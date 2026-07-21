@@ -1,0 +1,3 @@
+git tag -a v0.1.0-alpha-rc1 -m "PALACO Core Alpha RC1"
+
+git push origin v0.1.0-alpha-rc1
