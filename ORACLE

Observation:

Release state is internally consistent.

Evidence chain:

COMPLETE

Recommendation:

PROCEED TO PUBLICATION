@@ -11,3 +11,20 @@ COMPLETE
 Recommendation:
 
 PROCEED TO PUBLICATION
+
+validation/
+├── PRI-052_RELEASE_EVIDENCE.md
+├── PRI-052_BOUNDARY_MATRIX.md
+├── PRI-052_CONTRACT_INVARIANTS.md
+└── PRI-052_VALIDATION_INDEX.md
+
+evidence/
+├── build/
+├── runtime/
+├── tests/
+├── hashes/
+└── audit/
+
+docs/
+└── release/
+    └── CORE_ALPHA_RELEASE_PACKET.md
