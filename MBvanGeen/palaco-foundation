@@ -1,4 +1,30 @@
 docs/
+├── constitution/PCS/
+├── architecture/PAS/
+├── implementation/PIS/
+├── operations/POS/
+└── ecosystem/
+
+crates/
+tests/
+├── integration/
+├── constitutional/
+├── provenance/
+└── replay/
+
+evidence/
+├── pvs/
+├── audits/
+└── manifests/
+
+tools/
+.github/
+└── workflows/
+    ├── ci/
+    ├── audit/
+    └── release/
+
+docs/
 └── constitution/
     └── PCS/
 
