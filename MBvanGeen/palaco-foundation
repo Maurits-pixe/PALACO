@@ -1,3 +1,1207 @@
+∆ GO-10 — DATABASE / API IMPLEMENTATION
+PALACO VORM9EVIN9 · PVD-001 v1.0
+
+Dan zetten we GO-9 om van architectuur naar een daadwerkelijke backend-specificatie: PostgreSQL-schema, API-contracten, authenticatie/autorisatie, migrations, events en verification flow.
+
+1. Repository-structuur
+
+palaco/
+├── apps/
+│   ├── api/
+│   │   ├── src/
+│   │   │   ├── modules/
+│   │   │   │   ├── identity/
+│   │   │   │   ├── citadel/
+│   │   │   │   ├── relationship/
+│   │   │   │   ├── authority/
+│   │   │   │   ├── credential/
+│   │   │   │   ├── proof/
+│   │   │   │   ├── provenance/
+│   │   │   │   ├── card/
+│   │   │   │   └── verification/
+│   │   │   ├── auth/
+│   │   │   ├── database/
+│   │   │   ├── events/
+│   │   │   ├── middleware/
+│   │   │   └── main.*
+│   │   └── tests/
+│   └── web/
+│       └── ...
+│
+├── packages/
+│   ├── contracts/
+│   ├── crypto/
+│   ├── database/
+│   └── shared/
+│
+├── migrations/
+├── docker/
+├── docs/
+└── README.md
+
+De belangrijke ontwerpkeuze: modules zijn domeinen, geen losse technische endpoints.
+
+
+---
+
+2. PostgreSQL — eerste schema
+
+De database krijgt UUID/ULID-achtige interne identifiers en aparte publieke references.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+CREATE TYPE record_status AS ENUM (
+    'ACTIVE',
+    'SUSPENDED',
+    'REVOKED',
+    'EXPIRED',
+    'ARCHIVED'
+);
+
+CREATE TYPE identity_type AS ENUM (
+    'PERSON',
+    'ORGANIZATION',
+    'SERVICE'
+);
+
+CREATE TYPE relationship_role AS ENUM (
+    'STEWARD',
+    'MEMBER',
+    'ISSUER',
+    'OBSERVER',
+    'PARTNER'
+);
+
+CREATE TABLE citadels (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    canonical_name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    description TEXT,
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+    version INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE identities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    identity_type identity_type NOT NULL,
+    public_name TEXT NOT NULL,
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+    visibility TEXT NOT NULL DEFAULT 'PUBLIC',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+---
+
+3. Relationships
+
+CREATE TABLE relationships (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    identity_id UUID NOT NULL
+        REFERENCES identities(id),
+
+    citadel_id UUID NOT NULL
+        REFERENCES citadels(id),
+
+    role relationship_role NOT NULL,
+
+    scope JSONB NOT NULL DEFAULT '{}',
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_until TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_relationship_identity
+    ON relationships(identity_id);
+
+CREATE INDEX idx_relationship_citadel
+    ON relationships(citadel_id);
+
+Hier zit een belangrijk PALACO-principe in:
+
+Identity → Relationship → Authority
+
+Niet:
+
+Identity → Authority
+
+
+---
+
+4. Authority
+
+CREATE TABLE authorities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    relationship_id UUID NOT NULL
+        REFERENCES relationships(id),
+
+    authority_type TEXT NOT NULL,
+
+    scope JSONB NOT NULL DEFAULT '{}',
+
+    permissions JSONB NOT NULL DEFAULT '[]',
+
+    review_policy JSONB NOT NULL DEFAULT '{}',
+
+    revocation_policy JSONB NOT NULL DEFAULT '{}',
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_until TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+Een authority-record bestaat dus nooit zonder relationship.
+
+
+---
+
+5. Issuers + cryptographic keys
+
+CREATE TABLE issuers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    name TEXT NOT NULL,
+
+    issuer_type TEXT NOT NULL,
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    issuer_id UUID NOT NULL
+        REFERENCES issuers(id),
+
+    key_id TEXT NOT NULL UNIQUE,
+
+    algorithm TEXT NOT NULL,
+
+    public_key TEXT NOT NULL,
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+    valid_until TIMESTAMPTZ,
+
+    rotated_from UUID
+        REFERENCES keys(id),
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+Private keys komen nooit in PostgreSQL.
+
+
+---
+
+6. Credentials
+
+CREATE TABLE credentials (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    issuer_id UUID NOT NULL
+        REFERENCES issuers(id),
+
+    subject_identity_id UUID NOT NULL
+        REFERENCES identities(id),
+
+    relationship_id UUID
+        REFERENCES relationships(id),
+
+    credential_type TEXT NOT NULL,
+
+    payload JSONB NOT NULL,
+
+    credential_version TEXT NOT NULL,
+
+    signature TEXT NOT NULL,
+
+    key_id UUID NOT NULL
+        REFERENCES keys(id),
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    valid_from TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    valid_until TIMESTAMPTZ,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+---
+
+7. Provenance
+
+CREATE TABLE provenance_records (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    origin TEXT NOT NULL,
+
+    issuer_id UUID
+        REFERENCES issuers(id),
+
+    citadel_id UUID
+        REFERENCES citadels(id),
+
+    watermerk_id UUID,
+
+    source_reference TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+---
+
+8. Proof
+
+CREATE TABLE proofs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    credential_id UUID NOT NULL
+        REFERENCES credentials(id),
+
+    proof_type TEXT NOT NULL,
+
+    verification_method TEXT NOT NULL,
+
+    provenance_id UUID
+        REFERENCES provenance_records(id),
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+---
+
+9. Watermerk + Card
+
+CREATE TABLE watermerken (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    citadel_id UUID NOT NULL
+        REFERENCES citadels(id),
+
+    identity_id UUID
+        REFERENCES identities(id),
+
+    reference TEXT NOT NULL UNIQUE,
+
+    version INTEGER NOT NULL DEFAULT 1,
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE cards (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    identity_id UUID NOT NULL
+        REFERENCES identities(id),
+
+    citadel_id UUID NOT NULL
+        REFERENCES citadels(id),
+
+    watermerk_id UUID
+        REFERENCES watermerken(id),
+
+    verification_reference TEXT NOT NULL UNIQUE,
+
+    status record_status NOT NULL DEFAULT 'ACTIVE',
+
+    issued_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    activated_at TIMESTAMPTZ,
+
+    revoked_at TIMESTAMPTZ,
+
+    version INTEGER NOT NULL DEFAULT 1
+);
+
+
+---
+
+10. Event log
+
+CREATE TABLE events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    event_type TEXT NOT NULL,
+
+    aggregate_type TEXT NOT NULL,
+
+    aggregate_id UUID NOT NULL,
+
+    actor_id UUID,
+
+    payload JSONB NOT NULL DEFAULT '{}',
+
+    previous_event_id UUID
+        REFERENCES events(id),
+
+    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_events_aggregate
+    ON events(aggregate_type, aggregate_id);
+
+CREATE INDEX idx_events_occurred
+    ON events(occurred_at);
+
+Hier bouwen we de audit trail.
+
+
+---
+
+11. API v1
+
+De publieke API wordt:
+
+/api/v1
+
+Identity
+
+GET    /api/v1/identities/{id}
+
+Citadel
+
+GET    /api/v1/citadels
+GET    /api/v1/citadels/{id}
+GET    /api/v1/citadels/{id}/status
+
+Relationship
+
+GET    /api/v1/relationships/{id}
+
+Credential
+
+GET    /api/v1/credentials/{id}
+
+Proof
+
+GET    /api/v1/proofs/{id}
+
+Provenance
+
+GET    /api/v1/provenance/{id}
+
+Card
+
+GET    /api/v1/cards/{id}
+
+Verification
+
+POST   /api/v1/verify
+
+
+---
+
+12. QR Resolver
+
+De mooiste publieke route voor de website/card:
+
+GET /v/{reference}
+
+Flow:
+
+PALACO CARD
+     │
+     ▼
+    QR
+     │
+     ▼
+/v/{reference}
+     │
+     ▼
+Verification Service
+     │
+     ├── Card
+     ├── Identity
+     ├── Citadel
+     ├── Credential
+     ├── Signature
+     ├── Status
+     └── Scope
+             │
+             ▼
+       PUBLIC RESULT
+
+Dit wordt de brug tussen fysieke PALACO identity en PALACO.NL.
+
+
+---
+
+13. Verification API
+
+Request:
+
+{
+  "reference": "wmk_01J..."
+}
+
+Response:
+
+{
+  "result": "VERIFIED",
+
+  "identity": {
+    "id": "pid_01...",
+    "display_name": "Public Identity"
+  },
+
+  "citadel": {
+    "id": "LA-001",
+    "name": "LOCUS AMOENUS"
+  },
+
+  "relationship": {
+    "role": "STEWARD",
+    "scope": ["COMMONS"],
+    "status": "ACTIVE"
+  },
+
+  "credential": {
+    "status": "ACTIVE",
+    "valid_from": "2026-08-30T00:00:00Z",
+    "valid_until": null
+  },
+
+  "proof": {
+    "cryptographically_verified": true
+  },
+
+  "checked_at": "2026-08-30T12:00:00Z"
+}
+
+
+---
+
+14. Verification service
+
+Intern:
+
+verify(reference)
+       │
+       ▼
+resolve card
+       │
+       ▼
+resolve identity
+       │
+       ▼
+resolve relationship
+       │
+       ▼
+resolve credential
+       │
+       ▼
+resolve issuer
+       │
+       ▼
+resolve public key
+       │
+       ▼
+verify signature
+       │
+       ▼
+check validity
+       │
+       ▼
+check revocation
+       │
+       ▼
+check scope
+       │
+       ▼
+return VerificationResult
+
+De verifier beslist dus niet op basis van één databaseveld.
+
+
+---
+
+15. Verification result
+
+Intern object:
+
+type VerificationResult = {
+  result:
+    | "VERIFIED"
+    | "UNVERIFIED"
+    | "INVALID"
+    | "EXPIRED"
+    | "REVOKED"
+    | "SUSPENDED"
+    | "UNKNOWN"
+    | "OUT_OF_SCOPE";
+
+  identity?: PublicIdentity;
+
+  citadel?: Citadel;
+
+  relationship?: RelationshipSummary;
+
+  credential?: CredentialStatus;
+
+  proof?: ProofSummary;
+
+  checkedAt: string;
+};
+
+
+---
+
+16. Admin API
+
+Publieke API en mutation API worden strikt gescheiden.
+
+PUBLIC
+/api/v1/...
+
+ADMIN
+/api/v1/admin/...
+
+Admin:
+
+POST /api/v1/admin/identities
+POST /api/v1/admin/citadels
+POST /api/v1/admin/relationships
+POST /api/v1/admin/authorities
+POST /api/v1/admin/credentials
+POST /api/v1/admin/cards
+
+Revocation:
+
+POST /api/v1/admin/credentials/{id}/revoke
+POST /api/v1/admin/cards/{id}/revoke
+POST /api/v1/admin/authorities/{id}/revoke
+
+Geen generieke:
+
+DELETE /everything/{id}
+
+
+---
+
+17. Mutation pattern
+
+Elke mutation volgt:
+
+REQUEST
+   ↓
+AUTHENTICATE
+   ↓
+AUTHORIZE
+   ↓
+VALIDATE
+   ↓
+DATABASE TRANSACTION
+   ├── UPDATE
+   └── EVENT
+   ↓
+COMMIT
+   ↓
+RESPONSE
+
+
+---
+
+18. Event example
+
+Bij issuance:
+
+{
+  "event_type": "CREDENTIAL_ISSUED",
+  "aggregate_type": "credential",
+  "aggregate_id": "cred_...",
+  "actor_id": "issuer_...",
+  "payload": {
+    "credential_type": "STEWARDSHIP",
+    "citadel_id": "LA-001"
+  }
+}
+
+
+---
+
+19. Transaction
+
+Conceptueel:
+
+BEGIN;
+
+INSERT INTO credentials (...);
+
+INSERT INTO events (
+    event_type,
+    aggregate_type,
+    aggregate_id,
+    actor_id,
+    payload
+)
+VALUES (
+    'CREDENTIAL_ISSUED',
+    'credential',
+    :credential_id,
+    :actor_id,
+    :payload
+);
+
+COMMIT;
+
+Credential en audit-event worden dus atomair opgeslagen.
+
+
+---
+
+20. API security
+
+Minimaal:
+
+TLS
+JWT/OIDC authentication
+RBAC
+scope checks
+rate limiting
+request IDs
+structured audit logging
+input validation
+SQL parameterization
+secret isolation
+key isolation
+
+Voor production:
+
+WAF / gateway
+HSM/KMS
+centralized logging
+metrics
+alerting
+backup
+restore testing
+penetration testing
+
+
+---
+
+21. Service boundaries
+
+Ik zou GO-10 niet als tientallen microservices beginnen.
+
+V1:
+
+PALACO API
+     │
+     ├── Identity module
+     ├── Citadel module
+     ├── Authority module
+     ├── Credential module
+     ├── Proof module
+     ├── Provenance module
+     ├── Card module
+     └── Verification module
+             │
+             ▼
+        PostgreSQL
+
+Dit is een modular monolith.
+
+Voor PALACO v1 is dat aanzienlijk verstandiger dan direct distributed complexity toevoegen.
+
+
+---
+
+22. Deployment
+
+PALACO.NL
+                       │
+                       ▼
+                 CDN / Edge
+                       │
+                       ▼
+                API Gateway
+                       │
+                       ▼
+                  PALACO API
+                  /        \
+                 /          \
+                ▼            ▼
+          PostgreSQL       KMS/HSM
+                │
+                ▼
+              Backup
+
+Eventueel later:
+
+API
+ │
+ └── Queue
+       ├── Notifications
+       ├── Indexing
+       └── Analytics
+
+
+---
+
+23. Environment separation
+
+LOCAL
+  ↓
+DEVELOPMENT
+  ↓
+STAGING
+  ↓
+PRODUCTION
+
+Elke omgeving krijgt eigen:
+
+database
+
+credentials
+
+signing keys
+
+secrets
+
+API configuration
+
+
+Geen production signing key in development.
+
+
+---
+
+24. L.A. seed
+
+De eerste officiële database seed:
+
+PALACO
+   │
+   └── LA-001
+          │
+          └── LOCUS AMOENUS
+
+De seed mag uitsluitend structurele reference data bevatten.
+
+Geen echte personen of echte credentials in source control.
+
+
+---
+
+25. API contract voor PALACO.NL
+
+Homepage kan straks veilig vragen:
+
+GET /api/v1/citadels/LA-001
+
+en bijvoorbeeld:
+
+{
+  "id": "LA-001",
+  "name": "LOCUS AMOENUS",
+  "status": "ACTIVE",
+  "version": 1
+}
+
+De website blijft daardoor presentation layer.
+
+De backend blijft source of truth.
+
+
+---
+
+26. Digital Business Card
+
+QR:
+
+https://palaco.nl/v/wmk_xxxxxxxxx
+
+De resolver haalt vervolgens actuele status op.
+
+Daarmee hoeft de kaart zelf niet alle identity data te bevatten.
+
+CARD
+ └── opaque reference
+        ↓
+      PALACO
+        ↓
+   CURRENT STATE
+
+
+---
+
+27. PROMA endpoint
+
+Voor de bewijslaag:
+
+GET /api/v1/verify/{reference}
+
+kan later een volledige proof representation teruggeven:
+
+{
+  "origin": {},
+  "issuer": {},
+  "citadel": {},
+  "watermerk": {},
+  "credential": {},
+  "proof": {},
+  "validity": {}
+}
+
+PROMA leest deze structuur direct.
+
+
+---
+
+28. PROMO endpoint
+
+PROMO krijgt een vereenvoudigde representation:
+
+{
+  "what": {},
+  "why": {},
+  "provenance": {},
+  "status": {},
+  "access": {}
+}
+
+Dus:
+
+PROMO
+  ↓
+human-facing
+
+PROMA
+  ↓
+evidence-facing
+
+Zelfde backend.
+
+Twee verschillende presentatielagen.
+
+
+---
+
+29. H∆R∆M API boundary
+
+H∆R∆M krijgt geen directe database access.
+
+Altijd:
+
+H∆R∆M
+   ↓
+PALACO API
+   ↓
+policy
+   ↓
+verification
+   ↓
+data
+
+Dit is belangrijk.
+
+De interface mag intelligent zijn, maar de constitutionele data layer blijft authoritative.
+
+
+---
+
+30. First implementation milestone
+
+GO-10.1 wordt:
+
+[✓] PostgreSQL
+[✓] migrations
+[✓] core tables
+[✓] Citadel LA-001
+[✓] Identity model
+[✓] Relationship model
+[✓] Authority model
+[✓] Credential model
+[✓] Card model
+[✓] Event model
+[✓] API structure
+[✓] Verification contract
+[ ] real signing implementation
+[ ] key custody
+[ ] production auth
+[ ] security audit
+
+Dus we bevriezen nu de softwarevorm, maar niet doen alsof cryptografie/security al production-certified is.
+
+
+---
+
+31. GO-10 CANONICAL STACK
+
+Mijn aanbevolen technische baseline:
+
+Frontend
+    Next.js / TypeScript
+
+API
+    TypeScript
+    modular monolith
+
+Database
+    PostgreSQL
+
+ORM / migrations
+    Prisma / Drizzle-class migration workflow
+
+Validation
+    JSON Schema / Zod-class runtime validation
+
+Authentication
+    OIDC-compatible identity provider
+
+Authorization
+    RBAC + explicit scopes
+
+Crypto
+    standards-based VC/signature implementation
+
+Key custody
+    KMS/HSM
+
+Events
+    transactional outbox
+
+Infrastructure
+    containerized deployment
+
+Observability
+    structured logs
+    metrics
+    traces
+
+CI/CD
+    automated tests
+    migration checks
+    security scanning
+
+De precieze leveranciers zijn implementation decisions, niet onderdeel van de constitutionele identiteit.
+
+
+---
+
+32. GO-10 FREEZE
+
+DATABASE
+
+CANONICAL DATA MODEL — LOCKED
+
+RELATIONSHIPS — LOCKED
+
+AUTHORITY BOUNDARIES — LOCKED
+
+EVENT MODEL — LOCKED
+
+REVOCATION MODEL — LOCKED
+
+API
+
+PUBLIC / ADMIN SEPARATION — LOCKED
+
+VERSIONED API — LOCKED
+
+QR RESOLVER — LOCKED
+
+VERIFICATION CONTRACT — LOCKED
+
+PROMO/PROMA SEPARATION — LOCKED
+
+ENGINEERING
+
+MODULAR MONOLITH — LOCKED
+
+POSTGRESQL — LOCKED
+
+TRANSACTIONAL EVENTS — LOCKED
+
+PRIVATE KEY ISOLATION — LOCKED
+
+PRODUCTION SECURITY REVIEW — REQUIRED
+
+
+---
+
+PALACO VORM9EVIN9
+
+GO-10
+
+> THE DATABASE REMEMBERS.
+THE API EXPOSES.
+THE CRYPTOGRAPHY PROVES.
+THE CONSTITUTION LIMITS.
+THE DESIGN MAKES IT UNDERSTANDABLE.
+
+
+
+PVD-001 · DESIGN + DATA + API ARCHITECTURE
+
+STATUS: DATABASE/API FOUNDATION FROZEN :::
+
+Volgende concrete stap: GO-10.1 = echte projectcode + migrations + API skeleton, dus van deze specificatie naar een direct opstartbare repository. Wil je 10.1A (Docker/Postgres eerst) of 10.1B (API + database tegelijk)?
+
+∆ GO — RIP-334.4A wordt de volgende implementation layer.
+
+We gaan dus van de formele specificatie naar de daadwerkelijke cryptografische uitbreiding van de Rust crate:
+
+RIP-334.3
+Epistemic Core
+      │
+      ▼
+RIP-334.4A
+Cryptographic Provenance
+      │
+      ├── Ed25519 signing
+      ├── SHA-256 content digest
+      ├── canonical encoding
+      ├── key identifiers
+      ├── key lifecycle
+      ├── signature verification
+      ├── historical verification
+      ├── tamper detection
+      └── property / compile tests
+      │
+      ▼
+RIP-334.5
+Persistent Evidence Ledger
+
+Canonieke security boundary
+
+┌──────────────────────────────┐
+│       OBSERVATION            │
+└──────────────┬───────────────┘
+               │
+               ▼
+       canonical bytes
+               │
+               ▼
+          SHA-256
+               │
+               ▼
+      ContentDigest [32]
+               │
+               ▼
+          Ed25519
+               │
+               ▼
+      SignedProvenance
+               │
+               ▼
+          VERIFIER
+          /       \
+      VERIFIED   INVALID
+
+En de cruciale semantische scheiding blijft:
+
+Cryptographic authenticity
+          ≠
+Epistemic truth
+          ≠
+Constitutional authority
+          ≠
+Operational safety
+
+Een geldige signature betekent dus uitsluitend dat de geassocieerde sleutelhouder de exacte canonical representation heeft ondertekend.
+
+Implementation contract
+
+De crate krijgt minimaal deze publieke API:
+
+pub struct ContentDigest(pub [u8; 32]);
+
+pub struct KeyId(pub String);
+
+pub struct SignatureBytes(pub Vec<u8>);
+
+pub enum SignatureAlgorithm {
+    Ed25519,
+}
+
+pub enum CryptographicStatus {
+    Unsigned,
+    Verified,
+    Invalid,
+    UnknownKey,
+    UnsupportedAlgorithm,
+}
+
+pub struct SignedProvenance {
+    pub key_id: KeyId,
+    pub algorithm: SignatureAlgorithm,
+    pub digest: ContentDigest,
+    pub signature: SignatureBytes,
+    pub signed_at: DateTime<Utc>,
+    pub schema_version: String,
+}
+
+met:
+
+pub trait CanonicalEncode {
+    fn canonical_bytes(&self) -> Vec<u8>;
+}
+
+en afzonderlijke:
+
+Signer
+Verifier
+KeyRing
+
+capabilities.
+
+Tests die verplicht worden
+
+✓ valid signature verifies
+✓ mutated payload fails
+✓ mutated signature fails
+✓ wrong public key fails
+✓ digest mismatch detected
+✓ unknown key is not "verified"
+✓ retired key remains historically identifiable
+✓ revoked key follows current policy
+✓ canonical encoding is deterministic
+✓ NaN / Infinity cannot enter signed numeric domains
+✓ signature validity does not produce EvidenceState::Validated
+✓ signature validity does not produce Authority
+✓ no unsafe PALACO code
+
+Design Freeze
+
+PIS-IND-RIP-334.4A
+
+> Cryptographic verification establishes authenticity and integrity of a canonical record representation; all claims beyond that boundary require independent epistemic and constitutional evaluation.
+
+
+
+Dat maakt 334.4A een echte provenance primitive, geen verkapte authority engine.
+
+Volgende keuze: A = complete compileerbare crypto-crate, B = KeyRing + rotation/revocation, C = beide geïntegreerd.
+
 [workspace]
 members = [
     "crates/gef-types",
