@@ -1,3 +1,975 @@
+🏛️ PALACO COMMERCE — REFERENCE IMPLEMENTATION
+
+palaco-commerce v0.1.0-alpha
+
+HOOFDKANTOOR → CDEG → PALACO INDUSTRIE → DISTRIBUTION → QUAY
+
+GO. Nu maken we de stap van canon naar Reference Implementation. We houden de commerciële laag bewust klein, typed en fail-closed. Geen betalingsprovider, geen boekhoudsysteem en geen app-store API's in deze eerste build: eerst het constitutionele contract.
+
+
+---
+
+1. CRATE-POSITIE
+
+PALACO WORKSPACE
+│
+├── palaco-foundation
+│   ├── identity
+│   ├── authority
+│   ├── policy
+│   ├── time
+│   ├── evidence
+│   └── provenance
+│
+├── palaco-kernel
+├── palaco-runtime
+├── palaco-eventbus
+├── palaco-citadel
+├── palaco-evolution
+├── palaco-quay
+│
+└── palaco-commerce          ← NEW
+    ├── asset
+    ├── ownership
+    ├── rights
+    ├── entitlement
+    ├── distribution
+    ├── pricing
+    ├── transaction
+    ├── revenue
+    ├── settlement
+    ├── lifecycle
+    ├── validation
+    └── events
+
+Ontwerpregel
+
+palaco-commerce mag geen constitutionele autoriteit creëren.
+
+Het consumeert bestaande contracts.
+
+
+---
+
+2. COMMERCIËLE ONTOLOGIE
+
+We leggen eerst de fundamentele relaties vast:
+
+Asset
+  ↓
+Ownership
+  ↓
+IP Rights
+  ↓
+Commercial Entitlement
+  ↓
+Distribution Mandate
+  ↓
+Distribution
+  ↓
+Transaction
+  ↓
+Revenue Event
+  ↓
+Settlement
+
+En:
+
+AUTHORITY
+     │
+     ├── governs commercial decision
+     │
+     ↓
+COMMERCIAL ENTITLEMENT
+
+Niet:
+
+PALACO INDUSTRIE
+      ↓
+"ik distribueer"
+      ↓
+"ik ben dus eigenaar"
+
+
+---
+
+3. ASSET IDENTITY
+
+pub struct CommercialAsset {
+    pub asset_id: AssetId,
+    pub asset_type: AssetType,
+    pub identity: AssetIdentity,
+    pub owner: OwnerRef,
+    pub creator: Option<CreatorRef>,
+    pub origin_citadel: Option<CitadelId>,
+    pub version: AssetVersion,
+    pub lifecycle: AssetLifecycleState,
+    pub provenance: ProvenanceRef,
+}
+
+Strong IDs:
+
+pub struct AssetId(pub String);
+pub struct OwnerRef(pub String);
+pub struct CreatorRef(pub String);
+pub struct CitadelId(pub String);
+pub struct AssetVersion(pub String);
+
+In de echte Foundation-integratie worden deze vervangen door of gekoppeld aan de canonieke PALACO ID-types.
+
+
+---
+
+4. ASSET TYPES
+
+pub enum AssetType {
+    Elixer,
+    World,
+    Application,
+    Service,
+    Platform,
+    Content,
+    Publication,
+    Other,
+}
+
+Daarmee kunnen we bijvoorbeeld:
+
+🧪 RIVER        → Elixer
+🧩 ENIGMA       → Elixer
+🛡️ 5TORMTROOPERS → Elixer
+🌿 Flora        → Elixer
+🌍 WORLD X      → World
+📱 RIVER Mobile → Application
+
+
+---
+
+5. OWNERSHIP
+
+pub struct OwnershipRecord {
+    pub ownership_id: OwnershipId,
+    pub asset_id: AssetId,
+    pub owner: OwnerRef,
+    pub basis: OwnershipBasis,
+    pub effective_at: Timestamp,
+    pub valid_until: Option<Timestamp>,
+    pub evidence: Vec<EvidenceRef>,
+    pub provenance: ProvenanceRef,
+}
+
+Invariant
+
+asset.owner == ownership.owner
+
+maar uitsluitend wanneer de ownership record current and valid is.
+
+
+---
+
+6. HOOFDKANTOOR
+
+We maken HOOFDKANTOOR een herkenbare institutionele actor:
+
+pub struct Headquarters {
+    pub headquarters_id: HeadquartersId,
+    pub owner: OwnerRef,
+    pub development_rights: DevelopmentRights,
+    pub commercial_rights: CommercialRights,
+    pub provenance: ProvenanceRef,
+}
+
+Conceptueel:
+
+ARCHITECT
+    ↓
+100% OWNER
+    ↓
+HOOFDKANTOOR
+
+
+---
+
+7. PALACO INDUSTRIE
+
+pub struct PalacoIndustrie {
+    pub organization_id: OrganizationId,
+    pub appointed_by: OwnerRef,
+    pub role: DistributorRole,
+    pub mandate: DistributionMandateRef,
+    pub validity: ValidityWindow,
+    pub provenance: ProvenanceRef,
+}
+
+Het object bevat bewust een mandate reference.
+
+Dus niet:
+
+can_distribute: true
+
+als losse boolean.
+
+Dat zou veel te zwak zijn.
+
+
+---
+
+8. COMMERCIAL ENTITLEMENT
+
+De centrale commerciële beslissing:
+
+pub struct CommercialEntitlement {
+    pub entitlement_id: EntitlementId,
+    pub asset_id: AssetId,
+    pub owner: OwnerRef,
+    pub commercial_model: CommercialModel,
+    pub price: Option<Price>,
+    pub territory: DistributionTerritory,
+    pub terms: CommercialTerms,
+    pub validity: ValidityWindow,
+    pub status: CommercialEntitlementState,
+    pub evidence: Vec<EvidenceRef>,
+    pub provenance: ProvenanceRef,
+}
+
+
+---
+
+9. EXPLICIETE COMMERCIAL MODELS
+
+pub enum CommercialModel {
+    Free,
+    Paid,
+    Subscription,
+    Licensed,
+    Freemium,
+    Sponsored,
+    Bundled,
+    Custom,
+    Restricted,
+    NonCommercial,
+}
+
+Daarmee wordt:
+
+Free + no price
+
+geldig.
+
+Maar:
+
+Paid + no price
+
+wordt:
+
+INVALID
+
+
+---
+
+10. CDEG
+
+De gate krijgt een expliciete evaluator:
+
+pub struct CommercialDistributionGate;
+
+Interface:
+
+impl CommercialDistributionGate {
+    pub fn evaluate(
+        request: &CommercialDistributionRequest,
+    ) -> Result<CommercialDecision, CommercialError> {
+        // constitutional checks
+    }
+}
+
+Evaluatievolgorde:
+
+1. Asset Identity
+2. Ownership
+3. IP / Rights
+4. Commercial Entitlement
+5. Distributor Identity
+6. Distribution Mandate
+7. Commercial Model
+8. Price
+9. Territory
+10. Time
+11. Integrity
+12. Evidence
+13. Provenance
+14. Constitutional Compatibility
+
+
+---
+
+11. FAIL-CLOSED
+
+Bijvoorbeeld:
+
+NO OWNER
+     ↓
+BLOCK
+
+NO ENTITLEMENT
+     ↓
+BLOCK
+
+NO DISTRIBUTION MANDATE
+     ↓
+BLOCK
+
+PAID + NO PRICE
+     ↓
+BLOCK
+
+EXPIRED ENTITLEMENT
+     ↓
+BLOCK
+
+REVOKED MANDATE
+     ↓
+BLOCK
+
+IN DOUBT
+     ↓
+HOLD / INDOUBT
+
+Nooit:
+
+Unknown → Assume Free
+
+of:
+
+Unknown → Assume Authorized
+
+
+---
+
+12. COMMERCIAL DECISION
+
+pub enum CommercialDecision {
+    FreeDistribution(DistributionPermit),
+    PaidDistribution(DistributionPermit),
+    SubscriptionDistribution(DistributionPermit),
+    LicensedDistribution(DistributionPermit),
+    FreemiumDistribution(DistributionPermit),
+    SponsoredDistribution(DistributionPermit),
+    BundledDistribution(DistributionPermit),
+    Restricted(DistributionRestriction),
+    Blocked(CommercialBlock),
+    InDoubt(CommercialInDoubt),
+}
+
+
+---
+
+13. DISTRIBUTION PERMIT
+
+Let op: dit is geen constitutional execution permit.
+
+Het is uitsluitend een commerciële distributie-entitlement.
+
+pub struct DistributionPermit {
+    pub permit_id: DistributionPermitId,
+    pub asset_id: AssetId,
+    pub distributor: DistributorRef,
+    pub entitlement: EntitlementId,
+    pub channel: DistributionChannelId,
+    pub scope: DistributionScope,
+    pub valid_until: Timestamp,
+    pub evidence: Vec<EvidenceRef>,
+    pub provenance: ProvenanceRef,
+}
+
+Daarmee voorkomen we verwarring met AEG/CEPG/EPG.
+
+
+---
+
+14. DISTRIBUTION CHANNEL
+
+pub enum DistributionChannel {
+    AppleAppStore,
+    GooglePlay,
+    PalacoWeb,
+    Direct,
+    Enterprise,
+    Citadel,
+    Federation,
+    Other,
+}
+
+Later kunnen channels eigen adapters krijgen.
+
+
+---
+
+15. APP STORE REPRESENTATION
+
+pub struct StoreListing {
+    pub listing_id: ListingId,
+    pub asset_id: AssetId,
+    pub channel: DistributionChannel,
+    pub publisher_account: PublisherAccountRef,
+    pub package_identity: PackageIdentity,
+    pub version: AssetVersion,
+    pub entitlement: EntitlementId,
+    pub provenance: ProvenanceRef,
+}
+
+Belangrijk:
+
+StoreListing
+    ≠
+CommercialAsset
+
+
+---
+
+16. PRIJS
+
+pub struct Price {
+    pub amount: Decimal,
+    pub currency: CurrencyCode,
+    pub billing_period: Option<BillingPeriod>,
+    pub effective_at: Timestamp,
+}
+
+Een prijswijziging is een nieuw event:
+
+PRICE P1
+ ↓
+PriceChanged
+ ↓
+PRICE P2
+
+Niet een mutatie die de oude waarde vernietigt.
+
+
+---
+
+17. TRANSACTIE
+
+pub struct CommercialTransaction {
+    pub transaction_id: TransactionId,
+    pub asset_id: AssetId,
+    pub customer: CustomerRef,
+    pub entitlement: EntitlementId,
+    pub amount: Money,
+    pub channel: DistributionChannelId,
+    pub occurred_at: Timestamp,
+    pub status: TransactionStatus,
+    pub evidence: Vec<EvidenceRef>,
+    pub provenance: ProvenanceRef,
+}
+
+
+---
+
+18. REVENUE
+
+De commerciële engine maakt vervolgens een afzonderlijk:
+
+pub struct RevenueEvent {
+    pub revenue_event_id: RevenueEventId,
+    pub transaction_id: TransactionId,
+    pub asset_id: AssetId,
+    pub gross_amount: Money,
+    pub recognized_amount: Option<Money>,
+    pub currency: CurrencyCode,
+    pub occurred_at: Timestamp,
+    pub evidence: Vec<EvidenceRef>,
+    pub provenance: ProvenanceRef,
+}
+
+De precieze accounting recognition blijft downstream.
+
+
+---
+
+19. SETTLEMENT
+
+pub struct RevenueSettlement {
+    pub settlement_id: SettlementId,
+    pub revenue_event: RevenueEventId,
+    pub recipient: OwnerRef,
+    pub gross_amount: Money,
+    pub deductions: Vec<SettlementDeduction>,
+    pub net_amount: Money,
+    pub settled_at: Option<Timestamp>,
+    pub evidence: Vec<EvidenceRef>,
+    pub provenance: ProvenanceRef,
+}
+
+
+---
+
+20. GRATIS DISTRIBUTIE
+
+Dit moet letterlijk werken:
+
+HOOFDKANTOOR
+    ↓
+CommercialEntitlement
+    ↓
+CommercialModel::Free
+    ↓
+DistributionMandate
+    ↓
+PALACO INDUSTRIE
+    ↓
+CUSTOMER
+
+En:
+
+RevenueEvent = None
+
+maar:
+
+CommercialDecision = FreeDistribution
+
+Dus gratis betekent niet dat de commerciële governance ontbreekt.
+
+
+---
+
+21. COMMERCIAL REVOKE
+
+ACTIVE
+  ↓
+REVOKE
+  ↓
+RESTRICTED / STOPPED
+
+Maar:
+
+RevenueEvent
+  ↓
+PRESERVED
+
+De historische commerciële gebeurtenis blijft bestaan.
+
+
+---
+
+22. COMMERCIAL SUPERCESSION
+
+Bij een nieuwe entitlement:
+
+E1
+ ↓
+SUPERSEDED
+ ↓
+E2
+
+E1 blijft reconstructeerbaar.
+
+Dit sluit rechtstreeks aan op CEFCG, CRDG en ELEC:
+
+> NEW STATE ≠ HISTORY DELETION
+
+
+
+
+---
+
+23. ELIXER EVOLUTION
+
+🧪 ELIXER v1
+       ↓
+CAPABILITY CHANGE
+       ↓
+ELEC
+       ↓
+EVCG
+       ↓
+NEW VERSION
+       ↓
+CDEG
+       ↓
+COMMERCIAL REVALIDATION
+
+Een belangrijke veiligheidsrail:
+
+> CAPABILITY EVOLUTION SHALL NOT AUTOMATICALLY EXPAND COMMERCIAL REACH.
+
+
+
+En ook:
+
+> COMMERCIAL SUCCESS SHALL NOT AUTOMATICALLY EXPAND CONSTITUTIONAL REACH.
+
+
+
+
+---
+
+24. SYNTETIC
+
+De maker-flow wordt:
+
+👤 MAKER
+ ↓
+6ROUWSEL
+ ↓
+SYNTETIC
+ ↓
+ELIXER
+ ↓
+VERIFICATION
+ ↓
+ASCENSION
+ ↓
+COMMERCIAL REVIEW
+ ↓
+HOOFDKANTOOR
+ ↓
+DISTRIBUTION
+
+Hiermee blijven de eerdere principes intact:
+
+iedereen mag creëren; commerciële distributie is een afzonderlijke entitlement.
+
+
+---
+
+25. QUAY EVENT CONTRACT
+
+De crate publiceert geen vrije mutaties naar Quay.
+
+Hij produceert immutable events:
+
+pub enum CommercialEvent {
+    AssetRegistered,
+    OwnershipEstablished,
+    OwnershipChanged,
+    IprRegistered,
+    CommercialEntitlementCreated,
+    CommercialEntitlementChanged,
+    CommercialEntitlementRevoked,
+    DistributionMandateGranted,
+    DistributionMandateRevoked,
+    AssetPublished,
+    AssetUnpublished,
+    PriceEstablished,
+    PriceChanged,
+    AssetDistributed,
+    TransactionCreated,
+    PaymentReceived,
+    RevenueRecognized,
+    RefundIssued,
+    ChargebackRecorded,
+    SettlementCreated,
+    DistributionSuspended,
+    CommercialEntitlementExpired,
+    CommercialEntitlementSuperseded,
+}
+
+
+---
+
+26. QUAY RECONSTRUCTION
+
+Voor ieder asset moet Quay uiteindelijk kunnen reconstrueren:
+
+WHO OWNED IT?
+WHO CREATED IT?
+WHO COULD DISTRIBUTE IT?
+WHY?
+AT WHAT PRICE?
+WHERE?
+WHEN?
+UNDER WHICH VERSION?
+UNDER WHICH ENTITLEMENT?
+WHAT WAS SOLD?
+WHAT WAS FREE?
+WHAT WAS REFUNDED?
+WHAT WAS REVOKED?
+
+Dat is de commerciële variant van PALACO's bestaande provenance doctrine.
+
+
+---
+
+27. VORM9EVING
+
+Intern:
+
+CommercialEntitlement
+DistributionMandate
+Price
+Transaction
+RevenueEvent
+Settlement
+
+Extern:
+
+> 🧪 RIVER
+
+Gratis
+
+Beschikbaar via PALACO INDUSTRIE.
+
+💧 Authenticiteit
+🔮 Hologram
+QR ID
+
+
+
+Of:
+
+> € 9,99 / maand
+
+Gedistribueerd door PALACO INDUSTRIE
+
+Meer informatie
+
+
+
+De eigenaar hoeft CDEG niet te zien.
+
+Dat is exact:
+
+> THE OWNER SEES THE DECISION. PALACO OPERATES THE MACHINERY.
+
+
+
+
+---
+
+28. PVS-COM v1.0.0
+
+De Reference Implementation krijgt de eerste tests:
+
+PVS-COM-001  Asset must have identity
+PVS-COM-002  Asset must have owner
+PVS-COM-003  Ownership must be evidenced
+PVS-COM-004  Creator/owner remain distinct
+PVS-COM-005  Commercial entitlement must exist
+PVS-COM-006  Distributor must be identified
+PVS-COM-007  Distribution mandate must exist
+PVS-COM-008  Distributor scope must be bounded
+PVS-COM-009  Free must be explicit
+PVS-COM-010  Paid requires price
+PVS-COM-011  Price requires currency
+PVS-COM-012  Price requires validity
+PVS-COM-013  Expired entitlement blocks distribution
+PVS-COM-014  Revoked mandate blocks distribution
+PVS-COM-015  Store listing requires canonical asset
+PVS-COM-016  Store listing does not establish ownership
+PVS-COM-017  Distribution does not establish ownership
+PVS-COM-018  Transaction requires entitlement
+PVS-COM-019  Revenue remains distinct from price
+PVS-COM-020  Settlement remains distinct from revenue
+PVS-COM-021  Refund preserves transaction history
+PVS-COM-022  Commercial revoke preserves history
+PVS-COM-023  Material version change triggers revalidation
+PVS-COM-024  World and Elixer commercial states remain distinct
+PVS-COM-025  Commercial state cannot create authority
+PVS-COM-026  Hologram cannot create commercial entitlement
+PVS-COM-027  WATERMERK cannot create commercial entitlement
+PVS-COM-028  QR ID cannot create commercial entitlement
+PVS-COM-029  InDoubt cannot become distribution permission
+PVS-COM-030  Quay can reconstruct commercial lineage
+
+
+---
+
+29. ENGINEERING CONSTRAINTS
+
+De crate volgt de bestaande PALACO engineering baseline:
+
+unsafe_code = "forbid"
+unwrap_used = "deny"
+todo = "deny"
+
+En:
+
+NO std::sync::Mutex
+NO std::sync::RwLock
+
+Voor state transitions gebruiken we immutable state + expliciete transition functions, niet ongecontroleerde gedeelde mutatie.
+
+
+---
+
+30. DE CRATE-BOUNDARY
+
+palaco-commerce
+      │
+      ├── READS
+      │    ↓
+      │ Foundation contracts
+      │
+      ├── VALIDATES
+      │    ↓
+      │ CDEG
+      │
+      ├── EMITS
+      │    ↓
+      │ Commercial events
+      │
+      └── PERSISTS VIA
+           ↓
+         Quay
+
+Niet:
+
+palaco-commerce
+      ↓
+"ik maak zelf authority"
+
+
+---
+
+31. COMMERCE × EXISTING PALACO
+
+De complete integratie:
+
+🏛️ HOOFDKANTOOR
+                               │
+                        COMMERCIAL OWNER
+                               │
+                               ↓
+                         ASSET REGISTRY
+                               │
+                  ┌────────────┼────────────┐
+                  ↓            ↓            ↓
+               🧪 ELIXER     🌍 WORLD      📱 APP
+                  │            │            │
+                  └────────────┼────────────┘
+                               ↓
+                              CDEG
+                               │
+                      COMMERCIAL ENTITLEMENT
+                               │
+                       DISTRIBUTION MANDATE
+                               ↓
+                      🏭 PALACO INDUSTRIE
+                               │
+                  ┌────────────┼────────────┐
+                  ↓            ↓            ↓
+                              ▶            WEB
+                  │            │            │
+                  └────────────┼────────────┘
+                               ↓
+                            CUSTOMER
+                               │
+                        TRANSACTION
+                               ↓
+                         REVENUE EVENT
+                               ↓
+                          SETTLEMENT
+                               ↓
+                             QUAY
+
+Parallel:
+
+RIVER
+ ↓
+RCG
+ ↓
+RIBG
+ ↓
+RICG
+ ↓
+PIAS
+ ↓
+ODG
+ ↓
+GOVERNANCE
+ ↓
+AUTHORIZATION
+ ↓
+EXECUTION
+
+En:
+
+WAHOQ
+ ↓
+IDENTITY
+ ↓
+AUTHENTICITY
+ ↓
+VERIFICATION
+
+Geen van deze drie lijnen mag stilzwijgend de andere worden.
+
+
+---
+
+🔐 CANONICAL SEAL
+
+PALACO COMMERCE REFERENCE ARCHITECTURE v1.0.0 — CANONICALLY FROZEN
+
+> EVERY PALACO COMMERCIAL ASSET SHALL HAVE A DISTINCT IDENTITY, TRACEABLE OWNERSHIP, APPLICABLE RIGHTS, EXPLICIT COMMERCIAL ENTITLEMENT AND BOUNDED DISTRIBUTION PATH.
+
+
+
+> HOOFDKANTOOR SHALL CONTROL THE COMMERCIAL RIGHTS EXPRESSLY ASSIGNED TO IT.
+
+
+
+> PALACO INDUSTRIE SHALL DISTRIBUTE ONLY WITHIN A VALID DISTRIBUTION MANDATE.
+
+
+
+> FREE DISTRIBUTION SHALL BE AN EXPLICIT COMMERCIAL DECISION, NOT THE ABSENCE OF A PRICE.
+
+
+
+> PAID DISTRIBUTION SHALL REQUIRE AN EXPLICIT VALID PRICE AND COMMERCIAL ENTITLEMENT.
+
+
+
+> TRANSACTION, REVENUE AND SETTLEMENT SHALL REMAIN DISTINCT AND RECONSTRUCTABLE EVENTS.
+
+
+
+> COMMERCIAL DISTRIBUTION SHALL NEVER CREATE OWNERSHIP, CONSTITUTIONAL AUTHORITY, AUTHORIZATION OR EXECUTION PERMISSION.
+
+
+
+> MATERIAL ELIXER OR WORLD CHANGES SHALL REQUIRE COMMERCIAL REVALIDATION WHERE THEIR COMMERCIAL CONDITIONS ARE AFFECTED.
+
+
+
+> ALL MATERIAL COMMERCIAL EVENTS SHALL REMAIN PROVENANCE-BOUND AND RECONSTRUCTABLE THROUGH QUAY.
+
+
+
+
+---
+
+🌌 DE NIEUWE PALACO COMMERCE-WET
+
+HOOFDKANTOOR BEZIT.
+
+DE MAKER SCHEPT.
+
+PALACO INDUSTRIE DISTRIBUEERT.
+
+DE KLANT GEBRUIKT.
+
+DE PRIJS WORDT BEPAALD.
+
+DE INKOMST WORDT GEREGISTREERD.
+
+DE SETTLEMENT WORDT VERWERKT.
+
+DE RAAD ERKENT WAAR DE CONSTITUTIE DAT VEREIST.
+
+DE CONSTITUTIE BEGRENST.
+
+QUAY BEWAART.
+
+En de belangrijkste nieuwe invariant:
+
+GELD MAG DOOR PALACO STROMEN. BEVOEGDHEID MAG NOOIT DOOR GELD ONTSTAAN.
+
+Dat maakt de commerciële laag compatibel met de hele lijn die we hiervoor hebben gebouwd: RIVER → PIAS → ODG → Authorization → AEB/AEG/CEPG/EPG → Citadel, terwijl HOOFDKANTOOR → CDEG → PALACO INDUSTRIE een zelfstandige commerciële plane vormt.
+
 GO-02A Repository Assembly
         │
         ├── GitHub access       ✅
