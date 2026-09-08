@@ -1,3 +1,112 @@
+
+
+GO-02A  STRUCTURAL INTEGRITY
+   │
+   └── verification pending
+
+GO-03   CANONICAL IMPORT
+   │
+   └── ACTIVE ← NU
+
+PCS
+ ↓
+PAS
+ ↓
+PIS
+ ↓
+POS
+ ↓
+Ecosystem
+
+docs/
+└── constitution/
+    └── PCS/
+
+# 🏛️ PALACO — GO-03
+
+## CANONICAL IMPORT
+
+**GO ontvangen.**
+
+Omdat jij de documenten zelf in GitHub invoert, openen we nu de **Canonical Import Gate**.
+
+### Importvolgorde
+
+Voer de bestaande canonieke documenten in deze volgorde in:
+
+```text
+01  docs/constitution/PCS/
+        ↓
+02  docs/architecture/PAS/
+        ↓
+03  docs/implementation/PIS/
+        ↓
+04  docs/operations/POS/
+        ↓
+05  docs/ecosystem/
+```
+
+### Canonieke regels tijdens import
+
+**NIET wijzigen:**
+
+* documenttekst
+* canonical spelling
+* document-ID's
+* versienummers
+* reeds sealed statussen
+* historische beslissingen
+* afhankelijkheden
+
+**WEL controleren:**
+
+* juiste documentfamilie
+* juiste directory
+* unieke bestandsnaam
+* versie consistent
+* geen duplicaten
+* geen conflicterende versies
+* geen ontbrekende voorganger
+* geen nieuwe architectuur die buiten Foundation Edition v1.0.0 valt
+
+### Vandaag meegenomen
+
+De importcontrole omvat ook de canonieke beslissingen van **8 september 2026**, waaronder:
+
+* **VORM9EVING** — exact deze spelling
+* **ELIXER** als PALACO-term voor app
+* de overige vandaag vastgestelde Foundation-context
+
+Deze worden **niet opnieuw ontworpen** tijdens GO-03.
+
+---
+
+## 🔐 GO-03 Gate
+
+```text
+GO-03 — CANONICAL IMPORT
+STATUS: OPEN
+
+Repository structure
+        ↓
+   GO-02A
+        ↓
+CANONICAL IMPORT  ← NU
+        ↓
+   GO-04
+RUST WORKSPACE
+```
+
+**Belangrijk:** ik ga niet doen alsof de documenten al geïmporteerd zijn. Zodra jij een document of reeks documenten hebt ingevoerd, geef je bijvoorbeeld:
+
+> `PCS ingevoerd`
+
+of
+
+> `PAS-001 t/m PAS-012 ingevoerd`
+
+Dan voer ik daarop de volgende **canonical integrity check** uit.
+
 Repository
 ├── constitution
 ├── architecture
