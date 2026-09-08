@@ -1,3 +1,223 @@
+Helemaal correct. **Je diagnose klopt 100%**: dit is een **integratie-permissie 403**, niet een code/branch probleem.
+
+## Wat dit bewijst
+`Resource not accessible` bij **CREATE Cargo.toml op `setup/initial-structure`** betekent:  
+de gebruikte GitHub App/PAT heeft geen `contents:write` op `Maurits-pixe/PALACO-Citadel` (of repo is niet geselecteerd in app access).
+
+## Fix (in volgorde)
+1. **Identificeer credential-type** van de connector:
+   - GitHub App install
+   - of Personal Access Token (PAT)
+
+2. **Als GitHub App**  
+   - GitHub → `Settings` → `Applications` → `Installed GitHub Apps` → betreffende app → `Configure`
+   - Repository access: voeg **PALACO-Citadel** toe (of tijdelijk All repos)
+   - Controleer app permissions:
+     - **Contents: Read & write** (cruciaal)
+     - **Metadata: Read** (standaard)
+     - indien nodig: **Pull requests: Read & write**, **Workflows: Read & write**
+
+3. **Als PAT**
+   - Gebruik een **classic PAT met `repo`**  
+     of fine-grained token met repo `PALACO-Citadel` + **Contents (Read and write)**.
+   - Reconnect connector met nieuw token.
+
+4. **Reconnect hard**
+   - Disconnect integratie volledig
+   - Re-auth
+   - Repo opnieuw selecteren
+   - Branch target opnieuw instellen op `setup/initial-structure`
+
+5. **Gate re-test**
+   - Zelfde operation: CREATE `Cargo.toml`
+   - Verwacht: commit SHA gegenereerd, geen 403.
+
+Als je wilt, geef ik je nu een **ultrakorte validatiechecklist (5 API/UI checks)** om in <2 min te bevestigen dat de rechten echt goed staan vóór je opnieuw test.
+
+# 🏛️ PALACO-GITHUB-002
+
+## GO-02A — STRUCTURAL INTEGRITY
+
+**Status:** `ACTIVE — NOT YET PASSED`
+**Edition:** PALACO Foundation Edition v1.0.0
+**Date:** 8 September 2026
+**Mode:** **HANDHELD REPOSITORY ASSEMBLY**
+
+De gebruiker voert de documenten zelf in. Ik bewaak **structuur, volgorde, canonieke plaatsing, afhankelijkheden en gates**.
+
+---
+
+## 1. Bouw nu uitsluitend de repository-structuur
+
+Maak in `Maurits-pixe/PALACO` exact deze structuur:
+
+```text
+PALACO/
+│
+├── docs/
+│   ├── constitution/
+│   │   └── PCS/
+│   ├── architecture/
+│   │   └── PAS/
+│   ├── implementation/
+│   │   └── PIS/
+│   ├── operations/
+│   │   └── POS/
+│   └── ecosystem/
+│
+├── crates/
+│
+├── tests/
+│   ├── integration/
+│   ├── constitutional/
+│   ├── provenance/
+│   └── replay/
+│
+├── evidence/
+│   ├── pvs/
+│   ├── audits/
+│   └── manifests/
+│
+├── tools/
+│
+└── .github/
+    ├── workflows/
+    │   ├── ci/
+    │   ├── audit/
+    │   └── release/
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE/
+```
+
+### Belangrijk
+
+**Nog niet:**
+
+* geen canonieke documenten verplaatsen of herschrijven;
+* geen nieuwe subsystemen toevoegen;
+* geen GitHub-specifieke canon creëren;
+* geen crates implementeren;
+* geen release tag;
+* geen `v1.0.0` seal;
+* geen uitbreiding van de Foundation-scope.
+
+Dit is uitsluitend **structurele voorbereiding**.
+
+---
+
+# 2. GO-02A acceptance criteria
+
+GO-02A kan pas naar `PASSED` wanneer:
+
+| Controle    | Vereiste                            |
+| ----------- | ----------------------------------- |
+| `docs/`     | aanwezig                            |
+| PCS         | `docs/constitution/PCS/` aanwezig   |
+| PAS         | `docs/architecture/PAS/` aanwezig   |
+| PIS         | `docs/implementation/PIS/` aanwezig |
+| POS         | `docs/operations/POS/` aanwezig     |
+| Ecosystem   | `docs/ecosystem/` aanwezig          |
+| `crates/`   | aanwezig                            |
+| `tests/`    | vier domeinen aanwezig              |
+| `evidence/` | PVS, audits, manifests aanwezig     |
+| `tools/`    | aanwezig                            |
+| `.github/`  | governance-structuur aanwezig       |
+| Canon       | inhoud nog onaangetast              |
+| Scope       | Foundation freeze intact            |
+
+---
+
+# 3. Daarna pas GO-03
+
+Zodra de structuur daadwerkelijk bestaat, gaan we naar:
+
+```text
+GO-02A
+STRUCTURAL INTEGRITY
+        │
+        ▼
+GO-03
+CANONICAL IMPORT
+        │
+        ▼
+GO-04
+RUST WORKSPACE
+        │
+        ▼
+GO-05
+BUILD
+        │
+        ▼
+GO-06
+TEST
+        │
+        ▼
+GO-07
+PVS-001
+        │
+        ▼
+GO-08
+PVS-002
+        │
+        ▼
+GO-09
+EVIDENCE SEAL
+        │
+        ▼
+GO-10
+AUDIT
+        │
+        ▼
+GO-11
+RELEASE MANIFEST
+        │
+        ▼
+GO-12
+IMMUTABLE v1.0.0 TAG
+```
+
+## 🔒 Gate
+
+**GO-02A = OPEN**
+
+**Actie voor jou:** bouw exact bovenstaande structuur in GitHub.
+
+Wanneer hij staat, geef:
+
+> **GO-02A CHECK**
+
+Dan doen we de structurele controle en beslissen we formeel **PASSED / BLOCKED**.
+
+docs/
+├── constitution/PCS/
+├── architecture/PAS/
+├── implementation/PIS/
+├── operations/POS/
+└── ecosystem/
+
+crates/
+
+tests/
+├── integration/
+├── constitutional/
+├── provenance/
+└── replay/
+
+evidence/
+├── pvs/
+├── audits/
+└── manifests/
+
+tools/
+
+.github/
+├── workflows/
+│   ├── ci/
+│   ├── audit/
+│   └── release/
+├── ISSUE_TEMPLATE/
+└── PULL_REQUEST_TEMPLATE/
+
 # 🏛️ PALACO-GITHUB-002
 
 ## GO-02A — STRUCTURAL INTEGRITY
