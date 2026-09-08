@@ -1,3 +1,850 @@
+# 🏛️ PALACO — GO-01 ACTIVATED
+
+## PALACO-GITHUB-001
+
+### FOUNDATION REPOSITORY ASSEMBLY MANIFEST
+
+**Version:** v1.0.0
+**Status:** 🟢 **CANONICAL ASSEMBLY BASELINE**
+**Repository Target:** `Maurits-pixe/PALACO`
+**Foundation Baseline:** **PALACO Foundation Edition v1.0.0**
+**Scope:** Foundation Repository Assembly
+**Expansion Freeze:** 🔒 ACTIVE
+
+---
+
+# 1. PURPOSE
+
+**PALACO-GITHUB-001** is the master assembly manifest for transferring the consolidated PALACO Foundation into a controlled repository structure.
+
+Het manifest is **geen nieuw architectuurontwerp**.
+
+Het bepaalt uitsluitend:
+
+> **wat moet worden overgebracht, waar het thuishoort, welke status het heeft, hoe het wordt gevalideerd en onder welke voorwaarden Foundation v1.0.0 als repository release kan worden verklaard.**
+
+### Constitutional precedence
+
+```text
+PALACO CONSTITUTION
+        ↓
+PALACO ARCHITECTURE
+        ↓
+PALACO IMPLEMENTATION
+        ↓
+PALACO REPOSITORY
+        ↓
+GITHUB
+```
+
+**GitHub verleent geen PALACO authority.**
+
+---
+
+# 2. ASSEMBLY PRINCIPLE
+
+De repository wordt behandeld als een **reconstructible constitutional artifact**.
+
+Daarom geldt:
+
+> **Geen bestand wordt opgenomen uitsluitend omdat het nuttig lijkt.**
+
+Ieder opgenomen artifact moet een verklaarbare relatie hebben tot:
+
+* Canon
+* Architecture
+* Implementation
+* Operations
+* Ecosystem
+* Validation
+* Evidence
+* Governance
+* Release
+
+---
+
+# 3. FOUNDATION SCOPE FREEZE 🔒
+
+Tijdens GO-01 gelden de volgende verboden:
+
+| Actie                                             | Status |
+| ------------------------------------------------- | ------ |
+| Nieuwe Wonder toevoegen                           | ❌      |
+| Nieuwe grote subsystemen ontwerpen                | ❌      |
+| Foundation architecture uitbreiden                | ❌      |
+| Canon herschrijven voor GitHub                    | ❌      |
+| Nieuwe authority introduceren                     | ❌      |
+| Premature plugin ecosystem expansion              | ❌      |
+| Niet-gevalideerde features als Foundation opnemen | ❌      |
+
+### Toegestaan
+
+* consolideren;
+* classificeren;
+* structureren;
+* duplicaten identificeren;
+* provenance vastleggen;
+* ontbrekende artifacts markeren;
+* repository skeleton voorbereiden;
+* bestaande tests reproduceren;
+* evidence koppelen;
+* release metadata voorbereiden.
+
+---
+
+# 4. CANONICAL CONTENT REGISTER
+
+De Foundation assembly moet minimaal rekening houden met:
+
+### Constitution
+
+**PCS — PALACO Constitution Series**
+
+### Architecture
+
+**PAS — PALACO Architecture Series**
+
+### Implementation
+
+**PIS — PALACO Implementation Series**
+
+### Operations
+
+**POS — PALACO Operations Series**
+
+### Ecosystem
+
+Ecosystem-/Federation-gerelateerde canon.
+
+### Recent constitutional consolidation
+
+Daaronder vallen expliciet de recente canonieke uitbreidingen:
+
+* **CEFCG v1.0.0**
+* **REVOKE**
+* **COMET**
+* **Canonical Ascension**
+* **MEDIATOR**
+* **VORM9EVING**
+* **Execution Governance**
+* **Execution Commit Gate**
+
+Deze worden **geconserveerd**, niet opnieuw ontworpen.
+
+---
+
+# 5. DOCUMENT STATUS MODEL
+
+Ieder document krijgt één expliciete classificatie:
+
+```text
+CANONICAL
+CANONICAL DRAFT
+ENGINEERING
+REFERENCE
+HISTORICAL
+```
+
+### Regel
+
+> **Repository placement SHALL NOT confer constitutional authority.**
+
+Een bestand onder `docs/constitution/` is dus niet automatisch constitutioneel omdat het daar staat.
+
+De authority volgt uit de canonieke governance en statusregistratie.
+
+---
+
+# 6. REPOSITORY SKELETON
+
+De eerste structurele target:
+
+```text
+PALACO/
+│
+├── Cargo.toml
+├── README.md
+├── LICENSE
+│
+├── docs/
+│   ├── constitution/
+│   │   └── PCS/
+│   │
+│   ├── architecture/
+│   │   └── PAS/
+│   │
+│   ├── implementation/
+│   │   └── PIS/
+│   │
+│   ├── operations/
+│   │   └── POS/
+│   │
+│   └── ecosystem/
+│
+├── crates/
+│   ├── palaco-foundation/
+│   ├── palaco-kernel/
+│   ├── palaco-runtime/
+│   ├── palaco-eventbus/
+│   ├── palaco-quay/
+│   ├── palaco-citadel/
+│   └── palaco-evolution/
+│
+├── tests/
+│   ├── integration/
+│   ├── constitutional/
+│   ├── provenance/
+│   └── replay/
+│
+├── evidence/
+│   ├── pvs/
+│   ├── audits/
+│   └── manifests/
+│
+├── tools/
+│
+└── .github/
+    ├── workflows/
+    │   ├── ci/
+    │   ├── audit/
+    │   └── release/
+    │
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE/
+```
+
+---
+
+# 7. RUST ASSEMBLY ORDER
+
+De cratevolgorde wordt bewust niet willekeurig.
+
+```text
+01  palaco-foundation
+        ↓
+02  palaco-kernel
+        ↓
+03  palaco-runtime
+        ↓
+04  palaco-eventbus
+        ↓
+05  palaco-quay
+        ↓
+06  palaco-citadel
+        ↓
+07  palaco-evolution
+```
+
+### Foundation rule
+
+**palaco-foundation** vormt de constitutionele referentielaag.
+
+Afhankelijkheden moeten expliciet blijven.
+
+Geen verborgen cycliciteit.
+
+Geen impliciete privilege paths.
+
+---
+
+# 8. ENGINEERING CONSTRAINT REGISTER
+
+De repository assembly neemt de bestaande constraints over.
+
+```text
+unsafe_code = forbidden
+unwrap_used = deny
+todo = deny
+```
+
+Daarnaast:
+
+```text
+std::sync::Mutex  = forbidden
+std::sync::RwLock = forbidden
+```
+
+Deze constraints worden later onderdeel van CI en validation.
+
+---
+
+# 9. TEST ARCHITECTURE
+
+De teststructuur wordt:
+
+```text
+BUILD
+  ↓
+UNIT
+  ↓
+INTEGRATION
+  ↓
+CONSTITUTIONAL
+  ↓
+PROVENANCE
+  ↓
+REPLAY
+  ↓
+PVS
+  ↓
+AUDIT
+```
+
+De tests moeten niet uitsluitend functionaliteit testen.
+
+Ze moeten ook aantonen dat constitutionele invarianten niet worden doorbroken.
+
+---
+
+# 10. PVS BASELINE
+
+Bestaande referentiepunten:
+
+### PVS-001
+
+**Workspace Integrity**
+
+`PASSED`
+
+### PVS-002
+
+**Cross-Crate Contracts**
+
+`PASSED`
+
+PVS-002 evidence omvat onder meer:
+
+```text
+Zero Privilege Escalation
+Unbypassable WISDOM Routing
+Pre-Execution Constitutional Check
+Cryptographic Evidence Traceability
+Strict Agent Containment
+```
+
+Deze bestaande resultaten worden niet simpelweg “geclaimd”.
+
+Ze moeten als repository evidence opnieuw traceerbaar worden gemaakt.
+
+---
+
+# 11. EVIDENCE ARCHITECTURE
+
+De repository krijgt expliciet:
+
+```text
+evidence/
+├── pvs/
+├── audits/
+└── manifests/
+```
+
+De kernketen:
+
+```text
+IMPLEMENTATION
+      ↓
+VALIDATION
+      ↓
+EVIDENCE
+      ↓
+AUDIT
+      ↓
+MANIFEST
+```
+
+Daarmee wordt de repository zelf onderdeel van de **Proof Machine**.
+
+---
+
+# 12. PROVENANCE RULE
+
+Elke release-relevante artifact moet uiteindelijk kunnen worden teruggevoerd naar:
+
+```text
+SOURCE
+  ↓
+VERSION
+  ↓
+CHANGE
+  ↓
+BUILD
+  ↓
+VALIDATION
+  ↓
+EVIDENCE
+  ↓
+AUDIT
+  ↓
+MANIFEST
+```
+
+Dit sluit direct aan op:
+
+**Quay → Evidence → Audit → Replay**
+
+---
+
+# 13. MANIFEST / HASH DISCIPLINE
+
+De recent ontvangen digest:
+
+```text
+e9ce0caa66ac60eadce22a6a5a7326967c62e13b
+```
+
+wordt **niet automatisch als gecertificeerde release-evidence aangenomen**.
+
+Voor PALACO geldt:
+
+```text
+HASH
++
+ARTIFACT IDENTITY
++
+SOURCE
++
+CONTEXT
++
+VERIFICATION
+=
+VALID EVIDENCE ANCHOR
+```
+
+Dus de digest kan als **candidate evidence anchor** worden geregistreerd totdat de repository/commit/manifest-relatie daadwerkelijk is vastgesteld.
+
+Dat is belangrijk: **hash ≠ bewijs zonder provenance.**
+
+---
+
+# 14. GITHUB GOVERNANCE
+
+Pas nadat de Foundation repository structureel correct is:
+
+```text
+.github/
+├── workflows/
+│   ├── ci/
+│   ├── audit/
+│   └── release/
+│
+├── ISSUE_TEMPLATE/
+└── PULL_REQUEST_TEMPLATE/
+```
+
+PR governance moet minimaal kunnen beantwoorden:
+
+* Wat verandert?
+* Waarom?
+* Welke canon wordt geraakt?
+* Welke authority/context is relevant?
+* Welke tests zijn uitgevoerd?
+* Welke evidence ontstaat?
+* Is backward compatibility geraakt?
+* Is constitutionele scope geraakt?
+
+---
+
+# 15. RELEASE ASSEMBLY
+
+De eerste release wordt:
+
+```text
+PALACO Foundation Edition v1.0.0
+              ↓
+Repository Assembly
+              ↓
+Build
+              ↓
+Test
+              ↓
+PVS-001
+              ↓
+PVS-002
+              ↓
+Evidence
+              ↓
+Audit
+              ↓
+Release Manifest
+              ↓
+Git Tag
+              ↓
+v1.0.0
+```
+
+### Release principle
+
+**Geen tag voordat de evidence chain compleet is.**
+
+---
+
+# 16. ASSEMBLY GATES
+
+## GATE 0
+
+### CANONICAL CONTENT FREEZE
+
+🟢 Preparation defined
+🔒 Scope frozen
+
+---
+
+## GATE 1
+
+### STRUCTURAL INTEGRITY
+
+Vereist:
+
+* repository skeleton aanwezig;
+* directories correct;
+* Cargo workspace coherent;
+* geen ontbrekende structurele kernonderdelen.
+
+---
+
+## GATE 2
+
+### CANONICAL IMPORT
+
+Vereist:
+
+* PCS;
+* PAS;
+* PIS;
+* POS;
+* Ecosystem;
+* recente governance canon;
+* statusclassificatie.
+
+---
+
+## GATE 3
+
+### WORKSPACE INTEGRITY
+
+Vereist:
+
+* crates aanwezig;
+* dependency graph controleerbaar;
+* engineering constraints actief.
+
+---
+
+## GATE 4
+
+### VALIDATION
+
+Vereist:
+
+* build;
+* unit tests;
+* integration;
+* constitutional;
+* provenance;
+* replay.
+
+---
+
+## GATE 5
+
+### PVS
+
+```text
+PVS-001 → PASS
+PVS-002 → PASS
+```
+
+---
+
+## GATE 6
+
+### EVIDENCE SEAL
+
+Vereist:
+
+* evidence bundle;
+* provenance;
+* audit reference;
+* manifest;
+* artifact identity.
+
+---
+
+## GATE 7
+
+### RELEASE AUDIT
+
+Onafhankelijke controle van:
+
+* completeness;
+* consistency;
+* evidence;
+* provenance;
+* release integrity.
+
+---
+
+## GATE 8
+
+### FOUNDATION RELEASE
+
+Pas hier:
+
+```text
+v1.0.0
+```
+
+---
+
+# 17. MASTER ASSEMBLY CHECKLIST
+
+```text
+[ ] FOUNDATION BASELINE FROZEN
+
+[ ] CANONICAL TERMINOLOGY VERIFIED
+
+[ ] PCS REGISTERED
+[ ] PAS REGISTERED
+[ ] PIS REGISTERED
+[ ] POS REGISTERED
+[ ] ECOSYSTEM REGISTERED
+
+[ ] CEFCG v1.0.0 INCLUDED
+[ ] REVOKE INCLUDED
+[ ] COMET INCLUDED
+[ ] CANONICAL ASCENSION INCLUDED
+[ ] MEDIATOR INCLUDED
+[ ] VORM9EVING INCLUDED
+[ ] EXECUTION GOVERNANCE INCLUDED
+[ ] EXECUTION COMMIT GATE INCLUDED
+
+[ ] REPOSITORY SKELETON
+
+[ ] ROOT CARGO WORKSPACE
+
+[ ] FOUNDATION CRATE
+[ ] KERNEL CRATE
+[ ] RUNTIME CRATE
+[ ] EVENTBUS CRATE
+[ ] QUAY CRATE
+[ ] CITADEL CRATE
+[ ] EVOLUTION CRATE
+
+[ ] TEST STRUCTURE
+
+[ ] EVIDENCE STRUCTURE
+
+[ ] CI STRUCTURE
+[ ] AUDIT STRUCTURE
+[ ] RELEASE STRUCTURE
+
+[ ] BUILD PASS
+
+[ ] TEST PASS
+
+[ ] PVS-001 PASS
+[ ] PVS-002 PASS
+
+[ ] PROVENANCE COMPLETE
+
+[ ] EVIDENCE COMPLETE
+
+[ ] AUDIT COMPLETE
+
+[ ] MANIFEST SEALED
+
+[ ] RELEASE READY
+
+[ ] v1.0.0 TAG
+```
+
+---
+
+# 18. DE BELANGRIJKSTE BESLISSING
+
+Vanaf dit punt geldt één operationele regel:
+
+> ## **CONSOLIDATION → ASSEMBLY**
+
+Niet:
+
+> consolidation → nieuwe ideeën → nieuwe subsystemen → nieuwe architectuur → opnieuw consolideren.
+
+We verlaten dus de **architectural expansion loop** en gaan de **repository assembly loop** in.
+
+---
+
+# 19. CURRENT POSITION
+
+```text
+                         PALACO
+                           │
+                           ▼
+                 FOUNDATION v1.0.0
+                           │
+                           ▼
+                CANONICAL FREEZE
+                           │
+                           ▼
+             PALACO-GITHUB-001
+                           │
+                           ▼
+              REPOSITORY ASSEMBLY
+                           │
+          ┌────────────────┼────────────────┐
+          ▼                ▼                ▼
+        CANON            CODE            EVIDENCE
+          │                │                │
+          └────────────────┼────────────────┘
+                           ▼
+                       VALIDATION
+                           │
+                           ▼
+                          AUDIT
+                           │
+                           ▼
+                         SEAL
+                           │
+                           ▼
+                      FOUNDATION
+                         v1.0.0
+```
+
+## 🔱 GO-01 STATUS
+
+**PALACO-GITHUB-001 — FOUNDATION REPOSITORY ASSEMBLY MANIFEST v1.0.0**
+
+### **STATUS: 🟢 ESTABLISHED**
+
+### Current gate:
+
+# 🔒 CANONICAL CONTENT FREEZE
+
+### Next executable gate:
+
+# 🏗️ GO-02 — REPOSITORY SKELETON ASSEMBLY
+
+En vanaf GO-02 is de discipline eenvoudig:
+
+> **Eerst de Citadel correct in de repository plaatsen. Daarna pas bewijzen dat de repository de Citadel correct representeert.**
+
+**Foundation eerst. Expansion later.**
+
+# PALACO — GO-02
+
+## REPOSITORY SKELETON ASSEMBLY
+
+**Datum:** 8 september 2026
+**Baseline:** PALACO Foundation Edition v1.0.0
+**Target:** `Maurits-pixe/PALACO`
+**Gate:** `GO-02 — REPOSITORY SKELETON ASSEMBLY`
+
+Ik heb de GitHub-status daadwerkelijk gecontroleerd. De repository `Maurits-pixe/PALACO` is op dit moment **niet vindbaar/toegankelijk via de gekoppelde GitHub-verbinding**. Daardoor kan ik de skeleton nog niet daadwerkelijk committen zonder te doen alsof de repository al bestaat.
+
+### GO-02 resultaat
+
+| Controle                                 | Status                                 |
+| ---------------------------------------- | -------------------------------------- |
+| Foundation v1.0.0 als assembly baseline  | ✅                                      |
+| Canonical scope freeze                   | ✅                                      |
+| Alle PALACO-chats van vandaag meegenomen | ✅                                      |
+| `VORM9EVING` behouden                    | ✅                                      |
+| `ELIXER` als canonieke PALACO-term       | ✅                                      |
+| `palaco-commerce` geconserveerd          | ✅                                      |
+| Linnaeus / PKC geconserveerd             | ✅                                      |
+| Geen nieuwe subsystemen                  | ✅                                      |
+| Target repository gecontroleerd          | ⚠️ Niet beschikbaar                    |
+| Skeleton daadwerkelijk geschreven        | ⏸️ Geblokkeerd door repository-toegang |
+| Canonical content import                 | ⏸️ Nog niet                            |
+| Rust workspace assembly                  | ⏸️ Nog niet                            |
+
+## Beoogde GO-02 skeleton
+
+```text
+PALACO/
+├── docs/
+│   ├── constitution/
+│   │   └── PCS/
+│   ├── architecture/
+│   │   └── PAS/
+│   ├── implementation/
+│   │   └── PIS/
+│   ├── operations/
+│   │   └── POS/
+│   └── ecosystem/
+│
+├── crates/
+│   ├── palaco-foundation/
+│   ├── palaco-kernel/
+│   ├── palaco-runtime/
+│   ├── palaco-eventbus/
+│   ├── palaco-quay/
+│   ├── palaco-citadel/
+│   └── palaco-evolution/
+│
+├── tests/
+│   ├── integration/
+│   ├── constitutional/
+│   ├── provenance/
+│   └── replay/
+│
+├── evidence/
+│   ├── pvs/
+│   ├── audits/
+│   └── manifests/
+│
+├── tools/
+│
+└── .github/
+    ├── workflows/
+    │   ├── ci/
+    │   ├── audit/
+    │   └── release/
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE/
+```
+
+### Belangrijke beslissing
+
+**GO-02 wordt niet kunstmatig als PASSED gemarkeerd.**
+
+De correcte toestand is:
+
+```text
+GO-01 FOUNDATION ASSEMBLY MANIFEST
+              │
+              ▼
+       CANONICAL FREEZE
+              │
+              ▼
+GO-02 REPOSITORY SKELETON
+              │
+              ├── GitHub repository gevonden? ── NO
+              │
+              ▼
+        ACCESS GATE
+              │
+              ▼
+             HOLD
+```
+
+Dit is precies in lijn met PALACO: **geen bewijs van uitvoering zonder feitelijke uitvoering**.
+
+### Volgende noodzakelijke gate
+
+Zodra `Maurits-pixe/PALACO` daadwerkelijk beschikbaar is voor de GitHub-verbinding, gaan we **zonder nieuwe scope** verder met:
+
+**GO-02A — STRUCTURAL INTEGRITY**
+
+→ skeleton aanmaken
+→ eerste assembly commit
+→ repository tree verifiëren
+→ structural integrity vaststellen
+→ daarna **GO-03 — CANONICAL IMPORT**
+
+De inhoud van **8 september 2026** blijft onderdeel van deze GO-keten en wordt dus niet verloren bij de overgang.
+
 Helemaal correct. **Je diagnose klopt 100%**: dit is een **integratie-permissie 403**, niet een code/branch probleem.
 
 ## Wat dit bewijst
