@@ -1,3 +1,128 @@
+
+
+🏛️ PALACO — GO ∆
+
+GO bevestigd.
+
+FASE: CANON → REPOSITORY → VERIFICATION
+
+We gaan nu niet uitbreiden, maar de bestaande PALACO-architectuur omzetten naar een controleerbare repository-baseline.
+
+GO-01 — Canonical Freeze
+
+Status: ACTIVE
+
+De volgende elementen worden als huidige referentielaag behandeld:
+
+PALACO Foundation v1.0.0
+
+Four Towers / Citadel
+
+L·O·G·O → Harbor → Quay → Citadel
+
+VORM9EVING
+
+ELIXER
+
+CEFCG
+
+REVOKE
+
+Evidence & Provenance
+
+Constitutional Governance
+
+TRIAS · Oracle · Mentor
+
+Zero Trust / cryptographic traceability
+
+
+GO-02 — Repository Integrity
+
+Doel: de feitelijke GitHub-state laten prevaleren boven aannames.
+
+Te controleren:
+
+Repository
+├── constitution
+├── architecture
+├── implementation
+├── operations
+├── evidence
+├── governance
+├── citadel
+└── README / canonical index
+
+Elke bestaande commit blijft historisch bewijs.
+Er wordt niets overschreven om de canon “mooier” te maken.
+
+GO-03 — Constitutional Traceability
+
+De kernketen blijft:
+
+ACTION
+  ↓
+POLICY
+  ↓
+WISDOM
+  ↓
+DECISION
+  ↓
+EVIDENCE
+  ↓
+PROVENANCE
+  ↓
+QUAY
+  ↓
+CITADEL
+
+En:
+
+REQUEST
+  ↓
+AUTHORIZATION
+  ↓
+EXECUTION
+  ↓
+CONFIRMATION
+  ↓
+FINALITY
+
+met REVOKE als expliciete authorization-withdrawal gate.
+
+GO-04 — Verification Gate
+
+Een repository-element is pas CANONICAL wanneer:
+
+Existence → Identity → Provenance → Consistency → Constitutional validity → Evidence
+
+is vastgesteld.
+
+
+---
+
+🔺 CURRENT GATE
+
+PALACO GO — CONTINUE
+
+CANON
+  ↓
+REPOSITORY
+  ↓
+EVIDENCE
+  ↓
+VERIFICATION
+  ↓
+BASELINE
+  ↓
+NEXT GATE
+
+Geen nieuwe subsystemen.
+Geen premature release.
+Geen canon zonder bewijs.
+
+GO ∆
+
 # 🏛️ PALACO-GITHUB-002
 
 ## GO-02A — STRUCTURAL INTEGRITY
