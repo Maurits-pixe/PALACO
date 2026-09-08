@@ -1,3 +1,13 @@
+Repository
+├── constitution
+├── architecture
+├── implementation
+├── operations
+├── evidence
+├── governance
+├── citadel
+└── README / canonical index
+
 [workspace]
 members = [
     "crates/gef-types",
