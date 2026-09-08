@@ -1,0 +1,16 @@
+MANUAL REPOSITORY ASSEMBLY
+        ↓
+Cargo.toml
+LICENSE
+docs/
+crates/
+tests/
+evidence/
+tools/
+.github/
+        ↓
+TREE VERIFICATION
+        ↓
+GO-02A = PASS
+        ↓
+GO-03 = UNLOCKED
