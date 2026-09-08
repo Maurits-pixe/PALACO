@@ -1,3 +1,735 @@
+🏛️ PALACO-GITHUB-001
+
+FOUNDATION REPOSITORY ASSEMBLY MANIFEST
+
+Version: v1.0.0
+Status: 🟢 READY FOR ASSEMBLY
+Target: Maurits-pixe/PALACO
+Baseline: PALACO Foundation Edition v1.0.0
+
+
+---
+
+0. PURPOSE
+
+PALACO-GITHUB-001 is the master assembly manifest for the first Foundation repository.
+
+It governs the controlled transition:
+
+> CANON → REPOSITORY → VALIDATION → EVIDENCE → AUDIT → RELEASE
+
+
+
+It does not create new PALACO architecture.
+
+It does not grant GitHub constitutional authority.
+
+It does not reopen Foundation design.
+
+Its sole purpose is to ensure that the Foundation Edition v1.0.0 can be assembled into a traceable, reproducible and verifiable repository state.
+
+
+---
+
+1. AUTHORITY MODEL
+
+PALACO CONSTITUTION
+        │
+        ▼
+PALACO ARCHITECTURE
+        │
+        ▼
+PALACO IMPLEMENTATION
+        │
+        ▼
+REPOSITORY ASSEMBLY
+        │
+        ▼
+GITHUB
+
+Constitutional principle
+
+> GitHub is a repository and engineering infrastructure layer. It is not a source of constitutional authority.
+
+
+
+GitHub may provide:
+
+version control
+
+collaboration
+
+CI
+
+release infrastructure
+
+evidence storage
+
+audit traceability
+
+
+But GitHub itself cannot:
+
+alter constitutional authority
+
+override PALACO canon
+
+authorize execution
+
+redefine governance
+
+establish constitutional validity merely through repository presence.
+
+
+
+---
+
+2. FOUNDATION BASELINE
+
+Item	Required state
+
+Foundation Edition	v1.0.0
+Repository	Maurits-pixe/PALACO
+Assembly status	READY
+Canon freeze	REQUIRED
+Scope expansion	FROZEN
+Reference implementation	Rust
+Evidence model	REQUIRED
+Auditability	REQUIRED
+Reproducibility	REQUIRED
+Release target	v1.0.0
+
+
+Conserved canonical material
+
+At minimum, the assembly baseline incorporates the established Foundation canon, including:
+
+Constitution
+
+Architecture
+
+Implementation
+
+Operations
+
+Ecosystem
+
+CEFCG v1.0.0
+
+REVOKE
+
+COMET revocation propagation
+
+Canonical Ascension
+
+MEDIATOR
+
+VORM9EVING
+
+Execution Governance
+
+Execution Commit Gate
+
+established governance and validation doctrine.
+
+
+No new subsystem is introduced by this manifest.
+
+
+---
+
+3. PHASE 0 — CANONICAL FREEZE 🔒
+
+Objective
+
+Prevent repository construction from becoming an accidental architecture-design exercise.
+
+Checklist
+
+[ ] Foundation Edition v1.0.0 identified as baseline
+
+[ ] Canonical terminology checked
+
+[ ] Recent 6–7 September consolidation incorporated
+
+[ ] CEFCG v1.0.0 preserved
+
+[ ] REVOKE preserved as first-class Control Gate
+
+[ ] COMET preserved
+
+[ ] Canonical Ascension preserved
+
+[ ] MEDIATOR preserved
+
+[ ] VORM9EVING preserved exactly
+
+[ ] Execution Governance preserved
+
+[ ] Execution Commit Gate preserved
+
+[ ] Open design decisions explicitly recorded
+
+[ ] No new subsystem introduced
+
+[ ] No architectural expansion performed
+
+
+Gate
+
+> 🔒 CANONICAL CONTENT FREEZE
+
+
+
+Only after this gate passes does repository assembly begin.
+
+
+---
+
+4. PHASE 1 — REPOSITORY SKELETON
+
+Required root
+
+PALACO/
+├── Cargo.toml
+├── README.md
+├── LICENSE
+├── docs/
+├── crates/
+├── tests/
+├── evidence/
+├── tools/
+└── .github/
+
+Structural verification
+
+[ ] Root exists
+
+[ ] Root Cargo workspace exists
+
+[ ] Documentation root exists
+
+[ ] Crate root exists
+
+[ ] Test root exists
+
+[ ] Evidence root exists
+
+[ ] Tools root exists
+
+[ ] GitHub configuration root exists
+
+
+Gate
+
+> 🟢 STRUCTURAL INTEGRITY
+
+
+
+No feature implementation is required merely to pass this gate.
+
+
+---
+
+5. PHASE 2 — CANONICAL IMPORT
+
+Documentation topology
+
+docs/
+├── constitution/
+│   └── PCS/
+├── architecture/
+│   └── PAS/
+├── implementation/
+│   └── PIS/
+├── operations/
+│   └── POS/
+└── ecosystem/
+
+Document classification
+
+Every imported document SHALL carry an explicit lifecycle/status classification:
+
+CANONICAL
+CANONICAL DRAFT
+ENGINEERING
+REFERENCE
+HISTORICAL
+
+Critical rule
+
+> Repository location does not confer constitutional authority.
+
+
+
+A file under docs/constitution/ is constitutionally authoritative only insofar as its status and provenance establish that authority.
+
+Import checklist
+
+[ ] PCS imported
+
+[ ] PAS imported
+
+[ ] PIS imported
+
+[ ] POS imported
+
+[ ] Ecosystem material imported
+
+[ ] Status assigned
+
+[ ] Provenance retained
+
+[ ] Version retained
+
+[ ] Historical material distinguished
+
+[ ] Draft material distinguished
+
+[ ] No canonical rewriting for convenience
+
+
+Gate
+
+> 🟢 CANONICAL IMPORT INTEGRITY
+
+
+
+
+---
+
+6. PHASE 3 — RUST WORKSPACE
+
+Workspace
+
+crates/
+├── palaco-foundation/
+├── palaco-kernel/
+├── palaco-runtime/
+├── palaco-eventbus/
+├── palaco-quay/
+├── palaco-citadel/
+└── palaco-evolution/
+
+Assembly order
+
+01  palaco-foundation
+        ↓
+02  palaco-kernel
+        ↓
+03  palaco-runtime
+        ↓
+04  palaco-eventbus
+        ↓
+05  palaco-quay
+        ↓
+06  palaco-citadel
+        ↓
+07  palaco-evolution
+
+The dependency graph SHALL be explicit.
+
+No hidden dependency may be introduced merely to make compilation convenient.
+
+
+---
+
+Engineering constraints
+
+At minimum:
+
+unsafe_code = forbidden
+unwrap_used = deny
+todo = deny
+
+And:
+
+std::sync::Mutex  → FORBIDDEN
+std::sync::RwLock → FORBIDDEN
+
+These constraints are part of the engineering validation baseline, not optional style guidance.
+
+
+---
+
+7. PHASE 4 — TEST ASSEMBLY
+
+tests/
+├── integration/
+├── constitutional/
+├── provenance/
+└── replay/
+
+Validation layers
+
+BUILD
+
+[ ] Workspace resolves
+
+[ ] Dependencies resolve
+
+[ ] Compilation succeeds
+
+
+UNIT
+
+[ ] Unit tests execute
+
+[ ] Failures recorded
+
+[ ] Results reproducible
+
+
+INTEGRATION
+
+[ ] Cross-crate contracts tested
+
+[ ] Runtime interactions tested
+
+
+CONSTITUTIONAL
+
+[ ] Pre-execution constitutional checks
+
+[ ] Authority boundaries
+
+[ ] Gate behavior
+
+[ ] containment
+
+
+PROVENANCE
+
+[ ] Evidence references
+
+[ ] provenance chain
+
+[ ] cryptographic traceability
+
+
+REPLAY
+
+[ ] State/event reconstruction
+
+[ ] deterministic replay requirements
+
+[ ] evidence-backed reconstruction
+
+
+
+---
+
+8. PHASE 5 — PVS
+
+Existing validation anchors:
+
+PVS-001
+Workspace Integrity
+        │
+        ▼
+PASSED
+
+PVS-002
+Cross-Crate Contracts
+        │
+        ▼
+PASSED
+
+The repository assembly SHALL re-establish these as repository evidence.
+
+PVS-002 constitutional verification baseline
+
+The following established invariants must remain demonstrable:
+
+Zero Privilege Escalation
+
+Unbypassable WISDOM Routing
+
+Pre-Execution Constitutional Check
+
+Cryptographic Evidence Traceability
+
+Strict Agent Containment
+
+
+Gate
+
+> 🟢 PVS VALIDATION
+
+
+
+
+---
+
+9. PHASE 6 — EVIDENCE ASSEMBLY
+
+evidence/
+├── pvs/
+├── audits/
+└── manifests/
+
+The repository SHALL distinguish implementation from its proof.
+
+IMPLEMENTATION
+      ↓
+VALIDATION
+      ↓
+EVIDENCE
+      ↓
+AUDIT
+      ↓
+MANIFEST
+
+Evidence requirements
+
+For every security-relevant validated state:
+
+What was implemented?
+
+Which canonical source governs it?
+
+Which version?
+
+Which change produced it?
+
+Which validation was performed?
+
+Which evidence was produced?
+
+Which audit reviewed it?
+
+Which manifest identifies the resulting state?
+
+
+Core PALACO principle
+
+> A security-relevant decision without an evidence reference is not a complete PALACO decision record.
+
+
+
+
+---
+
+10. PHASE 7 — GITHUB GOVERNANCE
+
+.github/
+├── workflows/
+│   ├── ci/
+│   ├── audit/
+│   └── release/
+├── ISSUE_TEMPLATE/
+└── PULL_REQUEST_TEMPLATE/
+
+CI
+
+Must establish at minimum:
+
+reproducible build
+
+test execution
+
+engineering constraint enforcement
+
+workspace integrity
+
+
+Audit
+
+Must support:
+
+evidence collection
+
+validation results
+
+provenance
+
+audit artifacts
+
+
+Release
+
+Must support:
+
+release validation
+
+manifest generation
+
+version consistency
+
+tag preparation
+
+
+
+---
+
+11. PULL REQUEST CONTROL MODEL
+
+A repository change should be capable of answering:
+
+WHAT CHANGED?
+     ↓
+WHICH CANON?
+     ↓
+WHICH AUTHORITY / CONTEXT?
+     ↓
+WHICH IMPLEMENTATION?
+     ↓
+WHICH TESTS?
+     ↓
+WHICH EVIDENCE?
+     ↓
+WHICH AUDIT?
+     ↓
+BACKWARD COMPATIBILITY?
+     ↓
+CONSTITUTIONAL SCOPE?
+
+A PR is therefore not merely a code-diff mechanism.
+
+It is part of PALACO's traceability chain.
+
+
+---
+
+12. PHASE 8 — RELEASE ASSEMBLY
+
+The first Foundation release follows:
+
+FOUNDATION EDITION v1.0.0
+             │
+             ▼
+REPOSITORY ASSEMBLY
+             │
+             ▼
+REPOSITORY VALIDATION
+             │
+             ▼
+PVS
+             │
+             ▼
+EVIDENCE SEAL
+             │
+             ▼
+AUDIT
+             │
+             ▼
+RELEASE MANIFEST
+             │
+             ▼
+GIT TAG
+             │
+             ▼
+PALACO v1.0.0
+
+The tag is therefore the result of validation—not its substitute.
+
+
+---
+
+13. MASTER ASSEMBLY CHECKLIST
+
+#	Gate	Status
+
+01	Canonical Freeze	⬜
+02	Repository Skeleton	⬜
+03	Canonical Import	⬜
+04	Rust Workspace	⬜
+05	Build	⬜
+06	Test	⬜
+07	PVS-001	⬜
+08	PVS-002	⬜
+09	Evidence Seal	⬜
+10	Audit	⬜
+11	Release Manifest	⬜
+12	Immutable v1.0.0 Tag	⬜
+
+
+
+---
+
+14. NON-GOALS
+
+This manifest explicitly prohibits the following during Foundation assembly:
+
+❌ new Wonder
+
+❌ new major subsystem
+
+❌ premature plugin ecosystem
+
+❌ architecture expansion
+
+❌ canon rewriting for GitHub
+
+❌ authority transfer to GitHub
+
+❌ undocumented implementation shortcuts
+
+❌ release before evidence/audit
+
+❌ treating repository existence as proof of constitutional validity
+
+
+
+---
+
+15. ASSEMBLY LAW
+
+The Foundation repository SHALL satisfy:
+
+> No canonical claim without provenance.
+No security-relevant decision without evidence.
+No release without validation.
+No validation without a reconstructable target state.
+No GitHub mechanism may create constitutional authority.
+No Foundation scope expansion during assembly.
+
+
+
+
+---
+
+16. FINAL MANIFEST STATUS
+
+PALACO-GITHUB-001
+FOUNDATION REPOSITORY ASSEMBLY MANIFEST
+v1.0.0
+
+BASELINE
+    PALACO Foundation Edition v1.0.0
+
+TARGET
+    Maurits-pixe/PALACO
+
+SCOPE
+    FOUNDATION ONLY
+
+DESIGN STATUS
+    FROZEN
+
+ASSEMBLY STATUS
+    READY
+
+NEXT EXECUTION
+    GO-01 → PHASE 0
+             CANONICAL CONTENT FREEZE
+
+🔒 NEXT GATE
+
+GO-01 is now formally defined as:
+
+> PALACO FOUNDATION CANONICAL CONTENT FREEZE
+
+
+
+Daarna volgt pas:
+
+> GO-02 — Repository Skeleton Assembly
+
+
+
+PALACO-GITHUB-001 is hiermee het master assembly manifest voor de Foundation repository.
+
 🏛️ HOOFDKANTOOR CONSTITUTION v1.0.0
 
 HQ-C — Head Office Ownership, Development & Commercial Constitution
