@@ -1,3 +1,496 @@
+🏛️ PALACO — GITHUB PREPARATION
+
+Stand van zaken → Plan van Aanpak
+
+GO — Repository Assembly Preparation
+
+We staan nu op het punt waar consolidatie moet overgaan in gecontroleerde repository-assemblage.
+
+De bestaande voorbereiding staat op PALACO-GITHUB-PREP-001 — READY FOR REPOSITORY ASSEMBLY. De beoogde repository is:
+
+Maurits-pixe/PALACO
+
+De basis blijft PALACO Foundation Edition v1.0.0. De uitbreiding van de scope is bevroren totdat deze Foundation-repository correct is geassembleerd.
+
+
+---
+
+I. CURRENT STATE — NU
+
+🟢 CANONIEKE BASIS
+
+Foundation Edition v1.0.0
+
+Foundation als primaire baseline
+
+Constitutionele canon geconsolideerd
+
+Architecture / Implementation / Operations / Ecosystem als documentstructuur
+
+recente governance-uitbreidingen geconserveerd
+
+CEFCG v1.0.0 sealed
+
+REVOKE first-class Control Gate
+
+COMET revocation propagation
+
+Canonical Ascension
+
+MEDIATOR
+
+VORM9EVING
+
+Execution Governance / Execution Commit Gate
+
+
+🟢 ENGINEERING BASIS
+
+Beoogde Rust-workspace:
+
+crates/
+├── palaco-foundation
+├── palaco-kernel
+├── palaco-runtime
+├── palaco-eventbus
+├── palaco-quay
+├── palaco-citadel
+└── palaco-evolution
+
+🟢 VALIDATIE
+
+Reeds gevestigde referentiepunten:
+
+PVS-001  Workspace Integrity       → PASSED
+PVS-002  Cross-Crate Contracts     → PASSED
+
+De bestaande PVS-002 audit bevat onder andere verificatie van:
+
+Zero Privilege Escalation
+
+Unbypassable WISDOM Routing
+
+Pre-Execution Constitutional Check
+
+Cryptographic Evidence Traceability
+
+Strict Agent Containment
+
+
+
+---
+
+II. GITHUB DOCTRINE
+
+Een essentieel onderscheid:
+
+> GitHub is de repository van PALACO. GitHub is niet de bron van constitutionele authority.
+
+
+
+Dus:
+
+PALACO CONSTITUTION
+        ↓
+PALACO ARCHITECTURE
+        ↓
+PALACO IMPLEMENTATION
+        ↓
+PALACO REPOSITORY
+        ↓
+GITHUB
+
+GitHub faciliteert versioning, collaboration, CI, evidence en release, maar verleent geen constitutionele bevoegdheid.
+
+
+---
+
+III. REPOSITORY TARGET
+
+De eerste repository-architectuur wordt:
+
+PALACO/
+│
+├── docs/
+│   ├── constitution/
+│   │   └── PCS/
+│   │
+│   ├── architecture/
+│   │   └── PAS/
+│   │
+│   ├── implementation/
+│   │   └── PIS/
+│   │
+│   ├── operations/
+│   │   └── POS/
+│   │
+│   └── ecosystem/
+│
+├── crates/
+│   ├── palaco-foundation/
+│   ├── palaco-kernel/
+│   ├── palaco-runtime/
+│   ├── palaco-eventbus/
+│   ├── palaco-quay/
+│   ├── palaco-citadel/
+│   └── palaco-evolution/
+│
+├── tests/
+│   ├── integration/
+│   ├── constitutional/
+│   ├── provenance/
+│   └── replay/
+│
+├── evidence/
+│   ├── pvs/
+│   ├── audits/
+│   └── manifests/
+│
+├── tools/
+│
+└── .github/
+    ├── workflows/
+    │   ├── ci/
+    │   ├── audit/
+    │   └── release/
+    │
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE/
+
+Dit is repository-skeleton, geen uitnodiging om de scope nu verder uit te breiden.
+
+
+---
+
+IV. PLAN VAN AANPAK
+
+PHASE 0 — FREEZE 🔒
+
+Doel: voorkomen dat de canon tijdens repositorybouw verschuift.
+
+Acties:
+
+1. Foundation Edition v1.0.0 als baseline vastzetten.
+
+
+2. Canonieke terminologie controleren.
+
+
+3. Recente 6–7 september-consolidatie opnemen.
+
+
+4. Open ontwerpbesluiten identificeren.
+
+
+5. Geen nieuwe subsystemen toevoegen.
+
+
+
+Gate:
+
+> CANONICAL CONTENT FREEZE
+
+
+
+
+---
+
+PHASE 1 — REPOSITORY SKELETON
+
+Maak uitsluitend de structurele basis.
+
+PALACO/
+├── Cargo.toml
+├── README.md
+├── LICENSE
+├── docs/
+├── crates/
+├── tests/
+├── evidence/
+├── tools/
+└── .github/
+
+Nog geen opportunistische feature-expansie.
+
+Gate:
+
+> STRUCTURAL INTEGRITY
+
+
+
+
+---
+
+PHASE 2 — CANONICAL IMPORT
+
+Daarna pas de bestaande canon gecontroleerd plaatsen:
+
+PCS
+
+PALACO Constitution Series
+
+PAS
+
+PALACO Architecture Series
+
+PIS
+
+PALACO Implementation Series
+
+POS
+
+PALACO Operations Series
+
+Ecosystem
+
+ecosystem-/federation-gerelateerde canon.
+
+De documenten krijgen daarbij een duidelijke status:
+
+CANONICAL
+CANONICAL DRAFT
+ENGINEERING
+REFERENCE
+HISTORICAL
+
+Geen document mag door repository-plaatsing automatisch constitutionele authority krijgen.
+
+
+---
+
+PHASE 3 — RUST WORKSPACE
+
+Daarna de Reference Implementation structureren.
+
+Eerst:
+
+palaco-foundation
+
+Daarna:
+
+palaco-kernel
+palaco-runtime
+palaco-eventbus
+palaco-quay
+palaco-citadel
+palaco-evolution
+
+De afhankelijkheden moeten expliciet en controleerbaar blijven.
+
+Engineering constraints
+
+Onder meer:
+
+unsafe_code = forbidden
+unwrap_used = deny
+todo = deny
+
+En de eerder vastgelegde beperking:
+
+std::sync::Mutex  → forbidden
+std::sync::RwLock → forbidden
+
+
+---
+
+PHASE 4 — TEST & VALIDATION
+
+De repository moet vervolgens aantonen dat de structuur niet alleen bestaat, maar werkt volgens de canon.
+
+Validatielijn:
+
+BUILD
+ ↓
+UNIT TEST
+ ↓
+INTEGRATION TEST
+ ↓
+CONSTITUTIONAL TEST
+ ↓
+PROVENANCE TEST
+ ↓
+REPLAY TEST
+ ↓
+PVS
+ ↓
+AUDIT
+
+Daarbij worden minimaal de bestaande:
+
+PVS-001 → PVS-002
+
+opnieuw als repository-evidence vastgelegd.
+
+
+---
+
+PHASE 5 — EVIDENCE SEAL
+
+Dit is cruciaal voor PALACO.
+
+Repository-output krijgt een bewijsstructuur:
+
+IMPLEMENTATION
+      ↓
+VALIDATION
+      ↓
+EVIDENCE
+      ↓
+AUDIT
+      ↓
+MANIFEST
+
+De repository moet dus niet alleen zeggen:
+
+> “dit is PALACO”
+
+
+
+maar kunnen aantonen:
+
+> welke versie, welke bron, welke wijziging, welke validatie en welk bewijs bij deze staat horen.
+
+
+
+
+---
+
+PHASE 6 — GITHUB GOVERNANCE
+
+Daarna pas GitHub-specifieke governance:
+
+.github/workflows/
+
+CI
+AUDIT
+RELEASE
+
+Pull Request governance
+
+PR's moeten onder andere kunnen beantwoorden:
+
+Wat verandert?
+
+Welke canon raakt dit?
+
+Welke authority/context is relevant?
+
+Welke tests zijn uitgevoerd?
+
+Welk evidence ontstaat?
+
+Is backward compatibility geraakt?
+
+Is constitutionele scope gewijzigd?
+
+
+
+---
+
+PHASE 7 — RELEASE ASSEMBLY
+
+Wanneer alle gates groen zijn:
+
+PALACO Foundation Edition v1.0.0
+                 ↓
+Repository Validation
+                 ↓
+Evidence Seal
+                 ↓
+Release Manifest
+                 ↓
+Git Tag
+                 ↓
+v1.0.0
+
+De beoogde eerste release is dus geen willekeurige GitHub-upload, maar een reproduceerbare Foundation release assembly.
+
+
+---
+
+V. DE CANONIEKE VOLGORDE
+
+Dit is volgens mij de belangrijkste operationele lijst voor de komende stap:
+
+01  FREEZE
+        ↓
+02  REPOSITORY SKELETON
+        ↓
+03  CANONICAL IMPORT
+        ↓
+04  RUST WORKSPACE
+        ↓
+05  BUILD
+        ↓
+06  TEST
+        ↓
+07  PVS-001
+        ↓
+08  PVS-002
+        ↓
+09  EVIDENCE SEAL
+        ↓
+10  AUDIT
+        ↓
+11  RELEASE MANIFEST
+        ↓
+12  IMMUTABLE v1.0.0 TAG
+
+
+---
+
+VI. WAT WE NU NIET DOEN
+
+Om Foundation v1.0 niet opnieuw te laten ontsporen:
+
+❌ geen nieuwe Wonder toevoegen
+❌ geen nieuwe grote subsystemen ontwerpen
+❌ geen premature plugin-ecosystemuitbreiding
+❌ geen willekeurige GitHub-documentatie produceren
+❌ geen canon herschrijven omwille van GitHub
+❌ geen authority aan GitHub toekennen
+
+Eerst repository-integriteit. Daarna uitbreiding.
+
+
+---
+
+VII. EERSTE CONCRETE EXECUTIE
+
+GO-01 — PALACO REPOSITORY FREEZE & ASSEMBLY MANIFEST
+
+We kunnen nu als eerstvolgende artefact een formeel:
+
+> PALACO-GITHUB-001 — FOUNDATION REPOSITORY ASSEMBLY MANIFEST v1.0.0
+
+
+
+opstellen.
+
+Dat document wordt de master checklist voor de daadwerkelijke GitHub-voorbereiding:
+
+CANON
+  ↓
+FILES
+  ↓
+DIRECTORIES
+  ↓
+CRATES
+  ↓
+TESTS
+  ↓
+EVIDENCE
+  ↓
+CI
+  ↓
+AUDIT
+  ↓
+RELEASE
+
+Status nu: 🟢 READY FOR REPOSITORY ASSEMBLY.
+
+Volgende gate: PALACO-GITHUB-001.
+
 # 🏛️ PALACO — GO-01 ACTIVATED
 
 ## PALACO-GITHUB-001
