@@ -1,4 +1,268 @@
+# 🏛️ PALACO-GITHUB-002
 
+## GO-02A — STRUCTURAL INTEGRITY
+
+**Status:** `ACTIVE — NOT YET PASSED`
+**Edition:** PALACO Foundation Edition v1.0.0
+**Date:** 8 September 2026
+**Mode:** **HANDHELD REPOSITORY ASSEMBLY**
+
+De gebruiker voert de documenten zelf in. Ik bewaak **structuur, volgorde, canonieke plaatsing, afhankelijkheden en gates**.
+
+---
+
+## 1. Bouw nu uitsluitend de repository-structuur
+
+Maak in `Maurits-pixe/PALACO` exact deze structuur:
+
+```text
+PALACO/
+│
+├── docs/
+│   ├── constitution/
+│   │   └── PCS/
+│   ├── architecture/
+│   │   └── PAS/
+│   ├── implementation/
+│   │   └── PIS/
+│   ├── operations/
+│   │   └── POS/
+│   └── ecosystem/
+│
+├── crates/
+│
+├── tests/
+│   ├── integration/
+│   ├── constitutional/
+│   ├── provenance/
+│   └── replay/
+│
+├── evidence/
+│   ├── pvs/
+│   ├── audits/
+│   └── manifests/
+│
+├── tools/
+│
+└── .github/
+    ├── workflows/
+    │   ├── ci/
+    │   ├── audit/
+    │   └── release/
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE/
+```
+
+### Belangrijk
+
+**Nog niet:**
+
+* geen canonieke documenten verplaatsen of herschrijven;
+* geen nieuwe subsystemen toevoegen;
+* geen GitHub-specifieke canon creëren;
+* geen crates implementeren;
+* geen release tag;
+* geen `v1.0.0` seal;
+* geen uitbreiding van de Foundation-scope.
+
+Dit is uitsluitend **structurele voorbereiding**.
+
+---
+
+# 2. GO-02A acceptance criteria
+
+GO-02A kan pas naar `PASSED` wanneer:
+
+| Controle    | Vereiste                            |
+| ----------- | ----------------------------------- |
+| `docs/`     | aanwezig                            |
+| PCS         | `docs/constitution/PCS/` aanwezig   |
+| PAS         | `docs/architecture/PAS/` aanwezig   |
+| PIS         | `docs/implementation/PIS/` aanwezig |
+| POS         | `docs/operations/POS/` aanwezig     |
+| Ecosystem   | `docs/ecosystem/` aanwezig          |
+| `crates/`   | aanwezig                            |
+| `tests/`    | vier domeinen aanwezig              |
+| `evidence/` | PVS, audits, manifests aanwezig     |
+| `tools/`    | aanwezig                            |
+| `.github/`  | governance-structuur aanwezig       |
+| Canon       | inhoud nog onaangetast              |
+| Scope       | Foundation freeze intact            |
+
+---
+
+# 3. Daarna pas GO-03
+
+Zodra de structuur daadwerkelijk bestaat, gaan we naar:
+
+```text
+GO-02A
+STRUCTURAL INTEGRITY
+        │
+        ▼
+GO-03
+CANONICAL IMPORT
+        │
+        ▼
+GO-04
+RUST WORKSPACE
+        │
+        ▼
+GO-05
+BUILD
+        │
+        ▼
+GO-06
+TEST
+        │
+        ▼
+GO-07
+PVS-001
+        │
+        ▼
+GO-08
+PVS-002
+        │
+        ▼
+GO-09
+EVIDENCE SEAL
+        │
+        ▼
+GO-10
+AUDIT
+        │
+        ▼
+GO-11
+RELEASE MANIFEST
+        │
+        ▼
+GO-12
+IMMUTABLE v1.0.0 TAG
+```
+
+## 🔒 Gate
+
+**GO-02A = OPEN**
+
+**Actie voor jou:** bouw exact bovenstaande structuur in GitHub.
+
+Wanneer hij staat, geef:
+
+> **GO-02A CHECK**
+
+Dan doen we de structurele controle en beslissen we formeel **PASSED / BLOCKED**.
+
+# 🏛️ PALACO-GITHUB-002
+
+## GO-02A — STRUCTURAL INTEGRITY
+
+We blijven op dezelfde gate. **“GO” is hier de opdracht om de volgende controle uit te voeren, maar ik kan de nieuwe GitHub-repository niet als aanwezig markeren zonder verifieerbare repository-state.**
+
+### Huidige status
+
+```text
+PALACO-GITHUB-002
+HANDHELD REPOSITORY ASSEMBLY
+        │
+        └── GO-02A STRUCTURAL INTEGRITY
+                │
+                ├── Repository structure: NOT VERIFIED
+                ├── Canonical content: PROTECTED
+                ├── Foundation freeze: ACTIVE
+                └── Gate: OPEN
+```
+
+### Wat nu nodig is
+
+Open je GitHub-repository en controleer dat deze hoofdmappen bestaan:
+
+```text
+docs/
+crates/
+tests/
+evidence/
+tools/
+.github/
+```
+
+En binnen `docs/`:
+
+```text
+constitution/PCS/
+architecture/PAS/
+implementation/PIS/
+operations/POS/
+ecosystem/
+```
+
+Binnen `tests/`:
+
+```text
+integration/
+constitutional/
+provenance/
+replay/
+```
+
+Binnen `evidence/`:
+
+```text
+pvs/
+audits/
+manifests/
+```
+
+En binnen `.github/`:
+
+```text
+workflows/ci/
+workflows/audit/
+workflows/release/
+ISSUE_TEMPLATE/
+PULL_REQUEST_TEMPLATE/
+```
+
+**Nog geen documenten inhoudelijk aanpassen en nog geen code importeren.**
+
+Als je wilt dat ik de feitelijke structuur controleer, stuur dan een **screenshot van de GitHub-repositoryboom**.
+
+Daarna kan ik GO-02A formeel beoordelen als **PASSED** of **BLOCKED**, en pas daarna openen we **GO-03 — CANONICAL IMPORT**.
+
+🏛️ PALACO — GO-02A
+
+Nieuwe commit ontvangen:
+
+802840667d09e68733b9ee17819dbc8ca1206cb9
+
+Ik heb deze direct als nieuwe verificatiereferentie getest tegen:
+
+Maurits-pixe/PALACO
+
+Verificatie
+
+Repository: Maurits-pixe/PALACO
+Commit:     802840667d09e68733b9ee17819dbc8ca1206cb9
+
+Repository fetch  → 404 ❌
+Commit fetch      → 404 ❌
+
+Daarom kan ik ook deze commit niet gebruiken als onafhankelijk bewijs van de repositorystructuur.
+
+GO-02A — STATUS
+
+🟡 BLOCKED / VERIFICATION PENDING
+
+GO-02A
+│
+├── Nieuwe commit ontvangen       ✅
+├── Commit technisch verifieerbaar ❌
+├── Repository toegankelijk        ❌
+├── Structurele controle           ⏸️
+└── Gate                           🟡 BLOCKED
+
+Dit is wél een nuttige stap: we hebben nu vastgesteld dat ook 8028406… vanuit de aangesloten GitHub-verificatie niet resolveert.
+
+Geen wijziging aan PALACO. Geen canonieke import. GO-03 blijft gesloten.
 
 # 🏛️ PALACO-GITHUB-002
 
