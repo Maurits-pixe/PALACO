@@ -1,3 +1,61 @@
+# 🏛️ PALACO — GO-02A
+
+**GO ontvangen.**
+
+De gate kan nog niet formeel sluiten, omdat de feitelijke GitHub-structuur in deze chat nog niet verifieerbaar is.
+
+### Upload de GitHub-structuur als screenshot
+
+Zodra je de screenshot van de repositoryboom hier plaatst, controleer ik exact:
+
+1. `docs/` + PCS/PAS/PIS/POS/Ecosystem
+2. `crates/`
+3. `tests/` + vier testdomeinen
+4. `evidence/` + PVS/audits/manifests
+5. `tools/`
+6. `.github/` + workflows/templates
+7. **geen scope-uitbreiding**
+8. **Foundation Freeze intact**
+
+Daarna volgt uitsluitend één formele uitkomst:
+
+```text
+GO-02A
+├── PASSED
+└── → GO-03 CANONICAL IMPORT
+```
+
+of
+
+```text
+GO-02A
+└── BLOCKED
+    └── correctie vereist
+```
+
+**Geen canonieke documenten worden door mij aangepast.**
+
+USER / AGENT
+      ↓
+   L·O·G·O
+      ↓
+   HARBOR
+      ↓
+CITADEL CORE
+      ↓
+    QUAY
+      ↓
+    KEEP
+      ↓
+RESPONSE / RESULT
+
+docs/
+crates/
+tests/
+evidence/
+tools/
+.github/
+
 # 🏛️ PALACO — GO-STATE VERIFIED
 
 **GO ontvangen en uitgevoerd.**
