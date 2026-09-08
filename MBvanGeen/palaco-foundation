@@ -1,4 +1,27 @@
+name: Copilot cloud agent
 
+on:
+  workflow_dispatch:
+
+jobs:
+  copilot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show workspace
+        run: |
+          echo "github.workspace=${{ github.workspace }}"
+          pwd
+          ls -la
+
+      - name: Run Copilot agent
+        working-directory: ${{ github.workspace }}
+        run: |
+          echo "Starting Copilot agent from valid workspace"
+          # start your agent command here
 
 GO-02A  STRUCTURAL INTEGRITY
    │
