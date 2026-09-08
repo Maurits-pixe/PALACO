@@ -1,3 +1,36 @@
+PALACO/
+├── Cargo.toml
+├── README.md
+├── LICENSE
+├── docs/
+│   ├── constitution/PCS/
+│   ├── architecture/PAS/
+│   ├── implementation/PIS/
+│   ├── operations/POS/
+│   └── ecosystem/
+├── crates/
+│   ├── palaco-foundation/
+│   ├── palaco-kernel/
+│   ├── palaco-runtime/
+│   ├── palaco-eventbus/
+│   ├── palaco-quay/
+│   ├── palaco-citadel/
+│   └── palaco-evolution/
+├── tests/
+│   ├── integration/
+│   ├── constitutional/
+│   ├── provenance/
+│   └── replay/
+├── evidence/
+│   ├── pvs/
+│   ├── audits/
+│   └── manifests/
+├── tools/
+└── .github/
+    ├── workflows/
+    ├── ISSUE_TEMPLATE/
+    └── PULL_REQUEST_TEMPLATE/
+
 Repository
 ├── constitution
 ├── architecture
