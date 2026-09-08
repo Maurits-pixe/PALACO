@@ -1,3 +1,79 @@
+# 🏛️ PALACO-GITHUB-002
+
+## GO-02A — STRUCTURAL INTEGRITY
+
+We blijven op dezelfde gate. **“GO” is hier de opdracht om de volgende controle uit te voeren, maar ik kan de nieuwe GitHub-repository niet als aanwezig markeren zonder verifieerbare repository-state.**
+
+### Huidige status
+
+```text
+PALACO-GITHUB-002
+HANDHELD REPOSITORY ASSEMBLY
+        │
+        └── GO-02A STRUCTURAL INTEGRITY
+                │
+                ├── Repository structure: NOT VERIFIED
+                ├── Canonical content: PROTECTED
+                ├── Foundation freeze: ACTIVE
+                └── Gate: OPEN
+```
+
+### Wat nu nodig is
+
+Open je GitHub-repository en controleer dat deze hoofdmappen bestaan:
+
+```text
+docs/
+crates/
+tests/
+evidence/
+tools/
+.github/
+```
+
+En binnen `docs/`:
+
+```text
+constitution/PCS/
+architecture/PAS/
+implementation/PIS/
+operations/POS/
+ecosystem/
+```
+
+Binnen `tests/`:
+
+```text
+integration/
+constitutional/
+provenance/
+replay/
+```
+
+Binnen `evidence/`:
+
+```text
+pvs/
+audits/
+manifests/
+```
+
+En binnen `.github/`:
+
+```text
+workflows/ci/
+workflows/audit/
+workflows/release/
+ISSUE_TEMPLATE/
+PULL_REQUEST_TEMPLATE/
+```
+
+**Nog geen documenten inhoudelijk aanpassen en nog geen code importeren.**
+
+Als je wilt dat ik de feitelijke structuur controleer, stuur dan een **screenshot van de GitHub-repositoryboom**.
+
+Daarna kan ik GO-02A formeel beoordelen als **PASSED** of **BLOCKED**, en pas daarna openen we **GO-03 — CANONICAL IMPORT**.
+
 # 🏛️ PALACO — GO-02A
 
 **GO ontvangen.**
