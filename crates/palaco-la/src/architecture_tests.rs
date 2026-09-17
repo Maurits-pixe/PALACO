@@ -32,8 +32,11 @@ mod tests {
             "PROPAGATION STATUS IS EXPLICIT",
             "AUTHORIZATION BINDS AUTHORITY IDENTITY",
             "MISMATCHED AUTHORITY => STOP",
+            "REVOCATION PERSISTS THROUGH EVENTSTORE",
+            "REVOCATION EVENT IS IMMUTABLE",
+            "COMET PRESERVES REVOCATION IDENTITY",
         ];
 
-        assert_eq!(rules.len(), 28);
+        assert_eq!(rules.len(), 31);
     }
 }
