@@ -40,14 +40,20 @@ mod tests {
     #[test]
     fn digest_is_deterministic_for_exact_bytes() {
         let bytes = CanonicalBytes::new(b"PALACO-LA".to_vec());
-        assert_eq!(Sha256Digest::calculate(&bytes), Sha256Digest::calculate(&bytes));
+        assert_eq!(
+            Sha256Digest::calculate(&bytes),
+            Sha256Digest::calculate(&bytes)
+        );
     }
 
     #[test]
     fn different_bytes_produce_different_digest() {
         let first = CanonicalBytes::new(b"A".to_vec());
         let second = CanonicalBytes::new(b"B".to_vec());
-        assert_ne!(Sha256Digest::calculate(&first), Sha256Digest::calculate(&second));
+        assert_ne!(
+            Sha256Digest::calculate(&first),
+            Sha256Digest::calculate(&second)
+        );
     }
 
     #[test]
