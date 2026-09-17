@@ -18,7 +18,10 @@ pub trait EventStore {
         event: EventEnvelope,
     ) -> Result<(), EventStoreError>;
 
-    async fn load(&self, aggregate_id: AggregateId) -> Result<Vec<EventEnvelope>, EventStoreError>;
+    async fn load(
+        &self,
+        aggregate_id: AggregateId,
+    ) -> Result<Vec<EventEnvelope>, EventStoreError>;
 
     async fn load_after(
         &self,
@@ -26,7 +29,10 @@ pub trait EventStore {
         sequence: Sequence,
     ) -> Result<Vec<EventEnvelope>, EventStoreError>;
 
-    async fn current_head(&self, aggregate_id: AggregateId) -> Result<Option<EventEnvelope>, EventStoreError>;
+    async fn current_head(
+        &self,
+        aggregate_id: AggregateId,
+    ) -> Result<Option<EventEnvelope>, EventStoreError>;
 }
 
 #[cfg(test)]
