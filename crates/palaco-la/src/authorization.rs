@@ -1,4 +1,4 @@
-use crate::domain::{Authority, AuthorityStatus, Authorization, AuthorizationId, Decision, Scope};
+use crate::domain::{Authority, AuthorityStatus, Authorization, AuthorizationId, AuthorizationStatus, Decision, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthorizationEvaluationError {
@@ -36,6 +36,7 @@ pub fn authorize(
         decision_id: decision.id,
         authority_id: authority.id,
         scope: requested_scope,
+        status: AuthorizationStatus::Active,
     };
 
     Ok(AuthorizationEvaluation {
