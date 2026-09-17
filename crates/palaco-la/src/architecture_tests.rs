@@ -8,8 +8,11 @@ mod tests {
             "SIGNATURE != AUTHORITY",
             "PROVENANCE != PERMISSION",
             "UNKNOWN => FAIL_CLOSED",
+            "QUESTION != EVIDENCE",
+            "EVIDENCE != EPISTEMIC_STATE",
+            "THRESHOLD != DECISION",
         ];
 
-        assert_eq!(rules.len(), 5);
+        assert_eq!(rules.len(), 8);
     }
 }
