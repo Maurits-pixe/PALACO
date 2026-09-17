@@ -85,14 +85,7 @@ mod tests {
             Ok(permit) => permit,
             Err(_) => {
                 assert!(false);
-                return gate(
-                    &authorization,
-                    ExecutionRequest {
-                        operation: String::new(),
-                        scope: authorization.scope.clone(),
-                    },
-                )
-                .expect_err("test fallback");
+                return;
             }
         }
     }
