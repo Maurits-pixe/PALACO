@@ -157,7 +157,10 @@ impl Evidence {
         !self.source.is_empty()
             && !self.origin.is_empty()
             && !self.content_digest.is_empty()
-            && matches!(self.status, EpistemicStatus::Known | EpistemicStatus::Disputed)
+            && matches!(
+                self.status,
+                EpistemicStatus::Known | EpistemicStatus::Disputed
+            )
     }
 }
 
