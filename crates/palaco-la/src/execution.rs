@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::domain::{Authorization, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6,7 +8,7 @@ pub enum ExecutionGateError {
     EmptyOperation,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionRequest {
     pub operation: String,
     pub scope: Scope,
