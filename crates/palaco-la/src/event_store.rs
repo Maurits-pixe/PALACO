@@ -10,29 +10,29 @@ pub enum EventStoreError {
 }
 
 pub trait EventStore {
-    async fn append(
+    fn append(
         &self,
         aggregate_id: AggregateId,
         expected_next: Sequence,
         expected_previous_hash: Option<Sha256Digest>,
         event: EventEnvelope,
-    ) -> Result<(), EventStoreError>;
+    ) -> impl std::future::Future<Output = Result<(), EventStoreError>> + Send;
 
-    async fn load(
+    fn load(
         &self,
         aggregate_id: AggregateId,
-    ) -> Result<Vec<EventEnvelope>, EventStoreError>;
+    ) -> impl std::future::Future<Output = Result<Vec<EventEnvelope>, EventStoreError>> + Send;
 
-    async fn load_after(
+    fn load_after(
         &self,
         aggregate_id: AggregateId,
         sequence: Sequence,
-    ) -> Result<Vec<EventEnvelope>, EventStoreError>;
+    ) -> impl std::future::Future<Output = Result<Vec<EventEnvelope>, EventStoreError>> + Send;
 
-    async fn current_head(
+    fn current_head(
         &self,
         aggregate_id: AggregateId,
-    ) -> Result<Option<EventEnvelope>, EventStoreError>;
+    ) -> impl std::future::Future<Output = Result<Option<EventEnvelope>, EventStoreError>> + Send;
 }
 
 #[cfg(test)]
