@@ -1,8 +1,9 @@
 use std::env;
 
 use chrono::Utc;
+use palaco_la::authorization::authorize;
 use palaco_la::comet::{AuthorizationInvalidation, AUTHORIZATION_INVALIDATED_EVENT_TYPE};
-use palaco_la::domain::{AuthorizationId, AuthorizationStatus};
+use palaco_la::domain::{AuthorizationId, AuthorizationStatus, Authority, AuthorityStatus, Decision, DecisionId, DecisionVerdict, Scope};
 use palaco_la::domain::AuthorityId;
 use palaco_la::revocation::{RevocationReason, RevocationReceipt, REVOCATION_EVENT_TYPE};
 use ed25519_dalek::SigningKey;
@@ -326,4 +327,126 @@ async fn postgres_persists_canonical_authorization_invalidation_event() {
             .verify(&reconstructed.payload, &reconstructed.signature)
             .is_ok()
     );
+}
+
+
+#[tokio::test]
+async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_collectively() {
+    let store = store().await;
+    let authority_id = AuthorityId::new(Uuid::new_v4());
+    let authority = Authority {
+        id: authority_id,
+        scope: Scope {
+            target: "target".to_owned(),
+            operations: vec!["read".to_owned(), "write".to_owned()],
+            territory: "territory".to_owned(),
+            purpose: "purpose".to_owned(),
+        },
+        status: AuthorityStatus::Active,
+    };
+    let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
+    let actor_id = Uuid::new_v4();
+    let provenance = Uuid::new_v4();
+
+    let first = authorize(
+        Decision {
+            id: DecisionId::new(Uuid::new_v4()),
+            question_id: palaco_la::QuestionId::new(Uuid::new_v4()),
+            verdict: DecisionVerdict::Allow,
+        },
+        authority.clone(),
+        authority.scope.clone(),
+        AuthorizationId::new(Uuid::new_v4()),
+    )
+    .expect("authorization evaluation must succeed")
+    .authorization;
+
+    let second = authorize(
+        Decision {
+            id: DecisionId::new(Uuid::new_v4()),
+            question_id: palaco_la::QuestionId::new(Uuid::new_v4()),
+            verdict: DecisionVerdict::Allow,
+        },
+        authority.clone(),
+        Scope {
+            target: "target".to_owned(),
+            operations: vec!["read".to_owned()],
+            territory: "territory".to_owned(),
+            purpose: "purpose".to_owned(),
+        },
+        AuthorizationId::new(Uuid::new_v4()),
+    )
+    .expect("authorization evaluation must succeed")
+    .authorization;
+
+    store
+        .append_authorization_issued(
+            &first,
+            actor_id,
+            None,
+            None,
+            provenance,
+            &signer,
+        )
+        .await
+        .expect("first authorization issuance must persist");
+    store
+        .append_authorization_issued(
+            &second,
+            actor_id,
+            None,
+            None,
+            provenance,
+            &signer,
+        )
+        .await
+        .expect("second authorization issuance must persist");
+
+    let active = store
+        .active_authorization_ids_for_authority(authority_id)
+        .await
+        .expect("active authorization reconstruction must succeed");
+    assert_eq!(active, vec![first.id, second.id]);
+
+    let revocation = RevocationReceipt {
+        revocation_id: Uuid::new_v4(),
+        authority_id,
+        reason: RevocationReason::Explicit,
+        occurred_at: Utc::now(),
+    };
+    let revocation_event = store
+        .append_revocation(
+            &revocation,
+            actor_id,
+            None,
+            None,
+            provenance,
+            &signer,
+        )
+        .await
+        .expect("authority revocation must persist");
+
+    let invalidations = store
+        .invalidate_active_authorizations_for_revocation(
+            &revocation,
+            actor_id,
+            None,
+            Some(revocation_event.event_id),
+            provenance,
+            &signer,
+            Utc::now(),
+        )
+        .await
+        .expect("COMET bulk invalidation must persist");
+    assert_eq!(invalidations.len(), 2);
+    assert!(invalidations.iter().all(|event| {
+        event.event_type == AUTHORIZATION_INVALIDATED_EVENT_TYPE
+            && event.authority_reference == Some(authority_id.value())
+    }));
+
+    let active_after = store
+        .active_authorization_ids_for_authority(authority_id)
+        .await
+        .expect("active authorization reconstruction must succeed");
+    assert!(active_after.is_empty());
 }
