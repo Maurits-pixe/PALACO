@@ -45,6 +45,72 @@ pub fn authorize(
     })
 }
 
+
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
+use crate::signature::CanonicalSigner;
+use crate::verification::CanonicalBytes;
+
+pub const AUTHORIZATION_ISSUED_EVENT_TYPE: &str = "AuthorizationIssued";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct AuthorizationIssuedEventPayload {
+    authorization_id: AuthorizationId,
+    decision_id: crate::domain::DecisionId,
+    authority_id: crate::domain::AuthorityId,
+    scope: Scope,
+    status: AuthorizationStatus,
+}
+
+pub fn canonical_authorization_issued_payload(
+    authorization: &Authorization,
+) -> Result<CanonicalBytes, serde_json::Error> {
+    let payload = AuthorizationIssuedEventPayload {
+        authorization_id: authorization.id,
+        decision_id: authorization.decision_id,
+        authority_id: authorization.authority_id,
+        scope: authorization.scope.clone(),
+        status: authorization.status,
+    };
+    serde_json::to_vec(&payload).map(CanonicalBytes::new)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_authorization_issued_event(
+    authorization: &Authorization,
+    sequence: Sequence,
+    actor_id: Uuid,
+    correlation_id: Option<Uuid>,
+    causation_id: Option<EventId>,
+    previous_event_hash: Option<crate::verification::Sha256Digest>,
+    provenance: Uuid,
+    signer: &CanonicalSigner,
+) -> Result<EventEnvelope, serde_json::Error> {
+    let payload = canonical_authorization_issued_payload(authorization)?;
+    let signature = signer.sign(&payload);
+    Ok(EventEnvelope::new(
+        EventId::new(authorization.id.value()),
+        AUTHORIZATION_ISSUED_EVENT_TYPE.to_owned(),
+        AggregateId::new(authorization.id.value()),
+        "Authorization".to_owned(),
+        sequence,
+        Utc::now(),
+        Utc::now(),
+        actor_id,
+        Some(authorization.authority_id.value()),
+        correlation_id,
+        causation_id,
+        payload,
+        previous_event_hash,
+        SchemaVersion(1),
+        provenance,
+        signature,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
