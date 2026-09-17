@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use ed25519_dalek::Signature;
-use sqlx::{postgres::PgPool, Row};
+use sqlx::{Row, postgres::PgPool};
 use uuid::Uuid;
 
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
@@ -141,7 +141,11 @@ impl EventStore for PgEventStore {
         .bind(event.causation_id.map(EventId::value))
         .bind(event.payload.as_slice())
         .bind(event.payload_hash.as_bytes().as_slice())
-        .bind(event.previous_event_hash.map(|digest| digest.as_bytes().to_vec()))
+        .bind(
+            event
+                .previous_event_hash
+                .map(|digest| digest.as_bytes().to_vec()),
+        )
         .bind(event.schema_version.0 as i16)
         .bind(event.provenance)
         .bind(event.signature.to_bytes().as_slice())
@@ -190,7 +194,10 @@ impl EventStore for PgEventStore {
         load_events(&self.pool, aggregate_id, Some(sequence)).await
     }
 
-    async fn current_head(&self, aggregate_id: AggregateId) -> Result<Option<EventEnvelope>, EventStoreError> {
+    async fn current_head(
+        &self,
+        aggregate_id: AggregateId,
+    ) -> Result<Option<EventEnvelope>, EventStoreError> {
         let row = sqlx::query(
             "SELECT event_id, event_type, aggregate_id, aggregate_type, sequence,
                     occurred_at, recorded_at, actor_id, authority_reference,
@@ -266,7 +273,8 @@ fn event_from_row(row: sqlx::postgres::PgRow) -> Result<EventEnvelope, EventStor
     let payload_hash_bytes: Vec<u8> = row
         .try_get("payload_hash")
         .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
-    let payload_hash = digest_from_bytes(&payload_hash_bytes).map_err(EventStoreError::Persistence)?;
+    let payload_hash =
+        digest_from_bytes(&payload_hash_bytes).map_err(EventStoreError::Persistence)?;
 
     let previous_hash_bytes: Option<Vec<u8>> = row
         .try_get("previous_event_hash")
