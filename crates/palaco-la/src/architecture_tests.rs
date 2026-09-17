@@ -26,8 +26,12 @@ mod tests {
             "EXPIRATION => STOP",
             "SUSPENSION => REASSESS",
             "ACTIVE AUTHORITY => LIFECYCLE MAY CONTINUE",
+            "REVOKE => PROPAGATE",
+            "REVOCATION PRESERVES PROVENANCE",
+            "REVOCATION DOES NOT REWRITE HISTORY",
+            "PROPAGATION STATUS IS EXPLICIT",
         ];
 
-        assert_eq!(rules.len(), 22);
+        assert_eq!(rules.len(), 26);
     }
 }
