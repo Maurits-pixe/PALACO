@@ -8,6 +8,7 @@ pub mod decision;
 pub mod domain;
 pub mod event;
 pub mod event_store;
+pub mod replay;
 pub mod execution;
 pub mod lifecycle;
 pub mod persistence;
