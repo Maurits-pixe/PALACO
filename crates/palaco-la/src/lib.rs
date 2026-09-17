@@ -31,6 +31,7 @@ pub use execution::{
 pub use receipt::{ExecutionReceipt, ExecutionStatus, ObservationReceipt};
 pub use persistence::postgres::PgEventStore;
 pub use signature::{CanonicalSigner, CanonicalVerifier};
+pub use replay::{verify_history, ReplayError};
 pub use verification::{CanonicalBytes, Sha256Digest};
 
 pub use consequence::{ConsequenceReceipt, Reassessment, ReassessmentTrigger};
