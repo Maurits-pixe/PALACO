@@ -35,8 +35,12 @@ mod tests {
             "REVOCATION PERSISTS THROUGH EVENTSTORE",
             "REVOCATION EVENT IS IMMUTABLE",
             "COMET PRESERVES REVOCATION IDENTITY",
+            "AUTHORITY REVOCATION => AUTHORIZATION INVALIDATION",
+            "INVALIDATED AUTHORIZATION => EXECUTION STOP",
+            "COMET REQUIRES AUTHORITY IDENTITY MATCH",
+            "INACTIVE AUTHORIZATION => NO NEW EXECUTION PERMIT",
         ];
 
-        assert_eq!(rules.len(), 31);
+        assert_eq!(rules.len(), 35);
     }
 }
