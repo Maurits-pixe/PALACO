@@ -30,8 +30,10 @@ mod tests {
             "REVOCATION PRESERVES PROVENANCE",
             "REVOCATION DOES NOT REWRITE HISTORY",
             "PROPAGATION STATUS IS EXPLICIT",
+            "AUTHORIZATION BINDS AUTHORITY IDENTITY",
+            "MISMATCHED AUTHORITY => STOP",
         ];
 
-        assert_eq!(rules.len(), 26);
+        assert_eq!(rules.len(), 28);
     }
 }
