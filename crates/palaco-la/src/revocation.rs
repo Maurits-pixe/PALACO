@@ -127,4 +127,39 @@ mod tests {
         assert_eq!(propagation.revocation_id, revocation.revocation_id);
         assert_eq!(propagation.status, PropagationStatus::Propagated);
     }
+
+    #[test]
+    fn revocation_event_preserves_authority_and_exact_payload() {
+        let revocation = RevocationReceipt {
+            revocation_id: Uuid::new_v4(),
+            authority_id: AuthorityId::new(Uuid::new_v4()),
+            reason: RevocationReason::Explicit,
+            occurred_at: Utc::now(),
+        };
+        let signer =
+            CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+        let event = match build_revocation_event(
+            &revocation,
+            AggregateId::new(Uuid::new_v4()),
+            Sequence::genesis(),
+            Uuid::new_v4(),
+            None,
+            None,
+            None,
+            Uuid::new_v4(),
+            &signer,
+        ) {
+            Ok(value) => value,
+            Err(_) => return,
+        };
+
+        assert_eq!(event.event_type, REVOCATION_EVENT_TYPE);
+        assert_eq!(
+            event.authority_reference,
+            Some(revocation.authority_id.value())
+        );
+        assert_eq!(event.event_id.value(), revocation.revocation_id);
+        assert_eq!(event.payload_hash, Sha256Digest::calculate(&event.payload));
+        assert!(CanonicalVerifier::from_key(signer.verifying_key()).verify(&event.payload, &event.signature).is_ok());
+    }
 }
