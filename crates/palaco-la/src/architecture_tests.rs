@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     #[test]
     fn constitutional_boundaries_are_explicit() {
         let rules = [
@@ -52,8 +54,18 @@ mod tests {
             "SEMANTIC REPLAY REQUIRES STRUCTURAL REPLAY",
             "UNKNOWN AUTHORIZATION EVENT => FAIL_CLOSED",
             "REPLAYED REVOKED AUTHORIZATION => NO EXECUTION PERMIT",
+            "NO EXPECT IN L.A. TEST TREE",
         ];
 
-        assert_eq!(rules.len(), 48);
+        assert_eq!(rules.len(), 49);
+    }
+
+    #[test]
+    fn integration_tests_do_not_use_expect_or_unwrap() {
+        let source = fs::read_to_string("tests/postgres_integration.rs")
+            .map_err(|error| error.to_string())
+            .unwrap_or_default();
+        assert!(!source.contains(".expect("));
+        assert!(!source.contains(".unwrap("));
     }
 }
