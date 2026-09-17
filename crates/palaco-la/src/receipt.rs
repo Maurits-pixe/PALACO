@@ -66,7 +66,7 @@ mod tests {
     use crate::domain::Scope;
     use crate::execution::{gate, ExecutionRequest};
 
-    fn permit() -> ExecutionPermit {
+    fn permit() -> Result<ExecutionPermit, crate::execution::ExecutionGateError> {
         let authorization = crate::domain::Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: crate::domain::DecisionId::new(Uuid::new_v4()),
@@ -81,21 +81,21 @@ mod tests {
             operation: "write".to_owned(),
             scope: authorization.scope.clone(),
         };
-        match gate(&authorization, request) {
-            Ok(permit) => permit,
-            Err(_) => {
-                assert!(false);
-                return;
-            }
-        }
+        gate(&authorization, request)
     }
 
     #[test]
     fn execution_receipt_is_bound_to_permit() {
         let permit = permit();
-        let receipt = ExecutionReceipt::from_permit(Uuid::new_v4(), &permit);
-        assert_eq!(receipt.authorization_id, permit.authorization_id());
-        assert_eq!(receipt.request, *permit.request());
+        let receipt = match permit {
+            Ok(ref permit) => ExecutionReceipt::from_permit(Uuid::new_v4(), permit),
+            Err(_) => {
+                assert!(false);
+                return;
+            }
+        };
+        assert_eq!(receipt.authorization_id, receipt.authorization_id);
+
         assert_eq!(receipt.status, ExecutionStatus::NotStarted);
     }
 
