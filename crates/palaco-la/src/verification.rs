@@ -24,6 +24,10 @@ impl Sha256Digest {
         Self(value)
     }
 
+    pub fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
@@ -44,5 +48,12 @@ mod tests {
         let first = CanonicalBytes::new(b"A".to_vec());
         let second = CanonicalBytes::new(b"B".to_vec());
         assert_ne!(Sha256Digest::calculate(&first), Sha256Digest::calculate(&second));
+    }
+
+    #[test]
+    fn digest_can_be_reconstructed_from_exact_bytes() {
+        let bytes = CanonicalBytes::new(b"PALACO-LA".to_vec());
+        let digest = Sha256Digest::calculate(&bytes);
+        assert_eq!(Sha256Digest::from_bytes(*digest.as_bytes()), digest);
     }
 }
