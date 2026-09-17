@@ -106,7 +106,10 @@ mod tests {
         let permit = gate(&authorization(), request("read"));
         assert!(permit.is_ok());
         if let Ok(permit) = permit {
-            assert_ne!(permit.authorization_id(), AuthorizationId::new(uuid::Uuid::nil()));
+            assert_ne!(
+                permit.authorization_id(),
+                AuthorizationId::new(uuid::Uuid::nil())
+            );
         }
     }
 }
