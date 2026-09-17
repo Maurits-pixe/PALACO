@@ -1,6 +1,8 @@
 use std::env;
 
 use chrono::Utc;
+use palaco_la::comet::{AuthorizationInvalidation, AUTHORIZATION_INVALIDATED_EVENT_TYPE};
+use palaco_la::domain::{AuthorizationId, AuthorizationStatus};
 use palaco_la::domain::AuthorityId;
 use palaco_la::revocation::{RevocationReason, RevocationReceipt, REVOCATION_EVENT_TYPE};
 use ed25519_dalek::SigningKey;
@@ -260,6 +262,59 @@ async fn postgres_persists_canonical_revocation_event() {
         .await
         .expect("head lookup must succeed")
         .expect("revocation head must exist");
+
+    assert_eq!(reconstructed, event);
+    assert_eq!(
+        reconstructed.payload_hash,
+        palaco_la::Sha256Digest::calculate(&reconstructed.payload)
+    );
+    assert!(
+        palaco_la::CanonicalVerifier::from_key(signer.verifying_key())
+            .verify(&reconstructed.payload, &reconstructed.signature)
+            .is_ok()
+    );
+}
+
+
+#[tokio::test]
+async fn postgres_persists_canonical_authorization_invalidation_event() {
+    let store = store().await;
+    let authority_id = AuthorityId::new(Uuid::new_v4());
+    let authorization_id = AuthorizationId::new(Uuid::new_v4());
+    let invalidation = AuthorizationInvalidation {
+        propagation_id: Uuid::new_v4(),
+        revocation_id: Uuid::new_v4(),
+        authority_id,
+        authorization_id,
+        status: AuthorizationStatus::Revoked,
+        observed_at: Utc::now(),
+    };
+    let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
+    let actor_id = Uuid::new_v4();
+    let provenance = Uuid::new_v4();
+
+    let event = store
+        .append_authorization_invalidation(
+            &invalidation,
+            actor_id,
+            Some(Uuid::new_v4()),
+            None,
+            provenance,
+            &signer,
+        )
+        .await
+        .expect("authorization invalidation event must persist");
+
+    assert_eq!(event.event_type, AUTHORIZATION_INVALIDATED_EVENT_TYPE);
+    assert_eq!(event.aggregate_id.value(), authorization_id.value());
+    assert_eq!(event.authority_reference, Some(authority_id.value()));
+    assert_eq!(event.event_id.value(), invalidation.propagation_id);
+
+    let reconstructed = store
+        .current_head(event.aggregate_id)
+        .await
+        .expect("head lookup must succeed")
+        .expect("authorization invalidation head must exist");
 
     assert_eq!(reconstructed, event);
     assert_eq!(
