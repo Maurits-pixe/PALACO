@@ -58,11 +58,7 @@ pub struct Question {
 
 impl Question {
     pub fn new(id: QuestionId, subject: String, context: String) -> Self {
-        Self {
-            id,
-            subject,
-            context,
-        }
+        Self { id, subject, context }
     }
 }
 
@@ -145,12 +141,35 @@ impl Decision {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuthorizationStatus {
+    Active,
+    Suspended,
+    Revoked,
+    Expired,
+    Superseded,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Authorization {
     pub id: AuthorizationId,
     pub decision_id: DecisionId,
     pub authority_id: AuthorityId,
     pub scope: Scope,
+    pub status: AuthorizationStatus,
+}
+
+impl Authorization {
+    pub fn is_active(&self) -> bool {
+        matches!(self.status, AuthorizationStatus::Active)
+    }
+
+    pub fn revoked(&self) -> Self {
+        Self {
+            status: AuthorizationStatus::Revoked,
+            ..self.clone()
+        }
+    }
 }
 
 impl Evidence {
@@ -158,10 +177,7 @@ impl Evidence {
         !self.source.is_empty()
             && !self.origin.is_empty()
             && !self.content_digest.is_empty()
-            && matches!(
-                self.status,
-                EpistemicStatus::Known | EpistemicStatus::Disputed
-            )
+            && matches!(self.status, EpistemicStatus::Known | EpistemicStatus::Disputed)
     }
 }
 
@@ -226,5 +242,22 @@ mod tests {
             purpose: "purpose".to_owned(),
         };
         assert!(!authority.contains(&requested));
+    }
+
+    #[test]
+    fn revoked_authorization_is_not_active() {
+        let authorization = Authorization {
+            id: AuthorizationId::new(Uuid::new_v4()),
+            decision_id: DecisionId::new(Uuid::new_v4()),
+            authority_id: AuthorityId::new(Uuid::new_v4()),
+            scope: Scope {
+                target: "target".to_owned(),
+                operations: vec!["read".to_owned()],
+                territory: "territory".to_owned(),
+                purpose: "purpose".to_owned(),
+            },
+            status: AuthorizationStatus::Revoked,
+        };
+        assert!(!authorization.is_active());
     }
 }
