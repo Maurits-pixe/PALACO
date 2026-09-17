@@ -6,22 +6,27 @@ pub enum EventStoreError {
     SequenceConflict { expected: Sequence, actual: Sequence },
     PredecessorConflict,
     DuplicateEvent,
+    Persistence(String),
 }
 
 pub trait EventStore {
-    fn append(
-        &mut self,
+    async fn append(
+        &self,
         aggregate_id: AggregateId,
         expected_next: Sequence,
         expected_previous_hash: Option<Sha256Digest>,
         event: EventEnvelope,
     ) -> Result<(), EventStoreError>;
 
-    fn load(&self, aggregate_id: AggregateId) -> Vec<EventEnvelope>;
+    async fn load(&self, aggregate_id: AggregateId) -> Result<Vec<EventEnvelope>, EventStoreError>;
 
-    fn load_after(&self, aggregate_id: AggregateId, sequence: Sequence) -> Vec<EventEnvelope>;
+    async fn load_after(
+        &self,
+        aggregate_id: AggregateId,
+        sequence: Sequence,
+    ) -> Result<Vec<EventEnvelope>, EventStoreError>;
 
-    fn current_head(&self, aggregate_id: AggregateId) -> Option<EventEnvelope>;
+    async fn current_head(&self, aggregate_id: AggregateId) -> Result<Option<EventEnvelope>, EventStoreError>;
 }
 
 #[cfg(test)]
