@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Authorization, Scope};
+use crate::domain::{Authorization, AuthorizationStatus, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutionGateError {
     ScopeMismatch,
     EmptyOperation,
+    AuthorizationInactive,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +39,10 @@ pub fn gate(
         return Err(ExecutionGateError::EmptyOperation);
     }
 
+    if !matches!(authorization.status, AuthorizationStatus::Active) {
+        return Err(ExecutionGateError::AuthorizationInactive);
+    }
+
     if !authorization.scope.contains(&request.scope)
         || !request.scope.operations.contains(&request.operation)
     {
@@ -53,19 +58,20 @@ pub fn gate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{AuthorizationId, DecisionId};
+    use crate::domain::{AuthorizationId, AuthorityId, DecisionId};
 
     fn authorization() -> Authorization {
         Authorization {
             id: AuthorizationId::new(uuid::Uuid::new_v4()),
             decision_id: DecisionId::new(uuid::Uuid::new_v4()),
-            authority_id: crate::domain::AuthorityId::new(uuid::Uuid::new_v4()),
+            authority_id: AuthorityId::new(uuid::Uuid::new_v4()),
             scope: Scope {
                 target: "target".to_owned(),
                 operations: vec!["read".to_owned()],
                 territory: "territory".to_owned(),
                 purpose: "purpose".to_owned(),
             },
+            status: AuthorizationStatus::Active,
         }
     }
 
@@ -112,5 +118,15 @@ mod tests {
                 AuthorizationId::new(uuid::Uuid::nil())
             );
         }
+    }
+
+    #[test]
+    fn revoked_authorization_cannot_create_execution_permit() {
+        let mut authorization = authorization();
+        authorization.status = AuthorizationStatus::Revoked;
+        assert_eq!(
+            gate(&authorization, request("read")),
+            Err(ExecutionGateError::AuthorizationInactive)
+        );
     }
 }
