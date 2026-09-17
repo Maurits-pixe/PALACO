@@ -86,17 +86,14 @@ mod tests {
 
     #[test]
     fn execution_receipt_is_bound_to_permit() {
-        let permit = permit();
-        let receipt = match permit {
-            Ok(ref permit) => ExecutionReceipt::from_permit(Uuid::new_v4(), permit),
-            Err(_) => {
-                assert!(false);
-                return;
-            }
-        };
-        assert_eq!(receipt.authorization_id, receipt.authorization_id);
-
-        assert_eq!(receipt.status, ExecutionStatus::NotStarted);
+        let result = permit();
+        assert!(result.is_ok());
+        if let Ok(permit) = result {
+            let receipt = ExecutionReceipt::from_permit(Uuid::new_v4(), &permit);
+            assert_eq!(receipt.authorization_id, permit.authorization_id());
+            assert_eq!(receipt.request, *permit.request());
+            assert_eq!(receipt.status, ExecutionStatus::NotStarted);
+        }
     }
 
     #[test]
