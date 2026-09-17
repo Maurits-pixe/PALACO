@@ -3,6 +3,65 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::domain::AuthorityId;
+use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
+use crate::signature::CanonicalSigner;
+use crate::verification::CanonicalBytes;
+
+pub const REVOCATION_EVENT_TYPE: &str = "AuthorityRevoked";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct RevocationEventPayload {
+    revocation_id: Uuid,
+    authority_id: AuthorityId,
+    reason: RevocationReason,
+    occurred_at: DateTime<Utc>,
+}
+
+pub fn canonical_event_payload(
+    revocation: &RevocationReceipt,
+) -> Result<CanonicalBytes, serde_json::Error> {
+    let payload = RevocationEventPayload {
+        revocation_id: revocation.revocation_id,
+        authority_id: revocation.authority_id,
+        reason: revocation.reason,
+        occurred_at: revocation.occurred_at,
+    };
+    serde_json::to_vec(&payload).map(CanonicalBytes::new)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_revocation_event(
+    revocation: &RevocationReceipt,
+    aggregate_id: AggregateId,
+    sequence: Sequence,
+    actor_id: Uuid,
+    correlation_id: Option<Uuid>,
+    causation_id: Option<EventId>,
+    previous_event_hash: Option<crate::verification::Sha256Digest>,
+    provenance: Uuid,
+    signer: &CanonicalSigner,
+) -> Result<EventEnvelope, serde_json::Error> {
+    let payload = canonical_event_payload(revocation)?;
+    let signature = signer.sign(&payload);
+    Ok(EventEnvelope::new(
+        EventId::new(revocation.revocation_id),
+        REVOCATION_EVENT_TYPE.to_owned(),
+        aggregate_id,
+        "Authority".to_owned(),
+        sequence,
+        revocation.occurred_at,
+        Utc::now(),
+        actor_id,
+        Some(revocation.authority_id.value()),
+        correlation_id,
+        causation_id,
+        payload,
+        previous_event_hash,
+        SchemaVersion(1),
+        provenance,
+        signature,
+    ))
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RevocationReason {
