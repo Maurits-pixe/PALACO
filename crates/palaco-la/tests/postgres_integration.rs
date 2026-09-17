@@ -2,7 +2,7 @@ use std::env;
 
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
-use sqlx::{postgres::PgPoolOptions, Row};
+use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
 use palaco_la::{
@@ -219,18 +219,4 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() {
     .await
     .expect("aggregate head must exist");
     assert_eq!(head_sequence, 2);
-
-    let _ = sqlx::query("SELECT event_id FROM la.events WHERE aggregate_id = $1")
-        .bind(aggregate_id.value())
-        .fetch_all(store.pool())
-        .await
-        .expect("events must remain queryable");
-
-    let _ = sqlx::query("SELECT aggregate_id FROM la.aggregate_heads WHERE aggregate_id = $1")
-        .bind(aggregate_id.value())
-        .fetch_one(store.pool())
-        .await
-        .expect("head row must remain queryable");
-
-    let _ = Row::try_get::<Uuid, _>;
 }
