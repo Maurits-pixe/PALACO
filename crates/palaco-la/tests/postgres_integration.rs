@@ -1,12 +1,16 @@
 use std::env;
 
 use chrono::Utc;
+use ed25519_dalek::SigningKey;
 use palaco_la::authorization::authorize;
 use palaco_la::comet::{AuthorizationInvalidation, AUTHORIZATION_INVALIDATED_EVENT_TYPE};
-use palaco_la::domain::{AuthorizationId, AuthorizationStatus, Authority, AuthorityStatus, Decision, DecisionId, DecisionVerdict, Scope};
-use palaco_la::domain::AuthorityId;
-use palaco_la::revocation::{RevocationReason, RevocationReceipt, REVOCATION_EVENT_TYPE};
-use ed25519_dalek::SigningKey;
+use palaco_la::domain::{
+    AuthorizationId, AuthorizationStatus, Authority, AuthorityId, AuthorityStatus, Decision,
+    DecisionId, DecisionVerdict, Scope,
+};
+use palaco_la::revocation::{
+    RevocationReason, RevocationReceipt, REVOCATION_EVENT_TYPE,
+};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -15,19 +19,23 @@ use palaco_la::{
     EventStoreError, PgEventStore, SchemaVersion, Sequence,
 };
 
-fn database_url() -> String {
-    env::var("DATABASE_URL").expect("DATABASE_URL must be supplied by the PostgreSQL CI service")
+fn database_url() -> Result<String, String> {
+    env::var("DATABASE_URL").map_err(|_| "DATABASE_URL must be supplied".to_owned())
 }
 
-async fn store() -> PgEventStore {
+async fn store() -> Result<PgEventStore, String> {
+    let url = database_url()?;
     let pool = PgPoolOptions::new()
         .max_connections(8)
-        .connect(&database_url())
+        .connect(&url)
         .await
-        .expect("PostgreSQL must be reachable");
+        .map_err(|error| format!("PostgreSQL connection failed: {error}"))?;
     let store = PgEventStore::new(pool);
-    store.migrate().await.expect("L.A. migrations must apply");
     store
+        .migrate()
+        .await
+        .map_err(|error| format!("L.A. migrations failed: {error:?}"))?;
+    Ok(store)
 }
 
 fn event(
@@ -61,21 +69,21 @@ fn event(
 }
 
 #[tokio::test]
-async fn postgres_golden_path_persists_and_reconstructs_exact_events() {
-    let store = store().await;
+async fn postgres_golden_path_persists_and_reconstructs_exact_events() -> Result<(), String> {
+    let store = store().await?;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
     let first = event(aggregate_id, Sequence::genesis(), None, b"question-1");
 
     store
         .append(aggregate_id, Sequence::genesis(), None, first.clone())
         .await
-        .expect("genesis append must succeed");
+        .map_err(|error| format!("genesis append failed: {error:?}"))?;
 
     let head = store
         .current_head(aggregate_id)
         .await
-        .expect("head lookup must succeed")
-        .expect("head must exist");
+        .map_err(|error| format!("head lookup failed: {error:?}"))?
+        .ok_or_else(|| "head must exist".to_owned())?;
     assert_eq!(head, first);
 
     let second = event(
@@ -92,35 +100,39 @@ async fn postgres_golden_path_persists_and_reconstructs_exact_events() {
             second.clone(),
         )
         .await
-        .expect("second append must succeed");
+        .map_err(|error| format!("second append failed: {error:?}"))?;
 
-    let all = store.load(aggregate_id).await.expect("load must succeed");
+    let all = store
+        .load(aggregate_id)
+        .await
+        .map_err(|error| format!("load failed: {error:?}"))?;
     assert_eq!(all, vec![first.clone(), second.clone()]);
 
     let after_first = store
         .load_after(aggregate_id, Sequence::genesis())
         .await
-        .expect("load_after must succeed");
+        .map_err(|error| format!("load_after failed: {error:?}"))?;
     assert_eq!(after_first, vec![second.clone()]);
 
     assert_eq!(
         store
             .current_head(aggregate_id)
             .await
-            .expect("head lookup must succeed"),
+            .map_err(|error| format!("head lookup failed: {error:?}"))?,
         Some(second)
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn postgres_rejects_sequence_and_predecessor_conflicts() {
-    let store = store().await;
+async fn postgres_rejects_sequence_and_predecessor_conflicts() -> Result<(), String> {
+    let store = store().await?;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
     let first = event(aggregate_id, Sequence::genesis(), None, b"conflict-1");
     store
-        .append(aggregate_id, Sequence::genesis(), None, first.clone())
+        .append(aggregate_id, Sequence::genesis(), None, first)
         .await
-        .expect("genesis append must succeed");
+        .map_err(|error| format!("genesis append failed: {error:?}"))?;
 
     let wrong_sequence = event(aggregate_id, Sequence(9), None, b"wrong-sequence");
     assert!(matches!(
@@ -137,18 +149,19 @@ async fn postgres_rejects_sequence_and_predecessor_conflicts() {
             .await,
         Err(EventStoreError::PredecessorConflict)
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn postgres_rejects_duplicate_event_id() {
-    let store = store().await;
+async fn postgres_rejects_duplicate_event_id() -> Result<(), String> {
+    let store = store().await?;
     let aggregate_a = AggregateId::new(Uuid::new_v4());
     let aggregate_b = AggregateId::new(Uuid::new_v4());
     let first = event(aggregate_a, Sequence::genesis(), None, b"duplicate");
     store
         .append(aggregate_a, Sequence::genesis(), None, first.clone())
         .await
-        .expect("first append must succeed");
+        .map_err(|error| format!("first append failed: {error:?}"))?;
 
     let duplicate = EventEnvelope {
         event_id: first.event_id,
@@ -161,17 +174,18 @@ async fn postgres_rejects_duplicate_event_id() {
             .await,
         Err(EventStoreError::DuplicateEvent)
     );
+    Ok(())
 }
 
 #[tokio::test]
-async fn postgres_rejects_direct_event_mutation() {
-    let store = store().await;
+async fn postgres_rejects_direct_event_mutation() -> Result<(), String> {
+    let store = store().await?;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
     let first = event(aggregate_id, Sequence::genesis(), None, b"immutable");
     store
         .append(aggregate_id, Sequence::genesis(), None, first.clone())
         .await
-        .expect("append must succeed");
+        .map_err(|error| format!("append failed: {error:?}"))?;
 
     let update = sqlx::query("UPDATE la.events SET event_type = 'Tampered' WHERE event_id = $1")
         .bind(first.event_id.value())
@@ -184,18 +198,19 @@ async fn postgres_rejects_direct_event_mutation() {
         .execute(store.pool())
         .await;
     assert!(delete.is_err(), "DELETE must be rejected by the append-only trigger");
+    Ok(())
 }
 
 #[tokio::test]
-async fn postgres_serializes_concurrent_appends_per_aggregate() {
-    let store = store().await;
+async fn postgres_serializes_concurrent_appends_per_aggregate() -> Result<(), String> {
+    let store = store().await?;
     let pool = store.pool().clone();
     let aggregate_id = AggregateId::new(Uuid::new_v4());
     let first = event(aggregate_id, Sequence::genesis(), None, b"concurrency-1");
     store
         .append(aggregate_id, Sequence::genesis(), None, first.clone())
         .await
-        .expect("genesis append must succeed");
+        .map_err(|error| format!("genesis append failed: {error:?}"))?;
 
     let left_store = PgEventStore::new(pool.clone());
     let right_store = PgEventStore::new(pool);
@@ -213,7 +228,10 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() {
         .count();
     assert_eq!(successes, 1, "exactly one concurrent append may claim sequence 2");
 
-    let events = store.load(aggregate_id).await.expect("load must succeed");
+    let events = store
+        .load(aggregate_id)
+        .await
+        .map_err(|error| format!("load failed: {error:?}"))?;
     assert_eq!(events.len(), 2);
 
     let head_sequence: i64 = sqlx::query_scalar(
@@ -222,14 +240,14 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() {
     .bind(aggregate_id.value())
     .fetch_one(store.pool())
     .await
-    .expect("aggregate head must exist");
+    .map_err(|error| format!("aggregate head lookup failed: {error}"))?;
     assert_eq!(head_sequence, 2);
+    Ok(())
 }
 
-
 #[tokio::test]
-async fn postgres_persists_canonical_revocation_event() {
-    let store = store().await;
+async fn postgres_persists_canonical_revocation_event() -> Result<(), String> {
+    let store = store().await?;
     let authority_id = AuthorityId::new(Uuid::new_v4());
     let revocation = RevocationReceipt {
         revocation_id: Uuid::new_v4(),
@@ -238,20 +256,18 @@ async fn postgres_persists_canonical_revocation_event() {
         occurred_at: Utc::now(),
     };
     let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
-    let actor_id = Uuid::new_v4();
-    let provenance = Uuid::new_v4();
 
     let event = store
         .append_revocation(
             &revocation,
-            actor_id,
+            Uuid::new_v4(),
             Some(Uuid::new_v4()),
             None,
-            provenance,
+            Uuid::new_v4(),
             &signer,
         )
         .await
-        .expect("revocation event must persist");
+        .map_err(|error| format!("revocation event failed: {error:?}"))?;
 
     assert_eq!(event.event_type, REVOCATION_EVENT_TYPE);
     assert_eq!(event.aggregate_id.value(), authority_id.value());
@@ -261,8 +277,8 @@ async fn postgres_persists_canonical_revocation_event() {
     let reconstructed = store
         .current_head(event.aggregate_id)
         .await
-        .expect("head lookup must succeed")
-        .expect("revocation head must exist");
+        .map_err(|error| format!("head lookup failed: {error:?}"))?
+        .ok_or_else(|| "revocation head must exist".to_owned())?;
 
     assert_eq!(reconstructed, event);
     assert_eq!(
@@ -274,12 +290,12 @@ async fn postgres_persists_canonical_revocation_event() {
             .verify(&reconstructed.payload, &reconstructed.signature)
             .is_ok()
     );
+    Ok(())
 }
 
-
 #[tokio::test]
-async fn postgres_persists_canonical_authorization_invalidation_event() {
-    let store = store().await;
+async fn postgres_persists_canonical_authorization_invalidation_event() -> Result<(), String> {
+    let store = store().await?;
     let authority_id = AuthorityId::new(Uuid::new_v4());
     let authorization_id = AuthorizationId::new(Uuid::new_v4());
     let invalidation = AuthorizationInvalidation {
@@ -291,20 +307,18 @@ async fn postgres_persists_canonical_authorization_invalidation_event() {
         observed_at: Utc::now(),
     };
     let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
-    let actor_id = Uuid::new_v4();
-    let provenance = Uuid::new_v4();
 
     let event = store
         .append_authorization_invalidation(
             &invalidation,
-            actor_id,
+            Uuid::new_v4(),
             Some(Uuid::new_v4()),
             None,
-            provenance,
+            Uuid::new_v4(),
             &signer,
         )
         .await
-        .expect("authorization invalidation event must persist");
+        .map_err(|error| format!("authorization invalidation failed: {error:?}"))?;
 
     assert_eq!(event.event_type, AUTHORIZATION_INVALIDATED_EVENT_TYPE);
     assert_eq!(event.aggregate_id.value(), authorization_id.value());
@@ -314,8 +328,8 @@ async fn postgres_persists_canonical_authorization_invalidation_event() {
     let reconstructed = store
         .current_head(event.aggregate_id)
         .await
-        .expect("head lookup must succeed")
-        .expect("authorization invalidation head must exist");
+        .map_err(|error| format!("head lookup failed: {error:?}"))?
+        .ok_or_else(|| "authorization invalidation head must exist".to_owned())?;
 
     assert_eq!(reconstructed, event);
     assert_eq!(
@@ -327,12 +341,12 @@ async fn postgres_persists_canonical_authorization_invalidation_event() {
             .verify(&reconstructed.payload, &reconstructed.signature)
             .is_ok()
     );
+    Ok(())
 }
 
-
 #[tokio::test]
-async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_collectively() {
-    let store = store().await;
+async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_collectively() -> Result<(), String> {
+    let store = store().await?;
     let authority_id = AuthorityId::new(Uuid::new_v4());
     let authority = Authority {
         id: authority_id,
@@ -345,8 +359,6 @@ async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_
         status: AuthorityStatus::Active,
     };
     let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
-    let actor_id = Uuid::new_v4();
-    let provenance = Uuid::new_v4();
 
     let first = authorize(
         Decision {
@@ -358,7 +370,7 @@ async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_
         authority.scope.clone(),
         AuthorizationId::new(Uuid::new_v4()),
     )
-    .expect("authorization evaluation must succeed")
+    .map_err(|error| format!("first authorization evaluation failed: {error:?}"))?
     .authorization;
 
     let second = authorize(
@@ -376,36 +388,22 @@ async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_
         },
         AuthorizationId::new(Uuid::new_v4()),
     )
-    .expect("authorization evaluation must succeed")
+    .map_err(|error| format!("second authorization evaluation failed: {error:?}"))?
     .authorization;
 
     store
-        .append_authorization_issued(
-            &first,
-            actor_id,
-            None,
-            None,
-            provenance,
-            &signer,
-        )
+        .append_authorization_issued(&first, Uuid::new_v4(), None, None, Uuid::new_v4(), &signer)
         .await
-        .expect("first authorization issuance must persist");
+        .map_err(|error| format!("first issuance failed: {error:?}"))?;
     store
-        .append_authorization_issued(
-            &second,
-            actor_id,
-            None,
-            None,
-            provenance,
-            &signer,
-        )
+        .append_authorization_issued(&second, Uuid::new_v4(), None, None, Uuid::new_v4(), &signer)
         .await
-        .expect("second authorization issuance must persist");
+        .map_err(|error| format!("second issuance failed: {error:?}"))?;
 
     let active = store
         .active_authorization_ids_for_authority(authority_id)
         .await
-        .expect("active authorization reconstruction must succeed");
+        .map_err(|error| format!("active reconstruction failed: {error:?}"))?;
     assert_eq!(active, vec![first.id, second.id]);
 
     let revocation = RevocationReceipt {
@@ -417,27 +415,27 @@ async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_
     let revocation_event = store
         .append_revocation(
             &revocation,
-            actor_id,
+            Uuid::new_v4(),
             None,
             None,
-            provenance,
+            Uuid::new_v4(),
             &signer,
         )
         .await
-        .expect("authority revocation must persist");
+        .map_err(|error| format!("authority revocation failed: {error:?}"))?;
 
     let invalidations = store
         .invalidate_active_authorizations_for_revocation(
             &revocation,
-            actor_id,
+            Uuid::new_v4(),
             None,
             Some(revocation_event.event_id),
-            provenance,
+            Uuid::new_v4(),
             &signer,
             Utc::now(),
         )
         .await
-        .expect("COMET bulk invalidation must persist");
+        .map_err(|error| format!("COMET bulk invalidation failed: {error:?}"))?;
     assert_eq!(invalidations.len(), 2);
     assert!(invalidations.iter().all(|event| {
         event.event_type == AUTHORIZATION_INVALIDATED_EVENT_TYPE
@@ -447,6 +445,7 @@ async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_
     let active_after = store
         .active_authorization_ids_for_authority(authority_id)
         .await
-        .expect("active authorization reconstruction must succeed");
+        .map_err(|error| format!("post-revocation reconstruction failed: {error:?}"))?;
     assert!(active_after.is_empty());
+    Ok(())
 }
