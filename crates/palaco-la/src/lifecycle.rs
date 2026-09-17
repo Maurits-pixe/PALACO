@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Authority, AuthorityStatus, Authorization};
+use crate::domain::{Authority, AuthorityStatus, Authorization, AuthorizationStatus};
 use crate::execution::ExecutionPermit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,12 +17,16 @@ pub enum LifecycleReason {
     SuspendedAuthority,
     RevokedAuthority,
     ExpiredAuthority,
+    AuthorizationRevoked,
+    AuthorizationSuspended,
+    AuthorizationExpired,
+    AuthorizationSuperseded,
 }
 
 pub fn evaluate(
     authority: &Authority,
     authorization: &Authorization,
-    _permit: &ExecutionPermit,
+    permit: &ExecutionPermit,
 ) -> (ExecutionDisposition, LifecycleReason) {
     if authorization.authority_id != authority.id {
         return (
@@ -30,31 +34,56 @@ pub fn evaluate(
             LifecycleReason::AuthorityMismatch,
         );
     }
-    match authority.status {
-        AuthorityStatus::Active => (
-            ExecutionDisposition::Continue,
-            LifecycleReason::ActiveAuthority,
-        ),
-        AuthorityStatus::Suspended => (
+
+    if permit.authorization_id() != authorization.id {
+        return (
+            ExecutionDisposition::Stop,
+            LifecycleReason::AuthorityMismatch,
+        );
+    }
+
+    match authorization.status {
+        AuthorizationStatus::Revoked => {
+            (ExecutionDisposition::Stop, LifecycleReason::AuthorizationRevoked)
+        }
+        AuthorizationStatus::Suspended => (
             ExecutionDisposition::Reassess,
-            LifecycleReason::SuspendedAuthority,
+            LifecycleReason::AuthorizationSuspended,
         ),
-        AuthorityStatus::Revoked => (
+        AuthorizationStatus::Expired => (
             ExecutionDisposition::Stop,
-            LifecycleReason::RevokedAuthority,
+            LifecycleReason::AuthorizationExpired,
         ),
-        AuthorityStatus::Expired => (
+        AuthorizationStatus::Superseded => (
             ExecutionDisposition::Stop,
-            LifecycleReason::ExpiredAuthority,
+            LifecycleReason::AuthorizationSuperseded,
         ),
+        AuthorizationStatus::Active => match authority.status {
+            AuthorityStatus::Active => (
+                ExecutionDisposition::Continue,
+                LifecycleReason::ActiveAuthority,
+            ),
+            AuthorityStatus::Suspended => (
+                ExecutionDisposition::Reassess,
+                LifecycleReason::SuspendedAuthority,
+            ),
+            AuthorityStatus::Revoked => (
+                ExecutionDisposition::Stop,
+                LifecycleReason::RevokedAuthority,
+            ),
+            AuthorityStatus::Expired => (
+                ExecutionDisposition::Stop,
+                LifecycleReason::ExpiredAuthority,
+            ),
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{AuthorityId, Authorization, AuthorizationId, DecisionId, Scope};
-    use crate::execution::{ExecutionRequest, gate};
+    use crate::domain::{AuthorityId, AuthorizationId, DecisionId, Scope};
+    use crate::execution::{gate, ExecutionRequest};
     use uuid::Uuid;
 
     fn authority(status: AuthorityStatus) -> Authority {
@@ -70,7 +99,10 @@ mod tests {
         }
     }
 
-    fn authorization(authority_id: AuthorityId) -> Authorization {
+    fn authorization(
+        authority_id: AuthorityId,
+        status: AuthorizationStatus,
+    ) -> Authorization {
         Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: DecisionId::new(Uuid::new_v4()),
@@ -81,6 +113,7 @@ mod tests {
                 territory: "territory".to_owned(),
                 purpose: "purpose".to_owned(),
             },
+            status,
         }
     }
 
@@ -95,7 +128,7 @@ mod tests {
     #[test]
     fn revoked_authority_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Revoked);
-        let authorization = authorization(auth.id);
+        let authorization = authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -108,7 +141,7 @@ mod tests {
     #[test]
     fn suspended_authority_requires_reassessment() {
         let auth = authority(AuthorityStatus::Suspended);
-        let authorization = authorization(auth.id);
+        let authorization = authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -121,7 +154,7 @@ mod tests {
     #[test]
     fn active_authority_allows_lifecycle_continuation() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization = authorization(auth.id);
+        let authorization = authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -130,13 +163,31 @@ mod tests {
         assert_eq!(disposition, ExecutionDisposition::Continue);
         assert_eq!(reason, LifecycleReason::ActiveAuthority);
     }
-}
 
+    #[test]
+    fn revoked_authorization_stops_execution_lifecycle() {
+        let auth = authority(AuthorityStatus::Active);
+        let authorization = authorization(auth.id, AuthorizationStatus::Revoked);
+        let invalidated = authorization.revoked();
+        assert_eq!(invalidated.status, AuthorizationStatus::Revoked);
+        let prior_permit = {
+            let active = authorization(&auth.id, AuthorizationStatus::Active);
+            permit(&active)
+        };
+        let Some(prior_permit) = prior_permit else {
+            assert!(false);
+            return;
+        };
+        let (disposition, reason) = evaluate(&auth, &invalidated, &prior_permit);
+        assert_eq!(disposition, ExecutionDisposition::Stop);
+        assert_eq!(reason, LifecycleReason::AuthorizationRevoked);
+    }
 
     #[test]
     fn mismatched_authority_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization = authorization(AuthorityId::new(Uuid::new_v4()));
+        let authorization =
+            authorization(AuthorityId::new(Uuid::new_v4()), AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -145,3 +196,18 @@ mod tests {
         assert_eq!(disposition, ExecutionDisposition::Stop);
         assert_eq!(reason, LifecycleReason::AuthorityMismatch);
     }
+
+    #[test]
+    fn mismatched_permit_authorization_stops_execution_lifecycle() {
+        let auth = authority(AuthorityStatus::Active);
+        let authorization = authorization(auth.id, AuthorizationStatus::Active);
+        let other = authorization(auth.id, AuthorizationStatus::Active);
+        let Some(permit) = permit(&other) else {
+            assert!(false);
+            return;
+        };
+        let (disposition, reason) = evaluate(&auth, &authorization, &permit);
+        assert_eq!(disposition, ExecutionDisposition::Stop);
+        assert_eq!(reason, LifecycleReason::AuthorityMismatch);
+    }
+}
