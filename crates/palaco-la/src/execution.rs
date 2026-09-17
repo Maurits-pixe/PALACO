@@ -59,6 +59,7 @@ mod tests {
         Authorization {
             id: AuthorizationId::new(uuid::Uuid::new_v4()),
             decision_id: DecisionId::new(uuid::Uuid::new_v4()),
+            authority_id: crate::domain::AuthorityId::new(uuid::Uuid::new_v4()),
             scope: Scope {
                 target: "target".to_owned(),
                 operations: vec!["read".to_owned()],
