@@ -8,6 +8,7 @@ pub mod assessment;
 pub mod event_store;
 pub mod execution;
 pub mod persistence;
+pub mod receipt;
 pub mod signature;
 pub mod verification;
 
@@ -18,6 +19,7 @@ pub use domain::{AuthorizationId, AuthorityId, DecisionId, EvidenceId, QuestionI
 pub use event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 pub use event_store::{EventStore, EventStoreError};
 pub use execution::{gate as execution_gate, ExecutionGateError, ExecutionPermit, ExecutionRequest};
+pub use receipt::{ExecutionReceipt, ExecutionStatus, ObservationReceipt};
 pub use persistence::postgres::PgEventStore;
 pub use signature::{CanonicalSigner, CanonicalVerifier};
 pub use verification::{CanonicalBytes, Sha256Digest};
