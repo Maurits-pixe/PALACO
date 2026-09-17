@@ -67,6 +67,46 @@ impl PgEventStore {
         Ok(event)
     }
 
+    pub async fn append_authorization_invalidation(
+        &self,
+        invalidation: &crate::comet::AuthorizationInvalidation,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+    ) -> Result<EventEnvelope, EventStoreError> {
+        let aggregate_id = AggregateId::new(invalidation.authorization_id.value());
+        let head = self.current_head(aggregate_id).await?;
+        let (sequence, previous_event_hash) = match head {
+            Some(event) => (event.sequence.next(), Some(event.payload_hash)),
+            None => (Sequence::genesis(), None),
+        };
+
+        let event = crate::comet::build_authorization_invalidation_event(
+            invalidation,
+            aggregate_id,
+            sequence,
+            actor_id,
+            correlation_id,
+            causation_id,
+            previous_event_hash,
+            provenance,
+            signer,
+        )
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        self.append(
+            aggregate_id,
+            sequence,
+            previous_event_hash,
+            event.clone(),
+        )
+        .await?;
+
+        Ok(event)
+    }
+
     pub async fn migrate(&self) -> Result<(), EventStoreError> {
         sqlx::migrate!("./migrations")
             .run(&self.pool)
