@@ -23,29 +23,30 @@ pub fn evaluate(
     _permit: &ExecutionPermit,
 ) -> (ExecutionDisposition, LifecycleReason) {
     match authority.status {
-        AuthorityStatus::Active => {
-            (ExecutionDisposition::Continue, LifecycleReason::ActiveAuthority)
-        }
+        AuthorityStatus::Active => (
+            ExecutionDisposition::Continue,
+            LifecycleReason::ActiveAuthority,
+        ),
         AuthorityStatus::Suspended => (
             ExecutionDisposition::Reassess,
             LifecycleReason::SuspendedAuthority,
         ),
-        AuthorityStatus::Revoked => {
-            (ExecutionDisposition::Stop, LifecycleReason::RevokedAuthority)
-        }
-        AuthorityStatus::Expired => {
-            (ExecutionDisposition::Stop, LifecycleReason::ExpiredAuthority)
-        }
+        AuthorityStatus::Revoked => (
+            ExecutionDisposition::Stop,
+            LifecycleReason::RevokedAuthority,
+        ),
+        AuthorityStatus::Expired => (
+            ExecutionDisposition::Stop,
+            LifecycleReason::ExpiredAuthority,
+        ),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        Authorization, AuthorizationId, AuthorityId, DecisionId, Scope,
-    };
-    use crate::execution::{gate, ExecutionRequest};
+    use crate::domain::{AuthorityId, Authorization, AuthorizationId, DecisionId, Scope};
+    use crate::execution::{ExecutionRequest, gate};
     use uuid::Uuid;
 
     fn authority(status: AuthorityStatus) -> Authority {
