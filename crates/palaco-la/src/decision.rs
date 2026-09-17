@@ -106,11 +106,13 @@ mod tests {
         };
 
         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert!(matches!(result.map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
-        assert_eq!(
-            result.map(|value| value.decision.question_id),
-            Ok(q.id)
-        );
+        match result {
+            Ok(value) => {
+                assert_eq!(value.decision.verdict, DecisionVerdict::Allow);
+                assert_eq!(value.decision.question_id, q.id);
+            }
+            Err(error) => panic!("unexpected decision evaluation error: {error:?}"),
+        }
     }
 
     #[test]
