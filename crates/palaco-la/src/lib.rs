@@ -10,6 +10,7 @@ pub mod execution;
 pub mod persistence;
 pub mod consequence;
 pub mod receipt;
+pub mod revocation;
 pub mod lifecycle;
 pub mod signature;
 pub mod verification;
@@ -28,3 +29,5 @@ pub use verification::{CanonicalBytes, Sha256Digest};
 
 pub use consequence::{ConsequenceReceipt, Reassessment, ReassessmentTrigger};
 pub use lifecycle::{evaluate as evaluate_execution_lifecycle, ExecutionDisposition, LifecycleReason};
+
+pub use revocation::{propagate as propagate_revocation, PropagationReceipt, PropagationStatus, RevocationReason, RevocationReceipt};
