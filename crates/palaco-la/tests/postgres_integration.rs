@@ -1,6 +1,8 @@
 use std::env;
 
 use chrono::Utc;
+use palaco_la::domain::AuthorityId;
+use palaco_la::revocation::{RevocationReason, RevocationReceipt, REVOCATION_EVENT_TYPE};
 use ed25519_dalek::SigningKey;
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
@@ -219,4 +221,54 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() {
     .await
     .expect("aggregate head must exist");
     assert_eq!(head_sequence, 2);
+}
+
+
+#[tokio::test]
+async fn postgres_persists_canonical_revocation_event() {
+    let store = store().await;
+    let authority_id = AuthorityId::new(Uuid::new_v4());
+    let revocation = RevocationReceipt {
+        revocation_id: Uuid::new_v4(),
+        authority_id,
+        reason: RevocationReason::Explicit,
+        occurred_at: Utc::now(),
+    };
+    let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
+    let actor_id = Uuid::new_v4();
+    let provenance = Uuid::new_v4();
+
+    let event = store
+        .append_revocation(
+            &revocation,
+            actor_id,
+            Some(Uuid::new_v4()),
+            None,
+            provenance,
+            &signer,
+        )
+        .await
+        .expect("revocation event must persist");
+
+    assert_eq!(event.event_type, REVOCATION_EVENT_TYPE);
+    assert_eq!(event.aggregate_id.value(), authority_id.value());
+    assert_eq!(event.authority_reference, Some(authority_id.value()));
+    assert_eq!(event.event_id.value(), revocation.revocation_id);
+
+    let reconstructed = store
+        .current_head(event.aggregate_id)
+        .await
+        .expect("head lookup must succeed")
+        .expect("revocation head must exist");
+
+    assert_eq!(reconstructed, event);
+    assert_eq!(
+        reconstructed.payload_hash,
+        palaco_la::Sha256Digest::calculate(&reconstructed.payload)
+    );
+    assert!(
+        palaco_la::CanonicalVerifier::from_key(signer.verifying_key())
+            .verify(&reconstructed.payload, &reconstructed.signature)
+            .is_ok()
+    );
 }
