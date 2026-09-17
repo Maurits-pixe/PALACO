@@ -98,8 +98,8 @@ impl EventEnvelope {
             aggregate_id,
             aggregate_type,
             sequence,
-            occurred_at,
-            recorded_at,
+            occurred_at: normalize_timestamp(occurred_at),
+            recorded_at: normalize_timestamp(recorded_at),
             actor_id,
             authority_reference,
             correlation_id,
@@ -115,6 +115,14 @@ impl EventEnvelope {
 
     pub fn is_genesis(&self) -> bool {
         self.sequence == Sequence::genesis() && self.previous_event_hash.is_none()
+    }
+}
+
+fn normalize_timestamp(timestamp: DateTime<Utc>) -> DateTime<Utc> {
+    let microseconds = (timestamp.timestamp_subsec_nanos() / 1_000) * 1_000;
+    match DateTime::from_timestamp(timestamp.timestamp(), microseconds) {
+        Some(normalized) => normalized,
+        None => timestamp,
     }
 }
 
@@ -150,6 +158,40 @@ mod tests {
 
         assert!(event.is_genesis());
         assert_eq!(event.sequence.value(), 1);
+    }
+
+    #[test]
+    fn event_timestamps_use_microsecond_precision() {
+        let signer = crate::CanonicalSigner::from_key(
+            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
+        );
+        let timestamp = match DateTime::from_timestamp(1_000, 123_456_789) {
+            Some(value) => value,
+            None => return,
+        };
+        let payload = CanonicalBytes::new(b"timestamp".to_vec());
+        let signature = signer.sign(&payload);
+        let event = EventEnvelope::new(
+            EventId::new(Uuid::new_v4()),
+            "QuestionCreated".to_owned(),
+            AggregateId::new(Uuid::new_v4()),
+            "Question".to_owned(),
+            Sequence::genesis(),
+            timestamp,
+            timestamp,
+            Uuid::new_v4(),
+            None,
+            None,
+            None,
+            payload,
+            None,
+            SchemaVersion(1),
+            Uuid::new_v4(),
+            signature,
+        );
+
+        assert_eq!(event.occurred_at.timestamp_subsec_nanos(), 123_456_000);
+        assert_eq!(event.recorded_at.timestamp_subsec_nanos(), 123_456_000);
     }
 
     #[test]
