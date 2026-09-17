@@ -91,7 +91,7 @@ impl EventEnvelope {
         provenance: Uuid,
         signature: Signature,
     ) -> Self {
-        let payload_hash = Sha256Digest::calculate(payload.as_slice());
+        let payload_hash = Sha256Digest::calculate(&payload);
         Self {
             event_id,
             event_type,
@@ -124,7 +124,9 @@ mod tests {
 
     #[test]
     fn genesis_event_has_no_predecessor() {
-        let signer = crate::CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+        let signer = crate::CanonicalSigner::from_key(
+            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
+        );
         let payload = CanonicalBytes::new(b"genesis".to_vec());
         let signature = signer.sign(&payload);
         let event = EventEnvelope::new(
@@ -152,9 +154,11 @@ mod tests {
 
     #[test]
     fn payload_hash_is_derived_from_exact_payload_bytes() {
-        let signer = crate::CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+        let signer = crate::CanonicalSigner::from_key(
+            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
+        );
         let payload = CanonicalBytes::new(b"exact-payload".to_vec());
-        let expected = Sha256Digest::calculate(payload.as_slice());
+        let expected = Sha256Digest::calculate(&payload);
         let signature = signer.sign(&payload);
         let event = EventEnvelope::new(
             EventId::new(Uuid::new_v4()),
