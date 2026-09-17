@@ -45,8 +45,12 @@ mod tests {
             "AUTHORIZATION ISSUANCE => IMMUTABLE EVENT",
             "ACTIVE AUTHORIZATIONS ARE RECONSTRUCTED FROM EVENT HISTORY",
             "COMET BULK INVALIDATION => INDIVIDUAL IMMUTABLE EVENTS",
+            "EVENT HISTORY REPLAY IS DETERMINISTIC",
+            "REPLAY REJECTS PAYLOAD TAMPERING",
+            "REPLAY REJECTS PREDECESSOR BREAKS",
+            "REPLAY REQUIRES SIGNATURE VERIFICATION",
         ];
 
-        assert_eq!(rules.len(), 41);
+        assert_eq!(rules.len(), 45);
     }
 }
