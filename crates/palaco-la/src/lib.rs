@@ -25,3 +25,6 @@ pub use receipt::{ExecutionReceipt, ExecutionStatus, ObservationReceipt};
 pub use persistence::postgres::PgEventStore;
 pub use signature::{CanonicalSigner, CanonicalVerifier};
 pub use verification::{CanonicalBytes, Sha256Digest};
+
+pub use consequence::{ConsequenceReceipt, Reassessment, ReassessmentTrigger};
+pub use lifecycle::{evaluate as evaluate_execution_lifecycle, ExecutionDisposition, LifecycleReason};
