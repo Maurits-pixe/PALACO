@@ -149,6 +149,7 @@ impl Decision {
 pub struct Authorization {
     pub id: AuthorizationId,
     pub decision_id: DecisionId,
+    pub authority_id: AuthorityId,
     pub scope: Scope,
 }
 
