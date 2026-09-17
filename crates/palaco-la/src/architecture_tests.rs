@@ -16,8 +16,12 @@ mod tests {
             "QUESTION != EVIDENCE",
             "EVIDENCE != EPISTEMIC_STATE",
             "THRESHOLD != DECISION",
+            "EXECUTION RECEIPT != EXECUTION PERMIT",
+            "OBSERVATION != EXECUTION",
+            "EXECUTION SUCCESS REQUIRES OBSERVATION",
+            "UNKNOWN EXECUTION OUTCOME => FAIL_CLOSED",
         ];
 
-        assert_eq!(rules.len(), 13);
+        assert_eq!(rules.len(), 17);
     }
 }
