@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod domain;
+pub mod decision;
 pub mod event;
 pub mod assessment;
 pub mod event_store;
