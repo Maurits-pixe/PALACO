@@ -1,4 +1,4 @@
-# ∆ GO-046 — L.A. COMET REVOCATION PROPAGATION
+# ∆ GO-046 → GO-047 — L.A. COMET REVOCATION PROPAGATION
 
 ## Constitutional rule
 
@@ -8,7 +8,7 @@ REVOKE is a first-class lifecycle event. Revocation does not erase historical ev
 
 REVOKE → DETECT → PROPAGATE → BLOCK / REASSESS → RECEIPT → PRESERVE PROVENANCE
 
-GO-046 introduces explicit revocation and propagation receipts. A propagation receipt binds a revocation event to a target execution and records an explicit propagation status.
+GO-046 introduces explicit revocation and propagation receipts. GO-047 binds the revocation to a canonical immutable L.A. EventEnvelope and signs the exact canonical payload. A propagation receipt binds a revocation event to a target execution and records an explicit propagation status.
 
 ## Rules
 
@@ -23,6 +23,10 @@ GO-046 introduces explicit revocation and propagation receipts. A propagation re
 ## Non-goals
 
 GO-046 does not execute side effects, delete historical events, or infer authority from the existence of a valid cryptographic signature. It also does not make RIO an authority mechanism.
+
+## GO-047 EventStore boundary
+
+A revocation is represented as an immutable `AuthorityRevoked` event with the authority reference, event identity, payload hash, provenance and exact-byte signature. The event is suitable for append-only persistence through the existing EventStore boundary; this step does not yet add a special persistence shortcut or allow historical mutation.
 
 ## Verification
 
