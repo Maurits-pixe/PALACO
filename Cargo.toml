@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/palaco-la",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.90"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
