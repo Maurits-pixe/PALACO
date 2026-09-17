@@ -4,6 +4,7 @@ use sqlx::{Row, postgres::PgPool};
 use uuid::Uuid;
 
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
+use crate::authorization::build_authorization_issued_event;
 use crate::event_store::{EventStore, EventStoreError};
 use crate::signature::CanonicalSigner;
 use crate::verification::{CanonicalBytes, Sha256Digest};
@@ -25,6 +26,117 @@ impl PgEventStore {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn append_authorization_issued(
+        &self,
+        authorization: &crate::domain::Authorization,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+    ) -> Result<EventEnvelope, EventStoreError> {
+        let aggregate_id = AggregateId::new(authorization.id.value());
+        let head = self.current_head(aggregate_id).await?;
+        let (sequence, previous_event_hash) = match head {
+            Some(event) => (event.sequence.next(), Some(event.payload_hash)),
+            None => (Sequence::genesis(), None),
+        };
+
+        let event = build_authorization_issued_event(
+            authorization,
+            sequence,
+            actor_id,
+            correlation_id,
+            causation_id,
+            previous_event_hash,
+            provenance,
+            signer,
+        )
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        self.append(
+            aggregate_id,
+            sequence,
+            previous_event_hash,
+            event.clone(),
+        )
+        .await?;
+
+        Ok(event)
+    }
+
+    pub async fn active_authorization_ids_for_authority(
+        &self,
+        authority_id: crate::domain::AuthorityId,
+    ) -> Result<Vec<crate::domain::AuthorizationId>, EventStoreError> {
+        let rows = sqlx::query(
+            "SELECT aggregate_id
+             FROM (
+                 SELECT DISTINCT ON (aggregate_id)
+                        aggregate_id, event_type
+                 FROM la.events
+                 WHERE aggregate_type = 'Authorization'
+                   AND authority_reference = $1
+                 ORDER BY aggregate_id, sequence DESC
+             ) latest
+             WHERE event_type = 'AuthorizationIssued'
+             ORDER BY aggregate_id",
+        )
+        .bind(authority_id.value())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        rows.into_iter()
+            .map(|row| {
+                row.try_get::<Uuid, _>("aggregate_id")
+                    .map(crate::domain::AuthorizationId::new)
+                    .map_err(|error| EventStoreError::Persistence(error.to_string()))
+            })
+            .collect()
+    }
+
+    pub async fn invalidate_active_authorizations_for_revocation(
+        &self,
+        revocation: &RevocationReceipt,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+        observed_at: DateTime<Utc>,
+    ) -> Result<Vec<EventEnvelope>, EventStoreError> {
+        let authorization_ids = self
+            .active_authorization_ids_for_authority(revocation.authority_id)
+            .await?;
+
+        let mut events = Vec::with_capacity(authorization_ids.len());
+        for authorization_id in authorization_ids {
+            let invalidation = crate::comet::AuthorizationInvalidation {
+                propagation_id: Uuid::new_v4(),
+                revocation_id: revocation.revocation_id,
+                authority_id: revocation.authority_id,
+                authorization_id,
+                status: crate::domain::AuthorizationStatus::Revoked,
+                observed_at,
+            };
+
+            let event = self
+                .append_authorization_invalidation(
+                    &invalidation,
+                    actor_id,
+                    correlation_id,
+                    causation_id,
+                    provenance,
+                    signer,
+                )
+                .await?;
+            events.push(event);
+        }
+
+        Ok(events)
     }
 
     pub async fn append_revocation(
