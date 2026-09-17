@@ -1,8 +1,8 @@
+use crate::assessment::{assess, AssessmentError};
 use crate::domain::{
-    Decision, DecisionId, DecisionVerdict, Evidence, EpistemicState, Question, ThresholdAssessment,
+    Decision, DecisionId, DecisionVerdict, EpistemicState, Evidence, Question, ThresholdAssessment,
     ThresholdState,
 };
-use crate::assessment::{assess, AssessmentError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecisionEvaluationError {
@@ -129,10 +129,7 @@ mod tests {
         };
 
         let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert_eq!(
-            result,
-            Err(DecisionEvaluationError::ThresholdNotSatisfied)
-        );
+        assert_eq!(result, Err(DecisionEvaluationError::ThresholdNotSatisfied));
     }
 
     #[test]
@@ -148,10 +145,7 @@ mod tests {
         };
 
         let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert_eq!(
-            result,
-            Err(DecisionEvaluationError::UnusableEvidence)
-        );
+        assert_eq!(result, Err(DecisionEvaluationError::UnusableEvidence));
     }
 
     #[test]
@@ -165,6 +159,9 @@ mod tests {
         };
 
         let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
-        assert_eq!(result, Err(DecisionEvaluationError::MissingThresholdEvidence));
+        assert_eq!(
+            result,
+            Err(DecisionEvaluationError::MissingThresholdEvidence)
+        );
     }
 }
