@@ -40,6 +40,7 @@ pub use revocation::{
     propagate as propagate_revocation, PropagationReceipt, PropagationStatus, RevocationReason,
     RevocationReceipt,
 };
+pub use authorization::{AUTHORIZATION_ISSUED_EVENT_TYPE, canonical_authorization_issued_payload};
 pub use comet::{
     apply_invalidation as apply_comet_invalidation, propagate_revocation as propagate_comet_revocation,
     AuthorizationInvalidation, CometError, CometPropagationStatus,
