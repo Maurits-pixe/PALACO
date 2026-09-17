@@ -2,6 +2,7 @@
 
 pub mod assessment;
 pub mod authorization;
+pub mod authorization_replay;
 pub mod comet;
 pub mod consequence;
 pub mod decision;
@@ -20,6 +21,9 @@ pub mod verification;
 #[cfg(test)]
 mod architecture_tests;
 
+pub use authorization_replay::{
+    replay_authorization_history, AuthorizationReplay, AuthorizationReplayError,
+};
 pub use domain::{
     AuthorityId, AuthorizationId, AuthorizationStatus, DecisionId, EvidenceId, QuestionId,
 };
@@ -42,8 +46,11 @@ pub use revocation::{
     propagate as propagate_revocation, PropagationReceipt, PropagationStatus, RevocationReason,
     RevocationReceipt,
 };
-pub use authorization::{AUTHORIZATION_ISSUED_EVENT_TYPE, canonical_authorization_issued_payload};
+pub use authorization::{
+    canonical_authorization_issued_payload, AUTHORIZATION_ISSUED_EVENT_TYPE,
+};
 pub use comet::{
-    apply_invalidation as apply_comet_invalidation, propagate_revocation as propagate_comet_revocation,
+    apply_invalidation as apply_comet_invalidation,
+    propagate_revocation as propagate_comet_revocation,
     AuthorizationInvalidation, CometError, CometPropagationStatus,
 };
