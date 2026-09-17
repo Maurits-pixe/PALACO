@@ -13,6 +13,7 @@ pub enum ExecutionDisposition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum LifecycleReason {
     ActiveAuthority,
+    AuthorityMismatch,
     SuspendedAuthority,
     RevokedAuthority,
     ExpiredAuthority,
@@ -20,8 +21,15 @@ pub enum LifecycleReason {
 
 pub fn evaluate(
     authority: &Authority,
+    authorization: &Authorization,
     _permit: &ExecutionPermit,
 ) -> (ExecutionDisposition, LifecycleReason) {
+    if authorization.authority_id != authority.id {
+        return (
+            ExecutionDisposition::Stop,
+            LifecycleReason::AuthorityMismatch,
+        );
+    }
     match authority.status {
         AuthorityStatus::Active => (
             ExecutionDisposition::Continue,
