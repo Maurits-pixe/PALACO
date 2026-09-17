@@ -160,6 +160,10 @@ mod tests {
         );
         assert_eq!(event.event_id.value(), revocation.revocation_id);
         assert_eq!(event.payload_hash, Sha256Digest::calculate(&event.payload));
-        assert!(CanonicalVerifier::from_key(signer.verifying_key()).verify(&event.payload, &event.signature).is_ok());
+        assert!(
+            crate::CanonicalVerifier::from_key(signer.verifying_key())
+                .verify(&event.payload, &event.signature)
+                .is_ok()
+        );
     }
 }
