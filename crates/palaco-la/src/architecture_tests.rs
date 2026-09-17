@@ -8,6 +8,8 @@ mod tests {
             "DECISION != EXECUTION",
             "AUTHORITY != AUTHORIZATION",
             "AUTHORIZATION != EXECUTION",
+            "AUTHORIZATION REQUIRED FOR EXECUTION",
+            "EXECUTION PERMIT REQUIRED",
             "SIGNATURE != AUTHORITY",
             "PROVENANCE != PERMISSION",
             "UNKNOWN => FAIL_CLOSED",
@@ -16,6 +18,6 @@ mod tests {
             "THRESHOLD != DECISION",
         ];
 
-        assert_eq!(rules.len(), 11);
+        assert_eq!(rules.len(), 13);
     }
 }
