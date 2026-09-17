@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS la.events (
     authority_reference UUID,
     correlation_id UUID,
     causation_id UUID,
-    payload JSONB NOT NULL,
+    payload BYTEA NOT NULL,
     payload_hash BYTEA NOT NULL CHECK (octet_length(payload_hash) = 32),
     previous_event_hash BYTEA CHECK (previous_event_hash IS NULL OR octet_length(previous_event_hash) = 32),
     schema_version SMALLINT NOT NULL,
