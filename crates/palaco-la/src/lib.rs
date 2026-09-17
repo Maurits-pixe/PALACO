@@ -2,6 +2,7 @@
 
 pub mod domain;
 pub mod event;
+pub mod assessment;
 pub mod event_store;
 pub mod persistence;
 pub mod signature;
