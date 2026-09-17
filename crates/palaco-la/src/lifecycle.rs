@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Authority, AuthorityStatus};
+use crate::domain::{Authority, AuthorityStatus, Authorization};
 use crate::execution::ExecutionPermit;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,54 +70,78 @@ mod tests {
         }
     }
 
-    fn permit() -> Option<ExecutionPermit> {
-        let authorization = Authorization {
+    fn authorization(authority_id: AuthorityId) -> Authorization {
+        Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: DecisionId::new(Uuid::new_v4()),
+            authority_id,
             scope: Scope {
                 target: "target".to_owned(),
                 operations: vec!["write".to_owned()],
                 territory: "territory".to_owned(),
                 purpose: "purpose".to_owned(),
             },
-        };
+        }
+    }
+
+    fn permit(authorization: &Authorization) -> Option<ExecutionPermit> {
         let request = ExecutionRequest {
             operation: "write".to_owned(),
             scope: authorization.scope.clone(),
         };
-        gate(&authorization, request).ok()
+        gate(authorization, request).ok()
     }
 
     #[test]
     fn revoked_authority_stops_execution_lifecycle() {
-        let Some(permit) = permit() else {
+        let auth = authority(AuthorityStatus::Revoked);
+        let authorization = authorization(auth.id);
+        let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
         };
-        let (disposition, reason) = evaluate(&authority(AuthorityStatus::Revoked), &permit);
+        let (disposition, reason) = evaluate(&auth, &authorization, &permit);
         assert_eq!(disposition, ExecutionDisposition::Stop);
         assert_eq!(reason, LifecycleReason::RevokedAuthority);
     }
 
     #[test]
     fn suspended_authority_requires_reassessment() {
-        let Some(permit) = permit() else {
+        let auth = authority(AuthorityStatus::Suspended);
+        let authorization = authorization(auth.id);
+        let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
         };
-        let (disposition, reason) = evaluate(&authority(AuthorityStatus::Suspended), &permit);
+        let (disposition, reason) = evaluate(&auth, &authorization, &permit);
         assert_eq!(disposition, ExecutionDisposition::Reassess);
         assert_eq!(reason, LifecycleReason::SuspendedAuthority);
     }
 
     #[test]
     fn active_authority_allows_lifecycle_continuation() {
-        let Some(permit) = permit() else {
+        let auth = authority(AuthorityStatus::Active);
+        let authorization = authorization(auth.id);
+        let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
         };
-        let (disposition, reason) = evaluate(&authority(AuthorityStatus::Active), &permit);
+        let (disposition, reason) = evaluate(&auth, &authorization, &permit);
         assert_eq!(disposition, ExecutionDisposition::Continue);
         assert_eq!(reason, LifecycleReason::ActiveAuthority);
     }
 }
+
+
+    #[test]
+    fn mismatched_authority_stops_execution_lifecycle() {
+        let auth = authority(AuthorityStatus::Active);
+        let authorization = authorization(AuthorityId::new(Uuid::new_v4()));
+        let Some(permit) = permit(&authorization) else {
+            assert!(false);
+            return;
+        };
+        let (disposition, reason) = evaluate(&auth, &authorization, &permit);
+        assert_eq!(disposition, ExecutionDisposition::Stop);
+        assert_eq!(reason, LifecycleReason::AuthorityMismatch);
+    }
