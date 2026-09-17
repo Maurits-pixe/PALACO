@@ -5,7 +5,9 @@ use uuid::Uuid;
 
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::event_store::{EventStore, EventStoreError};
+use crate::signature::CanonicalSigner;
 use crate::verification::{CanonicalBytes, Sha256Digest};
+use crate::revocation::{build_revocation_event, RevocationReceipt};
 
 /// PostgreSQL implementation of the constitutional append-only event boundary.
 ///
@@ -23,6 +25,46 @@ impl PgEventStore {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn append_revocation(
+        &self,
+        revocation: &RevocationReceipt,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+    ) -> Result<EventEnvelope, EventStoreError> {
+        let aggregate_id = AggregateId::new(revocation.authority_id.value());
+        let head = self.current_head(aggregate_id).await?;
+        let (sequence, previous_event_hash) = match head {
+            Some(event) => (event.sequence.next(), Some(event.payload_hash)),
+            None => (Sequence::genesis(), None),
+        };
+
+        let event = build_revocation_event(
+            revocation,
+            aggregate_id,
+            sequence,
+            actor_id,
+            correlation_id,
+            causation_id,
+            previous_event_hash,
+            provenance,
+            signer,
+        )
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        self.append(
+            aggregate_id,
+            sequence,
+            previous_event_hash,
+            event.clone(),
+        )
+        .await?;
+
+        Ok(event)
     }
 
     pub async fn migrate(&self) -> Result<(), EventStoreError> {
