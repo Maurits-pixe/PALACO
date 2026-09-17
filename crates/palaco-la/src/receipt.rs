@@ -64,7 +64,7 @@ impl ObservationReceipt {
 mod tests {
     use super::*;
     use crate::domain::Scope;
-    use crate::execution::{gate, ExecutionRequest};
+    use crate::execution::{ExecutionRequest, gate};
 
     fn permit() -> Result<ExecutionPermit, crate::execution::ExecutionGateError> {
         let authorization = crate::domain::Authorization {
