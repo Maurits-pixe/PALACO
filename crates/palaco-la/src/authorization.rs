@@ -34,6 +34,7 @@ pub fn authorize(
     let authorization = Authorization {
         id: authorization_id,
         decision_id: decision.id,
+        authority_id: authority.id,
         scope: requested_scope,
     };
 
