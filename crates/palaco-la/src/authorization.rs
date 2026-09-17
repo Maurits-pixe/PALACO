@@ -1,6 +1,4 @@
-use crate::domain::{
-    Authority, AuthorityStatus, Authorization, AuthorizationId, Decision, Scope,
-};
+use crate::domain::{Authority, AuthorityStatus, Authorization, AuthorizationId, Decision, Scope};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthorizationEvaluationError {
@@ -48,9 +46,7 @@ pub fn authorize(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        AuthorityId, DecisionId, DecisionVerdict, QuestionId,
-    };
+    use crate::domain::{AuthorityId, DecisionId, DecisionVerdict, QuestionId};
     use uuid::Uuid;
 
     fn scope() -> Scope {
