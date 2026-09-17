@@ -20,8 +20,14 @@ mod tests {
             "OBSERVATION != EXECUTION",
             "EXECUTION SUCCESS REQUIRES OBSERVATION",
             "UNKNOWN EXECUTION OUTCOME => FAIL_CLOSED",
+            "CONSEQUENCE != OBSERVATION",
+            "REASSESSMENT REQUIRES NEW HISTORY",
+            "REVOCATION => STOP",
+            "EXPIRATION => STOP",
+            "SUSPENSION => REASSESS",
+            "ACTIVE AUTHORITY => LIFECYCLE MAY CONTINUE",
         ];
 
-        assert_eq!(rules.len(), 17);
+        assert_eq!(rules.len(), 22);
     }
 }
