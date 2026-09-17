@@ -11,8 +11,10 @@ mod tests {
             "QUESTION != EVIDENCE",
             "EVIDENCE != EPISTEMIC_STATE",
             "THRESHOLD != DECISION",
+            "DECISION != AUTHORIZATION",
+            "DECISION != EXECUTION",
         ];
 
-        assert_eq!(rules.len(), 8);
+        assert_eq!(rules.len(), 10);
     }
 }
