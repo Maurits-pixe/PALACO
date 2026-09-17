@@ -50,11 +50,14 @@ impl CanonicalVerifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand_core::OsRng;
+
+    fn test_signing_key() -> SigningKey {
+        SigningKey::from_bytes(&[7_u8; 32])
+    }
 
     #[test]
     fn exact_bytes_are_signed_and_verified() {
-        let signer = CanonicalSigner::from_key(SigningKey::generate(&mut OsRng));
+        let signer = CanonicalSigner::from_key(test_signing_key());
         let bytes = CanonicalBytes::new(b"PALACO-PVB-011".to_vec());
         let signature = signer.sign(&bytes);
         let verifier = CanonicalVerifier::from_key(signer.verifying_key());
@@ -64,7 +67,7 @@ mod tests {
 
     #[test]
     fn changed_bytes_fail_verification() {
-        let signer = CanonicalSigner::from_key(SigningKey::generate(&mut OsRng));
+        let signer = CanonicalSigner::from_key(test_signing_key());
         let original = CanonicalBytes::new(b"original".to_vec());
         let changed = CanonicalBytes::new(b"changed".to_vec());
         let signature = signer.sign(&original);
