@@ -8,7 +8,9 @@ pub mod assessment;
 pub mod event_store;
 pub mod execution;
 pub mod persistence;
+pub mod consequence;
 pub mod receipt;
+pub mod lifecycle;
 pub mod signature;
 pub mod verification;
 
