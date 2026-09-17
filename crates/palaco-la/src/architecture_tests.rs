@@ -49,8 +49,11 @@ mod tests {
             "REPLAY REJECTS PAYLOAD TAMPERING",
             "REPLAY REJECTS PREDECESSOR BREAKS",
             "REPLAY REQUIRES SIGNATURE VERIFICATION",
+            "SEMANTIC REPLAY REQUIRES STRUCTURAL REPLAY",
+            "UNKNOWN AUTHORIZATION EVENT => FAIL_CLOSED",
+            "REPLAYED REVOKED AUTHORIZATION => NO EXECUTION PERMIT",
         ];
 
-        assert_eq!(rules.len(), 45);
+        assert_eq!(rules.len(), 48);
     }
 }
