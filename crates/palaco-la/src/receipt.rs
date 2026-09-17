@@ -70,6 +70,7 @@ mod tests {
         let authorization = crate::domain::Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: crate::domain::DecisionId::new(Uuid::new_v4()),
+            authority_id: crate::domain::AuthorityId::new(Uuid::new_v4()),
             scope: Scope {
                 target: "target".to_owned(),
                 operations: vec!["write".to_owned()],
