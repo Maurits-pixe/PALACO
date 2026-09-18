@@ -3,6 +3,8 @@ use std::env;
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
 use palaco_la::authorization::authorize;
+use palaco_la::execution::{gate, ExecutionGateError, ExecutionRequest};
+use palaco_la::replay::replay_authorization_history;
 use palaco_la::comet::{AuthorizationInvalidation, AUTHORIZATION_INVALIDATED_EVENT_TYPE};
 use palaco_la::domain::{
     AuthorizationId, AuthorizationStatus, Authority, AuthorityId, AuthorityStatus, Decision,
@@ -343,6 +345,108 @@ async fn postgres_persists_canonical_authorization_invalidation_event() -> Resul
         palaco_la::CanonicalVerifier::from_key(signer.verifying_key())
             .verify(&reconstructed.payload, &reconstructed.signature)
             .is_ok()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_replay_of_revoked_authorization_cannot_create_execution_permit()
+    -> Result<(), String>
+{
+    let store = store().await?;
+    let authority_id = AuthorityId::new(Uuid::new_v4());
+    let authority = Authority {
+        id: authority_id,
+        scope: Scope {
+            target: "target".to_owned(),
+            operations: vec!["read".to_owned()],
+            territory: "territory".to_owned(),
+            purpose: "purpose".to_owned(),
+        },
+        status: AuthorityStatus::Active,
+    };
+    let authorization = authorize(
+        Decision {
+            id: DecisionId::new(Uuid::new_v4()),
+            question_id: palaco_la::QuestionId::new(Uuid::new_v4()),
+            verdict: DecisionVerdict::Allow,
+        },
+        authority.clone(),
+        authority.scope.clone(),
+        AuthorizationId::new(Uuid::new_v4()),
+    )
+    .map_err(|error| format!("authorization evaluation failed: {error:?}"))?
+    .authorization;
+    let signer = CanonicalSigner::from_key(SigningKey::from_bytes(&[7_u8; 32]));
+
+    store
+        .append_authorization_issued(
+            &authorization,
+            Uuid::new_v4(),
+            None,
+            None,
+            Uuid::new_v4(),
+            &signer,
+        )
+        .await
+        .map_err(|error| format!("authorization issuance failed: {error:?}"))?;
+
+    let revocation = RevocationReceipt {
+        revocation_id: Uuid::new_v4(),
+        authority_id,
+        reason: RevocationReason::Explicit,
+        occurred_at: Utc::now(),
+    };
+    let revocation_event = store
+        .append_revocation(
+            &revocation,
+            Uuid::new_v4(),
+            None,
+            None,
+            Uuid::new_v4(),
+            &signer,
+        )
+        .await
+        .map_err(|error| format!("authority revocation failed: {error:?}"))?;
+
+    let invalidation = palaco_la::comet::propagate_revocation(
+        &revocation,
+        &authorization,
+        Utc::now(),
+    )
+    .map_err(|error| format!("COMET propagation failed: {error:?}"))?;
+    store
+        .append_authorization_invalidation(
+            &invalidation,
+            Uuid::new_v4(),
+            None,
+            Some(revocation_event.event_id),
+            Uuid::new_v4(),
+            &signer,
+        )
+        .await
+        .map_err(|error| format!("authorization invalidation failed: {error:?}"))?;
+
+    let history = store
+        .load(AggregateId::new(authorization.id.value()))
+        .await
+        .map_err(|error| format!("authorization history load failed: {error:?}"))?;
+    let verifier = palaco_la::CanonicalVerifier::from_key(signer.verifying_key());
+    let replay = replay_authorization_history(&history, &verifier)
+        .map_err(|error| format!("authorization replay failed: {error:?}"))?;
+
+    assert_eq!(
+        replay.authorization.status,
+        AuthorizationStatus::Revoked
+    );
+
+    let request = ExecutionRequest {
+        operation: "read".to_owned(),
+        scope: authorization.scope.clone(),
+    };
+    assert_eq!(
+        gate(&replay.authorization, request),
+        Err(ExecutionGateError::AuthorizationInactive)
     );
     Ok(())
 }
