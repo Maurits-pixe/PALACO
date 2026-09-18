@@ -131,7 +131,7 @@ mod tests {
     use super::*;
     use crate::domain::{DecisionId, Scope};
 
-    fn authorization(authority_id: AuthorityId, status: AuthorizationStatus) -> Authorization {
+    fn make_authorization(authority_id: AuthorityId, status: AuthorizationStatus) -> Authorization {
         Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: DecisionId::new(Uuid::new_v4()),
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn revocation_propagates_only_to_bound_authorization() {
         let authority_id = AuthorityId::new(Uuid::new_v4());
-        let authorization = authorization(authority_id, AuthorizationStatus::Active);
+        let authorization = make_authorization(authority_id, AuthorizationStatus::Active);
         let revocation = RevocationReceipt {
             revocation_id: Uuid::new_v4(),
             authority_id,
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn mismatched_authority_blocks_comet_propagation() {
-        let authorization = authorization(
+        let authorization = make_authorization(
             AuthorityId::new(Uuid::new_v4()),
             AuthorizationStatus::Active,
         );
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn already_revoked_authorization_remains_revoked() {
         let authority_id = AuthorityId::new(Uuid::new_v4());
-        let authorization = authorization(authority_id, AuthorizationStatus::Revoked);
+        let authorization = make_authorization(authority_id, AuthorizationStatus::Revoked);
         let revocation = RevocationReceipt {
             revocation_id: Uuid::new_v4(),
             authority_id,
