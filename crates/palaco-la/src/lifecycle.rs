@@ -169,7 +169,13 @@ mod tests {
         let invalidated = authorization.revoked();
         assert_eq!(invalidated.status, AuthorizationStatus::Revoked);
         let prior_permit = {
-            let active = make_authorization(auth.id, AuthorizationStatus::Active);
+            let active = Authorization {
+                id: authorization.id,
+                decision_id: authorization.decision_id,
+                authority_id: authorization.authority_id,
+                scope: authorization.scope.clone(),
+                status: AuthorizationStatus::Active,
+            };
             permit(&active)
         };
         let Some(prior_permit) = prior_permit else {
