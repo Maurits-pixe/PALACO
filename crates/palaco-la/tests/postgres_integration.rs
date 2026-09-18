@@ -9,7 +9,7 @@ use palaco_la::domain::{
     DecisionId, DecisionVerdict, Scope,
 };
 use palaco_la::execution::{ExecutionGateError, ExecutionRequest, gate};
-use palaco_la::replay::replay_authorization_history;
+use palaco_la::replay_authorization_history;
 use palaco_la::revocation::{REVOCATION_EVENT_TYPE, RevocationReason, RevocationReceipt};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
