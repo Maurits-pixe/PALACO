@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::domain::AuthorityId;
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::signature::CanonicalSigner;
-use crate::verification::CanonicalBytes;
+use crate::verification::{CanonicalBytes, Sha256Digest};
 
 pub const REVOCATION_EVENT_TYPE: &str = "AuthorityRevoked";
 
