@@ -351,8 +351,7 @@ async fn postgres_persists_canonical_authorization_invalidation_event() -> Resul
 
 #[tokio::test]
 async fn postgres_replay_of_revoked_authorization_cannot_create_execution_permit()
-    -> Result<(), String>
-{
+-> Result<(), String> {
     let store = store().await?;
     let authority_id = AuthorityId::new(Uuid::new_v4());
     let authority = Authority {
@@ -435,10 +434,7 @@ async fn postgres_replay_of_revoked_authorization_cannot_create_execution_permit
     let replay = replay_authorization_history(&history, &verifier)
         .map_err(|error| format!("authorization replay failed: {error:?}"))?;
 
-    assert_eq!(
-        replay.authorization.status,
-        AuthorizationStatus::Revoked
-    );
+    assert_eq!(replay.authorization.status, AuthorizationStatus::Revoked);
 
     let request = ExecutionRequest {
         operation: "read".to_owned(),
