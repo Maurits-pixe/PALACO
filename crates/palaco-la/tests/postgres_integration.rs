@@ -226,7 +226,10 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() -> Result<(), St
         .into_iter()
         .filter(|result| result.is_ok())
         .count();
-    assert_eq!(successes, 1, "exactly one concurrent append may claim sequence 2");
+    assert_eq!(
+        successes, 1,
+        "exactly one concurrent append may claim sequence 2"
+    );
 
     let events = store
         .load(aggregate_id)
@@ -345,7 +348,9 @@ async fn postgres_persists_canonical_authorization_invalidation_event() -> Resul
 }
 
 #[tokio::test]
-async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_collectively() -> Result<(), String> {
+async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_collectively()
+    -> Result<(), String>
+{
     let store = store().await?;
     let authority_id = AuthorityId::new(Uuid::new_v4());
     let authority = Authority {
