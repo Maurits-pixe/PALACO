@@ -58,7 +58,7 @@ mod tests {
             "REPLAYED REVOKED AUTHORIZATION => EXECUTION GATE REJECTS",
         ];
 
-        assert_eq!(rules.len(), 50);
+        assert_eq!(rules.len(), 51);
     }
 
     #[test]
