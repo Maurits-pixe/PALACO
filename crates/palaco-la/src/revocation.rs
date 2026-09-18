@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::domain::AuthorityId;
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::signature::CanonicalSigner;
-use crate::verification::{CanonicalBytes, Sha256Digest};
+use crate::verification::CanonicalBytes;
 
 pub const REVOCATION_EVENT_TYPE: &str = "AuthorityRevoked";
 
@@ -112,6 +112,7 @@ pub fn propagate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::verification::Sha256Digest;
 
     #[test]
     fn propagation_preserves_revocation_identity() {
