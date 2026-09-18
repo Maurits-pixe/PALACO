@@ -100,7 +100,7 @@ mod tests {
         }
     }
 
-    fn authorization(authority_id: AuthorityId, status: AuthorizationStatus) -> Authorization {
+    fn make_authorization(authority_id: AuthorityId, status: AuthorizationStatus) -> Authorization {
         Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: DecisionId::new(Uuid::new_v4()),
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn revoked_authority_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Revoked);
-        let authorization = authorization(auth.id, AuthorizationStatus::Active);
+        let authorization = make_authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -139,7 +139,7 @@ mod tests {
     #[test]
     fn suspended_authority_requires_reassessment() {
         let auth = authority(AuthorityStatus::Suspended);
-        let authorization = authorization(auth.id, AuthorizationStatus::Active);
+        let authorization = make_authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn active_authority_allows_lifecycle_continuation() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization = authorization(auth.id, AuthorizationStatus::Active);
+        let authorization = make_authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;
@@ -165,11 +165,11 @@ mod tests {
     #[test]
     fn revoked_authorization_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization = authorization(auth.id, AuthorizationStatus::Revoked);
+        let authorization = make_authorization(auth.id, AuthorizationStatus::Revoked);
         let invalidated = authorization.revoked();
         assert_eq!(invalidated.status, AuthorizationStatus::Revoked);
         let prior_permit = {
-            let active = authorization(&auth.id, AuthorizationStatus::Active);
+            let active = make_authorization(&auth.id, AuthorizationStatus::Active);
             permit(&active)
         };
         let Some(prior_permit) = prior_permit else {
@@ -184,7 +184,7 @@ mod tests {
     #[test]
     fn mismatched_authority_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization = authorization(
+        let authorization = make_authorization(
             AuthorityId::new(Uuid::new_v4()),
             AuthorizationStatus::Active,
         );
@@ -200,8 +200,8 @@ mod tests {
     #[test]
     fn mismatched_permit_authorization_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization = authorization(auth.id, AuthorizationStatus::Active);
-        let other = authorization(auth.id, AuthorizationStatus::Active);
+        let authorization = make_authorization(auth.id, AuthorizationStatus::Active);
+        let other = make_authorization(auth.id, AuthorizationStatus::Active);
         let Some(permit) = permit(&other) else {
             assert!(false);
             return;
