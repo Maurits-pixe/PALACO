@@ -77,6 +77,7 @@ mod tests {
                 territory: "territory".to_owned(),
                 purpose: "purpose".to_owned(),
             },
+            status: crate::domain::AuthorizationStatus::Active,
         };
         let request = ExecutionRequest {
             operation: "write".to_owned(),
