@@ -106,7 +106,6 @@ mod tests {
     use crate::domain::{AuthorityId, AuthorizationId, DecisionId, Scope};
     use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
     use crate::signature::CanonicalSigner;
-    use crate::verification::CanonicalBytes;
     use chrono::Utc;
     use ed25519_dalek::SigningKey;
     use uuid::Uuid;
