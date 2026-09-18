@@ -55,9 +55,10 @@ mod tests {
             "UNKNOWN AUTHORIZATION EVENT => FAIL_CLOSED",
             "REPLAYED REVOKED AUTHORIZATION => NO EXECUTION PERMIT",
             "NO EXPECT OR UNWRAP IN L.A. TEST TREE",
+            "REPLAYED REVOKED AUTHORIZATION => EXECUTION GATE REJECTS",
         ];
 
-        assert_eq!(rules.len(), 49);
+        assert_eq!(rules.len(), 50);
     }
 
     #[test]
