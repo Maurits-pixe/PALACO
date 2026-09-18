@@ -43,9 +43,10 @@ pub fn evaluate(
     }
 
     match authorization.status {
-        AuthorizationStatus::Revoked => {
-            (ExecutionDisposition::Stop, LifecycleReason::AuthorizationRevoked)
-        }
+        AuthorizationStatus::Revoked => (
+            ExecutionDisposition::Stop,
+            LifecycleReason::AuthorizationRevoked,
+        ),
         AuthorizationStatus::Suspended => (
             ExecutionDisposition::Reassess,
             LifecycleReason::AuthorizationSuspended,
@@ -83,7 +84,7 @@ pub fn evaluate(
 mod tests {
     use super::*;
     use crate::domain::{AuthorityId, AuthorizationId, DecisionId, Scope};
-    use crate::execution::{gate, ExecutionRequest};
+    use crate::execution::{ExecutionRequest, gate};
     use uuid::Uuid;
 
     fn authority(status: AuthorityStatus) -> Authority {
@@ -99,10 +100,7 @@ mod tests {
         }
     }
 
-    fn authorization(
-        authority_id: AuthorityId,
-        status: AuthorizationStatus,
-    ) -> Authorization {
+    fn authorization(authority_id: AuthorityId, status: AuthorizationStatus) -> Authorization {
         Authorization {
             id: AuthorizationId::new(Uuid::new_v4()),
             decision_id: DecisionId::new(Uuid::new_v4()),
@@ -186,8 +184,10 @@ mod tests {
     #[test]
     fn mismatched_authority_stops_execution_lifecycle() {
         let auth = authority(AuthorityStatus::Active);
-        let authorization =
-            authorization(AuthorityId::new(Uuid::new_v4()), AuthorizationStatus::Active);
+        let authorization = authorization(
+            AuthorityId::new(Uuid::new_v4()),
+            AuthorizationStatus::Active,
+        );
         let Some(permit) = permit(&authorization) else {
             assert!(false);
             return;

@@ -1,4 +1,4 @@
-use crate::assessment::{assess, AssessmentError};
+use crate::assessment::{AssessmentError, assess};
 use crate::domain::{
     Decision, DecisionId, DecisionVerdict, EpistemicState, Evidence, Question, ThresholdAssessment,
     ThresholdState,

@@ -136,8 +136,7 @@ mod tests {
             reason: RevocationReason::Explicit,
             occurred_at: Utc::now(),
         };
-        let signer =
-            CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+        let signer = CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
         let event = match build_revocation_event(
             &revocation,
             AggregateId::new(Uuid::new_v4()),

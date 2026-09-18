@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::domain::{Authorization, AuthorizationId, AuthorizationStatus, AuthorityId};
+use crate::domain::{AuthorityId, Authorization, AuthorizationId, AuthorizationStatus};
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::revocation::RevocationReceipt;
 use crate::signature::CanonicalSigner;
@@ -219,8 +219,7 @@ mod tests {
             status: AuthorizationStatus::Revoked,
             observed_at: Utc::now(),
         };
-        let signer =
-            CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+        let signer = CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
         let event = match build_authorization_invalidation_event(
             &invalidation,
             AggregateId::new(invalidation.authorization_id.value()),

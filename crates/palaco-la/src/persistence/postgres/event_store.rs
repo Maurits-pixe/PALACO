@@ -3,12 +3,12 @@ use ed25519_dalek::Signature;
 use sqlx::{Row, postgres::PgPool};
 use uuid::Uuid;
 
-use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::authorization::build_authorization_issued_event;
+use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::event_store::{EventStore, EventStoreError};
+use crate::revocation::{RevocationReceipt, build_revocation_event};
 use crate::signature::CanonicalSigner;
 use crate::verification::{CanonicalBytes, Sha256Digest};
-use crate::revocation::{build_revocation_event, RevocationReceipt};
 
 /// PostgreSQL implementation of the constitutional append-only event boundary.
 ///
@@ -56,13 +56,8 @@ impl PgEventStore {
         )
         .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
 
-        self.append(
-            aggregate_id,
-            sequence,
-            previous_event_hash,
-            event.clone(),
-        )
-        .await?;
+        self.append(aggregate_id, sequence, previous_event_hash, event.clone())
+            .await?;
 
         Ok(event)
     }
@@ -168,13 +163,8 @@ impl PgEventStore {
         )
         .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
 
-        self.append(
-            aggregate_id,
-            sequence,
-            previous_event_hash,
-            event.clone(),
-        )
-        .await?;
+        self.append(aggregate_id, sequence, previous_event_hash, event.clone())
+            .await?;
 
         Ok(event)
     }
@@ -208,13 +198,8 @@ impl PgEventStore {
         )
         .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
 
-        self.append(
-            aggregate_id,
-            sequence,
-            previous_event_hash,
-            event.clone(),
-        )
-        .await?;
+        self.append(aggregate_id, sequence, previous_event_hash, event.clone())
+            .await?;
 
         Ok(event)
     }

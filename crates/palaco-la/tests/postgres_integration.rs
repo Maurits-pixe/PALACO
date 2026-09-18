@@ -3,16 +3,14 @@ use std::env;
 use chrono::Utc;
 use ed25519_dalek::SigningKey;
 use palaco_la::authorization::authorize;
-use palaco_la::execution::{gate, ExecutionGateError, ExecutionRequest};
-use palaco_la::replay::replay_authorization_history;
-use palaco_la::comet::{AuthorizationInvalidation, AUTHORIZATION_INVALIDATED_EVENT_TYPE};
+use palaco_la::comet::{AUTHORIZATION_INVALIDATED_EVENT_TYPE, AuthorizationInvalidation};
 use palaco_la::domain::{
-    AuthorizationId, AuthorizationStatus, Authority, AuthorityId, AuthorityStatus, Decision,
+    Authority, AuthorityId, AuthorityStatus, AuthorizationId, AuthorizationStatus, Decision,
     DecisionId, DecisionVerdict, Scope,
 };
-use palaco_la::revocation::{
-    RevocationReason, RevocationReceipt, REVOCATION_EVENT_TYPE,
-};
+use palaco_la::execution::{ExecutionGateError, ExecutionRequest, gate};
+use palaco_la::replay::replay_authorization_history;
+use palaco_la::revocation::{REVOCATION_EVENT_TYPE, RevocationReason, RevocationReceipt};
 use sqlx::postgres::PgPoolOptions;
 use uuid::Uuid;
 
@@ -193,13 +191,19 @@ async fn postgres_rejects_direct_event_mutation() -> Result<(), String> {
         .bind(first.event_id.value())
         .execute(store.pool())
         .await;
-    assert!(update.is_err(), "UPDATE must be rejected by the append-only trigger");
+    assert!(
+        update.is_err(),
+        "UPDATE must be rejected by the append-only trigger"
+    );
 
     let delete = sqlx::query("DELETE FROM la.events WHERE event_id = $1")
         .bind(first.event_id.value())
         .execute(store.pool())
         .await;
-    assert!(delete.is_err(), "DELETE must be rejected by the append-only trigger");
+    assert!(
+        delete.is_err(),
+        "DELETE must be rejected by the append-only trigger"
+    );
     Ok(())
 }
 
@@ -217,7 +221,12 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() -> Result<(), St
     let left_store = PgEventStore::new(pool.clone());
     let right_store = PgEventStore::new(pool);
     let left = event(aggregate_id, Sequence(2), Some(first.payload_hash), b"left");
-    let right = event(aggregate_id, Sequence(2), Some(first.payload_hash), b"right");
+    let right = event(
+        aggregate_id,
+        Sequence(2),
+        Some(first.payload_hash),
+        b"right",
+    );
 
     let (left_result, right_result) = tokio::join!(
         left_store.append(aggregate_id, Sequence(2), Some(first.payload_hash), left),
@@ -408,12 +417,9 @@ async fn postgres_replay_of_revoked_authorization_cannot_create_execution_permit
         .await
         .map_err(|error| format!("authority revocation failed: {error:?}"))?;
 
-    let invalidation = palaco_la::comet::propagate_revocation(
-        &revocation,
-        &authorization,
-        Utc::now(),
-    )
-    .map_err(|error| format!("COMET propagation failed: {error:?}"))?;
+    let invalidation =
+        palaco_la::comet::propagate_revocation(&revocation, &authorization, Utc::now())
+            .map_err(|error| format!("COMET propagation failed: {error:?}"))?;
     store
         .append_authorization_invalidation(
             &invalidation,
@@ -449,8 +455,7 @@ async fn postgres_replay_of_revoked_authorization_cannot_create_execution_permit
 
 #[tokio::test]
 async fn postgres_reconstructs_active_authorizations_and_comet_invalidates_them_collectively()
-    -> Result<(), String>
-{
+-> Result<(), String> {
     let store = store().await?;
     let authority_id = AuthorityId::new(Uuid::new_v4());
     let authority = Authority {

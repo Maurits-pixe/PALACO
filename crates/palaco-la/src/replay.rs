@@ -41,10 +41,7 @@ pub fn verify_history(
             return Err(ReplayError::PayloadHashMismatch);
         }
 
-        if verifier
-            .verify(&event.payload, &event.signature)
-            .is_err()
-        {
+        if verifier.verify(&event.payload, &event.signature).is_err() {
             return Err(ReplayError::InvalidSignature);
         }
     }
@@ -105,7 +102,10 @@ mod tests {
             first.provenance,
             second_signature,
         );
-        (vec![first, second], CanonicalVerifier::from_key(signer.verifying_key()))
+        (
+            vec![first, second],
+            CanonicalVerifier::from_key(signer.verifying_key()),
+        )
     }
 
     #[test]

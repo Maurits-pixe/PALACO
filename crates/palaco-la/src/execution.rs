@@ -58,7 +58,7 @@ pub fn gate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{AuthorizationId, AuthorityId, DecisionId};
+    use crate::domain::{AuthorityId, AuthorizationId, DecisionId};
 
     fn authorization() -> Authorization {
         Authorization {

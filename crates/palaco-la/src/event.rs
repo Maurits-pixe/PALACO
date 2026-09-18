@@ -194,9 +194,8 @@ mod tests {
 
     #[test]
     fn payload_hash_is_derived_from_exact_payload_bytes() {
-        let signer = crate::CanonicalSigner::from_key(
-            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
-        );
+        let signer =
+            crate::CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
         let payload = CanonicalBytes::new(b"exact-payload".to_vec());
         let expected = Sha256Digest::calculate(&payload);
         let signature = signer.sign(&payload);

@@ -9,11 +9,11 @@ pub mod decision;
 pub mod domain;
 pub mod event;
 pub mod event_store;
-pub mod replay;
 pub mod execution;
 pub mod lifecycle;
 pub mod persistence;
 pub mod receipt;
+pub mod replay;
 pub mod revocation;
 pub mod signature;
 pub mod verification;
@@ -22,7 +22,7 @@ pub mod verification;
 mod architecture_tests;
 
 pub use authorization_replay::{
-    replay_authorization_history, AuthorizationReplay, AuthorizationReplayError,
+    AuthorizationReplay, AuthorizationReplayError, replay_authorization_history,
 };
 pub use domain::{
     AuthorityId, AuthorizationId, AuthorizationStatus, DecisionId, EvidenceId, QuestionId,
@@ -30,27 +30,25 @@ pub use domain::{
 pub use event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 pub use event_store::{EventStore, EventStoreError};
 pub use execution::{
-    gate as execution_gate, ExecutionGateError, ExecutionPermit, ExecutionRequest,
+    ExecutionGateError, ExecutionPermit, ExecutionRequest, gate as execution_gate,
 };
-pub use receipt::{ExecutionReceipt, ExecutionStatus, ObservationReceipt};
 pub use persistence::postgres::PgEventStore;
+pub use receipt::{ExecutionReceipt, ExecutionStatus, ObservationReceipt};
+pub use replay::{ReplayError, verify_history};
 pub use signature::{CanonicalSigner, CanonicalVerifier};
-pub use replay::{verify_history, ReplayError};
 pub use verification::{CanonicalBytes, Sha256Digest};
 
-pub use consequence::{ConsequenceReceipt, Reassessment, ReassessmentTrigger};
-pub use lifecycle::{
-    evaluate as evaluate_execution_lifecycle, ExecutionDisposition, LifecycleReason,
-};
-pub use revocation::{
-    propagate as propagate_revocation, PropagationReceipt, PropagationStatus, RevocationReason,
-    RevocationReceipt,
-};
-pub use authorization::{
-    canonical_authorization_issued_payload, AUTHORIZATION_ISSUED_EVENT_TYPE,
-};
+pub use authorization::{AUTHORIZATION_ISSUED_EVENT_TYPE, canonical_authorization_issued_payload};
 pub use comet::{
+    AuthorizationInvalidation, CometError, CometPropagationStatus,
     apply_invalidation as apply_comet_invalidation,
     propagate_revocation as propagate_comet_revocation,
-    AuthorizationInvalidation, CometError, CometPropagationStatus,
+};
+pub use consequence::{ConsequenceReceipt, Reassessment, ReassessmentTrigger};
+pub use lifecycle::{
+    ExecutionDisposition, LifecycleReason, evaluate as evaluate_execution_lifecycle,
+};
+pub use revocation::{
+    PropagationReceipt, PropagationStatus, RevocationReason, RevocationReceipt,
+    propagate as propagate_revocation,
 };

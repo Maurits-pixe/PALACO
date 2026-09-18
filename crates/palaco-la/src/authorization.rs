@@ -1,4 +1,7 @@
-use crate::domain::{Authority, AuthorityStatus, Authorization, AuthorizationId, AuthorizationStatus, Decision, Scope};
+use crate::domain::{
+    Authority, AuthorityStatus, Authorization, AuthorizationId, AuthorizationStatus, Decision,
+    Scope,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthorizationEvaluationError {
@@ -44,7 +47,6 @@ pub fn authorize(
         authority,
     })
 }
-
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};

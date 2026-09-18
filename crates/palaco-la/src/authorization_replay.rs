@@ -2,9 +2,11 @@ use serde::Deserialize;
 
 use crate::authorization::AUTHORIZATION_ISSUED_EVENT_TYPE;
 use crate::comet::AUTHORIZATION_INVALIDATED_EVENT_TYPE;
-use crate::domain::{Authorization, AuthorizationId, AuthorizationStatus, AuthorityId, DecisionId, Scope};
+use crate::domain::{
+    AuthorityId, Authorization, AuthorizationId, AuthorizationStatus, DecisionId, Scope,
+};
 use crate::event::EventEnvelope;
-use crate::replay::{verify_history, ReplayError};
+use crate::replay::{ReplayError, verify_history};
 use crate::signature::CanonicalVerifier;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,17 +46,16 @@ pub fn replay_authorization_history(
 ) -> Result<AuthorizationReplay, AuthorizationReplayError> {
     verify_history(events, verifier).map_err(AuthorizationReplayError::Structural)?;
 
-    let first = events
-        .first()
-        .ok_or(AuthorizationReplayError::Structural(ReplayError::EmptyHistory))?;
+    let first = events.first().ok_or(AuthorizationReplayError::Structural(
+        ReplayError::EmptyHistory,
+    ))?;
 
     if first.event_type != AUTHORIZATION_ISSUED_EVENT_TYPE {
         return Err(AuthorizationReplayError::InvalidTransition);
     }
 
-    let issued: AuthorizationIssuedPayload =
-        serde_json::from_slice(first.payload.as_slice())
-            .map_err(|_| AuthorizationReplayError::InvalidPayload)?;
+    let issued: AuthorizationIssuedPayload = serde_json::from_slice(first.payload.as_slice())
+        .map_err(|_| AuthorizationReplayError::InvalidPayload)?;
 
     if first.aggregate_id.value() != issued.authorization_id.value() {
         return Err(AuthorizationReplayError::AggregateIdentityMismatch);
@@ -102,7 +103,7 @@ mod tests {
     use super::*;
     use crate::authorization::canonical_authorization_issued_payload;
     use crate::comet::canonical_invalidation_payload;
-    use crate::domain::{AuthorizationId, AuthorityId, DecisionId, Scope};
+    use crate::domain::{AuthorityId, AuthorizationId, DecisionId, Scope};
     use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
     use crate::signature::CanonicalSigner;
     use crate::verification::CanonicalBytes;
@@ -129,7 +130,13 @@ mod tests {
 
         let issued_payload = match canonical_authorization_issued_payload(&authorization) {
             Ok(value) => value,
-            Err(_) => return (Vec::new(), CanonicalVerifier::from_key(signer.verifying_key()), authorization_id),
+            Err(_) => {
+                return (
+                    Vec::new(),
+                    CanonicalVerifier::from_key(signer.verifying_key()),
+                    authorization_id,
+                );
+            }
         };
         let issued = EventEnvelope::new(
             EventId::new(authorization.id.value()),
@@ -160,7 +167,13 @@ mod tests {
         };
         let invalidation_payload = match canonical_invalidation_payload(&invalidation) {
             Ok(value) => value,
-            Err(_) => return (vec![issued], CanonicalVerifier::from_key(signer.verifying_key()), authorization_id),
+            Err(_) => {
+                return (
+                    vec![issued],
+                    CanonicalVerifier::from_key(signer.verifying_key()),
+                    authorization_id,
+                );
+            }
         };
         let second = EventEnvelope::new(
             EventId::new(invalidation.propagation_id),
