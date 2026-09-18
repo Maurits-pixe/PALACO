@@ -60,7 +60,7 @@ mod tests {
     use super::*;
     use crate::domain::{AuthorityId, AuthorizationId, DecisionId};
 
-    fn authorization() -> Authorization {
+    fn make_authorization() -> Authorization {
         Authorization {
             id: AuthorizationId::new(uuid::Uuid::new_v4()),
             decision_id: DecisionId::new(uuid::Uuid::new_v4()),
@@ -89,13 +89,13 @@ mod tests {
 
     #[test]
     fn execution_requires_authorized_scope() {
-        assert!(gate(&authorization(), request("read")).is_ok());
+        assert!(gate(&make_authorization(), request("read")).is_ok());
     }
 
     #[test]
     fn execution_rejects_operation_outside_authorization() {
         assert_eq!(
-            gate(&authorization(), request("write")),
+            gate(&make_authorization(), request("write")),
             Err(ExecutionGateError::ScopeMismatch)
         );
     }
@@ -103,14 +103,14 @@ mod tests {
     #[test]
     fn execution_rejects_empty_operation() {
         assert_eq!(
-            gate(&authorization(), request("")),
+            gate(&make_authorization(), request("")),
             Err(ExecutionGateError::EmptyOperation)
         );
     }
 
     #[test]
     fn permit_is_bound_to_authorization() {
-        let permit = gate(&authorization(), request("read"));
+        let permit = gate(&make_authorization(), request("read"));
         assert!(permit.is_ok());
         if let Ok(permit) = permit {
             assert_ne!(
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn revoked_authorization_cannot_create_execution_permit() {
-        let mut authorization = authorization();
+        let mut authorization = make_authorization();
         authorization.status = AuthorizationStatus::Revoked;
         assert_eq!(
             gate(&authorization, request("read")),
