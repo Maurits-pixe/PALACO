@@ -6,3 +6,7 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+palaco-eventbus = { path = "../palaco-eventbus" }
+palaco-foundation = { path = "../palaco-foundation" }
