@@ -110,9 +110,24 @@ jobs:
           }
 
           const runtime = texts.map(([, content]) => content).join('\\n');
-          const externalRuntime = /(?:src|href|url\\(\\s*|import\\s*\\(|fetch\\s*\\()["'(]?\\s*https?:\\/\\//i;
-          const localPath = /(?:file:\\/\\/|sandbox:\\/\\/|\\/workspace\\/|\\/Users\\/|\\/home\\/|[A-Za-z]:[\\\\/])/m;
+          const externalRuntimePatterns = [
+            /(?:src|href)\s*=\s*["']https?:\/\//i,
+            /(?:url|import|fetch)\s*\(\s*["']?https?:\/\//i
+          ];
+          const localPathTokens = ['file://', 'sandbox://', '/workspace/', '/Users/', '/home/'];
           const violations = [];
+
+          for (const [file, content] of texts) {
+            if (externalRuntimePatterns.some((pattern) => pattern.test(content))) {
+              violations.push(file + ': external runtime asset');
+            }
+            if (localPathTokens.some((token) => content.includes(token)) || /[A-Za-z]:[\\/]/.test(content)) {
+              violations.push(file + ': local path');
+            }
+          }
+
+          if (violations.length) throw new Error(violations.join('\n'));
+
 
           for (const [file, content] of texts) {
             if (externalRuntime.test(content)) violations.push(file + ': external runtime asset');
