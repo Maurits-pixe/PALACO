@@ -4,7 +4,7 @@
 //! Constitutional execution boundary.
 
 use palaco_foundation::{
-    disposition_for, ContractDisposition, ContractError, FailClosed, Validatable,
+    ContractDisposition, ContractError, FailClosed, Validatable, disposition_for,
 };
 use palaco_quay::ProvenanceRecord;
 
