@@ -16,4 +16,10 @@ This release is a public content and navigation baseline. It does not issue iden
 
 ## Accessibility and performance
 
-The shell includes semantic headings, keyboard-visible focus, a skip link, accessible form labels, status announcements, responsive layout and reduced-motion support. It uses no external runtime dependency, video, tracking script or remote asset.
+The shell includes semantic headings, keyboard-visible focus, a skip link, accessible form labels, status announcements, responsive layout, active-navigation state and reduced-motion support. It uses no external runtime dependency, video, tracking script or remote asset.
+
+## Security boundary
+
+The HTML carries a restrictive browser-enforced CSP and `no-referrer` policy. `website/security-headers.conf` defines the deployment contract for CSP framing restrictions, referrer policy, MIME-sniffing protection, browser capability restrictions and cross-origin opener isolation.
+
+The repository file is **not deployment evidence**. Before publication, inspect the actual deployed HTTP response and verify that the hosting layer returns the required headers. Until that check succeeds, deployment-header status remains **UNVERIFIED**.
