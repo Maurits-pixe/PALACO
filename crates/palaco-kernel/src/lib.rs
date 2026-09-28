@@ -3,9 +3,7 @@
 
 //! Final runtime-facing PALACO Foundation execution boundary.
 
-use palaco_foundation::{
-    ContractDisposition, ContractError, FailClosed, Validatable,
-};
+use palaco_foundation::{ContractDisposition, ContractError, FailClosed, Validatable};
 use palaco_runtime::RuntimePlan;
 
 /// Kernel cycle that preserves the runtime's constitutional disposition.
