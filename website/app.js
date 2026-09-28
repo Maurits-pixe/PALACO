@@ -55,6 +55,15 @@ function detail(route) {
   return page(`${header(`PALACO · ${title.toUpperCase()}`, title, subtitle)}<section class="section"><h2>${body}</h2><p>Current public status: <span class="badge">DRAFT</span> <span class="badge">UNVERIFIED</span></p>${link('','Return to PALACO')}</section>`);
 }
 
+function syncNavigation(routeName) {
+  const section = routeName.split('/')[0];
+  document.querySelectorAll('header nav a').forEach((anchor) => {
+    const target = anchor.getAttribute('href').replace(/^#\/?/, '').replace(/\/$/, '');
+    if (section && target === section) anchor.setAttribute('aria-current', 'page');
+    else anchor.removeAttribute('aria-current');
+  });
+}
+
 function route() {
   const raw = location.hash.replace(/^#\/?/, '').replace(/\/$/, '') || '';
   const main = document.querySelector('#main');
@@ -65,7 +74,9 @@ function route() {
   else if (raw === 'proof/watermerk') main.innerHTML = page(`${header('PALACO · PROOF', 'Watermerk', 'An identity-bearing authenticity layer.')}<section class="section"><p class="badge">UNVERIFIED</p><p>No Watermerk record is available to verify in this baseline.</p></section>`);
   else main.innerHTML = detail(raw);
   document.title = raw ? `${raw.split('/').pop().toUpperCase()} — PALACO` : 'PALACO — Constitutional infrastructure';
+  syncNavigation(raw);
   main.focus({preventScroll: true});
+  window.scrollTo(0, 0);
 }
 
 window.addEventListener('hashchange', route);
