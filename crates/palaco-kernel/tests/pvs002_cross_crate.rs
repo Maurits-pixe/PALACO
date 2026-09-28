@@ -18,8 +18,8 @@ fn cycle(authority: AuthorityState) -> Result<KernelCycle, ContractError> {
 }
 
 #[test]
-fn authorized_evidence_path_reaches_execute_without_widening_authority(
-) -> Result<(), ContractError> {
+fn authorized_evidence_path_reaches_execute_without_widening_authority() -> Result<(), ContractError>
+{
     let cycle = cycle(AuthorityState::Authorized)?;
 
     assert_eq!(cycle.disposition(), ContractDisposition::Execute);
@@ -30,8 +30,8 @@ fn authorized_evidence_path_reaches_execute_without_widening_authority(
 }
 
 #[test]
-fn revoked_authority_remains_denied_across_all_downstream_boundaries(
-) -> Result<(), ContractError> {
+fn revoked_authority_remains_denied_across_all_downstream_boundaries() -> Result<(), ContractError>
+{
     let cycle = cycle(AuthorityState::Revoked)?;
 
     assert_eq!(cycle.disposition(), ContractDisposition::Deny);
@@ -62,10 +62,7 @@ fn evolution_proposal_cannot_self_authorize_execution() -> Result<(), ContractEr
     let proposal = EvolutionProposal::new(evidence);
 
     proposal.validate()?;
-    assert_eq!(
-        proposal.requested_disposition(),
-        ContractDisposition::Hold
-    );
+    assert_eq!(proposal.requested_disposition(), ContractDisposition::Hold);
 
     Ok(())
 }
