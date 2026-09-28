@@ -127,14 +127,6 @@ jobs:
           }
 
           if (violations.length) throw new Error(violations.join('\n'));
-
-
-          for (const [file, content] of texts) {
-            if (externalRuntime.test(content)) violations.push(file + ': external runtime asset');
-            if (localPath.test(content)) violations.push(file + ': local path');
-          }
-
-          if (violations.length) throw new Error(violations.join('\\n'));
           if (!runtime.includes('DRAFT')) throw new Error('DRAFT invariant missing');
           if (!runtime.includes('UNVERIFIED')) throw new Error('UNVERIFIED invariant missing');
           if (/\\bVERIFIED\\b/.test(runtime.replaceAll('UNVERIFIED', ''))) {
