@@ -15,22 +15,41 @@ GO-10 audits the assembled Foundation repository after GO-09. It verifies:
 - PVS-001 and PVS-002;
 - GO-09 Evidence Seal verification;
 - GitHub Actions permissions and immutable action pinning;
-- publication safety while licensing is unresolved;
+- ratified licensing state;
+- publication safety;
 - release-blocker visibility.
 
-GO-10 does **not** claim deployment, production runtime conformance, external certification, or release readiness.
+GO-10 does **not** claim deployment, production runtime conformance, external certification, or release deployment readiness.
 
 ## Evidence basis
 
-The GO-09 seal preserves the validated Foundation subject state:
+The GO-09 seal remains historical evidence for the validated Foundation subject state:
 
 - subject commit: `e0049d81291bc3035c6e6a45e7ef585bb727452b`
 - subject tree: `e02b4b0186b5d5ba77ad1ef1be282e35ebd296a4`
-- GO-04 through GO-08: completed / success on the same subject commit
+- GO-04 through GO-08: completed / success on that subject commit
 - GO-09 seal verification: completed / success
 - sealed subject GitHub signature state: `unsigned` (preserved, not upgraded)
 
-GO-10 additionally hardens CI supply-chain references and makes crate publication fail-closed.
+GO-10 subsequently hardened CI supply-chain references and set crate publication fail-closed.
+
+## GO-10R licensing resolution
+
+The owner ratified **Option A — `MIT OR Apache-2.0`**.
+
+Current required state:
+
+- root Cargo expression: `MIT OR Apache-2.0`;
+- root `LICENSE`: dual-license choice declaration;
+- `LICENSE-MIT`: MIT License;
+- `LICENSE-APACHE`: Apache License, Version 2.0;
+- all seven Foundation crates inherit the workspace license;
+- `publish = false` remains enabled as a separate distribution safety gate.
+
+This closes the former licensing blockers:
+
+- `AUD-REL-001 — Canonical license not approved` → **CLOSED BY GO-10R RATIFICATION**
+- `AUD-REL-002 — License declaration/file mismatch` → **CLOSED BY GO-10R RATIFICATION**
 
 ## Audit controls
 
@@ -47,26 +66,16 @@ GO-10 additionally hardens CI supply-chain references and makes crate publicatio
 | External GitHub Actions | immutable 40-hex commit SHA |
 | Workflow permissions | explicit read-only |
 | Rust toolchain | pinned to 1.98.1 |
+| License | `MIT OR Apache-2.0`, owner-ratified |
+| License files | `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE` present |
 | Crate publication | `publish = false` inherited by all seven crates |
-
-## Open release blockers
-
-### AUD-REL-001 — Canonical license not approved
-
-The root `LICENSE` remains an assembly placeholder and explicitly states that authoritative license text must be canonically approved before release.
-
-### AUD-REL-002 — License declaration/file mismatch
-
-The Rust workspace currently declares `Apache-2.0`, while the repository does not yet contain the canonically approved Apache-2.0 license text. Other PALACO source material also contains `MIT OR Apache-2.0` declarations, so GO-10 does not infer or manufacture a licensing decision.
-
-**Mitigation:** all seven Foundation crates inherit `publish = false`. Accidental package publication is therefore fail-closed while the license decision remains unresolved.
 
 ## Audit observation
 
-The GO-09 subject commit is unsigned according to GitHub signature verification. This is recorded as an evidence limitation; GO-10 does not transform it into a signed artifact.
+The GO-09 subject commit is unsigned according to GitHub signature verification. This remains an evidence limitation only; GO-10 does not transform it into a signed artifact.
 
 ## Closing rule
 
-GO-10 is complete only when its CI workflow independently re-runs the technical regressions, verifies the Evidence Seal and passes the machine audit.
+GO-10 is complete only when its CI workflow independently re-runs the technical regressions, verifies the Evidence Seal, validates the ratified license state, and passes the machine audit.
 
-A successful GO-10 audit may coexist with open release blockers. **GO-11 Release Manifest remains locked while AUD-REL-001 / AUD-REL-002 remain unresolved.**
+When that run reports `release_blockers=NONE`, GO-11 Release Manifest may open. It still does not imply deployment or package publication.
