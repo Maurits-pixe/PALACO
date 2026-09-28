@@ -1,0 +1,56 @@
+name: GO-10 Foundation Audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "LICENSE"
+      - "crates/**"
+      - "docs/**"
+      - "tests/**"
+      - "evidence/**"
+      - "tools/**"
+      - ".github/workflows/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit commit with ancestry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Install pinned Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: 1.98.1
+          components: rustfmt, clippy
+      - name: PVS-001 regression
+        run: python3 tools/pvs001_workspace_integrity.py
+      - name: PVS-002 regression
+        run: python3 tools/pvs002_cross_crate_contracts.py
+      - name: Formatting audit
+        run: cargo fmt --all -- --check
+      - name: Clippy audit
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Workspace check audit
+        run: cargo check --workspace --all-targets
+      - name: Workspace build audit
+        run: cargo build --workspace --all-targets
+      - name: Workspace test audit
+        run: cargo test --workspace --all-targets
+      - name: Explicit PVS-002 integration audit
+        run: cargo test -p palaco-kernel --test pvs002_cross_crate
+      - name: Verify GO-09 Evidence Seal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verify_go09_evidence_seal.py
+      - name: Run GO-10 machine audit
+        run: python3 tools/go10_audit.py
