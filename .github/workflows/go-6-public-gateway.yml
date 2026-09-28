@@ -121,7 +121,7 @@ jobs:
             if (externalRuntimePatterns.some((pattern) => pattern.test(content))) {
               violations.push(file + ': external runtime asset');
             }
-            if (localPathTokens.some((token) => content.includes(token)) || /[A-Za-z]:[\\/]/.test(content)) {
+          if (localPathTokens.some((token) => content.includes(token)) || /(?:^|[\s"'(])[A-Za-z]:[\\/]/m.test(content)) {
               violations.push(file + ': local path');
             }
           }
