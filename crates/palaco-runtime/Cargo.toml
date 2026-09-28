@@ -6,3 +6,7 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+palaco-citadel = { path = "../palaco-citadel" }
+palaco-foundation = { path = "../palaco-foundation" }
