@@ -1,0 +1,29 @@
+name: GO-05 Rust Workspace Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - ".github/workflows/go-05-rust-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Toolchain versions
+        run: |
+          rustc --version
+          cargo --version
+      - name: Build workspace all targets
+        run: cargo build --workspace --all-targets
