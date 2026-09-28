@@ -1,4 +1,4 @@
-name: GO-10R License Resolution Guard
+name: GO-10R License Ratification
 
 on:
   push:
@@ -6,9 +6,12 @@ on:
     paths:
       - "Cargo.toml"
       - "LICENSE"
+      - "LICENSE-MIT"
+      - "LICENSE-APACHE"
       - "crates/**/Cargo.toml"
       - "docs/implementation/PIS/PIS-011.md"
       - "evidence/audits/GO-10R-CANONICAL-LICENSE-RESOLUTION.md"
+      - "evidence/audits/GO-10R-LICENSE-RATIFICATION.md"
       - "tools/go10r_license_resolution_guard.py"
       - ".github/workflows/go-10r-license-resolution.yml"
   workflow_dispatch:
@@ -17,10 +20,10 @@ permissions:
   contents: read
 
 jobs:
-  license-resolution-guard:
+  license-ratification:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - name: Verify unresolved license boundary is fail-closed
+      - name: Verify ratified dual-license boundary
         run: python3 tools/go10r_license_resolution_guard.py
