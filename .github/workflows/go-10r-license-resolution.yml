@@ -19,6 +19,8 @@ on:
 permissions:
   contents: read
 
+# Final GO-10R / GO-10 synchronized validation trigger.
+
 jobs:
   license-ratification:
     runs-on: ubuntu-latest
