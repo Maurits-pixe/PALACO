@@ -1,0 +1,26 @@
+name: GO-10R License Resolution Guard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "LICENSE"
+      - "crates/**/Cargo.toml"
+      - "docs/implementation/PIS/PIS-011.md"
+      - "evidence/audits/GO-10R-CANONICAL-LICENSE-RESOLUTION.md"
+      - "tools/go10r_license_resolution_guard.py"
+      - ".github/workflows/go-10r-license-resolution.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  license-resolution-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify unresolved license boundary is fail-closed
+        run: python3 tools/go10r_license_resolution_guard.py
