@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""GO-10 Foundation audit for PALACO.
-
-This audit verifies repository integrity and records release blockers without
-silently converting them into PASS conditions.
-"""
+"""GO-10 Foundation audit for PALACO."""
 
 from __future__ import annotations
 
@@ -70,32 +66,80 @@ for path in docs:
         if "Source provenance:" not in content or "Source blob:" not in content:
             error(f"{rel} lacks direct source provenance")
 
-go03 = ROOT / "evidence" / "manifests" / "GO-03-CANONICAL-IMPORT.md"
-if not go03.is_file():
+if not (ROOT / "evidence" / "manifests" / "GO-03-CANONICAL-IMPORT.md").is_file():
     error("GO-03 canonical import manifest is missing")
 
-# 2. Workspace publication boundary and unresolved licensing.
-root_cargo_path = ROOT / "Cargo.toml"
-root_cargo = tomllib.loads(root_cargo_path.read_text(encoding="utf-8"))
+# 2. Ratified licensing + publication safety.
+root_cargo = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
 workspace_package = root_cargo.get("workspace", {}).get("package", {})
+
+if workspace_package.get("license") != "MIT OR Apache-2.0":
+    blocker("RATIFIED_LICENSE_EXPRESSION_MISMATCH")
+
 if workspace_package.get("publish") is not False:
     error("workspace publication is not fail-closed")
-if workspace_package.get("license") != "Apache-2.0":
-    error("workspace license declaration changed unexpectedly during GO-10")
 
 for crate in EXPECTED_CRATES:
     cargo_path = ROOT / "crates" / crate / "Cargo.toml"
     data = tomllib.loads(cargo_path.read_text(encoding="utf-8"))
     package = data.get("package", {})
-    publish = package.get("publish")
-    if not isinstance(publish, dict) or publish.get("workspace") is not True:
-        error(f"{crate} does not inherit fail-closed workspace publication policy")
 
-license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
-if "License placeholder for repository assembly." in license_text:
-    blocker("LICENSE_CANON_NOT_APPROVED")
-if workspace_package.get("license") == "Apache-2.0" and "License placeholder" in license_text:
-    blocker("LICENSE_DECLARATION_FILE_MISMATCH")
+    license_value = package.get("license")
+    if not isinstance(license_value, dict) or license_value.get("workspace") is not True:
+        error(f"{crate} does not inherit workspace license")
+
+    publish_value = package.get("publish")
+    if not isinstance(publish_value, dict) or publish_value.get("workspace") is not True:
+        error(f"{crate} does not inherit fail-closed publication policy")
+
+root_license = ROOT / "LICENSE"
+mit_license = ROOT / "LICENSE-MIT"
+apache_license = ROOT / "LICENSE-APACHE"
+ratification = ROOT / "evidence" / "audits" / "GO-10R-LICENSE-RATIFICATION.md"
+
+if not root_license.is_file():
+    blocker("ROOT_LICENSE_MISSING")
+else:
+    text = root_license.read_text(encoding="utf-8")
+    if "MIT OR Apache-2.0" not in text or "placeholder" in text.lower():
+        blocker("ROOT_LICENSE_NOT_RATIFIED_DUAL_LICENSE")
+
+if not mit_license.is_file():
+    blocker("MIT_LICENSE_MISSING")
+else:
+    text = mit_license.read_text(encoding="utf-8")
+    for marker in [
+        "MIT License",
+        "Copyright (c) 2026 PALACO",
+        "Permission is hereby granted, free of charge",
+        'THE SOFTWARE IS PROVIDED "AS IS"',
+    ]:
+        if marker not in text:
+            blocker("MIT_LICENSE_INCOMPLETE")
+
+if not apache_license.is_file():
+    blocker("APACHE_LICENSE_MISSING")
+else:
+    text = apache_license.read_text(encoding="utf-8")
+    for marker in [
+        "Apache License",
+        "Version 2.0, January 2004",
+        "1. Definitions.",
+        "2. Grant of Copyright License.",
+        "3. Grant of Patent License.",
+        "4. Redistribution.",
+        "9. Accepting Warranty or Additional Liability.",
+        "END OF TERMS AND CONDITIONS",
+    ]:
+        if marker not in text:
+            blocker("APACHE_LICENSE_INCOMPLETE")
+
+if not ratification.is_file():
+    blocker("OWNER_LICENSE_RATIFICATION_MISSING")
+else:
+    text = ratification.read_text(encoding="utf-8")
+    if "Option A" not in text or "MIT OR Apache-2.0" not in text or "RATIFIED" not in text:
+        blocker("OWNER_LICENSE_RATIFICATION_INCOMPLETE")
 
 # 3. Workflow supply-chain and permission boundary.
 workflow_dir = ROOT / ".github" / "workflows"
@@ -135,8 +179,7 @@ for name in [
 ]:
     path = workflow_dir / name
     if not path.is_file():
-        if name != "go-10-audit.yml":
-            error(f"required workflow missing: {name}")
+        error(f"required workflow missing: {name}")
         continue
     content = path.read_text(encoding="utf-8")
     if f"dtolnay/rust-toolchain@{RUST_ACTION_SHA}" not in content:
@@ -144,7 +187,7 @@ for name in [
     if f"toolchain: {RUST_TOOLCHAIN}" not in content:
         error(f"{name} does not pin Rust {RUST_TOOLCHAIN}")
 
-# 4. Evidence Seal presence and preserved limitations.
+# 4. Evidence Seal presence and historical limitations.
 seal_path = ROOT / "evidence" / "manifests" / "GO-09-EVIDENCE-SEAL.json"
 seal_checksum = ROOT / "evidence" / "manifests" / "GO-09-EVIDENCE-SEAL.sha256"
 if not seal_path.is_file() or not seal_checksum.is_file():
@@ -159,11 +202,8 @@ else:
     else:
         error("GO-09 subject signature state changed from the sealed record")
 
-# 5. Explicit non-claims / release decision.
-if BLOCKERS:
-    release_state = "BLOCKED"
-else:
-    release_state = "ELIGIBLE_FOR_GO-11_REVIEW"
+# 5. Release decision.
+release_state = "BLOCKED" if BLOCKERS else "ELIGIBLE_FOR_GO-11_REVIEW"
 
 if ERRORS:
     print("GO-10 AUDIT: FAIL")
@@ -178,6 +218,7 @@ print("audit_integrity=PASS")
 print(f"canonical_artifacts={len(docs)}")
 print("workflow_supply_chain=IMMUTABLY_PINNED")
 print("workflow_permissions=READ_ONLY")
+print("license_resolution=RATIFIED_MIT_OR_APACHE_2_0")
 print("publication_guard=FAIL_CLOSED")
 print(f"release_readiness={release_state}")
 print("release_blockers=" + (",".join(BLOCKERS) if BLOCKERS else "NONE"))
