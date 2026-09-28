@@ -30,9 +30,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
           sparse-checkout: |
-            website
-            .github
-          sparse-checkout-cone-mode: true
+            /website/
+            /.github/
+          sparse-checkout-cone-mode: false
 
       - name: Assert exact PR head
         if: github.event_name == 'pull_request'
