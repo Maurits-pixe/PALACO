@@ -1,0 +1,23 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/palaco-foundation",
+  "crates/palaco-kernel",
+  "crates/palaco-runtime",
+  "crates/palaco-eventbus",
+  "crates/palaco-quay",
+  "crates/palaco-citadel",
+  "crates/palaco-evolution",
+]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+todo = "deny"
