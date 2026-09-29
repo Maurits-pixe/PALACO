@@ -1,0 +1,53 @@
+name: GO-12 Immutable v1.0.0 Tag
+
+on:
+  push:
+    branches:
+      - "go-12-v1.0.0-tag"
+    paths:
+      - ".github/workflows/go-12-v1.0.0-tag.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_SHA: "5283a560dc9d410fa778d69f93bb339dbafbf5fe"
+      TAG_NAME: "v1.0.0"
+    steps:
+      - name: Checkout GO-12 execution branch with history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Verify target commit exists
+        run: |
+          git cat-file -e "${TARGET_SHA}^{commit}"
+          test "$(git show -s --format=%H "$TARGET_SHA")" = "$TARGET_SHA"
+
+      - name: Refuse pre-existing tag
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG_NAME}" >/dev/null 2>&1; then
+            echo "Tag ${TAG_NAME} already exists; refusing to overwrite."
+            exit 1
+          fi
+
+      - name: Create annotated immutable release tag
+        run: |
+          git config user.name "PALACO GO-12"
+          git config user.email "go-12@users.noreply.github.com"
+          git tag -a "${TAG_NAME}" "${TARGET_SHA}" -m "PALACO Foundation Edition v1.0.0 — GO-12"
+          test "$(git rev-list -n 1 "${TAG_NAME}")" = "$TARGET_SHA"
+
+      - name: Push tag without force
+        run: git push origin "refs/tags/${TAG_NAME}"
+
+      - name: Verify remote tag resolves to exact release commit
+        run: |
+          git tag -d "${TAG_NAME}"
+          git fetch origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+          test "$(git rev-list -n 1 "${TAG_NAME}")" = "$TARGET_SHA"
+          git show --no-patch --decorate "${TAG_NAME}"
