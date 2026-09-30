@@ -27,6 +27,7 @@
       <button data-view="rio">06<br>RIO</button>
     </nav>
     <main id="main" tabindex="-1">
+      <p id="workspace-message" class="workspace-message" role="status" aria-live="polite"></p>
       <section class="view visible" data-panel="start">
         <div class="welcome">
           <div>
@@ -80,22 +81,25 @@
           </aside>
           <article class="sheet">
             <div class="sheet-meta"><span id="sheet-owner">NO ID</span><span id="sheet-id">NEW DOCUMENT</span></div>
-            <header class="sheet-cover"><p class="eyebrow">PALACO DOCUMENT</p><input id="title" aria-label="Document title" value="Untitled document"><p>LOCAL DRAFT · PROVENANCE VISIBLE · AUTHORITY NONE</p></header>
+            <header class="sheet-cover"><p class="eyebrow">PALACO DOCUMENT</p><input id="title" maxlength="200" aria-label="Document title" value="Untitled document"><p>LOCAL DRAFT · PROVENANCE VISIBLE · AUTHORITY NONE</p></header>
             <div id="blocks" class="blocks"></div>
             <footer><span>PALACO CX-001</span><span>UNVERIFIED</span></footer>
           </article>
           <aside class="inspector">
             <p class="eyebrow">Inspector</p>
-            <label>Purpose<textarea id="purpose" rows="4"></textarea></label>
-            <label>Citadel reference<input id="citadel" placeholder="e.g. LA-001"></label>
-            <label>Visibility<select id="visibility"><option>PRIVATE</option><option>SHARED</option><option>PUBLIC</option></select></label>
-            <dl><dt>Creator</dt><dd id="creator">NO ID</dd><dt>Status</dt><dd>LOCAL DRAFT</dd><dt>Verification</dt><dd>UNVERIFIED</dd><dt>Authority</dt><dd>NONE</dd><dt>Digest</dt><dd id="digest">NOT SEALED</dd></dl>
+            <label>Purpose<textarea id="purpose" maxlength="4000" rows="4"></textarea></label>
+            <label>Citadel reference<input id="citadel" maxlength="120" placeholder="e.g. LA-001"></label>
+            <label>Visibility intent<select id="visibility"><option>PRIVATE</option><option>SHARED</option><option>PUBLIC</option></select></label>
+            <p class="boundary">This records intent. Your document stays in this browser; it is not shared or published.</p>
+            <dl><dt>Original creator</dt><dd id="creator">NO ID</dd><dt>Last saved editor</dt><dd id="editor">NO ID</dd><dt>Status</dt><dd>LOCAL DRAFT</dd><dt>Verification</dt><dd>UNVERIFIED</dd><dt>Authority</dt><dd>NONE</dd><dt>Digest</dt><dd id="digest">NOT HASHED</dd></dl>
+            <details class="history"><summary>Revision history</summary><p class="boundary">Restore earlier content as a new draft. Save to add a revision.</p><ol id="revision-history"></ol></details>
           </aside>
         </div>
       </section>
 
       <section class="view" data-panel="docs">
-        <header class="section-head"><div><p class="eyebrow">04 · DOCUMENTS</p><h2>Local library</h2></div><button data-action="new">New document</button></header>
+        <header class="section-head"><div><p class="eyebrow">04 · DOCUMENTS</p><h2>Local library</h2></div><div class="row"><button data-action="import">Import JSON</button><button data-action="new">New document</button></div></header>
+        <p class="boundary">Import a .palaco.json file as a new local draft. Your ID and existing documents stay intact.</p>
         <div id="library" class="library"></div>
       </section>
 
@@ -107,9 +111,10 @@
       <section class="view" data-panel="rio">
         <header class="section-head"><div><p class="eyebrow">06 · RIO</p><h2>RIO · local guide</h2></div><span>LIVE AI NOT CONNECTED</span></header>
         <div class="rio">
+          <div class="rio-context"><div class="row"><button data-action="rio-context">Use current document as context</button><button data-action="rio-clear">Clear context</button></div><p id="rio-context-state">No document context attached.</p><p class="boundary">Only a title, block count, Citadel reference and revision summary is attached locally. No data is sent to a provider.</p></div>
           <div id="rio-log" class="rio-log"><article class="rio-system"><b>RIO</b><p>I can guide identity, building, images, provenance, saving and export. I do not act as an authority or live AI provider in this slice.</p></article></div>
           <form id="rio-form"><label for="rio-input">Ask RIO</label><div class="row"><input id="rio-input" autocomplete="off" placeholder="How do I use this image as a Citadel image?"><button class="primary">Send</button></div></form>
-          <div class="row quick"><button data-rio="create id">Create ID</button><button data-rio="use image">Use image</button><button data-rio="provenance">Provenance</button><button data-rio="export">Export</button></div>
+          <div class="row quick"><button data-rio="create id">Create ID</button><button data-rio="use image">Use image</button><button data-rio="revision history">Revisions</button><button data-rio="import document">Import</button><button data-rio="provenance">Provenance</button><button data-rio="export">Export</button></div>
         </div>
       </section>
     </main>
@@ -118,14 +123,17 @@
   <dialog id="image-dialog">
     <form id="image-form" method="dialog">
       <header class="dialog-head"><div><p class="eyebrow">ADD IMAGE</p><h3>Use this image as…</h3></div><button value="cancel" aria-label="Close">×</button></header>
-      <label>Image<input id="image-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      <label id="image-file-label">Image<input id="image-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
       <label>Role<select id="image-role"><option value="citadel">Citadel image</option><option value="cover">Cover image</option><option value="illustration">Illustration</option><option value="source">Source / evidence image</option><option value="watermark-reference">Watermark reference</option></select></label>
       <label>Caption<input id="image-caption" maxlength="160"></label>
       <label>Source note<input id="image-source" maxlength="240" placeholder="Where does this image come from?"></label>
       <p class="boundary">Role labels record intent only. Source / evidence and Watermark reference do not establish authenticity.</p>
-      <div class="row"><button class="primary" type="button" data-action="insert-image">Insert image</button><button value="cancel">Cancel</button></div>
+      <p id="image-message" class="error" role="alert"></p>
+      <div class="row"><button id="image-submit" class="primary" type="button" data-action="insert-image">Insert image</button><button value="cancel">Cancel</button></div>
     </form>
   </dialog>
+  <input id="import-file" type="file" accept=".palaco.json,.json,application/json" hidden aria-label="Import PALACO document">
+  <script src="studio-model.js" defer></script>
   <script src="studio.js" defer></script>
 </body>
 </html>
