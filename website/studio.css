@@ -5,3 +5,5 @@
 .print-value{display:none}@page{size:A4;margin:16mm}@media print{.sheet-cover input,.heading-input,.text-input{display:none!important}.print-value{display:block;white-space:pre-wrap;overflow-wrap:anywhere;color:#171714}.print-title{font:400 42px/1.1 Georgia,serif;letter-spacing:-.03em}.print-heading{font:400 28px/1.2 Georgia,serif}.print-text{font:18px/1.7 Georgia,serif}.sheet-cover{padding-top:20px}.block:has(.print-text){break-inside:auto}.sheet-meta{font-size:8px}.blocks{padding-top:18px;padding-bottom:18px}}
 
 .rio form .row{grid-template-columns:minmax(0,1fr) auto}.rio form input{min-width:0}.prov b{overflow-wrap:anywhere;min-width:0}
+
+.proof-grid>.panel,.library>.card{min-width:0;overflow-wrap:anywhere}.proof-grid p{overflow-wrap:anywhere}

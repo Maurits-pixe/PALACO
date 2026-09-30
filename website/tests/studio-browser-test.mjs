@@ -24,7 +24,11 @@ const origin='http://127.0.0.1:'+server.address().port;
 const storage=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('palaco-cx001')));
 const save=async(page,revision)=>{await page.locator('.tools [data-action="save"]').click();await page.waitForFunction(rev=>document.querySelector('#doc-state').textContent==='SAVED LOCAL · REV '+rev,revision)};
 const view=(page,name)=>page.locator('[data-view="'+name+'"]').click();
-const noOverflow=async(page,label)=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true,label);
+const noOverflow=async(page,label)=>{
+  const layout=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:Array.from(document.querySelectorAll('body *')).filter(n=>{const r=n.getBoundingClientRect();return r.width&&r.right>innerWidth+1}).slice(0,12).map(n=>({tag:n.tagName,class:n.className,id:n.id,right:n.getBoundingClientRect().right}))}));
+  if(layout.scroll>layout.width+1)await page.screenshot({path:resolve(output,label.replace(/[^a-z0-9]+/gi,'-')+'-overflow.png'),fullPage:true});
+  assert.equal(layout.scroll<=layout.width+1,true,label+' '+JSON.stringify(layout));
+};
 const imageFixture=async page=>Buffer.from((await page.evaluate(()=>{
   const canvas=document.createElement('canvas');canvas.width=640;canvas.height=360;const c=canvas.getContext('2d');c.fillStyle='#151513';c.fillRect(0,0,640,360);c.strokeStyle='#a88b54';c.lineWidth=2;
   for(let x=80;x<640;x+=80){c.strokeRect(x,80,35,210)}c.beginPath();c.moveTo(30,320);c.lineTo(610,320);c.stroke();c.fillStyle='#f2eee5';c.font='28px serif';c.fillText('L.A. — test image',32,45);return canvas.toDataURL('image/png').split(',')[1];
