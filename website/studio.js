@@ -36,9 +36,9 @@ function go(view){
 function showError(error){const message=error.message||'The operation could not be completed.';notice(message,true);if($('#image-dialog').open)$('#image-message').textContent=message}
 function checkStorage(){if(state.storageBlocked)throw Error('Unreadable local data is protected. Export this document before changing browser storage.')}
 async function saveIdentity(form){
-  if(state.busy)return;checkStorage();busy(true);
+  if(state.busy)return;checkStorage();const f=new FormData(form);busy(true);
   try{
-    const f=new FormData(form),base=state.identity||{palacoId:'PALACO-ID-'+crypto.randomUUID(),createdAt:now(),version:'CX-001/0.2'};
+    const base=state.identity||{palacoId:'PALACO-ID-'+crypto.randomUUID(),createdAt:now(),version:'CX-001/0.2'};
     const next={palacoId:base.palacoId,createdAt:base.createdAt,version:base.version,name:(f.get('name')||'').trim()||'Unnamed creator',alias:(f.get('alias')||'').trim(),purpose:(f.get('purpose')||'').trim(),status:'LOCAL_DRAFT',verification:'UNVERIFIED',authority:'NONE',updatedAt:now()};
     next.digest=await M.digest(next);
     if(!persist(next))return;state.identity=next;
@@ -156,8 +156,12 @@ function rio(question){
 }
 function rioMsg(who,message){const article=document.createElement('article');article.className=who==='YOU'?'rio-user':'rio-system';article.innerHTML='<b>'+esc(who)+'</b><p>'+esc(message)+'</p>';$('#rio-log').appendChild(article);article.scrollIntoView({block:'end'})}
 function attachContext(){sync();const doc=state.current;state.rioContext=doc.title+' · '+doc.blocks.length+' blocks · '+(doc.citadel||'no Citadel reference')+' · REV '+doc.revision+' · UNVERIFIED';$('#rio-context-state').textContent=state.rioContext;rioMsg('RIO','Document summary attached locally: '+state.rioContext)}
+function preparePrint(){
+  sync();$$('.print-value').forEach(node=>node.remove());
+  $$('#title,.heading-input,.text-input').forEach(input=>{const copy=document.createElement('div');copy.className='print-value '+(input.id==='title'?'print-title':input.classList.contains('heading-input')?'print-heading':'print-text');copy.textContent=input.value;input.after(copy)});
+}
 async function action(name){
-  if(name==='save')await saveDoc();if(name==='export')await exportDoc();if(name==='print'){sync();window.print()}if(name==='import')$('#import-file').click();
+  if(name==='save')await saveDoc();if(name==='export')await exportDoc();if(name==='print'){preparePrint();window.print()}if(name==='import')$('#import-file').click();
   if(name==='new'&&discardAllowed()){state.template='blank';state.current=newDoc();state.dirty=false;clearContext();renderDoc();go('build')}
   if(name==='delete-id'&&confirm('Delete the local PALACO ID? Existing document creator references remain.')){checkStorage();if(persist(null)){state.identity=null;renderIdentity();renderDoc();notice('Local ID deleted. Document source references were retained.')}}
   if(name==='rio-context')attachContext();if(name==='rio-clear')clearContext();
@@ -183,5 +187,6 @@ $('#import-file').addEventListener('change',event=>{importDoc(event.target.files
 $('#rio-form').addEventListener('submit',event=>{event.preventDefault();const input=$('#rio-input'),q=input.value.trim();if(q){rioMsg('YOU',q);rioMsg('RIO',rio(q));input.value=''}});
 ['title','purpose','citadel'].forEach(key=>$('#'+key).addEventListener('input',()=>{sync();markDirty()}));$('#visibility').addEventListener('change',()=>{sync();markDirty()});
 window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue=''}});
+window.addEventListener('beforeprint',preparePrint);
 window.addEventListener('storage',event=>{if(event.key===KEY||event.key===null){state.storageBlocked=true;notice('PALACO data changed in another tab. Export your unsaved work, then reload before saving.',true)}});load();
 })();

@@ -122,14 +122,14 @@
 
   <dialog id="image-dialog">
     <form id="image-form" method="dialog">
-      <header class="dialog-head"><div><p class="eyebrow">ADD IMAGE</p><h3>Use this image as…</h3></div><button value="cancel" aria-label="Close">×</button></header>
+      <header class="dialog-head"><div><p class="eyebrow">ADD IMAGE</p><h3>Use this image as…</h3></div><button value="cancel" formnovalidate aria-label="Close">×</button></header>
       <label id="image-file-label">Image<input id="image-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
       <label>Role<select id="image-role"><option value="citadel">Citadel image</option><option value="cover">Cover image</option><option value="illustration">Illustration</option><option value="source">Source / evidence image</option><option value="watermark-reference">Watermark reference</option></select></label>
       <label>Caption<input id="image-caption" maxlength="160"></label>
       <label>Source note<input id="image-source" maxlength="240" placeholder="Where does this image come from?"></label>
       <p class="boundary">Role labels record intent only. Source / evidence and Watermark reference do not establish authenticity.</p>
       <p id="image-message" class="error" role="alert"></p>
-      <div class="row"><button id="image-submit" class="primary" type="button" data-action="insert-image">Insert image</button><button value="cancel">Cancel</button></div>
+      <div class="row"><button id="image-submit" class="primary" type="button" data-action="insert-image">Insert image</button><button value="cancel" formnovalidate>Cancel</button></div>
     </form>
   </dialog>
   <input id="import-file" type="file" accept=".palaco.json,.json,application/json" hidden aria-label="Import PALACO document">
