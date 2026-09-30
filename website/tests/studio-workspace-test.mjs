@@ -13,7 +13,7 @@ function workspace(initial){
     if(!nodes.has(key))nodes.set(key,{value:key==='#title'?'Untitled document':key==='#visibility'?'PRIVATE':'',style:{},scrollHeight:100,textContent:'',innerHTML:'',dataset:{},classList:{toggle(){}},focus(){},reset(){},setAttribute(){},removeAttribute(){},addEventListener(type,fn){this[type]=fn},elements:{name:{},alias:{},purpose:{}}});
     return nodes.get(key);
   };
-  const context=vm.createContext({PalacoDocuments:null,requestAnimationFrame:fn=>fn(),crypto:globalThis.crypto,TextEncoder,Date,JSON,Array,Set,Error,Number,String,Uint8Array,FormData:class{constructor(form){this.data=form.data||{}}get(key){return this.data[key]}},
+  const context=vm.createContext({PalacoDocuments:null,navigator:{locks:{request:async(key,options,fn)=>fn()}},requestAnimationFrame:fn=>fn(),crypto:globalThis.crypto,TextEncoder,Date,JSON,Array,Set,Error,Number,String,Uint8Array,FormData:class{constructor(form){this.data=form.data||{}}get(key){return this.data[key]}},
     document:{querySelector:node,querySelectorAll:()=>[],addEventListener(type,fn){listeners[type]=fn}},
     window:{addEventListener(type,fn){windows[type]=fn}},localStorage:{getItem:()=>saved,setItem:(key,value)=>{if(quota)throw Error('quota');saved=value}},confirm:()=>true});
   vm.runInContext(model,context);vm.runInContext(code,context);
@@ -21,7 +21,7 @@ function workspace(initial){
   const click=async(selector,dataset)=>{const target={dataset,closest:s=>s===selector?target:null};listeners.click({target,preventDefault(){}});await settle()};
   const input=async(key,value)=>{const target=node('#'+key);target.value=value;target.input();await settle()};
   const identity=async name=>{node('#identity-form').data={name};node('#identity-form').submit({preventDefault(){},currentTarget:node('#identity-form')});await settle()};
-  return {node,click,input,identity,storage:()=>JSON.parse(saved),raw:()=>saved,quota:()=>{quota=true},windows};
+  return {node,click,input,identity,storage:()=>JSON.parse(saved),raw:()=>saved,quota:()=>{quota=true},windows,context,externalWrite:value=>{saved=value}};
 }
 test('workspace retains saved snapshots when restored content is saved',async()=>{
   const w=workspace();await w.input('title','First');await w.click('[data-action]',{action:'save'});
@@ -52,4 +52,15 @@ test('legacy documents migrate using only their available revision',async()=>{
 test('another tab cannot silently overwrite a local workspace',async()=>{
   const w=workspace();await w.input('title','First');await w.click('[data-action]',{action:'save'});const prior=w.raw();
   w.windows.storage({key:'palaco-cx001'});await w.input('title','Second');await w.click('[data-action]',{action:'save'});assert.equal(w.raw(),prior);assert.match(w.node('#workspace-message').textContent,/protected/);
+});
+test('a write during digest calculation survives even before the storage event arrives',async()=>{
+  const w=workspace();await w.input('title','First');await w.click('[data-action]',{action:'save'});
+  const other=w.storage();other.docs[0].title='Other tab';const newer=JSON.stringify(other),original=w.context.PalacoDocuments.prepareRevision;
+  w.context.PalacoDocuments.prepareRevision=async(...args)=>{const next=await original(...args);w.externalWrite(newer);return next};
+  await w.input('title','Pending edit');await w.click('[data-action]',{action:'save'});
+  assert.equal(w.raw(),newer);assert.equal(w.node('#title').value,'Pending edit');assert.match(w.node('#doc-state').textContent,/UNSAVED/);assert.match(w.node('#workspace-message').textContent,/another tab/);
+});
+test('saving without a cross-tab lock keeps the draft open for export',async()=>{
+  const w=workspace();delete w.context.navigator.locks;await w.input('title','Keep this');await w.click('[data-action]',{action:'save'});
+  assert.equal(w.raw(),null);assert.equal(w.node('#title').value,'Keep this');assert.match(w.node('#doc-state').textContent,/UNSAVED/);assert.match(w.node('#workspace-message').textContent,/Export/);
 });

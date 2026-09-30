@@ -55,3 +55,12 @@ test('restoration creates a new sequential revision',async()=>{
   const restored=M.clone(one);restored.restoredFrom={revision:one.revision,digest:one.digest};const three=await M.prepareRevision(restored,two);
   assert.equal(three.revision,3);assert.equal(three.title,'L.A.');assert.equal(three.parentDigest,two.digest);assert.equal(two.title,'Second');
 });
+test('export and import limits count UTF-8 bytes including pretty-print whitespace',async()=>{
+  const doc=document();doc.blocks=Array.from({length:99},(_,i)=>({id:'BLK-'+i,type:'text',text:'界'.repeat(20000),at:doc.createdAt}));
+  doc.blocks.push({id:'BLK-image',type:'image',at:doc.createdAt,data:'data:image/png;base64,'+'A'.repeat(2099000),name:'large.png',role:'source',caption:'',source:'',verification:'UNVERIFIED'});
+  assert.ok(JSON.stringify(doc).length<8000000);
+  await assert.rejects(M.makeExport(doc,null,false),/exceeds 8 MB/);
+  await assert.rejects(M.readExport(JSON.stringify({document:doc})),/smaller than 8 MB/);
+  const payload=await M.makeExport(document(),null,false);assert.ok(new TextEncoder().encode(JSON.stringify(payload,null,2)).byteLength<8000000);
+  assert.equal((await M.readExport(JSON.stringify(payload,null,2))).id,'DOC-original');
+});

@@ -74,6 +74,14 @@ async function suite(engine,type){
     passed(engine,'JSON round-trip forks the document; tampered import is rejected');
     await view(page,'build');await page.evaluate(()=>{Storage.prototype.setItem=function(){throw new DOMException('Quota exceeded','QuotaExceededError')}});await page.locator('#title').fill('Changes kept after failed save');await page.locator('.tools [data-action="save"]').click();await page.waitForFunction(()=>document.querySelector('#workspace-message').textContent.startsWith('Saving failed.'));assert.match(await page.locator('#doc-state').textContent(),/UNSAVED/);assert.equal((await storage(page)).docs.find(d=>d.id===importedId).revision,1);
     passed(engine,'quota failure retains open edits and saved revision');await page.reload();await view(page,'build');
+    const other=await context.newPage();other.on('pageerror',e=>runtimeErrors.push(e.message));other.on('dialog',dialog=>dialog.accept());await other.goto(origin+'/studio.html');await view(other,'build');
+    await page.evaluate(()=>{const original=PalacoDocuments.prepareRevision;PalacoDocuments.prepareRevision=async(...args)=>{const next=await original(...args);window.__savePaused=true;await new Promise(resolve=>window.__resumeSave=resolve);return next}});
+    await page.locator('#title').fill('Pending edit in first tab');await page.locator('.tools [data-action="save"]').click();await page.waitForFunction(()=>window.__savePaused);
+    await other.locator('#title').fill('Saved in the other tab');await save(other,2);await page.evaluate(()=>window.__resumeSave());
+    await page.waitForFunction(()=>document.querySelector('#workspace-message').textContent.includes('another tab')&&!document.querySelector('#title').disabled);
+    assert.equal((await storage(page)).docs.find(d=>d.id===importedId).title,'Saved in the other tab');assert.equal((await storage(page)).docs.find(d=>d.id===importedId).revision,2);
+    assert.equal(await page.locator('#title').inputValue(),'Pending edit in first tab');assert.match(await page.locator('#doc-state').textContent(),/UNSAVED/);
+    await other.close();await page.reload();await view(page,'build');passed(engine,'a second-tab save during hashing survives; pending edits remain open');
     if(engine==='chromium'){
       const long=Array.from({length:75},(_,i)=>'PRINT-LINE-'+String(i+1).padStart(3,'0')+' — Complete local document text remains readable.').join('\n');
       await page.locator('.text-input').fill(long);await page.emulateMedia({media:'print'});await page.evaluate(()=>window.dispatchEvent(new Event('beforeprint')));

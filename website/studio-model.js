@@ -49,10 +49,10 @@ async function prepareRevision(current,previous,editorId=null){
 async function makeExport(current,identity,pending){
   const doc=withoutDigest(validateDocument(current));doc.digest=await digest(doc);
   const payload={schema:SCHEMA,exportedAt:new Date().toISOString(),boundary:'LOCAL EXPORT — NOT VERIFIED — NO AUTHORITY',pendingChanges:!!pending,identity:identity?clone(identity):null,document:doc};
-  payload.exportDigest=await digest(payload);if(JSON.stringify(payload).length>8000000)fail('This export exceeds 8 MB. Use fewer or smaller images.');return payload;
+  payload.exportDigest=await digest(payload);if(new TextEncoder().encode(JSON.stringify(payload,null,2)).byteLength>8000000)fail('This export exceeds 8 MB. Use fewer or smaller images or less text.');return payload;
 }
 async function readExport(raw){
-  if(!text(raw,8000000))fail('Use a PALACO JSON file smaller than 8 MB.');let payload;
+  if(!text(raw,8000000)||new TextEncoder().encode(raw).byteLength>8000000)fail('Use a PALACO JSON file smaller than 8 MB.');let payload;
   try{payload=JSON.parse(raw)}catch{fail('This file is not valid JSON.')}
   fields(payload,['schema','exportedAt','boundary','pendingChanges','identity','document','exportDigest']);
   if(!['PALACO-CX-001/0.1',SCHEMA].includes(payload.schema)||!timestamp(payload.exportedAt)||!hash(payload.exportDigest))fail('Unsupported PALACO export.');

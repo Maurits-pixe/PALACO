@@ -1,7 +1,7 @@
 (function(){
 'use strict';
 const M=PalacoDocuments,KEY='palaco-cx001';
-const state={identity:null,docs:[],revisions:{},current:null,template:'blank',dirty:false,busy:false,imageId:null,rioContext:null};
+const state={identity:null,docs:[],revisions:{},current:null,template:'blank',dirty:false,busy:false,imageId:null,rioContext:null,expectedRaw:null};
 const $=(s,r)=>(r||document).querySelector(s),$$=(s,r)=>Array.from((r||document).querySelectorAll(s));
 const now=()=>new Date().toISOString(),id=p=>p+'-'+crypto.randomUUID();
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -9,8 +9,12 @@ function busy(value){state.busy=value;$$('#title,#purpose,#citadel,#visibility,[
 function fitText(node){node.style.height='auto';node.style.height=node.scrollHeight+'px'}
 function fitDocument(){requestAnimationFrame(()=>$$('#title,.heading-input,.text-input').forEach(fitText))}
 function notice(message,error=false){$('#workspace-message').textContent=message;$('#workspace-message').classList.toggle('error',error)}
-function persist(identity=state.identity,docs=state.docs,revisions=state.revisions){
-  try{localStorage.setItem(KEY,JSON.stringify({identity,docs,revisions}));return true}
+async function persist(identity=state.identity,docs=state.docs,revisions=state.revisions){
+  if(!navigator.locks){notice('Safe local saving is unavailable in this browser. Export a JSON copy to keep your changes.',true);return false}
+  try{return await navigator.locks.request(KEY+'-write',{mode:'exclusive'},()=>{
+    if(state.storageBlocked||localStorage.getItem(KEY)!==state.expectedRaw){state.storageBlocked=true;notice('PALACO data changed in another tab. Export your unsaved work, then reload before saving.',true);return false}
+    const raw=JSON.stringify({identity,docs,revisions});localStorage.setItem(KEY,raw);state.expectedRaw=raw;return true;
+  })}
   catch{notice('Saving failed. Your changes remain open. Export a JSON copy to keep them.',true);return false}
 }
 function templateBlocks(t){
@@ -22,7 +26,7 @@ function templateBlocks(t){
 function newDoc(){return {id:id('DOC'),title:'Untitled document',purpose:'',citadel:'',visibility:'PRIVATE',template:state.template,status:'LOCAL_DRAFT',verification:'UNVERIFIED',authority:'NONE',creatorId:state.identity?state.identity.palacoId:null,revision:0,createdAt:now(),updatedAt:now(),blocks:templateBlocks(state.template)}}
 function load(){
   try{
-    const raw=localStorage.getItem(KEY);
+    const raw=localStorage.getItem(KEY);state.expectedRaw=raw;
     if(raw){const value=JSON.parse(raw);state.identity=value.identity||null;state.docs=(value.docs||[]).map(M.validateDocument);
       const histories=value.revisions||{};
       for(const doc of state.docs){const records=histories[doc.id]||[M.clone(doc)];state.revisions[doc.id]=records.map(M.validateDocument)}
@@ -36,14 +40,14 @@ function go(view){
   if(view==='docs')renderLibrary();if(view==='proof')renderProof().catch(showError);if(view==='build')renderDoc();$('#main').focus({preventScroll:true});
 }
 function showError(error){const message=error.message||'The operation could not be completed.';notice(message,true);if($('#image-dialog').open)$('#image-message').textContent=message}
-function checkStorage(){if(state.storageBlocked)throw Error('Unreadable local data is protected. Export this document before changing browser storage.')}
+function checkStorage(){if(state.storageBlocked)throw Error('Changed or unreadable local data is protected. Export your unsaved work, then reload before saving.')}
 async function saveIdentity(form){
   if(state.busy)return;checkStorage();const f=new FormData(form);busy(true);
   try{
     const base=state.identity||{palacoId:'PALACO-ID-'+crypto.randomUUID(),createdAt:now(),version:'CX-001/0.2'};
     const next={palacoId:base.palacoId,createdAt:base.createdAt,version:base.version,name:(f.get('name')||'').trim()||'Unnamed creator',alias:(f.get('alias')||'').trim(),purpose:(f.get('purpose')||'').trim(),status:'LOCAL_DRAFT',verification:'UNVERIFIED',authority:'NONE',updatedAt:now()};
     next.digest=await M.digest(next);
-    if(!persist(next))return;state.identity=next;
+    if(!await persist(next))return;state.identity=next;
     if(!state.current.creatorId&&state.current.revision===0&&!state.current.importedFrom){state.current.creatorId=next.palacoId;markDirty()}
     renderIdentity();renderDoc();notice('Local ID saved. You can now build your document.');
   }finally{busy(false)}
@@ -64,7 +68,7 @@ async function saveDoc(){
     if(previous&&!state.dirty){notice('This revision is already saved.');return}
     const next=await M.prepareRevision(captured,previous,state.identity?state.identity.palacoId:null);
     const docs=state.docs.filter(d=>d.id!==next.id).concat(next),revisions={...state.revisions,[next.id]:(state.revisions[next.id]||[]).concat(M.clone(next))};
-    if(!persist(state.identity,docs,revisions))return;state.docs=docs;state.revisions=revisions;
+    if(!await persist(state.identity,docs,revisions))return;state.docs=docs;state.revisions=revisions;
     if(state.current.id===next.id){
       if(JSON.stringify(state.current)===before){state.current=M.clone(next);state.dirty=false}
       else{state.current.revision=next.revision;state.current.digest=next.digest;state.dirty=true}
@@ -169,7 +173,7 @@ function preparePrint(){
 async function action(name){
   if(name==='save')await saveDoc();if(name==='export')await exportDoc();if(name==='print'){preparePrint();window.print()}if(name==='import')$('#import-file').click();
   if(name==='new'&&discardAllowed()){state.template='blank';state.current=newDoc();state.dirty=false;clearContext();renderDoc();go('build')}
-  if(name==='delete-id'&&confirm('Delete the local PALACO ID? Existing document creator references remain.')){checkStorage();if(persist(null)){state.identity=null;renderIdentity();renderDoc();notice('Local ID deleted. Document source references were retained.')}}
+  if(name==='delete-id'&&confirm('Delete the local PALACO ID? Existing document creator references remain.')){checkStorage();busy(true);try{if(await persist(null)){state.identity=null;renderIdentity();renderDoc();notice('Local ID deleted. Document source references were retained.')}}finally{busy(false)}}
   if(name==='rio-context')attachContext();if(name==='rio-clear')clearContext();
 }
 async function click(event){
@@ -182,7 +186,7 @@ async function click(event){
   node=event.target.closest('[data-block]');if(node){move(node.dataset.id,node.dataset.block);return}node=event.target.closest('[data-restore]');if(node){restoreRevision(node.dataset.restore);return}
   node=event.target.closest('[data-open]');if(node){if(!discardAllowed())return;state.current=M.clone(state.docs.find(doc=>doc.id===node.dataset.open));state.dirty=false;clearContext();go('build');return}
   node=event.target.closest('[data-delete]');if(node){if(!confirm('Delete this document and all its local revisions?'))return;checkStorage();const docs=state.docs.filter(doc=>doc.id!==node.dataset.delete),revisions={...state.revisions};delete revisions[node.dataset.delete];
-    if(persist(state.identity,docs,revisions)){state.docs=docs;state.revisions=revisions;if(state.current.id===node.dataset.delete){state.current=newDoc();state.dirty=false;clearContext();renderDoc()}renderLibrary()}return}
+    busy(true);try{if(await persist(state.identity,docs,revisions)){state.docs=docs;state.revisions=revisions;if(state.current.id===node.dataset.delete){state.current=newDoc();state.dirty=false;clearContext();renderDoc()}renderLibrary()}}finally{busy(false)}return}
   node=event.target.closest('[data-rio]');if(node){rioMsg('YOU',node.dataset.rio);rioMsg('RIO',rio(node.dataset.rio))}
 }
 document.addEventListener('click',event=>{click(event).catch(showError)});
