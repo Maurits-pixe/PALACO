@@ -24,6 +24,13 @@ const origin='http://127.0.0.1:'+server.address().port;
 const storage=page=>page.evaluate(()=>JSON.parse(localStorage.getItem('palaco-cx001')));
 const save=async(page,revision)=>{await page.locator('.tools [data-action="save"]').click();await page.waitForFunction(rev=>document.querySelector('#doc-state').textContent==='SAVED LOCAL · REV '+rev,revision)};
 const view=(page,name)=>page.locator('[data-view="'+name+'"]').click();
+const capture=async(page,name)=>{
+  // Firefox full-page captures retain the current scroll offset for sticky elements.
+  await page.evaluate(()=>window.scrollTo(0,0));await page.waitForFunction(()=>window.scrollY===0);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.ok(Math.abs((await page.locator('.topbar').boundingBox()).y)<1,'Capture starts with navigation at the page top');
+  await page.screenshot({path:resolve(output,name),fullPage:true});
+};
 const noOverflow=async(page,label)=>{
   const layout=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,overflow:Array.from(document.querySelectorAll('body *')).filter(n=>{const r=n.getBoundingClientRect();return r.width&&r.right>innerWidth+1}).slice(0,12).map(n=>({tag:n.tagName,class:n.className,id:n.id,right:n.getBoundingClientRect().right}))}));
   if(layout.scroll>layout.width+1)await page.screenshot({path:resolve(output,label.replace(/[^a-z0-9]+/gi,'-')+'-overflow.png'),fullPage:true});
@@ -43,7 +50,7 @@ async function suite(engine,type){
   page.on('dialog',dialog=>dialog.accept());
   try{
     await page.goto(origin+'/studio.html');await page.waitForFunction(()=>!!globalThis.PalacoDocuments&&document.querySelector('#sheet-id').textContent.startsWith('DOC-'));
-    await noOverflow(page,'desktop start overflow');await page.screenshot({path:resolve(output,engine+'-start.png'),fullPage:true});
+    await noOverflow(page,'desktop start overflow');await capture(page,engine+'-start.png');
     await page.keyboard.press('Tab');assert.equal(await page.locator('.skip').evaluate(n=>n===document.activeElement),true);await page.keyboard.press('Enter');assert.equal(await page.locator('#main').evaluate(n=>n===document.activeElement),true);
     passed(engine,'keyboard skip link');
     await view(page,'identity');await page.locator('#identity-form [name="name"]').fill('Consumer QA');await page.locator('#identity-form [name="alias"]').fill('LA-maker');await page.locator('#identity-form [name="purpose"]').fill('Build a sober L.A. document');
@@ -65,8 +72,8 @@ async function suite(engine,type){
     data=await storage(page);assert.equal(data.revisions[first.id].length,3);assert.equal(data.revisions[first.id][1].title,'L.A. · Second revision');assert.equal(data.docs[0].parentDigest,data.revisions[first.id][1].digest);
     passed(engine,'save and restore retain the revision chain');
     await page.reload();await view(page,'build');assert.equal(await page.locator('#title').inputValue(),'L.A. · Consumer document');assert.match(await page.locator('#doc-state').textContent(),/REV 3/);
-    await noOverflow(page,'desktop builder overflow');await page.screenshot({path:resolve(output,engine+'-build.png'),fullPage:true});passed(engine,'saved document survives reload');
-    await view(page,'rio');await page.locator('[data-action="rio-context"]').click();assert.match(await page.locator('#rio-context-state').textContent(),/L.A. · Consumer document/);await page.locator('#rio-input').fill('Help me continue');await page.locator('#rio-form button').click();assert.match(await page.locator('#rio-log article').last().textContent(),/Attached local context/);await page.screenshot({path:resolve(output,engine+'-rio.png'),fullPage:true});
+    await noOverflow(page,'desktop builder overflow');await capture(page,engine+'-build.png');passed(engine,'saved document survives reload');
+    await view(page,'rio');await page.locator('[data-action="rio-context"]').click();assert.match(await page.locator('#rio-log article').last().textContent(),/Document summary attached locally/);assert.match(await page.locator('#rio-context-state').textContent(),/L.A. · Consumer document/);await page.locator('#rio-input').fill('Help me continue');await page.locator('#rio-form button').click();assert.match(await page.locator('#rio-log article').last().textContent(),/Attached local context/);await capture(page,engine+'-rio.png');
     await view(page,'build');await page.locator('#title').fill('L.A. · Export current content');await view(page,'rio');assert.equal(await page.locator('#rio-context-state').textContent(),'No document context attached.');passed(engine,'RIO context attaches explicitly and clears after edits');
     await view(page,'build');const downloadPromise=page.waitForEvent('download');await page.locator('.tools [data-action="export"]').click();const download=await downloadPromise,exportPath=resolve(output,engine+'.palaco.json');await download.saveAs(exportPath);const exported=JSON.parse(await readFile(exportPath,'utf8'));assert.equal(exported.document.title,'L.A. · Export current content');assert.equal(exported.pendingChanges,true);
     await view(page,'docs');await page.locator('#import-file').setInputFiles(exportPath);await page.waitForFunction(()=>document.querySelector('#workspace-message').textContent.startsWith('Imported as a new local draft.'));assert.notEqual(await page.locator('#sheet-id').textContent(),first.id);assert.equal((await storage(page)).identity.palacoId,creator);await save(page,1);assert.equal((await storage(page)).docs.length,2);
@@ -89,7 +96,7 @@ async function suite(engine,type){
       await page.pdf({path:resolve(output,'studio-print.pdf'),format:'A4',printBackground:true,preferCSSPageSize:true});await page.emulateMedia({media:'screen'});passed(engine,'A4 PDF uses complete multiline content and hides editing tools');
     }
     const mobile=await context.newPage();mobile.on('pageerror',e=>runtimeErrors.push(e.message));mobile.on('dialog',dialog=>dialog.accept());await mobile.setViewportSize({width:390,height:844});await mobile.goto(origin+'/studio.html');
-    for(const name of ['start','identity','build','docs','proof','rio']){await view(mobile,name);await noOverflow(mobile,'mobile '+name+' overflow');if(name==='build'){await mobile.waitForFunction(()=>Array.from(document.querySelectorAll('#title,.heading-input,.text-input')).every(n=>n.scrollHeight<=n.clientHeight+2));assert.equal(await mobile.locator('.inspector').evaluate(n=>n.scrollHeight<=n.clientHeight+1),true,'Inspector content must be visible without nested scrolling')}if(name==='build'||name==='rio'||name==='proof')await mobile.screenshot({path:resolve(output,engine+'-mobile-'+name+'.png'),fullPage:true})}
+    for(const name of ['start','identity','build','docs','proof','rio']){await view(mobile,name);await noOverflow(mobile,'mobile '+name+' overflow');if(name==='build'){await mobile.waitForFunction(()=>Array.from(document.querySelectorAll('#title,.heading-input,.text-input')).every(n=>n.scrollHeight<=n.clientHeight+2));assert.equal(await mobile.locator('.inspector').evaluate(n=>n.scrollHeight<=n.clientHeight+1),true,'Inspector content must be visible without nested scrolling')}if(name==='build'||name==='rio'||name==='proof')await capture(mobile,engine+'-mobile-'+name+'.png')}
     await mobile.setViewportSize({width:320,height:740});for(const name of ['start','identity','build','docs','proof','rio']){await view(mobile,name);await noOverflow(mobile,'320px '+name+' overflow')}
     passed(engine,'all sections fit 390px and 320px; document text and inspector stay complete');await mobile.close();
     assert.deepEqual(runtimeErrors,[],'runtime errors');assert.deepEqual(policyErrors,[],'CSP violations');assert.deepEqual(requests,[],'unexpected remote requests');passed(engine,'no runtime errors, CSP violations or external requests');
