@@ -91,7 +91,19 @@ node website/tests/smoke-test.mjs
 
 Model and controller tests cover retained snapshots, restore-to-new-revision, current-content export, tampering, unsupported schemas/fields, unsafe image data, creator/editor separation, legacy migration, failed storage and cross-tab writes. The controller tests use a minimal DOM adapter and do not establish browser or visual conformance.
 
-Local checks: 17 behavioral tests PASS; Studio and gateway smoke checks PASS. Full browser/visual/print QA remains pending because browser installation in this environment failed. GitHub CI status must be read from the exact pushed head before any CI claim.
+Local checks: 17 behavioral tests PASS; Studio and gateway smoke checks PASS. The workflow also runs the real consumer journey in pinned Playwright 1.62.1 Chromium and Firefox on GitHub runners. Screenshots, a Chromium A4 PDF, synthetic JSON round-trip fixtures and a machine-readable browser report are retained as head-bound CI artifacts for 14 days. Browser and visual results must be read from the exact pushed head before making a QA claim.
+
+The browser suite exercises keyboard entry, complete ID fields, file-free dialog cancellation and Escape, image decoding and metadata edits, retained/restored revisions, reload, explicit RIO context, JSON round-trip and tamper rejection, storage-quota failure, all-section 390px/320px layouts and runtime/CSP/external-request boundaries. Chromium additionally checks the full multiline A4 print content and hidden editing/navigation controls. The test server uses local HTTP headers; these do not establish deployed-host security. Native operating-system print dialogs and physical devices remain outside automated coverage.
+
+Titles, headings and paragraph fields grow to display their full content. The mobile/tablet inspector follows the normal page flow so metadata and revision history remain accessible without nested panel scrolling. Print builds plain-text mirrors of current field values, paginates paragraph lines, and excludes all navigation and editing controls. Browser QA identified and repaired native FormData capture after disabling fields, dialog cancellation validation, narrow-screen min-content overflow, cropped editable text and print fragmentation.
+
+To run the browser suite where compatible browsers are installed:
+
+```bash
+PALACO_PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs \
+PALACO_QA_OUTPUT=/absolute/path/to/qa-output \
+node website/tests/studio-browser-test.mjs
+```
 
 The dedicated GO-044 workflow runs for pull requests targeting main or the GO-6 branch. The frozen GO-6 commit and PR #33 are not changed by this slice.
 
@@ -107,3 +119,11 @@ A separate review gate is required before any of the following may become live:
 - verified Citadel membership or role binding;
 - Watermerk verification;
 - public publication or authority grant.
+
+## Browser/print evidence checkpoint
+
+Product-source checkpoint: `517f3e7f379545aac179bf87c83fc2e78108e0f1`. Run [36724619901](https://github.com/Maurits-pixe/PALACO/actions/runs/36724619901): completed / success. 17 model/controller tests, two smoke suites and 23 real-browser checks PASS in Chromium 151.0.7922.34 and Firefox 153.0.
+
+The artifact archive (ID `11101823876`) was downloaded and its SHA-256 matched `c83cba2d1f74cf0e670fb53ae797153a0086c80b4304fd4a28d9e63c9dc9ac96`. Desktop and mobile screenshots were inspected. All four A4 PDF pages were rendered and inspected; all 75 test-line labels were present as complete words, with navigation/editing controls excluded. This checkpoint records the reviewed evidence and does not automatically describe later heads. The final mobile-inspector/all-section test extension must pass its own head-bound CI run before handoff.
+
+Gate status remains DRAFT / NOT MERGED / NOT DEPLOYED / UNVERIFIED. Automated UI and print checks are scoped implementation evidence, not canonical provenance or identity conformance.

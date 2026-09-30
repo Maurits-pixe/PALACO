@@ -30,4 +30,4 @@ Open `/studio.html` from the local server. Start with a local ID and one blank s
 
 All records remain LOCAL DRAFT / UNVERIFIED / AUTHORITY NONE. Storage is local to this browser and origin. Clearing browser data removes documents and revisions. Export to keep a portable copy; import creates a new draft and does not install an identity. Visibility describes intent and does not publish or secure a document.
 
-See `docs/PALACO-CX-001.md` for behavior, validation commands, migration limits and outstanding browser/visual QA.
+See `docs/PALACO-CX-001.md` for behavior, validation commands, migration limits and browser/print coverage. The GO-044 workflow runs the consumer journey in Chromium and Firefox and retains screenshots, a Chromium A4 PDF and a JSON report for review. CI artifacts contain synthetic QA data. Titles, headings and paragraphs grow with their content; print uses complete text mirrors.
