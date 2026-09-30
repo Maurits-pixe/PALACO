@@ -1,0 +1,67 @@
+name: GO-044 Consumer Studio
+
+on:
+  pull_request:
+    branches: [main, go-6/palaco-nl-v1]
+    paths:
+      - website/**
+      - docs/PALACO-CX-001.md
+      - .github/workflows/go-044-consumer-studio.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  consumer-studio:
+    name: Consumer Studio model and workspace validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          sparse-checkout: |
+            /website/
+            /.github/
+            /docs/PALACO-CX-001.md
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - name: Assert exact PR head
+        if: github.event_name == 'pull_request'
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Parse runtime scripts
+        run: |
+          node --check website/studio-model.js
+          node --check website/studio.js
+          node --check website/app.js
+      - name: Check model and controller behavior
+        run: node --test website/tests/studio-model-test.mjs website/tests/studio-workspace-test.mjs
+      - name: Check Studio and gateway boundaries
+        run: |
+          node website/tests/studio-smoke-test.mjs
+          node website/tests/smoke-test.mjs
+      - name: Install isolated browser QA tools
+        run: |
+          npm install --prefix "$RUNNER_TEMP/palaco-browser-tools" --ignore-scripts --omit=optional --no-audit --no-fund playwright@1.62.1
+          node "$RUNNER_TEMP/palaco-browser-tools/node_modules/playwright/cli.js" install --with-deps chromium firefox
+      - name: Check real browser journey and A4 print
+        env:
+          PALACO_PLAYWRIGHT_MODULE: ${{ runner.temp }}/palaco-browser-tools/node_modules/playwright/index.mjs
+          PALACO_QA_OUTPUT: ${{ runner.temp }}/palaco-browser-evidence
+          PALACO_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node website/tests/studio-browser-test.mjs
+      - name: Retain browser screenshots, PDF and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-browser-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/palaco-browser-evidence
+          if-no-files-found: warn
+          retention-days: 14
