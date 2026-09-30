@@ -10,10 +10,10 @@ const model=await readFile(new URL('../studio-model.js',import.meta.url),'utf8')
 function workspace(initial){
   const nodes=new Map(),listeners={},windows={};let saved=initial||null,quota=false;
   const node=key=>{
-    if(!nodes.has(key))nodes.set(key,{value:key==='#title'?'Untitled document':key==='#visibility'?'PRIVATE':'',textContent:'',innerHTML:'',dataset:{},classList:{toggle(){}},focus(){},reset(){},setAttribute(){},removeAttribute(){},addEventListener(type,fn){this[type]=fn},elements:{name:{},alias:{},purpose:{}}});
+    if(!nodes.has(key))nodes.set(key,{value:key==='#title'?'Untitled document':key==='#visibility'?'PRIVATE':'',style:{},scrollHeight:100,textContent:'',innerHTML:'',dataset:{},classList:{toggle(){}},focus(){},reset(){},setAttribute(){},removeAttribute(){},addEventListener(type,fn){this[type]=fn},elements:{name:{},alias:{},purpose:{}}});
     return nodes.get(key);
   };
-  const context=vm.createContext({PalacoDocuments:null,crypto:globalThis.crypto,TextEncoder,Date,JSON,Array,Set,Error,Number,String,Uint8Array,FormData:class{constructor(form){this.data=form.data||{}}get(key){return this.data[key]}},
+  const context=vm.createContext({PalacoDocuments:null,requestAnimationFrame:fn=>fn(),crypto:globalThis.crypto,TextEncoder,Date,JSON,Array,Set,Error,Number,String,Uint8Array,FormData:class{constructor(form){this.data=form.data||{}}get(key){return this.data[key]}},
     document:{querySelector:node,querySelectorAll:()=>[],addEventListener(type,fn){listeners[type]=fn}},
     window:{addEventListener(type,fn){windows[type]=fn}},localStorage:{getItem:()=>saved,setItem:(key,value)=>{if(quota)throw Error('quota');saved=value}},confirm:()=>true});
   vm.runInContext(model,context);vm.runInContext(code,context);

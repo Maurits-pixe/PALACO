@@ -77,11 +77,11 @@ async function suite(engine,type){
     if(engine==='chromium'){
       const long=Array.from({length:75},(_,i)=>'PRINT-LINE-'+String(i+1).padStart(3,'0')+' — Complete local document text remains readable.').join('\n');
       await page.locator('.text-input').fill(long);await page.emulateMedia({media:'print'});await page.evaluate(()=>window.dispatchEvent(new Event('beforeprint')));
-      assert.equal(await page.locator('.print-text').textContent(),long);assert.equal(await page.locator('.tools').isVisible(),false);assert.equal(await page.locator('.text-input').isVisible(),false);
+      assert.equal(await page.locator('.print-text').textContent(),long);assert.equal(await page.locator('.tools').isVisible(),false);assert.equal(await page.locator('.text-input').isVisible(),false);assert.equal(await page.locator('.skip').isVisible(),false);
       await page.pdf({path:resolve(output,'studio-print.pdf'),format:'A4',printBackground:true,preferCSSPageSize:true});await page.emulateMedia({media:'screen'});passed(engine,'A4 PDF uses complete multiline content and hides editing tools');
     }
     const mobile=await context.newPage();mobile.on('pageerror',e=>runtimeErrors.push(e.message));mobile.on('dialog',dialog=>dialog.accept());await mobile.setViewportSize({width:390,height:844});await mobile.goto(origin+'/studio.html');
-    for(const name of ['start','identity','build','docs','proof','rio']){await view(mobile,name);await noOverflow(mobile,'mobile '+name+' overflow');if(name==='build'||name==='rio')await mobile.screenshot({path:resolve(output,engine+'-mobile-'+name+'.png'),fullPage:true})}
+    for(const name of ['start','identity','build','docs','proof','rio']){await view(mobile,name);await noOverflow(mobile,'mobile '+name+' overflow');if(name==='build'){await mobile.waitForFunction(()=>Array.from(document.querySelectorAll('#title,.heading-input,.text-input')).every(n=>n.scrollHeight<=n.clientHeight+2))}if(name==='build'||name==='rio'||name==='proof')await mobile.screenshot({path:resolve(output,engine+'-mobile-'+name+'.png'),fullPage:true})}
     await mobile.setViewportSize({width:320,height:740});for(const name of ['start','build','rio']){await view(mobile,name);await noOverflow(mobile,'320px '+name+' overflow')}
     passed(engine,'all sections fit a 390px viewport; primary views fit 320px');await mobile.close();
     assert.deepEqual(runtimeErrors,[],'runtime errors');assert.deepEqual(policyErrors,[],'CSP violations');assert.deepEqual(requests,[],'unexpected remote requests');passed(engine,'no runtime errors, CSP violations or external requests');

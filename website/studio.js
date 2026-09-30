@@ -6,6 +6,8 @@ const $=(s,r)=>(r||document).querySelector(s),$$=(s,r)=>Array.from((r||document)
 const now=()=>new Date().toISOString(),id=p=>p+'-'+crypto.randomUUID();
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function busy(value){state.busy=value;$$('#title,#purpose,#citadel,#visibility,[data-edit],#identity-form input,#identity-form textarea').forEach(node=>{node.disabled=value})}
+function fitText(node){node.style.height='auto';node.style.height=node.scrollHeight+'px'}
+function fitDocument(){requestAnimationFrame(()=>$$('#title,.heading-input,.text-input').forEach(fitText))}
 function notice(message,error=false){$('#workspace-message').textContent=message;$('#workspace-message').classList.toggle('error',error)}
 function persist(identity=state.identity,docs=state.docs,revisions=state.revisions){
   try{localStorage.setItem(KEY,JSON.stringify({identity,docs,revisions}));return true}
@@ -103,13 +105,13 @@ function renderDoc(){
   $$('[data-template]').forEach(n=>n.classList.toggle('selected',n.dataset.template===doc.template));
   $('#blocks').innerHTML=doc.blocks.length?doc.blocks.map(block=>{
     let inner='';const key=esc(block.id);
-    if(block.type==='heading')inner='<input class="heading-input" maxlength="20000" aria-label="Heading text" data-edit="'+key+'" value="'+esc(block.text)+'">';
+    if(block.type==='heading')inner='<textarea class="heading-input" rows="1" maxlength="20000" aria-label="Heading text" data-edit="'+key+'">'+esc(block.text)+'</textarea>';
     if(block.type==='text')inner='<textarea class="text-input" maxlength="20000" aria-label="Paragraph text" data-edit="'+key+'">'+esc(block.text)+'</textarea>';
     if(block.type==='divider')inner='<div class="divider"></div>';
     if(block.type==='provenance')inner='<div class="prov"><div><span class="eyebrow">CREATOR</span><b>'+esc(doc.creatorId||'NO ID')+'</b></div><div><span class="eyebrow">STATUS</span><b>LOCAL DRAFT</b></div><div><span class="eyebrow">VERIFICATION</span><b>UNVERIFIED</b></div><div><span class="eyebrow">CITADEL</span><b>'+esc(doc.citadel||'—')+'</b></div></div>';
     if(block.type==='image')inner='<figure><img class="image-'+esc(block.role)+'" src="'+esc(block.data)+'" alt="'+esc(block.caption||block.role)+'"><figcaption><span>'+esc(block.caption||block.name)+'</span><span class="role">'+esc(block.role)+'</span></figcaption><p class="boundary">Source: '+esc(block.source||'not supplied')+' · UNVERIFIED</p><button class="image-details" data-image-edit="'+key+'">Use this image as… / Edit details</button></figure>';
     return '<section class="block '+(block.type==='image'?'image-block':'')+'" data-block-id="'+key+'">'+inner+controls(block)+'</section>';
-  }).join(''):'<div class="empty"><p class="eyebrow">BLANK TEMPLATE</p><p>Add a heading, text, image, provenance card or divider.</p></div>';renderHistory();
+  }).join(''):'<div class="empty"><p class="eyebrow">BLANK TEMPLATE</p><p>Add a heading, text, image, provenance card or divider.</p></div>';renderHistory();fitDocument();
 }
 function move(key,action){
   const index=state.current.blocks.findIndex(block=>block.id===key);if(index<0)return;
@@ -158,7 +160,11 @@ function rioMsg(who,message){const article=document.createElement('article');art
 function attachContext(){sync();const doc=state.current;state.rioContext=doc.title+' · '+doc.blocks.length+' blocks · '+(doc.citadel||'no Citadel reference')+' · REV '+doc.revision+' · UNVERIFIED';$('#rio-context-state').textContent=state.rioContext;rioMsg('RIO','Document summary attached locally: '+state.rioContext)}
 function preparePrint(){
   sync();$$('.print-value').forEach(node=>node.remove());
-  $$('#title,.heading-input,.text-input').forEach(input=>{const copy=document.createElement('div');copy.className='print-value '+(input.id==='title'?'print-title':input.classList.contains('heading-input')?'print-heading':'print-text');copy.textContent=input.value;input.after(copy)});
+  $$('#title,.heading-input,.text-input').forEach(input=>{
+    const copy=document.createElement('div');copy.className='print-value '+(input.id==='title'?'print-title':input.classList.contains('heading-input')?'print-heading':'print-text');
+    if(input.classList.contains('text-input'))input.value.split('\n').forEach((value,index)=>{if(index)copy.append(document.createTextNode('\n'));const line=document.createElement('p');line.className='print-line';line.textContent=value;copy.append(line)});else copy.textContent=input.value;
+    input.after(copy);
+  });
 }
 async function action(name){
   if(name==='save')await saveDoc();if(name==='export')await exportDoc();if(name==='print'){preparePrint();window.print()}if(name==='import')$('#import-file').click();
@@ -180,13 +186,14 @@ async function click(event){
   node=event.target.closest('[data-rio]');if(node){rioMsg('YOU',node.dataset.rio);rioMsg('RIO',rio(node.dataset.rio))}
 }
 document.addEventListener('click',event=>{click(event).catch(showError)});
-document.addEventListener('input',event=>{const node=event.target.closest('[data-edit]');if(node){const block=state.current.blocks.find(item=>item.id===node.dataset.edit);if(block){block.text=node.value;markDirty()}}});
+document.addEventListener('input',event=>{const node=event.target.closest('[data-edit]');if(node){const block=state.current.blocks.find(item=>item.id===node.dataset.edit);if(block){block.text=node.value;fitText(node);markDirty()}}});
 $('#identity-form').addEventListener('submit',event=>{event.preventDefault();saveIdentity(event.currentTarget).catch(showError)});
 $('#image-file').addEventListener('change',()=>$('#image-file').setCustomValidity(''));
 $('#import-file').addEventListener('change',event=>{importDoc(event.target.files[0]).catch(showError)});
 $('#rio-form').addEventListener('submit',event=>{event.preventDefault();const input=$('#rio-input'),q=input.value.trim();if(q){rioMsg('YOU',q);rioMsg('RIO',rio(q));input.value=''}});
-['title','purpose','citadel'].forEach(key=>$('#'+key).addEventListener('input',()=>{sync();markDirty()}));$('#visibility').addEventListener('change',()=>{sync();markDirty()});
+['title','purpose','citadel'].forEach(key=>$('#'+key).addEventListener('input',()=>{sync();markDirty();if(key==='title')fitText($('#title'))}));$('#visibility').addEventListener('change',()=>{sync();markDirty()});
 window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue=''}});
 window.addEventListener('beforeprint',preparePrint);
+window.addEventListener('resize',fitDocument);
 window.addEventListener('storage',event=>{if(event.key===KEY||event.key===null){state.storageBlocked=true;notice('PALACO data changed in another tab. Export your unsaved work, then reload before saving.',true)}});load();
 })();
