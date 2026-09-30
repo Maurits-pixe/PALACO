@@ -10,6 +10,6 @@ assert.match(html,/LOCAL DRAFT · UNVERIFIED · AUTHORITY NONE/);
 assert.match(html,/connect-src 'none'/);
 assert.doesNotMatch(html,/(?:src|href)=["']https?:\/\//i);
 new Function(js);
-for(const m of ['localStorage','crypto.subtle.digest','PALACO-ID-','LOCAL_DRAFT','UNVERIFIED','authority:\\'NONE\\''])assert.ok(js.includes(m),m);
+for(const m of ['localStorage','crypto.subtle.digest','PALACO-ID-','LOCAL_DRAFT','UNVERIFIED',"authority:'NONE'"])assert.ok(js.includes(m),m);
 for(const m of ['--gold','.builder','.sheet','@media print',':focus-visible'])assert.ok(css.includes(m),m);
 console.log('PALACO CX-001 Studio smoke checks: PASS');
