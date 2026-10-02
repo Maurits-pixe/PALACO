@@ -165,6 +165,7 @@ def check_schema_ids():
             isinstance(sid, str) and sid.strip(),
             f"{rel(path)}: missing or empty $id",
         )
+        require(sid == sid.strip(), f"{rel(path)}: $id has leading/trailing whitespace")
         if sid in seen:
             raise ConformanceError(
                 f"Duplicate $id {sid!r} in {rel(path)} and {rel(seen[sid])}"
