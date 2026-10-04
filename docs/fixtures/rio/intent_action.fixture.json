@@ -1,0 +1,12 @@
+{
+  "intent_id": "rio-intent-go13",
+  "conversation_id": "rio-conversation-go13",
+  "requested_by": "palaco:identity:person-go13",
+  "intent_type": "UPDATE",
+  "target_ref": "palaco:object:go13-example",
+  "risk_class": "LOW",
+  "policy_ref": "palaco:policy:go13",
+  "trias_required": true,
+  "state": "PROPOSED",
+  "created_at": "2026-10-02T09:02:00Z"
+}
