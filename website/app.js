@@ -17,7 +17,7 @@ const card = (title, text, route) => `<article class="card"><p class="eyebrow">$
 const page = (content) => content;
 
 function home() {
-  return page(`<section class="hero"><p class="eyebrow">PALACO.NL · PVD-001 · v1.0</p><h1>PALACO</h1><p>Constitutional infrastructure<br>for the autonomous era</p>${link('enter', 'Enter PALACO')}</section>
+  return page(`<section class="hero"><p class="eyebrow">PALACO.NL · PVD-001 · v1.0</p><h1>PALACO</h1><p>Constitutional infrastructure<br>for the autonomous era</p><a class="button" href="studio.html">Create ID / Build</a></section>
   <section class="section"><p class="eyebrow">Understand</p><h2>PALACO makes bounded environments understandable before asking anyone to enter them.</h2><div class="grid">${card('Citadels','Places and environments with identity, function and provenance.','citadels')}${card('Proof','Identity, provenance and status made inspectable.','proof')}${card('Evolution','Systems, experiments and change kept visible.','evolution')}</div></section>
   <section class="section dark"><p class="eyebrow">Reference Citadel · LA-001</p><h2>Locus Amoenus</h2><p>A living reference environment for PALACO architecture. Enter from the perimeter and inspect each layer at your own pace.</p>${architecture()}${link('citadels/la-001','Enter L.A.')}</section>
   <section class="section"><div class="grid">${card('Elixirs','Curated experiences with origin, status and provenance.','elixirs')}${card('H∆R∆M','A human interface for orientation, context and action.','haram')}${card('Industrie','The practical layer for identity, infrastructure, commerce and research.','industrie')}</div></section>`);

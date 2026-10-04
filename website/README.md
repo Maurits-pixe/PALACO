@@ -23,3 +23,11 @@ The shell includes semantic headings, keyboard-visible focus, a skip link, acces
 The HTML carries a restrictive browser-enforced CSP and `no-referrer` policy. `website/security-headers.conf` defines the deployment contract for CSP framing restrictions, referrer policy, MIME-sniffing protection, browser capability restrictions and cross-origin opener isolation.
 
 The repository file is **not deployment evidence**. Before publication, inspect the actual deployed HTTP response and verify that the hosting layer returns the required headers. Until that check succeeds, deployment-header status remains **UNVERIFIED**.
+
+## Consumer Studio · CX-001
+
+Open `/studio.html` from the local server. Start with a local ID and one blank sheet. Add document blocks or images, edit image roles/source notes, save retained revisions, restore earlier content into a new draft, or export/import `.palaco.json` copies. RIO offers deterministic local guidance and an explicit document-summary attachment.
+
+All records remain LOCAL DRAFT / UNVERIFIED / AUTHORITY NONE. Storage is local to this browser and origin. Clearing browser data removes documents and revisions. Export to keep a portable copy; import creates a new draft and does not install an identity. Visibility describes intent and does not publish or secure a document.
+
+See `docs/PALACO-CX-001.md` for behavior, validation commands, migration limits and browser/print coverage. The GO-044 workflow runs the consumer journey in Chromium and Firefox and retains screenshots, a Chromium A4 PDF and a JSON report for review. CI artifacts contain synthetic QA data. Titles, headings and paragraphs grow with their content; print uses complete text mirrors.
