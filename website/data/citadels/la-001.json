@@ -1,0 +1,16 @@
+{
+  "id": "LA-001",
+  "name": "Locus Amoenus",
+  "role": "Reference Citadel",
+  "status": "DRAFT",
+  "verification": "UNVERIFIED",
+  "visibility": "PUBLIC",
+  "version": "PVD-001 v1.0",
+  "origin": "GO-6 user-supplied website specification",
+  "issuer": null,
+  "watermerk": null,
+  "seal": null,
+  "validity": null,
+  "spaces": ["Observatory", "Commons", "Elixirs", "H∆R∆M"],
+  "towers": ["LOGO — Access & Identity", "HARBOR — Traffic & Transit", "QUAY — Storage & Provenance", "KEEP — Defense & Oversight"]
+}

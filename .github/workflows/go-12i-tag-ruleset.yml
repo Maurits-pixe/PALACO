@@ -1,0 +1,26 @@
+name: GO-12I Server-side Tag Immutability
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "evidence/governance/GO-12I-V1.0.0-TAG-RULESET.json"
+      - "tools/verify_go12i_tag_ruleset.py"
+      - ".github/workflows/go-12i-tag-ruleset.yml"
+  schedule:
+    - cron: "29 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tag-ruleset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout governance head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify server-side v1.0.0 tag immutability
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verify_go12i_tag_ruleset.py

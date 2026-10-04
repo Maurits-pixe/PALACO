@@ -1,0 +1,154 @@
+name: GO-6 Public Gateway
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/go-6-public-gateway.yml"
+      - "website/**"
+      - "docs/PVD-001/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-6-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-6-static-validation:
+    name: GO-6 static validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          sparse-checkout: |
+            /website/
+            /.github/
+          sparse-checkout-cone-mode: false
+
+      - name: Assert exact PR head
+        if: github.event_name == 'pull_request'
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Parse JavaScript
+        run: node --check website/app.js
+
+      - name: Run GO-6 smoke test
+        run: node website/tests/smoke-test.mjs
+
+      - name: Validate JSON data
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, readdir } from 'node:fs/promises';
+          import { join } from 'node:path';
+
+          async function walk(dir) {
+            const entries = await readdir(dir, { withFileTypes: true });
+            const files = [];
+            for (const entry of entries) {
+              const path = join(dir, entry.name);
+              if (entry.isDirectory()) files.push(...await walk(path));
+              else if (entry.name.endsWith('.json')) files.push(path);
+            }
+            return files;
+          }
+
+          const files = await walk('website/data');
+          for (const file of files) JSON.parse(await readFile(file, 'utf8'));
+          console.log(`Validated ${files.length} JSON files`);
+          NODE
+
+      - name: Enforce static runtime and evidence boundaries
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, readdir } from 'node:fs/promises';
+          import { join } from 'node:path';
+
+          const runtimeFiles = [
+            'website/index.html',
+            'website/app.js',
+            'website/styles.css',
+            'website/components/header.html',
+            'website/components/footer.html',
+            'website/security-headers.conf',
+            'website/tests/smoke-test.mjs'
+          ];
+
+          async function walk(dir) {
+            const entries = await readdir(dir, { withFileTypes: true });
+            const files = [];
+            for (const entry of entries) {
+              const path = join(dir, entry.name);
+              if (entry.isDirectory()) files.push(...await walk(path));
+              else if (entry.name.endsWith('.json')) files.push(path);
+            }
+            return files;
+          }
+
+          const jsonFiles = await walk('website/data');
+          runtimeFiles.push(...jsonFiles);
+
+          const texts = [];
+          for (const file of runtimeFiles) {
+            texts.push([file, await readFile(file, 'utf8')]);
+          }
+
+          const runtime = texts.map(([, content]) => content).join('\\n');
+          const externalRuntimePatterns = [
+            /(?:src|href)\s*=\s*["']https?:\/\//i,
+            /(?:url|import|fetch)\s*\(\s*["']?https?:\/\//i
+          ];
+          const localPathTokens = ['file://', 'sandbox://', '/workspace/', '/Users/', '/home/'];
+          const violations = [];
+
+          for (const [file, content] of texts) {
+            if (externalRuntimePatterns.some((pattern) => pattern.test(content))) {
+              violations.push(file + ': external runtime asset');
+            }
+          if (localPathTokens.some((token) => content.includes(token)) || /(?:^|[\s"'(])[A-Za-z]:[\\/]/m.test(content)) {
+              violations.push(file + ': local path');
+            }
+          }
+
+          if (violations.length) throw new Error(violations.join('\n'));
+          if (!runtime.includes('DRAFT')) throw new Error('DRAFT invariant missing');
+          if (!runtime.includes('UNVERIFIED')) throw new Error('UNVERIFIED invariant missing');
+          if (/\\bVERIFIED\\b/.test(runtime.replaceAll('UNVERIFIED', ''))) {
+            throw new Error('unqualified VERIFIED claim found in runtime');
+          }
+
+          const headers = await readFile('website/security-headers.conf', 'utf8');
+          for (const directive of [
+            'Content-Security-Policy:',
+            "frame-ancestors 'none'",
+            'Referrer-Policy: no-referrer',
+            'X-Content-Type-Options: nosniff',
+            'X-Frame-Options: DENY',
+            'Permissions-Policy:',
+            'Cross-Origin-Opener-Policy: same-origin'
+          ]) {
+            if (!headers.includes(directive)) {
+              throw new Error('missing security directive: ' + directive);
+            }
+          }
+
+          console.log('Static runtime boundary: PASS');
+          console.log('DRAFT/UNVERIFIED invariants: PASS');
+          console.log('Security manifest: PASS');
+          NODE

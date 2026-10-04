@@ -1,0 +1,26 @@
+name: GO-07 PVS-001 Workspace Integrity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "crates/**"
+      - "docs/**"
+      - "tests/**"
+      - "evidence/**"
+      - "tools/pvs001_workspace_integrity.py"
+      - ".github/workflows/go-07-pvs-001.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pvs-001:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify PVS-001 workspace integrity
+        run: python3 tools/pvs001_workspace_integrity.py
