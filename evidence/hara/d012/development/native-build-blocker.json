@@ -1,0 +1,9 @@
+{
+  "kind": "DEVELOPMENT_CHECK_NOT_ACCEPTANCE_EVIDENCE",
+  "sourceHash": "NOT_RECORDED_FOR_DEVELOPMENT_RUN",
+  "storageScenarios": "NOT EXECUTED: native fixture compilation failed",
+  "observedCompilerDiagnostic": "wal-stall.c: ignoring return value of write declared with warn_unused_result [-Werror=unused-result]",
+  "testProcess": { "total": 18, "pass": 15, "fail": 3, "skipped": 0 },
+  "interpretation": "Three harness-build failures, no candidate storage-result claim. The 15 development read/lock controls are not counted as final source-bound evidence.",
+  "repair": "Check the trace write result while retaining -Werror and all frozen assertions. New run evidence is recorded separately."
+}

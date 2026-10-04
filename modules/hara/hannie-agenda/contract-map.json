@@ -1,0 +1,32 @@
+{
+  "candidate": "0.3.3-d012.1",
+  "kind": "DERIVED_IMPLEMENTATION_MAP",
+  "requirements": [
+    { "id": "D-011/D-012", "source": "https://app.notion.com/p/3ad8207920724cc59999c6bdf9ebcd73", "implementation": "isolated branch plus source-acquisition and per-run SHA-256 manifests", "verification": "tools/check-evidence.mjs" },
+    { "id": "ALLOWLIST/TIMEZONE", "source": "https://app.notion.com/p/3ef29e9a126a819f9fb2c9409e1b3611", "sections": "1,7", "implementation": "src/value.mjs and prepare", "tests": ["D012-P04", "D012-T01"] },
+    { "id": "GRANT/EXACT_APPROVAL", "source": "https://app.notion.com/p/3ef29e9a126a819f9fb2c9409e1b3611", "sections": "2,3,6", "implementation": "authorize, confirm, terminal grant state and durable clock high-water", "tests": ["D012-P01", "D012-P03", "D012-G01..G03", "D012-I-*"] },
+    { "id": "MUTATION-COMMIT", "source": "https://app.notion.com/p/3ef29e9a126a819f9fb2c9409e1b3611", "sections": "6,7", "implementation": "NOT IMPLEMENTED: all mutation execution denied because storage effect deadline is unproven", "positiveTests": "NOT EXECUTED / BLOCKED", "tests": ["D012-DENY-*", "FROZEN-TIME-*"] },
+    { "id": "INTEGRATED-DENY", "source": "https://app.notion.com/p/3ef29e9a126a81c6b997d13ddef3cece", "implementation": "own nonreplaceable execute plus frozen class/prototype/instance, one export implementation, effect-table SQL authorizer", "tests": ["D012-D01..D04", "D012-DENY-*"] },
+    { "id": "READ-FRESHNESS", "source": "https://app.notion.com/p/3ef29e9a126a81bc880ee7173456c4ac", "implementation": "authorize after callbacks and storage, release fence for readEvent/recover/prepare/revise", "tests": ["FROZEN-FRESHNESS-*", "FRESHNESS-ACTUAL-WRITER-LOCK", "FRESHNESS-POSITIVE", "FRESHNESS-REGRANT"] },
+    { "id": "PERSONA/CONCERN", "source": "https://app.notion.com/p/3ef29e9a126a810d89b5d31b12ed8730", "implementation": "explicit recipient, purpose, field and receipt rights; durable target concern across requests/actions/actors/sessions; exact selected reassessment", "tests": ["D012-R01", "D012-C01..C03", "D012-V-*"] },
+    { "id": "RECEIPT/RECOVERY", "source": "https://app.notion.com/p/3ef29e9a126a819f9fb2c9409e1b3611", "sections": "7,8", "implementation": "semantic proposal/grant/approval/receipt/version/audit binding; historical/current distinction; narrow OWNER metadata exception", "tests": ["D012-R01..R06", "D012-RB-*", "D012-S04"] },
+    { "id": "FROZEN-WAL-FAILURE", "source": "https://app.notion.com/p/3ef29e9a126a81779b05cbf3c7548a40", "implementation": "new source-bound controls plus native WAL hazard calibration; no historical test-byte equivalence claim", "tests": ["HARNESS-CALIBRATION", "FROZEN-TIME-*"] }
+  ],
+  "conservativeDerivedPolicies": [
+    "OWNER_DIRECT is accepted only under authenticated OWNER context. HANNIE cannot waive review with an origin flag; a host-mediated owner instruction route remains unbound.",
+    "One active grant generation per own-calendar scope; reissue revokes prior active generations.",
+    "Pending creation concerns use a conservative shared barrier per own calendar.",
+    "D012 schema 1 is new; no schema-301 byte-equivalence, historical-code recovery or migration compatibility claim."
+  ],
+  "unimplementedOrUnverified": [
+    "absolute physical effect deadline and AM-R01 / D-010",
+    "successful agenda mutations, mutation commit/revoke ordering, lost mutation ACK and effect transaction crash recovery on this candidate",
+    "hosted identity/admission and server-side owner instruction provenance",
+    "restore/trust epoch anchor outside the database snapshot",
+    "D1, Google/Microsoft, live model adapters, widget/ELIXER/Black/Foundation AM-10",
+    "production limits, retention, capacity, independent review and official HQ verification"
+  ],
+  "integration": "HOLD",
+  "production": "HOLD",
+  "independentReview": "PENDING"
+}

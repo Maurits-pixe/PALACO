@@ -1,0 +1,23 @@
+{
+  "kind": "D012_FROZEN_REQUIREMENT_CONTROLS",
+  "origin": "New test implementations of the failure expectations recorded in Notion. Original historical test bytes and code are unavailable and are not reconstructed.",
+  "mutationDeadlineDecision": "D-010 OPEN; successful mutation COMMIT is not replaced with intent acceptance.",
+  "storage": {
+    "finding": "AM-R01 / AM-TIME-001",
+    "source": "https://app.notion.com/p/3ef29e9a126a81779b05cbf3c7548a40",
+    "historicalResult": "FAIL: an effect appeared after grant/approval expiry",
+    "delayMs": 2400,
+    "deadlineMs": 1200,
+    "cases": ["TIME-I01-GRANT-AND-APPROVAL", "TIME-I02-APPROVAL-ONLY"],
+    "newCandidateExpectation": "STORAGE_EFFECT_DEADLINE_UNSUPPORTED before authority callbacks or any WAL write. No event/version/receipt/consumption/concern change.",
+    "calibration": "A separate privileged SQLite primitive fixture must actually reach a single armed WAL pwrite64 and expose an effect after expiry to a second process. This is not candidate execution or proof of old candidate equivalence."
+  },
+  "read": {
+    "finding": "AM-TIME-003-R01-F01",
+    "source": "https://app.notion.com/p/3ef29e9a126a81bc880ee7173456c4ac",
+    "historicalResult": "FAIL: title content released approximately 151 ms after expiry",
+    "waitEndsAfterExpiryMs": 150,
+    "cases": ["READ-I01-CONTEXT", "RECOVER-I01-CONTEXT", "READ-I02-POLICY"],
+    "newCandidateExpectation": "No HANNIE content or receipt identity released after the context/policy/storage wait; re-evaluate current context, policy, grant and time."
+  }
+}
