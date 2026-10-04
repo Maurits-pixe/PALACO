@@ -1,17 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-<<<<<<< HEAD
-    "crates/palaco-la",
-]
-
-[workspace.package]
-edition = "2024"
-rust-version = "1.90"
-
-[workspace.lints.rust]
-unsafe_code = "forbid"
-=======
   "crates/palaco-foundation",
   "crates/palaco-kernel",
   "crates/palaco-runtime",
@@ -19,11 +8,13 @@ unsafe_code = "forbid"
   "crates/palaco-quay",
   "crates/palaco-citadel",
   "crates/palaco-evolution",
+  "crates/palaco-la",
 ]
 
 [workspace.package]
 version = "1.0.0"
 edition = "2024"
+rust-version = "1.90"
 license = "MIT OR Apache-2.0"
 publish = false
 
@@ -33,4 +24,3 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 unwrap_used = "deny"
 todo = "deny"
->>>>>>> origin/main
