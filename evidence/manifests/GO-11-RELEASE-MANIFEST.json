@@ -1,0 +1,119 @@
+{
+  "schema": "palaco.release-manifest.v1",
+  "gate": "GO-11",
+  "title": "PALACO Foundation Edition v1.0.0 Release Manifest",
+  "repository": "Maurits-pixe/PALACO",
+  "version": "1.0.0",
+  "planned_tag": "v1.0.0",
+  "release_subject": {
+    "commit_sha": "45775eb592c88afe23abe98a6f672c99d5842d9d",
+    "tree_sha": "e7146ccfeb91a8988c7157ad7b8e544854bb5e40",
+    "commit_message": "GO-10R: synchronize final license and audit validation",
+    "github_signature_verification": {
+      "verified": false,
+      "reason": "unsigned"
+    }
+  },
+  "workspace": {
+    "edition": "2024",
+    "resolver": "2",
+    "license": "MIT OR Apache-2.0",
+    "publish": false,
+    "crates": [
+      "palaco-foundation",
+      "palaco-kernel",
+      "palaco-runtime",
+      "palaco-eventbus",
+      "palaco-quay",
+      "palaco-citadel",
+      "palaco-evolution"
+    ]
+  },
+  "canonical_content": {
+    "substantive_imported_artifacts": 28,
+    "go03_manifest": "evidence/manifests/GO-03-CANONICAL-IMPORT.md"
+  },
+  "release_critical_blobs": [
+    {
+      "path": "Cargo.toml",
+      "blob_sha": "24bf5417cdf5c2605479a73a6e5c50a24d626b82"
+    },
+    {
+      "path": "LICENSE",
+      "blob_sha": "94467903d8b3d9847c257b6da2e40ab3fc5fb1fc"
+    },
+    {
+      "path": "LICENSE-MIT",
+      "blob_sha": "d418e19a1f437223025f3ccd66119097eb9af8c9"
+    },
+    {
+      "path": "LICENSE-APACHE",
+      "blob_sha": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+    },
+    {
+      "path": "evidence/audits/GO-10R-LICENSE-RATIFICATION.md",
+      "blob_sha": "9b16e6c4776b9cc10b2a99c16df982da1b23cd76"
+    },
+    {
+      "path": "evidence/audits/GO-10-FOUNDATION-AUDIT.md",
+      "blob_sha": "d769acc9ceb02cbb9eea1046c00935b8f537d34d"
+    },
+    {
+      "path": "evidence/manifests/GO-09-EVIDENCE-SEAL.json",
+      "blob_sha": "aad625e2ca92e264d703f1f6cba13fc0c61bbab5"
+    },
+    {
+      "path": "evidence/manifests/GO-09-EVIDENCE-SEAL.sha256",
+      "blob_sha": "2d330c25b5accee700f58d946214552dc3d87af1"
+    }
+  ],
+  "current_head_evidence": [
+    {
+      "gate": "GO-10R",
+      "name": "GO-10R License Ratification",
+      "run_id": 36418154559,
+      "head_sha": "45775eb592c88afe23abe98a6f672c99d5842d9d",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "gate": "GO-10",
+      "name": "GO-10 Foundation Audit",
+      "run_id": 36418154633,
+      "head_sha": "45775eb592c88afe23abe98a6f672c99d5842d9d",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "historical_evidence": {
+    "go09_subject_commit": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+    "go09_seal_verification_run": 36416242387
+  },
+  "release_state": {
+    "technical_audit": "PASS",
+    "license_resolution": "RATIFIED_MIT_OR_APACHE_2_0",
+    "release_blockers": [],
+    "go12_tag_gate": "ELIGIBLE_AFTER_GO11_VERIFICATION",
+    "package_publication": "DISABLED"
+  },
+  "verification_policy": {
+    "subject_commit_must_exist": true,
+    "subject_tree_must_match": true,
+    "subject_must_be_ancestor_of_manifest_container": true,
+    "current_head_evidence_must_match_subject_commit": true,
+    "current_head_evidence_must_be_completed_success": true,
+    "release_critical_blob_shas_must_match_subject_commit": true,
+    "license_expression_must_be_ratified_dual_license": true,
+    "publication_must_remain_disabled": true,
+    "manifest_sha256_must_match_companion_checksum": true,
+    "planned_tag_must_not_exist_before_go12": true
+  },
+  "non_claims": [
+    "GO-11 does not deploy PALACO.",
+    "GO-11 does not publish crates or packages.",
+    "GO-11 does not claim production runtime conformance.",
+    "GO-11 does not claim external security certification.",
+    "GO-11 does not convert an unsigned Git commit into a signed commit.",
+    "GO-11 does not create the v1.0.0 tag; tagging belongs to GO-12."
+  ]
+}

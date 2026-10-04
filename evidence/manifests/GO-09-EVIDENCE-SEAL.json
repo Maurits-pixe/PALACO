@@ -1,0 +1,81 @@
+{
+  "baseline": "PALACO Foundation Edition v1.0.0",
+  "evidence": [
+    {
+      "conclusion": "success",
+      "gate": "GO-04",
+      "head_sha": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+      "name": "GO-04 Rust Workspace Validation",
+      "run_id": 36415724932,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "gate": "GO-05",
+      "head_sha": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+      "name": "GO-05 Rust Workspace Build",
+      "run_id": 36415724824,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "gate": "GO-06",
+      "head_sha": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+      "name": "GO-06 Rust Workspace Tests",
+      "run_id": 36415724859,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "gate": "GO-07",
+      "head_sha": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+      "name": "GO-07 PVS-001 Workspace Integrity",
+      "run_id": 36415724804,
+      "status": "completed"
+    },
+    {
+      "conclusion": "success",
+      "gate": "GO-08",
+      "head_sha": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+      "name": "GO-08 PVS-002 Cross-Crate Contracts",
+      "run_id": 36415724801,
+      "status": "completed"
+    }
+  ],
+  "evidence_cutoff_utc": "2026-09-28T11:27:29Z",
+  "gate": "GO-09",
+  "repository": "Maurits-pixe/PALACO",
+  "schema": "palaco.evidence-seal.v1",
+  "scope_limits": [
+    "This seal does not make GitHub a constitutional authority.",
+    "This seal does not turn an unsigned Git commit into a cryptographically signed commit.",
+    "This seal does not claim deployment, runtime production conformance, external security certification, or release readiness.",
+    "The Apache-2.0 Cargo declaration versus placeholder LICENSE discrepancy remains unresolved.",
+    "GitHub Actions references are not yet fully pinned to immutable action commit SHAs in workflow source."
+  ],
+  "subject": {
+    "commit_message": "GO-08: apply rustfmt corrections",
+    "commit_sha": "e0049d81291bc3035c6e6a45e7ef585bb727452b",
+    "github_signature_verification": {
+      "reason": "unsigned",
+      "verified": false
+    },
+    "tree_sha": "e02b4b0186b5d5ba77ad1ef1be282e35ebd296a4"
+  },
+  "title": "PALACO Foundation Edition v1.0.0 Evidence Seal",
+  "verification_policy": {
+    "all_evidence_runs_must_be_completed": true,
+    "all_evidence_runs_must_conclude_success": true,
+    "all_evidence_runs_must_match_subject_commit": true,
+    "manifest_sha256_must_match_companion_checksum": true,
+    "subject_commit_must_be_ancestor_of_seal_commit": true
+  },
+  "verified_properties": [
+    "workspace validation succeeded on the sealed subject commit",
+    "workspace build succeeded on the sealed subject commit",
+    "workspace tests succeeded on the sealed subject commit",
+    "PVS-001 workspace integrity succeeded on the sealed subject commit",
+    "PVS-002 cross-crate contract verification succeeded on the sealed subject commit",
+    "PVS-002 regression included formatting, clippy, check, build, tests, and the explicit cross-crate integration test"
+  ]
+}

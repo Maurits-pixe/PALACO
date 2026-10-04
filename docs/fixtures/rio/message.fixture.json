@@ -1,0 +1,13 @@
+{
+  "message_id": "rio-message-go13",
+  "conversation_id": "rio-conversation-go13",
+  "sender_identity_ref": "palaco:identity:person-go13",
+  "body": "GO-13 conformance fixture; no authorization granted.",
+  "content_type": "text/plain",
+  "created_at": "2026-10-02T09:01:00Z",
+  "provenance": {
+    "origin_surface": "web",
+    "origin_endpoint": "https://palaco.example/rio",
+    "trace_ref": "go13-message-trace"
+  }
+}

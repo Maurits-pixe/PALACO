@@ -1,0 +1,25 @@
+{
+  "conversation_id": "rio-conversation-go13",
+  "version": "0.1",
+  "identity_ref": "palaco:identity:conversation-go13",
+  "participants": [
+    {
+      "participant_id": "participant-go13",
+      "type": "PERSON",
+      "identity_ref": "palaco:identity:person-go13",
+      "role": "OWNER",
+      "join_state": "JOINED",
+      "joined_at": "2026-10-02T09:00:00Z"
+    }
+  ],
+  "context": {
+    "citadel_ref": null,
+    "world_ref": null,
+    "elixer_ref": null,
+    "tags": ["go-13", "conformance"]
+  },
+  "state": "ACTIVE",
+  "created_at": "2026-10-02T09:00:00Z",
+  "updated_at": "2026-10-02T09:00:00Z",
+  "policy_refs": ["palaco:policy:go13"]
+}

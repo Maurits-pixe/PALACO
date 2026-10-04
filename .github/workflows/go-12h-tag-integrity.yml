@@ -1,0 +1,24 @@
+name: GO-12H v1.0.0 Tag Integrity
+
+on:
+  push:
+    branches: [main]
+  delete:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  tag-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current governance head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify v1.0.0 immutable identity
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verify_go12h_tag_integrity.py
