@@ -1,0 +1,28 @@
+name: GO-09 Evidence Seal Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "evidence/manifests/GO-09-EVIDENCE-SEAL.json"
+      - "evidence/manifests/GO-09-EVIDENCE-SEAL.sha256"
+      - "tools/verify_go09_evidence_seal.py"
+      - ".github/workflows/go-09-evidence-seal.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evidence-seal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout seal commit with ancestry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Verify GO-09 evidence seal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verify_go09_evidence_seal.py

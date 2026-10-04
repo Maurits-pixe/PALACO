@@ -1,0 +1,34 @@
+{
+  "schema": "palaco.tag-attestation.v1",
+  "gate": "GO-12H",
+  "repository": "Maurits-pixe/PALACO",
+  "tag": "v1.0.0",
+  "tag_ref": "refs/tags/v1.0.0",
+  "annotated_tag_object_sha": "2604d6f1c89660b22d08605722a6916f321cdd73",
+  "target_commit_sha": "5283a560dc9d410fa778d69f93bb339dbafbf5fe",
+  "tag_message": "PALACO Foundation Edition v1.0.0 — GO-12",
+  "tagger": {
+    "name": "PALACO GO-12",
+    "date_utc": "2026-09-29T19:07:25Z"
+  },
+  "verification": {
+    "workflow_run_id": 36616974801,
+    "workflow_conclusion": "success",
+    "remote_ref_verified": true,
+    "target_commit_verified": true,
+    "tag_signature": {
+      "verified": false,
+      "reason": "unsigned"
+    }
+  },
+  "immutability_state": {
+    "server_side_tag_ruleset_present": false,
+    "integrity_monitor_required": true,
+    "preventive_protection_status": "OPEN_ADMIN_ACTION"
+  },
+  "non_claims": [
+    "This attestation does not claim that GitHub server-side tag deletion or retargeting is currently prevented.",
+    "This attestation does not convert the unsigned annotated tag into a signed tag.",
+    "The v1.0.0 release contents remain the commit identified by target_commit_sha."
+  ]
+}

@@ -1,0 +1,189 @@
+{
+  "$id": "https://palaco.example/schemas/rio-schema-bundle-001.json",
+  "title": "RIO Schema Bundle 001",
+  "type": "object",
+  "definitions": {
+    "IdentityRef": {
+      "type": "string",
+      "pattern": "^palaco:identity:[A-Za-z0-9._:-]+$"
+    },
+    "PolicyRef": {
+      "type": "string",
+      "pattern": "^palaco:policy:[A-Za-z0-9._:-]+$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Participant": {
+      "type": "object",
+      "required": [
+        "participant_id",
+        "type",
+        "identity_ref",
+        "role",
+        "join_state",
+        "joined_at"
+      ],
+      "properties": {
+        "participant_id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["PERSON", "CITADEL", "WORLD", "ELIXER", "SYSTEM"]
+        },
+        "identity_ref": { "$ref": "#/definitions/IdentityRef" },
+        "role": {
+          "type": "string",
+          "enum": ["OWNER", "MEMBER", "GUEST", "OBSERVER", "SYSTEM"]
+        },
+        "join_state": {
+          "type": "string",
+          "enum": ["INVITED", "JOINED", "LEFT", "REMOVED"]
+        },
+        "joined_at": { "$ref": "#/definitions/Timestamp" },
+        "left_at": {
+          "anyOf": [
+            { "$ref": "#/definitions/Timestamp" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ConversationContext": {
+      "type": "object",
+      "required": ["citadel_ref", "world_ref", "elixer_ref", "tags"],
+      "properties": {
+        "citadel_ref": { "type": ["string", "null"] },
+        "world_ref": { "type": ["string", "null"] },
+        "elixer_ref": { "type": ["string", "null"] },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Conversation": {
+      "type": "object",
+      "required": [
+        "conversation_id",
+        "version",
+        "identity_ref",
+        "participants",
+        "context",
+        "state",
+        "created_at",
+        "updated_at",
+        "policy_refs"
+      ],
+      "properties": {
+        "conversation_id": { "type": "string" },
+        "version": { "type": "string" },
+        "identity_ref": { "$ref": "#/definitions/IdentityRef" },
+        "participants": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Participant" }
+        },
+        "context": { "$ref": "#/definitions/ConversationContext" },
+        "state": {
+          "type": "string",
+          "enum": ["PENDING", "ACTIVE", "PAUSED", "ARCHIVED", "REVOKED", "DELETED_VIEW"]
+        },
+        "created_at": { "$ref": "#/definitions/Timestamp" },
+        "updated_at": { "$ref": "#/definitions/Timestamp" },
+        "policy_refs": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/PolicyRef" }
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "Message": {
+      "type": "object",
+      "required": [
+        "message_id",
+        "conversation_id",
+        "sender_identity_ref",
+        "body",
+        "created_at",
+        "provenance"
+      ],
+      "properties": {
+        "message_id": { "type": "string" },
+        "conversation_id": { "type": "string" },
+        "sender_identity_ref": { "$ref": "#/definitions/IdentityRef" },
+        "body": { "type": "string" },
+        "content_type": {
+          "type": "string",
+          "enum": ["text/plain", "text/markdown", "application/json"],
+          "default": "text/plain"
+        },
+        "created_at": { "$ref": "#/definitions/Timestamp" },
+        "edited_at": {
+          "anyOf": [{ "$ref": "#/definitions/Timestamp" }, { "type": "null" }]
+        },
+        "provenance": {
+          "type": "object",
+          "required": ["origin_surface", "origin_endpoint"],
+          "properties": {
+            "origin_surface": {
+              "type": "string",
+              "enum": ["mobile", "web", "elixer", "system"]
+            },
+            "origin_endpoint": { "type": "string" },
+            "trace_ref": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntentAction": {
+      "type": "object",
+      "required": [
+        "intent_id",
+        "conversation_id",
+        "requested_by",
+        "intent_type",
+        "target_ref",
+        "risk_class",
+        "policy_ref",
+        "trias_required",
+        "state",
+        "created_at"
+      ],
+      "properties": {
+        "intent_id": { "type": "string" },
+        "conversation_id": { "type": "string" },
+        "requested_by": { "$ref": "#/definitions/IdentityRef" },
+        "intent_type": {
+          "type": "string",
+          "enum": ["CREATE", "UPDATE", "DELETE", "GRANT", "REVOKE", "EXECUTE"]
+        },
+        "target_ref": { "type": "string" },
+        "intent_payload": { "type": "object" },
+        "risk_class": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        },
+        "policy_ref": { "$ref": "#/definitions/PolicyRef" },
+        "trias_required": { "type": "boolean" },
+        "state": {
+          "type": "string",
+          "enum": ["PROPOSED", "REVIEW", "APPROVED", "DENIED", "EXPIRED", "EXECUTED"]
+        },
+        "created_at": { "$ref": "#/definitions/Timestamp" },
+        "updated_at": {
+          "anyOf": [{ "$ref": "#/definitions/Timestamp" }, { "type": "null" }]
+        },
+        "decision_ref": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    }
+  }
+}

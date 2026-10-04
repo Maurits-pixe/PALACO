@@ -1,0 +1,19 @@
+[package]
+name = "palaco-kernel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+palaco-foundation = { path = "../palaco-foundation" }
+palaco-runtime = { path = "../palaco-runtime" }
+
+[dev-dependencies]
+palaco-citadel = { path = "../palaco-citadel" }
+palaco-eventbus = { path = "../palaco-eventbus" }
+palaco-evolution = { path = "../palaco-evolution" }
+palaco-quay = { path = "../palaco-quay" }

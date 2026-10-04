@@ -1,0 +1,36 @@
+name: GO-11 Release Manifest Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "evidence/manifests/GO-11-RELEASE-MANIFEST.json"
+      - "evidence/manifests/GO-11-RELEASE-MANIFEST.sha256"
+      - "tools/verify_go11_release_manifest.py"
+      - ".github/workflows/go-11-release-manifest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release-manifest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout manifest container with ancestry
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Verify historical GO-09 Evidence Seal
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verify_go09_evidence_seal.py
+      - name: Verify GO-10R ratified license
+        run: python3 tools/go10r_license_resolution_guard.py
+      - name: Verify GO-10 audit state
+        run: python3 tools/go10_audit.py
+      - name: Verify GO-11 release manifest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/verify_go11_release_manifest.py

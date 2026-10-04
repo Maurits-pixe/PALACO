@@ -1,0 +1,13 @@
+[package]
+name = "palaco-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+palaco-citadel = { path = "../palaco-citadel" }
+palaco-foundation = { path = "../palaco-foundation" }
