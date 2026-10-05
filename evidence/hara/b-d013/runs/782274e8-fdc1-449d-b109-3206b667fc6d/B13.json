@@ -1,0 +1,38 @@
+{
+  "mutation": {
+    "status": "DENIED",
+    "code": "CONSENT_INACTIVE",
+    "writer": {
+      "pid": 408,
+      "code": 0,
+      "signal": null,
+      "message": {
+        "status": "DENIED",
+        "code": "CONSENT_INACTIVE"
+      },
+      "stderr": ""
+    }
+  },
+  "revocation": {
+    "status": "RECONSTRUCTION_REQUIRED",
+    "writer": {
+      "pid": 409,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  },
+  "order": [
+    {
+      "kind": "REVOKE"
+    }
+  ],
+  "r": {
+    "status": "RESULT_UNKNOWN",
+    "code": "NO_DURABLE_COMMIT",
+    "readProcess": {
+      "pid": 432,
+      "exit": 0
+    }
+  }
+}

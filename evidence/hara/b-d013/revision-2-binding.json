@@ -1,0 +1,32 @@
+{
+  "kind": "B_D013_REVISION_2_PUBLICATION_BINDING",
+  "remoteCodeCommit": "86ab5f8814904d4648394f2e3e95011a6a95b745",
+  "testedLocalCodeCommit": "3f142ab70ad009542a412fb5ee7d263a0676796c",
+  "base": "c2a5e4059c21ef11a498f85bf3499a65ccfdfc92",
+  "revisionReason": "Only contract status now refers to builder evidence instead of obsolete implementation-pending label; runtime unchanged",
+  "runId": "782274e8-fdc1-449d-b109-3206b667fc6d",
+  "sourceSetSha256": "b2ae38496d2842d403fd87b5d61299683afb43739aab07863f9090987c634a4e",
+  "sourceArtifactHashCheck": "PASS",
+  "scopeGitBlobHashes": {
+    ".github/workflows/hannie-b-d013.yml": "b62b9a026d05b03fe61f898ab2d86a03a6d2f078",
+    "evidence/hara/b-d013/source-manifest.json": "3bfc22b89335d7fd90c830fab9797850aef9a380",
+    "modules/hara/hannie-b-d013/CONTRACT.md": "2679ec67865545612b33d2a18abafa220299d3c3",
+    "modules/hara/hannie-b-d013/README.md": "1ad99e92b0e5032f6d6f8407a6edad6f93051506",
+    "modules/hara/hannie-b-d013/package.json": "b12584e1385c813f4b9068b914b864f27f4b328a",
+    "modules/hara/hannie-b-d013/src/index.mjs": "c5de389db567842ba93523eec5f3c48b5de33c90",
+    "modules/hara/hannie-b-d013/src/schema.sql": "7df32b66b2c9d6fe06b447a0dd9ecfa0f64c89e1",
+    "modules/hara/hannie-b-d013/src/value.mjs": "9e175eb3ba94638be6f313d6bd95597d7f441bda",
+    "modules/hara/hannie-b-d013/src/worker.mjs": "db13c1d1b9cd3bd95039e1b5f4274e799539dd94",
+    "modules/hara/hannie-b-d013/tests/commit.test.mjs": "8fe747d6b5570680f83b8d6fafa43d92aedac4da",
+    "modules/hara/hannie-b-d013/tests/fixture.mjs": "0458a516b59564a3e3ace38087c934f6087717bc",
+    "modules/hara/hannie-b-d013/tests/wal-stall.c": "d6b480ee1a83522ad82d343b24c1dcfe3d45cd08",
+    "modules/hara/hannie-b-d013/tools/run-evidence.mjs": "87a7fe96679095845904e53ca08482d305bdc4fe"
+  },
+  "originalEvidencePreserved": true,
+  "denyEvidenceReused": false,
+  "acceptance": "HOLD",
+  "independentReview": "PENDING",
+  "integration": "HOLD",
+  "production": "HOLD",
+  "proof": "NOT ISSUED"
+}
