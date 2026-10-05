@@ -1,0 +1,8 @@
+{
+  "code": "CONSENT_INACTIVE",
+  "dependency": "policy",
+  "method": "prepare",
+  "observedAfterExpiryMs": 157,
+  "eventCount": 1,
+  "contentReleased": false
+}
