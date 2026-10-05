@@ -1,0 +1,13 @@
+# B-R1 separate repair candidate
+
+Frozen baseline: PR #37 / 99196e469c7a48d74050b3cebe293831966d7ba8. PR #36 and R2 unchanged. New branch hara/hannie-b-d013-repair; no merge.
+
+Four review findings addressed in candidate: monotonic supervisor/worker time floor plus fail-closed new-supervisor recovery; exclusive OS flock around decision/revoke/locked worker IPC release; exact auditgrant validation; actual native delay 900 ms in trace. An additional post-wait expiry check prevents disclosure on expiry during release wait. Recovery uses SQLite readOnly/query_only and never rewrites rows. A precommit WRITE_ATTEMPT message is not durability evidence: independent crashed-writer readback remains required.
+
+Formal run a7cabc2b-c53b-4233-9954-59f89284daa3, v24.19.0, 20/20 controls PASS. Source set 42ececee5405b605a74a88d8822af2f90e35515c3f6430a95085bba54971a878; before/after identical. Independently recomputed own source/artifact hashes: 33 PASS. The local parent commit in result.json is the prior local B evidence checkout, not the published code commit; exact source hash and subsequent blob binding identify tested bytes. Development FAIL runs retained: first 12/16 (undefined revoke request key and invalid audit fixture); subsequent 18/19 runs (audit fixture hit FK/NOT NULL constraints). Final audit fixture uses a distinct valid grant. Intermediate 19/19 kept. No failures relabeled.
+
+BR01 distinct auditgrant rejects; BR02 real native late commit plus supervisor/reader wall rollback withholds; BR03 fresh supervisor withholds without historical deadline witness and no state change; BR04 actual concurrent revoke waits behind locked IPC release, subsequent read withholds; BR05 expiry during release wait withholds. B01-B14 own candidate controls re-executed; deny suite not run/reused.
+
+TRIAS: narrowly scoped DERIVED repair, no trust-epoch/restore/providers/D1 added; frozen evidence preserved. ORACLE: actual process SIGKILL/native WAL and new regressions, with B12 late effect still retained. MENTOR: Linux flock/private realpath prerequisite and fail-closed restart semantics explicit; independent review must assess IPC release boundary and deadline measurement.
+
+ACCEPTANCE HOLD / FORMAL INDEPENDENT ACCEPTANCE PENDING. No exact durability timestamp, no guarantee of zero late effects. The IPC boundary is not a consumer/network release proof. Writers must honor the candidate lock; arbitrary direct database writers, hardlink aliases, hostile lockfile manipulation, machine reboot/clock-trust/restore are not covered. No integration, production, merge or official PROOF. Next valid transition: independent review of the new exact candidate and its own evidence; deadline/late-effect acceptance unresolved.

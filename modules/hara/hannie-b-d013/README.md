@@ -22,3 +22,5 @@ Per run nieuwe ID, raw TAP, proces-/native traces, runtime- en binaryhash, brons
 Provisioning gebeurt uitsluitend in tests/fixture.mjs. Geen productiegrant of echte afspraak wordt aangemaakt. De exported execute/recover/revoke zijn lokale bouwinterfaces, geen live PALACO-service. Recovery opent de database read-only en schrijft geen receipt, event, approval of audit opnieuw.
 
 Niet in deze slice: providers, D1, restore-/trustepoch, live identiteit, persona-reviewflow, integratie, productie, merge of PROOF. Lokale Date.now is geen geattesteerde ERA-tijd. Eén AI-builder; onafhankelijke review PENDING. Productie/integratie HOLD.
+
+B-R1 repair requires Linux `/usr/bin/flock` and a private canonical database path. Recovery from a new supervisor withholds historical content without a deadline witness. Release scope is locked worker IPC, not a consumer/network delivery guarantee. See CONTRACT.md.
