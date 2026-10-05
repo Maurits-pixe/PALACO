@@ -24,4 +24,4 @@ Werkelijke SIGKILL vóór COMMIT: geen besluit/effect/consumption/receipt. Werke
 
 ## Status
 
-SPECIFICATION DRAFT / IMPLEMENTATION PENDING / ACCEPTANCE OPEN. Onafhankelijke review PENDING. Integratie/productie HOLD. Merge NOT AUTHORIZED. PROOF NOT ISSUED.
+SPECIFICATION DRAFT / ACCEPTANCE OPEN. De actuele bouw- en uitvoeringsstatus staat in het afzonderlijke B-evidence-rapport; deze contracttekst verleent geen acceptatie. Onafhankelijke review PENDING. Integratie/productie HOLD. Merge NOT AUTHORIZED. PROOF NOT ISSUED.
