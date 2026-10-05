@@ -9,6 +9,9 @@ import { fixture, createInput, prepared, seedCommitted, databaseState, waitUntil
 
 const here = dirname(fileURLToPath(import.meta.url));
 const frozen = JSON.parse(readFileSync(join(here, 'frozen-controls.json'), 'utf8'));
+// R1-F01: suppress only the known experimental runtime diagnostic in WAL children.
+// Keep the strict stderr assertion so other warnings/errors remain failures.
+const walExecArgv = [...process.execArgv, '--disable-warning=ExperimentalWarning'];
 const denies = (fn, code) => assert.throws(fn, e => e.code === code);
 function use(t, opts = {}) { const f = fixture(opts); t.after(() => f.close()); return f; }
 function trace(name, value) {
@@ -33,6 +36,7 @@ async function walScenario(t, route, deadlineKind) {
     assert.equal(c.status, 0, c.stderr);
   }
   const writer = fork(join(here, 'wal-worker.mjs'), [dir, route, deadlineKind], {
+    execArgv: walExecArgv,
     env: { ...process.env, LD_PRELOAD: library, D012_WAL_PATH: join(dir, 'calendar.sqlite-wal'), D012_WAL_ARM: join(dir, 'arm'), D012_WAL_TRACE: join(dir, 'native.jsonl') },
     stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   let stderr = ''; writer.stderr.on('data', x => { stderr += x; });
@@ -51,6 +55,17 @@ async function walScenario(t, route, deadlineKind) {
   trace(route + '-' + deadlineKind, result);
   return result;
 }
+test('R1-F01 selective warning suppression retains unexpected diagnostics and errors', () => {
+  const launch = source => spawnSync(process.execPath, [...walExecArgv, '--input-type=module', '-e', source], {
+    encoding: 'utf8', env: { ...process.env, NODE_OPTIONS: '' },
+  });
+  const experimental = launch("process.emitWarning('SQLite regression warning', { type: 'ExperimentalWarning' });");
+  assert.equal(experimental.status, 0); assert.equal(experimental.stderr, '');
+  const unexpected = launch("process.emitWarning('unexpected diagnostic', { type: 'D012UnexpectedWarning' });");
+  assert.equal(unexpected.status, 0); assert.match(unexpected.stderr, /D012UnexpectedWarning: unexpected diagnostic/);
+  const error = launch("throw new Error('unexpected child failure');");
+  assert.notEqual(error.status, 0); assert.match(error.stderr, /unexpected child failure/);
+});
 test('HARNESS-CALIBRATION real 2400ms WAL stall and second-process late effect (privileged primitive, not candidate execution)', async t => {
   const { writer: w, reader: r, native } = await walScenario(t, 'primitive-calibration', 'grant-and-approval');
   assert.equal(native.length, 1); assert.equal(native[0].pathConfirmed, true);

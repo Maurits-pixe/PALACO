@@ -15,7 +15,9 @@ Dit is nieuwe broncode met een eigen bewijsketen. De onvindbare v0.3.x-code en h
 - Onraad staat duurzaam op het doelobject, ook bij nieuwe verzoeken, actiecodes, persona's of sessies. Herbeoordeling selecteert één exact voorstel; eigenaarakkoord of meerderheid heft de blokkade niet zelfstandig op.
 - Conservatieve nieuwe policy: OWNER_DIRECT vraagt een geauthenticeerde OWNER-context. HANNIE levert HARA-voorstellen met review; een hostroute voor een aantoonbare directe eigenaarinstructie is nog niet gebonden.
 
-**AM-R01 / D-010 blijft OPEN.** Succesvolle mutation COMMIT blijft de contractuele autorisatie-/effectgrens. Er is geen intent-acceptatiequeue, latere uitvoering of andere deadlinebetekenis ingevoerd. De runtime heeft geen mutatiebody of effectfallback. Een vaste execute-functie weigert vóór argumentgetters, context, klok, hooks, databaseverkeer en receipt-replay. De runtime-SQL-verbinding weigert bovendien writes naar events, versies, receipts en mutationaudit.
+**D-010 semantiekbesluit: optie B geregistreerd; implementatie en acceptatie OPEN.** De deadline bindt volgens het actuele opdrachtgeversbesluit aan het duurzaam gecommitte TACP-autorisatiebesluit. De oorspronkelijke v0.3-effectdeadline en oude OPEN-labels blijven historische broncontext. Zie [D010-ADDENDUM.md](D010-ADDENDUM.md) voor de actuele contractdelta en resterende bewijsgrens. Deze candidate implementeert optie B niet: de uniforme execute-deny blijft intact, zonder mutatiebody of effectfallback. De vaste execute-functie weigert vóór argumentgetters, context, klok, hooks, databaseverkeer en receipt-replay; runtime-SQL weigert writes naar events, versies, receipts en mutationaudit. AM-R01 is niet als technische oplossing gesloten.
+
+**Harnessrevisie R1-F01 (2026-10-05):** WAL-writerchildren onderdrukken alleen `ExperimentalWarning`; de lege-stderr-assertie blijft bestaan. Andere warningtypes en echte child-errors blijven zichtbaar en worden door een afzonderlijke regressiecontrole bewaakt. De historische R1 op codecommit 428c66e3 blijft behouden; onafhankelijke herreview van deze gewijzigde bronset is PENDING.
 
 ## Bronnen en reproduceerbaarheid
 

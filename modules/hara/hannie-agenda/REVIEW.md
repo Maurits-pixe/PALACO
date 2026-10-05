@@ -19,7 +19,16 @@ Bouwer: één coding-assistent. Een zelfcontrole door de bouwer is geen onafhank
 - Eigen runtime / run-ID / logs / artifacthashes: NOT EXECUTED
 - Bevindingen en dissent: PENDING
 - Beperkt oordeel over geteste code: PENDING
-- D-010 / effectdeadline: OPEN; geen semantiekbesluit
+- D-010: optie B geregistreerd; normatieve delta in D010-ADDENDUM.md; implementatie en acceptatie OPEN. Deze candidate weigert nog alle mutaties.
 - Integratie / productie / merge / deployment: HOLD; afzonderlijke bevoegde beslissing vereist
 
 Deze reviewopdracht kent geen authority toe en benadert geen reviewer. Volgende geldige overgang: exacte candidate → onafhankelijke review met eigen evidence.
+
+## Herreviewdelta R1-F01 / D-010 (2026-10-05)
+
+Het bestaande Notion AI R1-record blijft historische evidence op codecommit 428c66e3. Dit is geen nieuwe onafhankelijke review. Selecteer de nieuwe gepubliceerde head en sourceSetSha256; hergebruik de oude 76/76 niet als bewijs voor deze revisie.
+
+- Controleer R1-F01 op standaardrun én tests/fixtures/experimental-warning.cjs via NODE_OPTIONS; behoud de strict-stderr-foutdetectie. De nieuwe R1-F01-controle moet aantonen dat niet-experimentele warnings en echte errors zichtbaar blijven.
+- Vergelijk D010-ADDENDUM.md met het actuele D-010-besluit. Optie B is geregistreerd, maar positieve mutaties/TACP zijn NOT IMPLEMENTED / NOT EXECUTED. Voorafgaande tijdsample, prepare of OWNER-akkoord zijn geen duurzame TACP-commit.
+- Leg een exact serialization/durability-contract vast voordat een nieuwe positieve candidate wordt geaccepteerd; een SQL-insert vóór WAL-durability garandeert geen beslissingscommit vóór expiry.
+- Behoud de frozen effectdeadline-controls als historische hazard/deny-controls; herlabel ze niet tot bewijs van B-semantiek.

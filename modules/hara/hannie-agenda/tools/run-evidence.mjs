@@ -70,7 +70,10 @@ const result = {
   scope: 'New isolated local adapter: unconditional mutation denial, tested callback/storage-wait freshness, grant/review/proposal and synthetic historical receipt controls. WAL primitive calibration is not candidate execution.',
   originalHistoricalFixtureBytes: 'UNAVAILABLE; requirement controls newly implemented from primary Notion records',
   successfulCandidateAgendaMutations: 'NOT EXECUTED / BLOCKED',
-  absoluteEffectDeadline: 'UNPROVEN; AM-R01 OPEN; D-010 OPEN',
+  absoluteEffectDeadline: 'UNPROVEN; AM-R01 technical capability OPEN',
+  revision: 'R1-F01-harness-and-D010-status-2026-10-05',
+  temporalDecision: 'D-010 B recorded; durable TACP NOT IMPLEMENTED; acceptance OPEN',
+  warningRegressionPreload: process.env.NODE_OPTIONS || null,
   officialPalacoProof: 'NOT ISSUED', independentReview: 'PENDING',
   integration: 'HOLD', production: 'HOLD', deployment: 'NOT DEPLOYED', hostedD1: 'NOT EXECUTED', AM10: 'NOT EXECUTED',
 };
