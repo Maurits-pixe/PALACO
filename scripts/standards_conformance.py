@@ -3,7 +3,7 @@
 
 Checks, in one run:
   1. Parser regression tests (duplicate JSON keys, Status metadata parser).
-  2. Status metadata on every docs/standards/{rio,visitcard}/**/*.md.
+  2. Status + Last Updated metadata on every docs/standards/{rio,visitcard}/**/*.md.
   3. Non-empty, unique `$id` on every docs/schemas/rio/**/*.json.
   4. RIO fixtures valid against RIO-SCHEMA-BUNDLE-001 (Draft 2020-12 +
      FormatChecker), plus negative tests per definition.
@@ -24,6 +24,7 @@ STANDARDS_DIRS = (
     ROOT / "docs/standards/rio",
     ROOT / "docs/standards/visitcard",
 )
+REQUIRED_DOC_FIELDS = ["Status", "Last Updated"]
 RIO_SCHEMA_DIR = ROOT / "docs/schemas/rio"
 RIO_BUNDLE = RIO_SCHEMA_DIR / "RIO-SCHEMA-BUNDLE-001.json"
 RIO_FIXTURE_DIR = ROOT / "docs/fixtures/rio"
@@ -89,7 +90,7 @@ def read_json(path):
 
 
 # --------------------------------------------------------------------------
-# Markdown Status metadata
+# Markdown standards metadata
 # --------------------------------------------------------------------------
 
 def strip_fenced_code(text):
@@ -141,12 +142,15 @@ def check_metadata():
         require(files, f"No Markdown standards found in {rel(directory)}")
         for path in files:
             try:
-                status = extract_status(path.read_text(encoding="utf-8"))
+                text = path.read_text(encoding="utf-8")
+                status = extract_status(text)
+                for field in REQUIRED_DOC_FIELDS:
+                    require(field in text, f"missing required metadata {field!r}")
             except ConformanceError as error:
                 raise ConformanceError(f"{rel(path)}: {error}") from error
             print(f"  ok {rel(path)} (Status: {status})")
             count += 1
-    return f"Status metadata in {count} documents"
+    return f"Status + Last Updated metadata in {count} documents"
 
 
 # --------------------------------------------------------------------------
@@ -342,7 +346,7 @@ def run_regression_tests():
 
 CHECKS = (
     ("parser regression tests", run_regression_tests),
-    ("standards Status metadata", check_metadata),
+    ("standards metadata", check_metadata),
     ("RIO schema $id uniqueness", check_schema_ids),
     ("RIO schema/fixture conformance", check_rio_fixtures),
 )
