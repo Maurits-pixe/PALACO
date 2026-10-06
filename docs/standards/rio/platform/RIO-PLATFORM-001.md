@@ -1,7 +1,7 @@
 # RIO-PLATFORM-001
 ## PALACO RIO Chat-Platform v0.1
 
-### Status
+### Metadata
 Draft v0.1
 
 ### Canonical statement
