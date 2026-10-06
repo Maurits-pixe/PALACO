@@ -1,0 +1,8 @@
+{
+  "P": "PALACO",
+  "V": "0.1",
+  "T": "PERSON",
+  "D": "discovery_demo_epoch_001",
+  "E": "ephemeral_demo_001",
+  "R": "rio://demo/resolver"
+}
