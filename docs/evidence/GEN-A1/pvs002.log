@@ -1,0 +1,2 @@
+PVS-002: PASS
+Cross-crate dependency graph is explicit, acyclic, evidence-bearing, fail-closed, and Evolution does not confer execution authority.

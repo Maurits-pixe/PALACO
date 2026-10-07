@@ -1,0 +1,84 @@
+    Checking palaco-foundation v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-foundation)
+    Checking palaco-la v0.1.0 (/home/runner/work/PALACO/PALACO/crates/palaco-la)
+error[E0599]: no associated function or constant named `new` found for struct `domain::Question` in the current scope
+  --> crates/palaco-la/src/decision.rs:75:19
+   |
+75 |         Question::new(
+   |                   ^^^ associated function or constant not found in `domain::Question`
+   |
+  ::: crates/palaco-la/src/domain.rs:52:1
+   |
+52 | pub struct Question {
+   | ------------------- associated function or constant `new` not found for this struct
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following traits define an item `new`, perhaps you need to implement one of them:
+           candidate #1: `curve25519_dalek::traits::VartimePrecomputedMultiscalarMul`
+           candidate #2: `rand::distributions::uniform::UniformSampler`
+           candidate #3: `sha2::Digest`
+           candidate #4: `sha2::digest::KeyInit`
+           candidate #5: `sha2::digest::Mac`
+           candidate #6: `sha2::digest::VariableOutput`
+           candidate #7: `sha2::digest::core_api::VariableOutputCore`
+           candidate #8: `sha2::digest::crypto_common::KeyIvInit`
+           candidate #9: `sha2::digest::typenum::Bit`
+help: there is a method `ne` with a similar name, but with different arguments
+  --> /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library/core/src/cmp.rs:263:4
+
+error[E0599]: no associated function or constant named `new` found for struct `domain::Question` in the current scope
+  --> crates/palaco-la/src/assessment.rs:82:19
+   |
+82 |         Question::new(
+   |                   ^^^ associated function or constant not found in `domain::Question`
+   |
+  ::: crates/palaco-la/src/domain.rs:52:1
+   |
+52 | pub struct Question {
+   | ------------------- associated function or constant `new` not found for this struct
+   |
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following traits define an item `new`, perhaps you need to implement one of them:
+           candidate #1: `curve25519_dalek::traits::VartimePrecomputedMultiscalarMul`
+           candidate #2: `rand::distributions::uniform::UniformSampler`
+           candidate #3: `sha2::Digest`
+           candidate #4: `sha2::digest::KeyInit`
+           candidate #5: `sha2::digest::Mac`
+           candidate #6: `sha2::digest::VariableOutput`
+           candidate #7: `sha2::digest::core_api::VariableOutputCore`
+           candidate #8: `sha2::digest::crypto_common::KeyIvInit`
+           candidate #9: `sha2::digest::typenum::Bit`
+help: there is a method `ne` with a similar name, but with different arguments
+  --> /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library/core/src/cmp.rs:263:4
+
+error[E0382]: use of moved value: `result`
+   --> crates/palaco-la/src/decision.rs:111:13
+    |
+108 |         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
+    |             ------ move occurs because `result` has type `std::result::Result<decision::DecisionEvaluation, decision::DecisionEvaluationError>`, which does not implement the `Copy` trait
+109 |         assert!(matches!(result.map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+    |                                 ----------------------------------- `result` moved due to this method call
+110 |         assert_eq!(
+111 |             result.map(|value| value.decision.question_id),
+    |             ^^^^^^ value used here after move
+    |
+note: `std::result::Result::<T, E>::map` takes ownership of the receiver `self`, which moves `result`
+   --> /rustc/48a229ceaefd4985c50990b14116b6d856af0985/library/core/src/result.rs:831:27
+help: consider calling `.as_ref()` to borrow the value's contents
+    |
+109 |         assert!(matches!(result.as_ref().map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+    |                                +++++++++
+help: consider calling `.as_mut()` to mutably borrow the value's contents
+    |
+109 |         assert!(matches!(result.as_mut().map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+    |                                +++++++++
+help: you can `clone` the value and consume it, but this might not be your desired behavior
+    |
+109 |         assert!(matches!(result.clone().map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+    |                                ++++++++
+
+    Checking palaco-eventbus v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-eventbus)
+    Checking palaco-evolution v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-evolution)
+Some errors have detailed explanations: E0382, E0599.
+For more information about an error, try `rustc --explain E0382`.
+error: could not compile `palaco-la` (lib test) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...

@@ -1,3 +1,61 @@
+# PALACO — Genesis Foundation
+
+The repository root is the canonical `palaco-genesis/` boundary from the
+GEN-A1 blueprint; no nested or competing workspace is needed. The existing
+Rust crates, dual license and historical evidence are preserved.
+
+**Current scope:** A1.1 repository consolidation, not full GEN-A1 certification.
+Local verification and outstanding blockers are recorded in
+[GEN-A1 evidence](docs/evidence/GEN-A1/verification.json) and its
+[ledger entry](docs/evidence/GEN-A1/ledger.json).
+
+> Governance may constrain execution; execution may never silently redefine governance.
+
+## Foundation map
+
+```text
+./
+├── Cargo.toml
+├── README.md, LICENSE, LICENSE-MIT, LICENSE-APACHE
+├── CHANGELOG.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
+├── GOVERNANCE.md, ROADMAP.md, ARCHITECTURE.md, RELEASE.md
+├── .cargo/config.toml
+├── .github/workflows/
+├── docs/
+│   ├── constitution/
+│   ├── architecture/
+│   ├── implementation/
+│   ├── operations/
+│   └── evidence/GEN-A1/
+└── crates/
+    ├── palaco-foundation/
+    ├── palaco-kernel/
+    ├── palaco-runtime/
+    ├── palaco-eventbus/
+    ├── palaco-quay/
+    ├── palaco-citadel/
+    ├── palaco-evolution/
+    └── palaco-la/          # Existing extension, not added by Genesis
+```
+
+Start with [governance](GOVERNANCE.md), the
+[constitution seed](docs/constitution/constitution.md), and the
+[current kernel contract](docs/architecture/kernel-contract.md).
+See [architecture](ARCHITECTURE.md) for implemented boundaries versus future
+intent, [contributing](CONTRIBUTING.md) for verification commands, and the
+[roadmap](ROADMAP.md) for gates still awaiting evidence.
+Existing workflow files are retained; their presence alone is not proof of
+a successful CI run. Existing records under `evidence/` remain historical
+records, not a certification of this checkout.
+
+---
+
+# Legacy contributor material
+
+The material below is retained for provenance. For current setup and
+verification requirements, use [CONTRIBUTING.md](CONTRIBUTING.md); its Rust
+minimum and repository URLs supersede the legacy setup below.
+
 # Contributing to PALACO
 
 **Version:** 1.0  

@@ -1,0 +1,17 @@
+GO-10 AUDIT: FAIL
+ERROR: go-044-consumer-studio.yml has non-immutable action reference: actions/upload-artifact@v4
+ERROR: go-044-consumer-studio.yml does not use the audited checkout commit
+ERROR: go-6-public-gateway.yml has non-immutable action reference: actions/checkout@v4
+ERROR: go-6-public-gateway.yml has non-immutable action reference: actions/setup-node@v4
+ERROR: go-6-public-gateway.yml does not use the audited checkout commit
+ERROR: hannie-agenda-candidate.yml has non-immutable action reference: actions/upload-artifact@v4
+ERROR: hannie-agenda-candidate.yml does not use the audited checkout commit
+ERROR: hannie-b-d013.yml does not use the audited checkout commit
+ERROR: palaco-la.yml lacks explicit permissions
+ERROR: palaco-la.yml has non-immutable action reference: actions/checkout@v6
+ERROR: palaco-la.yml has non-immutable action reference: dtolnay/rust-toolchain@stable
+ERROR: palaco-la.yml does not use the audited checkout commit
+ERROR: registry-contract.yml does not use the audited checkout commit
+ERROR: temporary-preview.yml requests write permission
+ERROR: temporary-preview.yml has non-immutable action reference: actions/deploy-pages@v4
+ERROR: temporary-preview.yml does not use the audited checkout commit

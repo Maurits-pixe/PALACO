@@ -1,0 +1,7 @@
+    Checking palaco-quay v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-quay)
+    Checking palaco-eventbus v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-eventbus)
+    Checking palaco-evolution v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-evolution)
+    Checking palaco-citadel v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-citadel)
+    Checking palaco-runtime v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-runtime)
+    Checking palaco-kernel v1.0.0 (/home/runner/work/PALACO/PALACO/crates/palaco-kernel)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s

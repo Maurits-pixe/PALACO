@@ -1,0 +1,259 @@
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/assessment.rs:1:
+ use crate::domain::{
+-    Evidence, EpistemicState, EpistemicStatus, Question, ThresholdAssessment, ThresholdState,
++    EpistemicState, EpistemicStatus, Evidence, Question, ThresholdAssessment, ThresholdState,
+ };
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/decision.rs:1:
++use crate::assessment::{AssessmentError, assess};
+ use crate::domain::{
+-    Decision, DecisionId, DecisionVerdict, Evidence, EpistemicState, Question, ThresholdAssessment,
++    Decision, DecisionId, DecisionVerdict, EpistemicState, Evidence, Question, ThresholdAssessment,
+     ThresholdState,
+ };
+-use crate::assessment::{assess, AssessmentError};
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum DecisionEvaluationError {
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/decision.rs:106:
+         };
+ 
+         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
+-        assert!(matches!(result.map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+-        assert_eq!(
+-            result.map(|value| value.decision.question_id),
+-            Ok(q.id)
+-        );
++        assert!(matches!(
++            result.map(|value| value.decision.verdict),
++            Ok(DecisionVerdict::Allow)
++        ));
++        assert_eq!(result.map(|value| value.decision.question_id), Ok(q.id));
+     }
+ 
+     #[test]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/decision.rs:125:
+         };
+ 
+         let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
+-        assert_eq!(
+-            result,
+-            Err(DecisionEvaluationError::ThresholdNotSatisfied)
+-        );
++        assert_eq!(result, Err(DecisionEvaluationError::ThresholdNotSatisfied));
+     }
+ 
+     #[test]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/decision.rs:144:
+         };
+ 
+         let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
+-        assert_eq!(
+-            result,
+-            Err(DecisionEvaluationError::UnusableEvidence)
+-        );
++        assert_eq!(result, Err(DecisionEvaluationError::UnusableEvidence));
+     }
+ 
+     #[test]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/decision.rs:161:
+         };
+ 
+         let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
+-        assert_eq!(result, Err(DecisionEvaluationError::MissingThresholdEvidence));
++        assert_eq!(
++            result,
++            Err(DecisionEvaluationError::MissingThresholdEvidence)
++        );
+     }
+ }
+ 
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/domain.rs:113:
+         !self.source.is_empty()
+             && !self.origin.is_empty()
+             && !self.content_digest.is_empty()
+-            && matches!(self.status, EpistemicStatus::Known | EpistemicStatus::Disputed)
++            && matches!(
++                self.status,
++                EpistemicStatus::Known | EpistemicStatus::Disputed
++            )
+     }
+ }
+ 
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/event.rs:132:
+ 
+     #[test]
+     fn genesis_event_has_no_predecessor() {
+-        let signer = crate::CanonicalSigner::from_key(
+-            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
+-        );
++        let signer =
++            crate::CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+         let payload = CanonicalBytes::new(b"genesis".to_vec());
+         let signature = signer.sign(&payload);
+         let event = EventEnvelope::new(
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/event.rs:162:
+ 
+     #[test]
+     fn event_timestamps_use_microsecond_precision() {
+-        let signer = crate::CanonicalSigner::from_key(
+-            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
+-        );
++        let signer =
++            crate::CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+         let timestamp = match DateTime::from_timestamp(1_000, 123_456_789) {
+             Some(value) => value,
+             None => return,
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/event.rs:196:
+ 
+     #[test]
+     fn payload_hash_is_derived_from_exact_payload_bytes() {
+-        let signer = crate::CanonicalSigner::from_key(
+-            ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]),
+-        );
++        let signer =
++            crate::CanonicalSigner::from_key(ed25519_dalek::SigningKey::from_bytes(&[7_u8; 32]));
+         let payload = CanonicalBytes::new(b"exact-payload".to_vec());
+         let expected = Sha256Digest::calculate(&payload);
+         let signature = signer.sign(&payload);
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/event_store.rs:3:
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub enum EventStoreError {
+-    SequenceConflict { expected: Sequence, actual: Sequence },
++    SequenceConflict {
++        expected: Sequence,
++        actual: Sequence,
++    },
+     PredecessorConflict,
+     DuplicateEvent,
+     Persistence(String),
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/lib.rs:1:
+ #![forbid(unsafe_code)]
+ 
+-pub mod domain;
++pub mod assessment;
+ pub mod decision;
++pub mod domain;
+ pub mod event;
+-pub mod assessment;
+ pub mod event_store;
+ pub mod persistence;
+ pub mod signature;
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/persistence/postgres/event_store.rs:1:
+ use chrono::{DateTime, Utc};
+ use ed25519_dalek::Signature;
+-use sqlx::{postgres::PgPool, Row};
++use sqlx::{Row, postgres::PgPool};
+ use uuid::Uuid;
+ 
+ use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/persistence/postgres/event_store.rs:141:
+         .bind(event.causation_id.map(EventId::value))
+         .bind(event.payload.as_slice())
+         .bind(event.payload_hash.as_bytes().as_slice())
+-        .bind(event.previous_event_hash.map(|digest| digest.as_bytes().to_vec()))
++        .bind(
++            event
++                .previous_event_hash
++                .map(|digest| digest.as_bytes().to_vec()),
++        )
+         .bind(event.schema_version.0 as i16)
+         .bind(event.provenance)
+         .bind(event.signature.to_bytes().as_slice())
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/persistence/postgres/event_store.rs:190:
+         load_events(&self.pool, aggregate_id, Some(sequence)).await
+     }
+ 
+-    async fn current_head(&self, aggregate_id: AggregateId) -> Result<Option<EventEnvelope>, EventStoreError> {
++    async fn current_head(
++        &self,
++        aggregate_id: AggregateId,
++    ) -> Result<Option<EventEnvelope>, EventStoreError> {
+         let row = sqlx::query(
+             "SELECT event_id, event_type, aggregate_id, aggregate_type, sequence,
+                     occurred_at, recorded_at, actor_id, authority_reference,
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/persistence/postgres/event_store.rs:266:
+     let payload_hash_bytes: Vec<u8> = row
+         .try_get("payload_hash")
+         .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+-    let payload_hash = digest_from_bytes(&payload_hash_bytes).map_err(EventStoreError::Persistence)?;
++    let payload_hash =
++        digest_from_bytes(&payload_hash_bytes).map_err(EventStoreError::Persistence)?;
+ 
+     let previous_hash_bytes: Option<Vec<u8>> = row
+         .try_get("previous_event_hash")
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/verification.rs:40:
+     #[test]
+     fn digest_is_deterministic_for_exact_bytes() {
+         let bytes = CanonicalBytes::new(b"PALACO-LA".to_vec());
+-        assert_eq!(Sha256Digest::calculate(&bytes), Sha256Digest::calculate(&bytes));
++        assert_eq!(
++            Sha256Digest::calculate(&bytes),
++            Sha256Digest::calculate(&bytes)
++        );
+     }
+ 
+     #[test]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/src/verification.rs:47:
+     fn different_bytes_produce_different_digest() {
+         let first = CanonicalBytes::new(b"A".to_vec());
+         let second = CanonicalBytes::new(b"B".to_vec());
+-        assert_ne!(Sha256Digest::calculate(&first), Sha256Digest::calculate(&second));
++        assert_ne!(
++            Sha256Digest::calculate(&first),
++            Sha256Digest::calculate(&second)
++        );
+     }
+ 
+     #[test]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/tests/postgres_integration.rs:172:
+         .bind(first.event_id.value())
+         .execute(store.pool())
+         .await;
+-    assert!(update.is_err(), "UPDATE must be rejected by the append-only trigger");
++    assert!(
++        update.is_err(),
++        "UPDATE must be rejected by the append-only trigger"
++    );
+ 
+     let delete = sqlx::query("DELETE FROM la.events WHERE event_id = $1")
+         .bind(first.event_id.value())
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/tests/postgres_integration.rs:179:
+         .execute(store.pool())
+         .await;
+-    assert!(delete.is_err(), "DELETE must be rejected by the append-only trigger");
++    assert!(
++        delete.is_err(),
++        "DELETE must be rejected by the append-only trigger"
++    );
+ }
+ 
+ #[tokio::test]
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/tests/postgres_integration.rs:195:
+     let left_store = PgEventStore::new(pool.clone());
+     let right_store = PgEventStore::new(pool);
+     let left = event(aggregate_id, Sequence(2), Some(first.payload_hash), b"left");
+-    let right = event(aggregate_id, Sequence(2), Some(first.payload_hash), b"right");
++    let right = event(
++        aggregate_id,
++        Sequence(2),
++        Some(first.payload_hash),
++        b"right",
++    );
+ 
+     let (left_result, right_result) = tokio::join!(
+         left_store.append(aggregate_id, Sequence(2), Some(first.payload_hash), left),
+Diff in /home/runner/work/PALACO/PALACO/crates/palaco-la/tests/postgres_integration.rs:206:
+         .into_iter()
+         .filter(|result| result.is_ok())
+         .count();
+-    assert_eq!(successes, 1, "exactly one concurrent append may claim sequence 2");
++    assert_eq!(
++        successes, 1,
++        "exactly one concurrent append may claim sequence 2"
++    );
+ 
+     let events = store.load(aggregate_id).await.expect("load must succeed");
+     assert_eq!(events.len(), 2);

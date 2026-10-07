@@ -1,0 +1,2 @@
+PVS-001: FAIL
+- workspace members mismatch: ['palaco-foundation', 'palaco-kernel', 'palaco-runtime', 'palaco-eventbus', 'palaco-quay', 'palaco-citadel', 'palaco-evolution', 'palaco-la']

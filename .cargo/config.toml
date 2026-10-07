@@ -1,0 +1,5 @@
+[build]
+target-dir = "target"
+
+[net]
+git-fetch-with-cli = true
