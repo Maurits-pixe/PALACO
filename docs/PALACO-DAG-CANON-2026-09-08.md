@@ -1,9 +1,9 @@
 # 🏛️ PALACO — Dagcanon 8 september 2026
 
-**Status:** Canonieke consolidatie van de aangeleverde reconstructie  
-**Versie:** 1.0.0  
-**Datum van de canon:** 2026-09-08  
-**Document bijgewerkt:** 2026-10-07  
+**Status:** Canonieke consolidatie van de aangeleverde reconstructie
+**Versie:** 1.0.0
+**Datum van de canon:** 2026-09-08
+**Document bijgewerkt:** 2026-10-07
 **Eigenaar:** Niet gespecificeerd in de bronreconstructie
 
 ---
@@ -264,14 +264,14 @@ De constitutionele grens is: **KNOWLEDGE NEVER JUMPS DIRECTLY TO AUTHORITY.**
 
 ## Dagcanon
 
-> **PALACO identificeert voordat het classificeert.**  
-> **PALACO bepaalt voordat het certificeert.**  
-> **PALACO bewijst voordat het zekerheid claimt.**  
-> **PALACO beoordeelt of kennis voldoende is voordat die kennis material governance mag dragen.**  
-> **PALACO laat epistemische status alleen veranderen via een traceerbare transitie.**  
-> **PALACO bewaart de geschiedenis van wat het wist, ook wanneer het later anders leert.**  
+> **PALACO identificeert voordat het classificeert.**
+> **PALACO bepaalt voordat het certificeert.**
+> **PALACO bewijst voordat het zekerheid claimt.**
+> **PALACO beoordeelt of kennis voldoende is voordat die kennis material governance mag dragen.**
+> **PALACO laat epistemische status alleen veranderen via een traceerbare transitie.**
+> **PALACO bewaart de geschiedenis van wat het wist, ook wanneer het later anders leert.**
 > **RIO vertaalt die complexiteit naar menselijke taal. VORM9EVING maakt die begrijpelijk. QUAY vergeet de herkomst nooit.**
 
-**PALACO DOES NOT HIDE UNCERTAINTY.**  
-**PALACO DOES NOT INVENT CERTAINTY.**  
+- **PALACO DOES NOT HIDE UNCERTAINTY.**
+- **PALACO DOES NOT INVENT CERTAINTY.**
 **PALACO GOVERNS THE TRANSITION BETWEEN WHAT IS UNKNOWN, WHAT IS OBSERVED, WHAT IS DETERMINED, WHAT IS VERIFIED — AND WHAT MAY ACTUALLY BE DONE.**
