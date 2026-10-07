@@ -25,3 +25,16 @@ Werkelijke SIGKILL vóór COMMIT: geen besluit/effect/consumption/receipt. Werke
 ## Status
 
 SPECIFICATION DRAFT / ACCEPTANCE OPEN. De actuele bouw- en uitvoeringsstatus staat in het afzonderlijke B-evidence-rapport; deze contracttekst verleent geen acceptatie. Onafhankelijke review PENDING. Integratie/productie HOLD. Merge NOT AUTHORIZED. PROOF NOT ISSUED.
+
+
+## Afzonderlijke herstelcandidate — DERIVED B-R1
+
+Baseline PR #37 head 99196e469c7a48d74050b3cebe293831966d7ba8 blijft frozen. Vier AI-reviewbevindingen zijn hersteldoelen, geen acceptatie.
+
+Tijd: binnen één levende supervisor loopt de hoogste waargenomen wall time alleen op, met een monotone elapsed ondergrens. Een worker ontvangt die ondergrens plus dezelfde OS-monotone hrtime-anchor; processtart/IPC-wacht wordt meegerekend. Een nieuwe supervisor heeft geen bewijs van de historische deadline. Recovery zonder eigen oorspronkelijke write-attempt-witness houdt inhoud achter (DEADLINE_NOT_PROVEN), ook bij een teruggezette klok. Een write-attempt/ACK alleen bewijst nooit duurzaamheid; een afzonderlijk read-only SQLiteproces moet de volledige transactie reconstrueren vóór de conservatieve deadline. Geen restore-/trust-epoch toegevoegd.
+
+Vrijgave: alle candidate-write-, revoke- en readworkers verkrijgen dezelfde Linux flock, op de canonical realpath van de database, vóór databasewerk. De vrijgavegrens is het verzenden van het inhoudelijke worker-IPCbericht binnen die lock. Een revoke die eerder duurzaam committeert blokkeert die overdracht; een latere revoke trekt reeds overgedragen bytes niet terug. Geen netwerk/provider- of consumer-releaseclaim. Andere databasewriters die deze lock omzeilen vallen buiten deze geïsoleerde candidate. De lock wordt door het OS bij SIGKILL vrijgegeven. Recovery opent SQLite uitsluitend readOnly/query_only; de filesystemlock schrijft geen beslissing/effect/receipt opnieuw.
+
+Audit: DECISION-auditgrant moet exact de requestgrant zijn. De native trace schrijft de daadwerkelijk ingestelde delay (900 ms); gemeten duur wordt apart uit start/end gecontroleerd.
+
+B12-late-effect blijft bestaan: geen algemene D-013-conformance, geen nul-late-effectgarantie. decisionAt/effectAt blijven readback-bovengrenzen. ACCEPTANCE HOLD; formele onafhankelijke acceptatie PENDING; integratie/productie HOLD; geen merge, PROOF of externe dispatch.

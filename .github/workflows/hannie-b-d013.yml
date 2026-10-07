@@ -1,7 +1,7 @@
 name: Hannie B D-013 isolated SQLite
 on:
   push:
-    branches: ['hara/hannie-b-d013-sqlite']
+    branches: ['hara/hannie-b-d013-repair']
     paths: ['modules/hara/hannie-b-d013/**', '.github/workflows/hannie-b-d013.yml']
   pull_request:
     paths: ['modules/hara/hannie-b-d013/**', '.github/workflows/hannie-b-d013.yml']

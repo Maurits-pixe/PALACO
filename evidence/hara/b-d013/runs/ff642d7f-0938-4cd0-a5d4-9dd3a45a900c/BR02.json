@@ -1,0 +1,10 @@
+{
+  "status": "COMMITTED_RESULT_WITHHELD",
+  "code": "DEADLINE_NOT_PROVEN",
+  "operationId": "operation-1",
+  "auditSequence": 1,
+  "readProcess": {
+    "pid": 505,
+    "exit": 0
+  }
+}
