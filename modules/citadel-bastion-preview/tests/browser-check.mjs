@@ -16,7 +16,7 @@ fs.writeFileSync(path.join(certDir,'ext.cnf'),'subjectAltName=DNS:localhost,IP:1
 run(['x509','-req','-in','localhost.csr','-CA','ca.pem','-CAkey','ca-key.pem','-CAcreateserial','-out','localhost.pem','-days','1','-extfile','ext.cnf']);
 const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js','preview','--configLoader','native'], { cwd: root, stdio: ['ignore','pipe','pipe'] });
 let log=''; child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
-const request = (url, opts={}) => new Promise((resolve,reject) => { const req=https.get(url,{...opts,rejectUnauthorized:false},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString()}));});req.on('error',reject); });
+const request = (url, opts={}) => new Promise((resolve,reject) => { const req=https.get(url,{ca:fs.readFileSync(path.join(certDir,'ca.pem')),...opts},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString()}));});req.on('error',reject); });
 try {
   for (let i=0;i<100;i++) { try { const r=await request('https://127.0.0.1:5175/'); if(r.status===200) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   const identity=await request('https://127.0.0.1:5175/.well-known/palaco-app.json'); assert.equal(identity.status,200); assert.equal(JSON.parse(identity.body).appId,'bastion');
