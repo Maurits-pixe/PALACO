@@ -10,6 +10,8 @@
 
 Thank you for your interest in contributing to PALACO! This document outlines the process for contributing code, documentation, and improvements.
 
+For Vercel preview deployment setup and URLs for PALACO's web apps, see [Web preview deployments](docs/operations/Preview-Deployments.md).
+
 ---
 
 ## Code of Conduct

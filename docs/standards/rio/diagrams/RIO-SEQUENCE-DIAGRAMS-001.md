@@ -4,6 +4,9 @@
 ### Status
 Draft v0.2
 
+### Last Updated
+2026-10-06
+
 ## 1) Discover → Connect (Cross-Surface)
 
 ```mermaid

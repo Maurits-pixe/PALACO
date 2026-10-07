@@ -1,0 +1,12 @@
+{
+  "kind": "REMOTE_CODE_TREE_BINDING",
+  "remoteCodeCommit": "f68be57b8c3b60114ccefdd88446a5995d1c38ef",
+  "testedLocalCodeCommit": "0c1c99ed240bd7ba1d89512da56f5a7a5de55edd",
+  "exactFullRepositoryTreeSha": "9e813208a853784f0058b8466b932ef1182e5670",
+  "comparison": "Local git rev-parse codecommit^{tree} equals GitHub create_tree response; commits differ only in commit metadata",
+  "sourceSetSha256": "0cdef92a85d26cad4c1dd50d609e4fd8f69dc311264c0d672781a347e6551b2e",
+  "localEvidenceCommitsRemainOriginal": true,
+  "independentReview": "PENDING",
+  "integration": "HOLD",
+  "production": "HOLD"
+}

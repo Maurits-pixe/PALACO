@@ -1,0 +1,13 @@
+{
+  "kind": "B_D013_PRIMARY_SOURCE_BINDING",
+  "source": "https://app.notion.com/p/8a4f35ebe743499088178364ec04c58d",
+  "sourceLastEditedAt": "2026-10-05T08:22:47.722Z",
+  "snapshotSha256": "2eabd3c27a49860a25b96210f0ef4612c4a4aecd0cc75facbd3cc6c912151134",
+  "hashDefinition": "SHA-256 of fetched Notion text rendered as UTF-8 file with final newline",
+  "snapshotPubliclyIncluded": false,
+  "authority": "D-013 user decision and current explicit build instruction; not execution evidence",
+  "frozenDenyHead": "8660ce4453ec67c04e8a65de8e56c9edba089bb5",
+  "denySuiteEvidenceReused": false,
+  "integration": "HOLD",
+  "production": "HOLD"
+}

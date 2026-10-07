@@ -1,0 +1,162 @@
+TAP version 13
+# Subtest: B01 actual SIGKILL after COMMIT and new process reconstruct all atomic rows before expiry
+ok 1 - B01 actual SIGKILL after COMMIT and new process reconstruct all atomic rows before expiry
+  ---
+  duration_ms: 121.980954
+  type: 'test'
+  ...
+# Subtest: B02 SIGKILL before COMMIT loses all effects and recovery never writes
+ok 2 - B02 SIGKILL before COMMIT loses all effects and recovery never writes
+  ---
+  duration_ms: 166.491885
+  type: 'test'
+  ...
+# Subtest: B03 false ACK before durability cannot be success
+ok 3 - B03 false ACK before durability cannot be success
+  ---
+  duration_ms: 124.911868
+  type: 'test'
+  ...
+# Subtest: B04 crash-surviving revoke before decision blocks effect
+not ok 4 - B04 crash-surviving revoke before decision blocks effect
+  ---
+  duration_ms: 3.466798
+  type: 'test'
+  location: '/workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:20:1'
+  failureType: 'testCodeFailure'
+  error: 'INVALID_INPUT'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    canonical (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:7:66)
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:9:69
+    Array.map (<anonymous>)
+    canonical (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:9:38)
+    key (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:8:35)
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:18:77
+    new Promise (<anonymous>)
+    launch (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:12:10)
+    revoke (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:36:22)
+    TestContext.<anonymous> (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:21:31)
+  ...
+# Subtest: B05 revoke after commit keeps historical effect but blocks new disclosure and replay
+not ok 5 - B05 revoke after commit keeps historical effect but blocks new disclosure and replay
+  ---
+  duration_ms: 131.46026
+  type: 'test'
+  location: '/workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:23:1'
+  failureType: 'testCodeFailure'
+  error: 'INVALID_INPUT'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    canonical (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:7:66)
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:9:69
+    Array.map (<anonymous>)
+    canonical (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:9:38)
+    key (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:8:35)
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:18:77
+    new Promise (<anonymous>)
+    launch (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:12:10)
+    revoke (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:36:22)
+    TestContext.<anonymous> (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:24:104)
+  ...
+# Subtest: B06 lost ACK after durability reconstructs only with no second write
+ok 6 - B06 lost ACK after durability reconstructs only with no second write
+  ---
+  duration_ms: 499.249081
+  type: 'test'
+  ...
+# Subtest: B07 wrong digest cannot consume approval or write
+ok 7 - B07 wrong digest cannot consume approval or write
+  ---
+  duration_ms: 133.973478
+  type: 'test'
+  ...
+# Subtest: B07 wrong generation cannot consume approval or write
+ok 8 - B07 wrong generation cannot consume approval or write
+  ---
+  duration_ms: 145.132663
+  type: 'test'
+  ...
+# Subtest: B08 context isolation before write and during recovery
+ok 9 - B08 context isolation before write and during recovery
+  ---
+  duration_ms: 310.294457
+  type: 'test'
+  ...
+# Subtest: B09 corrupt receipt is not success and replay cannot repair it
+ok 10 - B09 corrupt receipt is not success and replay cannot repair it
+  ---
+  duration_ms: 292.320924
+  type: 'test'
+  ...
+# Subtest: B10 real SQLite lock wait past expiry rejects inside transaction
+ok 11 - B10 real SQLite lock wait past expiry rejects inside transaction
+  ---
+  duration_ms: 469.168999
+  type: 'test'
+  ...
+# Subtest: B11 real concurrent duplicate writers create only one atomic effect
+ok 12 - B11 real concurrent duplicate writers create only one atomic effect
+  ---
+  duration_ms: 225.465516
+  type: 'test'
+  ...
+# Subtest: B12 native WAL stall crosses expiry: precommit sample is not timely success and recovery does not replay
+ok 13 - B12 native WAL stall crosses expiry: precommit sample is not timely success and recovery does not replay
+  ---
+  duration_ms: 1090.747048
+  type: 'test'
+  ...
+# Subtest: B13 concurrent revoke and mutation share authoritative commit order
+not ok 14 - B13 concurrent revoke and mutation share authoritative commit order
+  ---
+  duration_ms: 3.799229
+  type: 'test'
+  location: '/workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:38:1'
+  failureType: 'testCodeFailure'
+  error: 'INVALID_INPUT'
+  code: 'ERR_TEST_FAILURE'
+  stack: |-
+    canonical (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:7:66)
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:9:69
+    Array.map (<anonymous>)
+    canonical (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/value.mjs:9:38)
+    key (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:8:35)
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:18:77
+    new Promise (<anonymous>)
+    launch (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:12:10)
+    revoke (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/src/index.mjs:36:22)
+    TestContext.<anonymous> (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:39:98)
+  ...
+# Subtest: B14 actual SIGKILL inside native COMMIT WAL write cannot survive as success
+ok 15 - B14 actual SIGKILL inside native COMMIT WAL write cannot survive as success
+  ---
+  duration_ms: 173.475932
+  type: 'test'
+  ...
+# Subtest: BR01 altered audit grant cannot release content
+not ok 16 - BR01 altered audit grant cannot release content
+  ---
+  duration_ms: 117.67867
+  type: 'test'
+  location: '/workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:48:2'
+  failureType: 'testCodeFailure'
+  error: 'FOREIGN KEY constraint failed'
+  code: 'ERR_SQLITE_ERROR'
+  stack: |-
+    file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:48:249
+    mutate (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/fixture.mjs:16:76)
+    TestContext.<anonymous> (file:///workspace/scratch/13b839834fd9/PALACO-B-D013-REPAIR/modules/hara/hannie-b-d013/tests/commit.test.mjs:48:163)
+    process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    async Test.run (node:internal/test_runner/test:1389:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 12
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 15497.523003

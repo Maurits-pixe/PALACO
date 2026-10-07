@@ -1,0 +1,29 @@
+name: Hannie B D-013 isolated SQLite
+on:
+  push:
+    branches: ['hara/hannie-b-d013-repair']
+    paths: ['modules/hara/hannie-b-d013/**', '.github/workflows/hannie-b-d013.yml']
+  pull_request:
+    paths: ['modules/hara/hannie-b-d013/**', '.github/workflows/hannie-b-d013.yml']
+permissions:
+  contents: read
+jobs:
+  b-d013:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node: ['24.14.1', '24.19.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node tools/run-evidence.mjs
+        working-directory: modules/hara/hannie-b-d013
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: b-d013-${{ matrix.node }}
+          path: evidence/hara/b-d013/runs/
+          if-no-files-found: error

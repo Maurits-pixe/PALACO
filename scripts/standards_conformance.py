@@ -3,10 +3,12 @@
 
 Checks, in one run:
   1. Parser regression tests (duplicate JSON keys, Status metadata parser).
-  2. Status metadata on every docs/standards/{rio,visitcard}/**/*.md.
-  3. Non-empty, unique `$id` on every docs/schemas/rio/**/*.json.
+  2. Status + Last Updated metadata on every docs/standards/{rio,visitcard}/**/*.md.
+  3. Non-empty, unique `$id` across docs/schemas/{rio,visitcard}/**/*.json.
   4. RIO fixtures valid against RIO-SCHEMA-BUNDLE-001 (Draft 2020-12 +
      FormatChecker), plus negative tests per definition.
+  5. VisitCard + BeaconPayload fixtures valid against the VisitCard bundle,
+     plus negative tests for required fields and structural disclosure bounds.
 
 Any failure exits non-zero.
 """
@@ -24,15 +26,31 @@ STANDARDS_DIRS = (
     ROOT / "docs/standards/rio",
     ROOT / "docs/standards/visitcard",
 )
+REQUIRED_DOC_FIELDS = ["Status", "Last Updated"]
 RIO_SCHEMA_DIR = ROOT / "docs/schemas/rio"
 RIO_BUNDLE = RIO_SCHEMA_DIR / "RIO-SCHEMA-BUNDLE-001.json"
 RIO_FIXTURE_DIR = ROOT / "docs/fixtures/rio"
+VISITCARD_SCHEMA_DIR = ROOT / "docs/schemas/visitcard"
+VISITCARD_BUNDLE = VISITCARD_SCHEMA_DIR / "VISITCARD-SCHEMA-BUNDLE-001.json"
+VISITCARD_FIXTURE_DIR = ROOT / "docs/fixtures/visitcard"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 FIXTURES = {
     "Conversation": "conversation.fixture.json",
     "Message": "message.fixture.json",
     "IntentAction": "intent_action.fixture.json",
+}
+VISITCARD_FIXTURES = {
+    "VisitCard": "visitcard.fixture.json",
+    "BeaconPayload": "beacon_payload.fixture.json",
+}
+VISITCARD_REQUIRED_FIELDS = {
+    "VisitCard": (
+        "identity_ref", "object_type", "introduction", "rio_endpoint",
+        "watermerk_ref", "hologram_ref", "provenance", "validity",
+        "presentation_hints", "discovery_methods",
+    ),
+    "BeaconPayload": ("P", "V", "T", "D", "E", "R"),
 }
 
 STATUS_HEADING_RE = re.compile(r" {0,3}#{1,6}[ \t]+status[ \t]*#*[ \t]*", re.IGNORECASE)
@@ -89,7 +107,7 @@ def read_json(path):
 
 
 # --------------------------------------------------------------------------
-# Markdown Status metadata
+# Markdown standards metadata
 # --------------------------------------------------------------------------
 
 def strip_fenced_code(text):
@@ -141,21 +159,27 @@ def check_metadata():
         require(files, f"No Markdown standards found in {rel(directory)}")
         for path in files:
             try:
-                status = extract_status(path.read_text(encoding="utf-8"))
+                text = path.read_text(encoding="utf-8")
+                status = extract_status(text)
+                for field in REQUIRED_DOC_FIELDS:
+                    require(field in text, f"missing required metadata {field!r}")
             except ConformanceError as error:
                 raise ConformanceError(f"{rel(path)}: {error}") from error
             print(f"  ok {rel(path)} (Status: {status})")
             count += 1
-    return f"Status metadata in {count} documents"
+    return f"Status + Last Updated metadata in {count} documents"
 
 
 # --------------------------------------------------------------------------
-# RIO schema $id uniqueness
+# RIO + VisitCard schema $id uniqueness
 # --------------------------------------------------------------------------
 
 def check_schema_ids():
-    files = sorted(RIO_SCHEMA_DIR.rglob("*.json"))
-    require(files, f"No JSON schemas found in {rel(RIO_SCHEMA_DIR)}")
+    files = []
+    for directory in (RIO_SCHEMA_DIR, VISITCARD_SCHEMA_DIR):
+        schema_files = sorted(directory.rglob("*.json"))
+        require(schema_files, f"No JSON schemas found in {rel(directory)}")
+        files.extend(schema_files)
     seen = {}
     for path in files:
         schema = read_json(path)
@@ -172,7 +196,7 @@ def check_schema_ids():
             )
         seen[sid] = path
         print(f"  ok {rel(path)} ($id: {sid})")
-    return f"$id unique across {len(files)} RIO schema file(s)"
+    return f"$id unique across {len(files)} RIO + VisitCard schema file(s)"
 
 
 # --------------------------------------------------------------------------
@@ -241,6 +265,134 @@ def check_rio_fixtures():
 
     return f"RIO fixtures valid + negative tests for {len(FIXTURES)} definitions"
 
+
+# --------------------------------------------------------------------------
+# VisitCard fixtures + structural boundary tests
+# --------------------------------------------------------------------------
+
+def check_visitcard_fixtures():
+    bundle = read_json(VISITCARD_BUNDLE)
+    require(isinstance(bundle, dict), "VisitCard bundle must be a JSON object")
+    require(bundle.get("$schema") == DIALECT, "Unexpected VisitCard $schema dialect")
+    Draft202012Validator.check_schema(bundle)
+    definitions = bundle.get("definitions")
+    require(isinstance(definitions, dict), "VisitCard bundle has no definitions")
+    root_validator = Draft202012Validator(bundle, format_checker=FormatChecker())
+    validators = {}
+    instances = {}
+    negative_count = 0
+
+    def reject(validator, instance, keyword, label):
+        nonlocal negative_count
+        expect_rejection(validator, instance, keyword, label)
+        negative_count += 1
+
+    for definition, filename in VISITCARD_FIXTURES.items():
+        require(definition in definitions, f"Missing VisitCard definition: {definition}")
+        selected = {**bundle, "$ref": f"#/definitions/{definition}"}
+        Draft202012Validator.check_schema(selected)
+        validator = Draft202012Validator(selected, format_checker=FormatChecker())
+        path = VISITCARD_FIXTURE_DIR / filename
+        require(path.is_file(), f"Missing fixture: {rel(path)}")
+        instance = read_json(path)
+        require(isinstance(instance, dict), f"{rel(path)}: fixture must be a JSON object")
+        errors = sorted(validator.iter_errors(instance), key=lambda e: tuple(map(str, e.path)))
+        require(
+            not errors,
+            f"{rel(path)} invalid against {definition}: "
+            + "; ".join(f"{list(e.path)}: {e.message}" for e in errors),
+        )
+        require(root_validator.is_valid(instance), f"{rel(path)} invalid against bundle root")
+        validators[definition] = validator
+        instances[definition] = instance
+        print(f"  ok {rel(path)} valid against {definition} and bundle root")
+
+        extra = copy.deepcopy(instance)
+        require("_go13_extra" not in extra, f"{rel(path)}: reserved test field present")
+        extra["_go13_extra"] = True
+        reject(validator, extra, "additionalProperties", f"{definition}: extra property")
+        required = VISITCARD_REQUIRED_FIELDS[definition]
+        for field in required:
+            missing = copy.deepcopy(instance)
+            missing.pop(field, None)
+            reject(validator, missing, "required", f"{definition}: missing {field}")
+            wrong_type = copy.deepcopy(instance)
+            wrong_type[field] = None
+            reject(validator, wrong_type, "type", f"{definition}: null {field}")
+
+    card = instances["VisitCard"]
+    card_validator = validators["VisitCard"]
+    card_cases = (
+        ("invalid identity namespace", ("identity_ref",), "person.demo", "pattern"),
+        ("unknown validity", ("validity",), "AUTHORIZED", "enum"),
+        ("invalid RIO endpoint", ("rio_endpoint",), "not-a-uri", "format"),
+        ("empty introduction", ("introduction",), "", "minLength"),
+        ("unknown discovery method", ("discovery_methods",), ["UNKNOWN"], "enum"),
+        ("empty discovery methods", ("discovery_methods",), [], "minItems"),
+        ("duplicate discovery methods", ("discovery_methods",), ["QR", "QR"], "uniqueItems"),
+        ("missing origin evidence", ("provenance", "evidence_refs"), [], "minItems"),
+        ("empty evidence reference", ("provenance", "evidence_refs"), [""], "minLength"),
+        ("unknown origin surface", ("provenance", "origin_surface"), "trusted", "enum"),
+        ("invalid origin endpoint", ("provenance", "origin_endpoint"), "not-a-uri", "format"),
+        ("empty presentation label", ("presentation_hints", "display_name"), "", "minLength"),
+    )
+    for label, path, value, keyword in card_cases:
+        invalid = copy.deepcopy(card)
+        target = invalid
+        for component in path[:-1]:
+            target = target[component]
+        target[path[-1]] = value
+        reject(card_validator, invalid, keyword, f"VisitCard: {label}")
+
+    for parent, field in (
+        ("provenance", "origin_surface"),
+        ("provenance", "origin_endpoint"),
+        ("provenance", "evidence_refs"),
+        ("presentation_hints", "display_name"),
+    ):
+        invalid = copy.deepcopy(card)
+        invalid[parent].pop(field, None)
+        reject(card_validator, invalid, "required", f"VisitCard: missing {parent}.{field}")
+
+    for parent in ("provenance", "presentation_hints"):
+        invalid = copy.deepcopy(card)
+        invalid[parent]["authorization"] = {"grant": True}
+        reject(card_validator, invalid, "additionalProperties", f"VisitCard: {parent} authority field")
+
+    for state in ("EXPIRED", "REVOKED"):
+        variant = copy.deepcopy(card)
+        variant["validity"] = state
+        require(card_validator.is_valid(variant), f"VisitCard: declared validity {state} rejected")
+        print(f"  ok VisitCard {state} is structural data, not an authorization decision")
+
+    beacon = instances["BeaconPayload"]
+    beacon_validator = validators["BeaconPayload"]
+    for field, value in (
+        ("identity_profile", {"name": "Demo"}),
+        ("contact_data", {"email": "demo@example.invalid"}),
+        ("visitcard", card),
+        ("authorization", {"grant": True}),
+    ):
+        invalid = copy.deepcopy(beacon)
+        invalid[field] = value
+        reject(beacon_validator, invalid, "additionalProperties", f"BeaconPayload: forbidden {field}")
+    for field in ("V", "T", "D", "E"):
+        invalid = copy.deepcopy(beacon)
+        invalid[field] = ""
+        reject(beacon_validator, invalid, "minLength", f"BeaconPayload: empty {field}")
+    invalid = copy.deepcopy(beacon)
+    invalid["P"] = "OTHER"
+    reject(beacon_validator, invalid, "const", "BeaconPayload: invalid protocol family")
+    invalid = copy.deepcopy(beacon)
+    invalid["R"] = "not-a-uri"
+    reject(beacon_validator, invalid, "format", "BeaconPayload: invalid resolver endpoint")
+
+    reject(root_validator, {}, "oneOf", "VisitCard bundle: unmatched empty object")
+    reject(root_validator, "PALACO", "type", "VisitCard bundle: non-object payload")
+    return (
+        f"VisitCard fixtures valid + {negative_count} negative tests "
+        f"for {len(VISITCARD_FIXTURES)} definitions"
+    )
 
 # --------------------------------------------------------------------------
 # Parser regression tests
@@ -342,9 +494,10 @@ def run_regression_tests():
 
 CHECKS = (
     ("parser regression tests", run_regression_tests),
-    ("standards Status metadata", check_metadata),
-    ("RIO schema $id uniqueness", check_schema_ids),
+    ("standards metadata", check_metadata),
+    ("RIO + VisitCard schema $id uniqueness", check_schema_ids),
     ("RIO schema/fixture conformance", check_rio_fixtures),
+    ("VisitCard schema/fixture conformance", check_visitcard_fixtures),
 )
 
 
