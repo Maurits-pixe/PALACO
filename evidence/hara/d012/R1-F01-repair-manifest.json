@@ -1,0 +1,106 @@
+{
+  "kind": "R1F01_BUILDER_REPAIR_EVIDENCE",
+  "codeCommit": "0c1c99ed240bd7ba1d89512da56f5a7a5de55edd",
+  "historicalPRHead": "7243e8d1e72818cbe0d17472aec6a87e8d7b109d",
+  "historicalBase": "c2a5e4059c21ef11a498f85bf3499a65ccfdfc92",
+  "runs": [
+    {
+      "runId": "8b44c5eb-eefd-4549-a647-250f03e4ebee",
+      "node": "v24.19.0",
+      "sourceSetSha256": "3a5ebc62f0dc3d913c5e12987a01ff6bb1bcf8a4b57cd7301dbfc65d80070e6b",
+      "counts": {
+        "tests": 76,
+        "pass": 73,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourceUnchangedAfterRun": true,
+      "resultSha256": "187046473682a4256ee805145b4ebcb246db8300d7d12fabcbaddfcb721c9dd5"
+    },
+    {
+      "runId": "7b77dac3-3861-4f85-b973-a9decaddfd5d",
+      "node": "v24.14.1",
+      "sourceSetSha256": "3a5ebc62f0dc3d913c5e12987a01ff6bb1bcf8a4b57cd7301dbfc65d80070e6b",
+      "counts": {
+        "tests": 76,
+        "pass": 73,
+        "fail": 3,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourceUnchangedAfterRun": true,
+      "resultSha256": "d5381363ff3d7f7771b788427af30f452e04f69a9bf604ca787cd934d2892951"
+    },
+    {
+      "runId": "7c1b81bc-56ad-4981-95e3-ccb637926f23",
+      "node": "v24.19.0",
+      "sourceSetSha256": "cd37bb650bf12aaa18f719ec9718a06b8366a12de0a6103052669ed51a53e386",
+      "counts": {
+        "tests": 77,
+        "pass": 77,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourceUnchangedAfterRun": true,
+      "resultSha256": "c82d63a8e9a69f44b80998239bca503df01a2f891b8ca4399e2d9be1805669a2"
+    },
+    {
+      "runId": "2ec7683c-77ae-444a-a653-97c679d3d45f",
+      "node": "v24.19.0",
+      "sourceSetSha256": "0cdef92a85d26cad4c1dd50d609e4fd8f69dc311264c0d672781a347e6551b2e",
+      "counts": {
+        "tests": 77,
+        "pass": 77,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourceUnchangedAfterRun": true,
+      "resultSha256": "d4a61e404a00443982c9cb048983e89991df23b96d580ca88da659a7b4c35439"
+    },
+    {
+      "runId": "f3a64c26-5f3a-410f-a6a6-3951f7e2d792",
+      "node": "v24.19.0",
+      "sourceSetSha256": "0cdef92a85d26cad4c1dd50d609e4fd8f69dc311264c0d672781a347e6551b2e",
+      "counts": {
+        "tests": 77,
+        "pass": 77,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourceUnchangedAfterRun": true,
+      "resultSha256": "d9048dc312219d088c1cdaf0374521f6930c799b2c29478c60dcd90479de96ea"
+    },
+    {
+      "runId": "64b53d79-4f63-4247-a9b6-3565b911b928",
+      "node": "v24.14.1",
+      "sourceSetSha256": "0cdef92a85d26cad4c1dd50d609e4fd8f69dc311264c0d672781a347e6551b2e",
+      "counts": {
+        "tests": 77,
+        "pass": 77,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "sourceUnchangedAfterRun": true,
+      "resultSha256": "dc4298a295074e6414404f34539ae7249326987f65af9e5cf52e832c115c7f50"
+    }
+  ],
+  "sourceRuntimeFilesUnchanged": true,
+  "frozenControlExpectationsUnchanged": true,
+  "node24_14_1ArchiveSha256": "84d38715d449447117d05c3e71acd78daa49d5b1bfa8aacf610303920c3322be",
+  "privateSourceBytes": "NOT CHECKED",
+  "independentReview": "PENDING",
+  "integration": "HOLD",
+  "production": "HOLD",
+  "officialPalacoProof": "NOT ISSUED"
+}
