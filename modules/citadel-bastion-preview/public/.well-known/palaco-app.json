@@ -1,0 +1,7 @@
+{
+  "appId": "bastion",
+  "version": "1.0.0-preview.1",
+  "status": "preview-blocked",
+  "description": "Tactisch commandocentrum — geïsoleerde previewcandidate",
+  "securityLevel": "preview-only"
+}
