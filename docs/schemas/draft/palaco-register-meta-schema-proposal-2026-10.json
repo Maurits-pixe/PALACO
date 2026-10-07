@@ -1,0 +1,662 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:palaco:draft:pms-001:2026-10",
+  "title": "PALACO Draft Register MetaSchema",
+  "description": "Non-canonical proposal for inspectable metadata. Validation is diagnostic and never grants authority, canonical status, merge permission or runtime authorization.",
+  "$comment": "DRAFT_PROPOSAL. Requires provenance and epistemic scope. Keep history append-only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record",
+    "provenance",
+    "epistemic"
+  ],
+  "properties": {
+    "record": {
+      "$ref": "#/$defs/Record"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "epistemic": {
+      "$ref": "#/$defs/Epistemic"
+    }
+  },
+  "$defs": {
+    "Record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "object_kind",
+        "domain",
+        "version",
+        "status",
+        "lifecycle",
+        "traceability",
+        "classification",
+        "specialization"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9]{1,7}-[0-9]{3,6}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "object_kind": {
+          "type": "string",
+          "enum": [
+            "CORE",
+            "DOCUMENT",
+            "SERVICE",
+            "CONTROL"
+          ]
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subdomain": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "DRAFT",
+            "REVIEW",
+            "SUPPORTED",
+            "DETERMINED",
+            "VERIFIED",
+            "DISPUTED",
+            "STALE",
+            "RETIRED"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        },
+        "owners": {
+          "$ref": "#/$defs/Owners"
+        },
+        "approval": {
+          "$ref": "#/$defs/ApprovalReference"
+        },
+        "traceability": {
+          "$ref": "#/$defs/Traceability"
+        },
+        "verification": {
+          "$ref": "#/$defs/Verification"
+        },
+        "compliance": {
+          "$ref": "#/$defs/Compliance"
+        },
+        "change_control": {
+          "$ref": "#/$defs/ChangeControl"
+        },
+        "audit": {
+          "$ref": "#/$defs/Audit"
+        },
+        "repository": {
+          "$ref": "#/$defs/RepositoryPin"
+        },
+        "classification": {
+          "$ref": "#/$defs/Classification"
+        },
+        "specialization": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/CoreSpecialization"
+            },
+            {
+              "$ref": "#/$defs/DocumentSpecialization"
+            },
+            {
+              "$ref": "#/$defs/ServiceSpecialization"
+            },
+            {
+              "$ref": "#/$defs/ControlSpecialization"
+            }
+          ]
+        }
+      }
+    },
+    "CoreSpecialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "metadata_scope"
+      ],
+      "properties": {
+        "kind": {
+          "const": "CORE"
+        },
+        "metadata_scope": {
+          "type": "string"
+        }
+      }
+    },
+    "DocumentSpecialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "document_type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "DOCUMENT"
+        },
+        "document_type": {
+          "type": "string",
+          "enum": [
+            "FOUNDATION",
+            "ADR",
+            "POLICY",
+            "STANDARD",
+            "PROCEDURE",
+            "REFERENCE"
+          ]
+        },
+        "approval_ref": {
+          "type": "string"
+        },
+        "related_document_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ServiceSpecialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "service_type",
+        "runtime_ref",
+        "observability"
+      ],
+      "properties": {
+        "kind": {
+          "const": "SERVICE"
+        },
+        "service_type": {
+          "type": "string",
+          "enum": [
+            "APPLICATION",
+            "API",
+            "MICROSERVICE",
+            "WORKER",
+            "PLATFORM_SERVICE",
+            "RUNTIME_COMPONENT"
+          ]
+        },
+        "runtime_ref": {
+          "type": "string"
+        },
+        "observability": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "logging",
+            "metrics",
+            "tracing"
+          ],
+          "properties": {
+            "logging": {
+              "type": "boolean"
+            },
+            "metrics": {
+              "type": "boolean"
+            },
+            "tracing": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "ControlSpecialization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "control_type",
+        "risk_ref",
+        "verification_ref"
+      ],
+      "properties": {
+        "kind": {
+          "const": "CONTROL"
+        },
+        "control_type": {
+          "type": "string",
+          "enum": [
+            "PREVENTIVE",
+            "DETECTIVE",
+            "CORRECTIVE",
+            "COMPENSATING"
+          ]
+        },
+        "risk_ref": {
+          "type": "string"
+        },
+        "verification_ref": {
+          "type": "string"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "created_at"
+      ],
+      "properties": {
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "effective_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_review_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "next_review_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "retirement_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "Owners": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "business_ref": {
+          "type": "string"
+        },
+        "architecture_ref": {
+          "type": "string"
+        },
+        "technical_ref": {
+          "type": "string"
+        },
+        "verification_ref": {
+          "type": "string"
+        },
+        "custodian_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "ApprovalReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_ref",
+        "evidence_refs"
+      ],
+      "properties": {
+        "decision_ref": {
+          "type": "string"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "authority_ref": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        }
+      }
+    },
+    "Traceability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parent_refs",
+        "upstream_refs",
+        "related_adr_refs"
+      ],
+      "properties": {
+        "parent_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "child_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "upstream_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "downstream_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_adr_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_control_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "related_requirement_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "method",
+        "scope",
+        "evidence_refs"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "NOT_REQUESTED",
+            "PENDING",
+            "PASSED",
+            "FAILED",
+            "UNKNOWN",
+            "SCOPED"
+          ]
+        },
+        "method": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "last_verified_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "Compliance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "regulatory_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "control_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risk_rating": {
+          "type": "string",
+          "enum": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL",
+            "UNKNOWN"
+          ]
+        },
+        "exception_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "ChangeControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_ref",
+        "change_type",
+        "impact_assessment"
+      ],
+      "properties": {
+        "request_ref": {
+          "type": "string"
+        },
+        "change_type": {
+          "type": "string"
+        },
+        "impact_assessment": {
+          "type": "string"
+        },
+        "reviewer_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decision_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "Audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trail_ref": {
+          "type": "string"
+        },
+        "evidence_package_ref": {
+          "type": "string"
+        },
+        "inspection_status": {
+          "type": "string"
+        },
+        "last_audited_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "findings_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "RepositoryPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "ref",
+        "path"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{7,64}$"
+        },
+        "path": {
+          "type": "string"
+        },
+        "branch_policy_ref": {
+          "type": "string"
+        }
+      }
+    },
+    "Classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "level",
+        "scope"
+      ],
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": [
+            "PROPOSED",
+            "SUPPORTED",
+            "DETERMINED",
+            "VERIFIED",
+            "NON_CANONICAL",
+            "HISTORICAL",
+            "SUPERSEDED"
+          ]
+        },
+        "scope": {
+          "type": "string"
+        },
+        "criticality": {
+          "type": "string"
+        },
+        "impact_tier": {
+          "type": "string"
+        },
+        "confidentiality": {
+          "type": "string"
+        },
+        "integrity": {
+          "type": "string"
+        },
+        "availability": {
+          "type": "string"
+        }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_refs",
+        "captured_at",
+        "capture_method"
+      ],
+      "properties": {
+        "source_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "captured_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "capture_method": {
+          "type": "string"
+        },
+        "source_digest": {
+          "type": "string"
+        },
+        "lineage_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Epistemic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "state",
+        "purpose_scope"
+      ],
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "PROPOSED",
+            "SUPPORTED",
+            "DETERMINED",
+            "VERIFIED",
+            "DISPUTED",
+            "STALE",
+            "UNKNOWN"
+          ]
+        },
+        "purpose_scope": {
+          "type": "string"
+        },
+        "uncertainty": {
+          "type": "string"
+        },
+        "conflict_refs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "revalidation_due_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}
