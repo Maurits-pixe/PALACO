@@ -43,7 +43,7 @@ static void pause_if_armed(int fd) {
   int out = open(trace, O_WRONLY | O_CREAT | O_APPEND, 0600);
   if (out >= 0) {
     char buf[256];
-    int len = snprintf(buf, sizeof(buf), "{\"kind\":\"WAL_STALL\",\"pathConfirmed\":true,\"delayMs\":2400,\"startMs\":%lld,\"endMs\":%lld}\n", start, milliseconds());
+    int len = snprintf(buf, sizeof(buf), "{\"kind\":\"WAL_STALL\",\"pathConfirmed\":true,\"delayMs\":%ld,\"startMs\":%lld,\"endMs\":%lld}\n", delay, start, milliseconds());
     ssize_t written = write(out, buf, (size_t)len);
     close(out);
     if (written != len) return;
