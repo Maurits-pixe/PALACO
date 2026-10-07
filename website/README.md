@@ -10,6 +10,8 @@ python3 -m http.server 8080 --directory website
 
 Open `http://localhost:8080/` and use the navigation. The canonical route model is documented in `docs/PVD-001/PALACO-NL-FULL-WEBSITE.md`; the hash form keeps direct navigation safe on static hosting.
 
+Vercel PR previews are documented in [Web preview deployments](../docs/operations/Preview-Deployments.md).
+
 ## Evidence boundary
 
 This release is a public content and navigation baseline. It does not issue identity, grant authority, establish provenance or connect to a live verification provider. Proof therefore returns `UNVERIFIED` when no authoritative provider is connected. No visible PALACO mark is treated as proof.
