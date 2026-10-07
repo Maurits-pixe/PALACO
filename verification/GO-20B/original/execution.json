@@ -1,0 +1,106 @@
+{
+  "schema": "GO-20B-local-execution-v1",
+  "label": "original",
+  "repository": "Maurits-pixe/PALACO",
+  "branch": "go-18/write-authorization-proof",
+  "candidate_commit": "960a51b19059eb76a59a6c8caf1aa13831b062bf",
+  "candidate_tree": "182978e1f3a7c4163457b7edd93ca335911a7dcd",
+  "main_commit_before": "96864384022191e7e6f6fd59134defbd3ae41151",
+  "main_tree_before": "da01553abfc4d07865b76cb99a13addd2477d4d3",
+  "baseline_object_type": "commit",
+  "git_version": "git version 2.53.0.windows.3",
+  "python_version": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+  "python_executable": "C:\\Users\\mauri\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "working_directory": "C:\\Users\\mauri\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-2\\work\\PALACO",
+  "command": [
+    "C:\\Users\\mauri\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+    "tools/pvs003_repository_provenance.py"
+  ],
+  "working_tree_status_before": "",
+  "checkout_mode": "non-cone sparse checkout; complete Git object database; all verifier inputs materialized and blob-verified",
+  "checkout_reason": "Windows-incompatible historical paths remain untouched in Git. WSL is unavailable. This is local candidate execution, not a full Linux checkout or CI run.",
+  "sparse_patterns": [
+    "/tools/",
+    "/verification/",
+    "/docs/verification/",
+    "/.github/workflows/",
+    "/crates/",
+    "/Cargo.toml",
+    "/333333",
+    "/Canonical Status",
+    "/MBvanGeen/palaco-foundation",
+    "/PALACO_Foundation_v0.3.0_alpha.zip",
+    "/ALPHA"
+  ],
+  "local_core_autocrlf": "false",
+  "local_core_protectNTFS": "false",
+  "input_manifest": [
+    {
+      "path": "333333",
+      "git_blob": "228c9f97c819606f331060b14c3bb8aa700ffa10",
+      "sha256": "034dfaed619a1689d6dd7003b1c00802970bb9136fec4cfea22efdcf8f91a9fb",
+      "bytes": 515423
+    },
+    {
+      "path": "Canonical Status",
+      "git_blob": "5a2ab70d54f909ae7b9a6783d29ccd1aa46e2983",
+      "sha256": "81b072ee56a5da8824fc9e1e66fc0ad720a5509cc7bc0ab9a5e7de0b062e91f8",
+      "bytes": 440376
+    },
+    {
+      "path": "MBvanGeen/palaco-foundation",
+      "git_blob": "d11f7dd5bc07eafde19949281e365b3a5457059c",
+      "sha256": "2020f4a0146125e3042d845a226b6d3c51c406a1566beb8ba9f649617b6d58cc",
+      "bytes": 778008
+    },
+    {
+      "path": "PALACO_Foundation_v0.3.0_alpha.zip",
+      "git_blob": "63b3b2679864a541141b4b80f17bef8b603010a2",
+      "sha256": "10fcd727b75086f766239c7917874a9256ce82af952a76123ecbedffdcdbff99",
+      "bytes": 1842
+    },
+    {
+      "path": "ALPHA",
+      "git_blob": "f6ce67cc8af29305a2f9f63ecda89509f5cc87c3",
+      "sha256": "f90e38c2baf02958e9f1e92cbdd8984ee20277ad25a441b8e857bb160d1da317",
+      "bytes": 88
+    },
+    {
+      "path": "tools/pvs003_repository_provenance.py",
+      "git_blob": "8ffa9ef90eb7e925ea20b56f3d7f7d884a8fd38c",
+      "sha256": "f191780a0c18f6c4b906426b39c0364d3b26ee659c6d8613d40b5c9bd35cdaf8",
+      "bytes": 2537
+    },
+    {
+      "path": "verification/GO-19B-FORENSIC-CLASSIFICATION.md",
+      "git_blob": "ff46ab681129601beff55d5c9ca4faa7d0f74296",
+      "sha256": "f87d1ab131c0c194df5f75400e090e696f0e251992a6db8c6b5647e589fbf0e2",
+      "bytes": 4472
+    },
+    {
+      "path": "Cargo.toml",
+      "git_blob": "214c93645bc5f0e5975edc7d0756e447c75c3d8e",
+      "sha256": "600e5cdd0d8532de387117038ab20bef472e19d820c2ff263a3672184423a468",
+      "bytes": 486
+    }
+  ],
+  "protected_baseline_blobs": {
+    "333333": "228c9f97c819606f331060b14c3bb8aa700ffa10",
+    "Canonical Status": "5a2ab70d54f909ae7b9a6783d29ccd1aa46e2983",
+    "MBvanGeen/palaco-foundation": "d11f7dd5bc07eafde19949281e365b3a5457059c",
+    "PALACO_Foundation_v0.3.0_alpha.zip": "63b3b2679864a541141b4b80f17bef8b603010a2",
+    "ALPHA": "f6ce67cc8af29305a2f9f63ecda89509f5cc87c3"
+  },
+  "started_at_utc": "2026-10-07T11:07:57.249631+00:00",
+  "finished_at_utc": "2026-10-07T11:07:57.358812+00:00",
+  "exit_code": 1,
+  "stdout_sha256": "a7d17f3724e99ac6a3a3af73efe03d0fb9c12736f8016cd45336796978bfa288",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stdout_bytes": 141,
+  "stderr_bytes": 0,
+  "working_tree_status_after": "",
+  "main_commit_after": "96864384022191e7e6f6fd59134defbd3ae41151",
+  "main_tree_after": "da01553abfc4d07865b76cb99a13addd2477d4d3",
+  "ci_execution": false
+}

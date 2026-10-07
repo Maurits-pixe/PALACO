@@ -1,0 +1,140 @@
+{
+  "evidence_kind": "SYNTHETIC_REGRESSION_TESTS_ONLY",
+  "limitations": "Git outputs are mocked. These checks do not execute against repository Git refs, validate original historical provenance, or constitute CI execution evidence.",
+  "started_at_utc": "2026-10-07T11:10:36.280678+00:00",
+  "finished_at_utc": "2026-10-07T11:10:36.307504+00:00",
+  "python": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "source_verifier": "C:\\Users\\mauri\\Documents\\Codex\\2026-10-07\\referenced-chatgpt-conversation-this-is-an-2\\work\\PALACO\\tools\\pvs003_repository_provenance.py",
+  "source_verifier_sha256": "5ff8efd8521c990f96107703cb1fe5122f7c6b5a03204dc3d029d0b580961610",
+  "fixture_verifier_sha256": "5ff8efd8521c990f96107703cb1fe5122f7c6b5a03204dc3d029d0b580961610",
+  "result": "PASS",
+  "synthetic_cases": [
+    {
+      "case": "matching_commit_and_tree",
+      "synthetic_git_commit": "96864384022191e7e6f6fd59134defbd3ae41151",
+      "synthetic_git_tree": "da01553abfc4d07865b76cb99a13addd2477d4d3",
+      "synthetic_git_error": null,
+      "expected_exit_code": 0,
+      "actual_exit_code": 0,
+      "stdout": "PVS-003: PASS\nFrozen repository baseline, protected historical material, classification boundary, workspace membership, and exact canonical identifier are preserved.\nPVS-003 PASS != merge authority != canonical ascension\n",
+      "stderr": "",
+      "mocked_git_calls": [
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{commit}"
+        ],
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{tree}"
+        ]
+      ],
+      "assertions": "PASS"
+    },
+    {
+      "case": "different_commit_same_tree",
+      "synthetic_git_commit": "1111111111111111111111111111111111111111",
+      "synthetic_git_tree": "da01553abfc4d07865b76cb99a13addd2477d4d3",
+      "synthetic_git_error": null,
+      "expected_exit_code": 1,
+      "actual_exit_code": 1,
+      "stdout": "PVS-003: FAIL\n- frozen main commit mismatch: expected 96864384022191e7e6f6fd59134defbd3ae41151, got 1111111111111111111111111111111111111111\n",
+      "stderr": "",
+      "mocked_git_calls": [
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{commit}"
+        ],
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{tree}"
+        ]
+      ],
+      "assertions": "PASS"
+    },
+    {
+      "case": "same_commit_different_tree",
+      "synthetic_git_commit": "96864384022191e7e6f6fd59134defbd3ae41151",
+      "synthetic_git_tree": "2222222222222222222222222222222222222222",
+      "synthetic_git_error": null,
+      "expected_exit_code": 1,
+      "actual_exit_code": 1,
+      "stdout": "PVS-003: FAIL\n- frozen main tree mismatch: expected da01553abfc4d07865b76cb99a13addd2477d4d3, got 2222222222222222222222222222222222222222\n",
+      "stderr": "",
+      "mocked_git_calls": [
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{commit}"
+        ],
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{tree}"
+        ]
+      ],
+      "assertions": "PASS"
+    },
+    {
+      "case": "missing_main_ref",
+      "synthetic_git_commit": null,
+      "synthetic_git_tree": null,
+      "synthetic_git_error": "missing_ref",
+      "expected_exit_code": 1,
+      "actual_exit_code": 1,
+      "stdout": "PVS-003: FAIL\n- git rev-parse --verify main^{commit} failed: Command '['git', 'rev-parse', '--verify', 'main^{commit}']' returned non-zero exit status 128.\n- git rev-parse --verify main^{tree} failed: Command '['git', 'rev-parse', '--verify', 'main^{tree}']' returned non-zero exit status 128.\n",
+      "stderr": "",
+      "mocked_git_calls": [
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{commit}"
+        ],
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{tree}"
+        ]
+      ],
+      "assertions": "PASS"
+    },
+    {
+      "case": "git_unavailable",
+      "synthetic_git_commit": null,
+      "synthetic_git_tree": null,
+      "synthetic_git_error": "missing_git",
+      "expected_exit_code": 1,
+      "actual_exit_code": 1,
+      "stdout": "PVS-003: FAIL\n- git rev-parse --verify main^{commit} failed: git unavailable (synthetic)\n- git rev-parse --verify main^{tree} failed: git unavailable (synthetic)\n",
+      "stderr": "",
+      "mocked_git_calls": [
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{commit}"
+        ],
+        [
+          "git",
+          "rev-parse",
+          "--verify",
+          "main^{tree}"
+        ]
+      ],
+      "assertions": "PASS"
+    }
+  ],
+  "unittest_log": "test_baseline_and_git_error_paths (__main__.CandidateBaselineTests.test_baseline_and_git_error_paths) ... ok\n\n----------------------------------------------------------------------\nRan 1 test in 0.022s\n\nOK\n"
+}

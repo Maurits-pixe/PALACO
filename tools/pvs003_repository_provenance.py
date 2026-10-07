@@ -7,7 +7,8 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_MAIN_TREE = "96864384022191e7e6f6fd59134defbd3ae41151"
+EXPECTED_MAIN_COMMIT = "96864384022191e7e6f6fd59134defbd3ae41151"
+EXPECTED_MAIN_TREE = "da01553abfc4d07865b76cb99a13addd2477d4d3"
 CLASSIFICATION = ROOT / "verification/GO-19B-FORENSIC-CLASSIFICATION.md"
 PROTECTED = [
     "333333",
@@ -37,7 +38,13 @@ def git(*args: str) -> str:
         errors.append(f"git {' '.join(args)} failed: {exc}")
         return ""
 
-main_tree = git("rev-parse", "main^{tree}")
+main_commit = git("rev-parse", "--verify", "main^{commit}")
+if main_commit and main_commit != EXPECTED_MAIN_COMMIT:
+    errors.append(
+        f"frozen main commit mismatch: expected {EXPECTED_MAIN_COMMIT}, got {main_commit}"
+    )
+
+main_tree = git("rev-parse", "--verify", "main^{tree}")
 if main_tree and main_tree != EXPECTED_MAIN_TREE:
     errors.append(
         f"frozen main tree mismatch: expected {EXPECTED_MAIN_TREE}, got {main_tree}"

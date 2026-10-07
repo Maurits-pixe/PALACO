@@ -1,0 +1,3 @@
+PVS-003: PASS
+Frozen repository baseline, protected historical material, classification boundary, workspace membership, and exact canonical identifier are preserved.
+PVS-003 PASS != merge authority != canonical ascension

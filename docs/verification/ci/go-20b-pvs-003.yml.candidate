@@ -1,0 +1,184 @@
+# GO-20B review candidate only. This file is not an active workflow.
+# No CI execution, merge authority, or canonical ascension is claimed.
+name: GO-20B PVS-003 candidate evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pvs-003-candidate:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'Maurits-pixe/PALACO' && github.ref == 'refs/heads/go-18/write-authorization-proof'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EVIDENCE_DIR: ${{ runner.temp }}/go20b-pvs003-evidence
+      EXPECTED_MAIN_COMMIT: 96864384022191e7e6f6fd59134defbd3ae41151
+      EXPECTED_MAIN_TREE: da01553abfc4d07865b76cb99a13addd2477d4d3
+    steps:
+      - name: Initialize evidence before checkout
+        shell: bash
+        run: |
+          mkdir -p "$EVIDENCE_DIR"
+          printf 'NOT_RUN\n' > "$EVIDENCE_DIR/verifier-exit-code.txt"
+          : > "$EVIDENCE_DIR/verifier.stdout.txt"
+          : > "$EVIDENCE_DIR/verifier.stderr.txt"
+
+      - name: Checkout dispatched commit with complete tree and history
+        id: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Check frozen baseline and capture actual verifier execution
+        if: always()
+        shell: bash
+        env:
+          CHECKOUT_OUTCOME: ${{ steps.checkout.outcome }}
+          PYTHON_OUTCOME: ${{ steps.python.outcome }}
+          READ_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import base64
+          import datetime
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import platform
+          import subprocess
+          import sys
+          import time
+
+          evidence = pathlib.Path(os.environ['EVIDENCE_DIR'])
+          evidence.mkdir(parents=True, exist_ok=True)
+          utc = lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
+          record = {
+              'status': 'NOT_RUN',
+              'started_at_utc': utc(),
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'ref': os.environ['GITHUB_REF'],
+              'dispatched_commit': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'run_attempt': os.environ['GITHUB_RUN_ATTEMPT'],
+              'run_url': f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              'runtime': {
+                  'python': sys.version,
+                  'executable': sys.executable,
+                  'platform': platform.platform(),
+                  'runner_os': os.environ.get('RUNNER_OS'),
+                  'image_os': os.environ.get('ImageOS'),
+                  'image_version': os.environ.get('ImageVersion'),
+              },
+              'checkout_outcome': os.environ['CHECKOUT_OUTCOME'],
+              'python_setup_outcome': os.environ['PYTHON_OUTCOME'],
+              'expected_main_commit': os.environ['EXPECTED_MAIN_COMMIT'],
+              'expected_main_tree': os.environ['EXPECTED_MAIN_TREE'],
+              'commands': [],
+              'authority': 'PVS-003 PASS != merge authority != canonical ascension',
+          }
+          # Authentication exists only in Git subprocess environments, never evidence.
+          git_env = os.environ.copy()
+          token = git_env.pop('READ_TOKEN')
+          git_env['GIT_CONFIG_COUNT'] = '1'
+          git_env['GIT_CONFIG_KEY_0'] = 'http.https://github.com/.extraheader'
+          git_env['GIT_CONFIG_VALUE_0'] = 'AUTHORIZATION: basic ' + base64.b64encode(
+              ('x-access-token:' + token).encode()).decode()
+          child_env = os.environ.copy()
+          child_env.pop('READ_TOKEN', None)
+
+          def git(*args):
+              result = subprocess.run(['git', *args], capture_output=True, env=git_env)
+              stdout = result.stdout.decode('utf-8', errors='replace')
+              stderr = result.stderr.decode('utf-8', errors='replace')
+              record['commands'].append({
+                  'argv': ['git', *args], 'exit_code': result.returncode,
+                  'stdout': stdout, 'stderr': stderr,
+              })
+              if result.returncode:
+                  raise RuntimeError(f"git {' '.join(args)} failed ({result.returncode})")
+              return stdout.strip()
+
+          def require(condition, message):
+              if not condition:
+                  raise RuntimeError(message)
+
+          result_code = 1
+          try:
+              require(record['checkout_outcome'] == 'success', 'checkout did not succeed; verifier not run')
+              require(record['python_setup_outcome'] == 'success', 'Python setup did not succeed; verifier not run')
+              record['git_version'] = git('--version')
+              record['checked_commit'] = git('rev-parse', 'HEAD^{commit}')
+              record['checked_tree'] = git('rev-parse', 'HEAD^{tree}')
+              require(record['checked_commit'] == record['dispatched_commit'], 'checkout does not match dispatched commit')
+              require(not git('status', '--porcelain', '--untracked-files=all'), 'checkout is not clean')
+
+              live = git('ls-remote', '--exit-code', 'origin', 'refs/heads/main')
+              record['origin_main_before'] = live
+              require(live == record['expected_main_commit'] + '\trefs/heads/main', 'live origin/main differs from frozen commit')
+              git('fetch', '--no-tags', '--no-recurse-submodules', 'origin', 'refs/heads/main')
+              record['fetched_main_commit'] = git('rev-parse', 'FETCH_HEAD^{commit}')
+              record['fetched_main_tree'] = git('rev-parse', 'FETCH_HEAD^{tree}')
+              require(record['fetched_main_commit'] == record['expected_main_commit'], 'fetched main commit differs from frozen commit')
+              require(record['fetched_main_tree'] == record['expected_main_tree'], 'fetched main tree differs from frozen tree')
+              # A fresh detached checkout has no local main. Never overwrite an existing ref.
+              existing = git('for-each-ref', '--format=%(objectname)', 'refs/heads/main')
+              if not existing:
+                  git('branch', 'main', 'FETCH_HEAD')
+              else:
+                  require(existing == record['expected_main_commit'], 'existing local main differs from frozen commit')
+              record['local_main_commit'] = git('rev-parse', 'main^{commit}')
+              record['local_main_tree'] = git('rev-parse', 'main^{tree}')
+
+              verifier = pathlib.Path('tools/pvs003_repository_provenance.py')
+              record['verifier_blob'] = git('rev-parse', 'HEAD:tools/pvs003_repository_provenance.py')
+              record['verifier_file_blob'] = git('hash-object', str(verifier))
+              record['verifier_sha256'] = hashlib.sha256(verifier.read_bytes()).hexdigest()
+              require(record['verifier_blob'] == record['verifier_file_blob'], 'verifier file differs from checked commit')
+              record['verifier_argv'] = [sys.executable, str(verifier)]
+              record['verifier_started_at_utc'] = utc()
+              started = time.monotonic()
+              completed = subprocess.run(record['verifier_argv'], capture_output=True, env=child_env)
+              record['verifier_duration_seconds'] = time.monotonic() - started
+              record['verifier_finished_at_utc'] = utc()
+              record['verifier_exit_code'] = completed.returncode
+              (evidence / 'verifier.stdout.txt').write_bytes(completed.stdout)
+              (evidence / 'verifier.stderr.txt').write_bytes(completed.stderr)
+              (evidence / 'verifier-exit-code.txt').write_text(str(completed.returncode) + '\n')
+              sys.stdout.buffer.write(completed.stdout)
+              sys.stderr.buffer.write(completed.stderr)
+              record['status'] = 'PASS' if completed.returncode == 0 else 'FAIL'
+              record['origin_main_after'] = git('ls-remote', '--exit-code', 'origin', 'refs/heads/main')
+              require(record['origin_main_after'] == live, 'origin/main changed during execution; frozen-envelope CI gate fails')
+              result_code = 0 if completed.returncode == 0 else 1
+          except Exception as exc:
+              record['execution_error'] = f'{type(exc).__name__}: {exc}'
+              record['status'] = 'BLOCKED' if 'verifier_exit_code' not in record else 'FAIL'
+              print(record['execution_error'], file=sys.stderr)
+          finally:
+              record['finished_at_utc'] = utc()
+              (evidence / 'execution.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+                  summary.write(f"PVS-003 candidate: **{record['status']}**. Verifier exit: `{record.get('verifier_exit_code', 'NOT_RUN')}`.\n\n")
+                  summary.write('The following step attempts to upload runtime evidence. PVS-003 PASS != merge authority != canonical ascension.\n')
+          sys.exit(result_code)
+          PY
+
+      - name: Preserve execution evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go20b-pvs003-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/go20b-pvs003-evidence/
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,8 @@
+SYNTHETIC REGRESSION TESTS ONLY — mocked Git; not actual repository/CI execution
+
+test_baseline_and_git_error_paths (__main__.CandidateBaselineTests.test_baseline_and_git_error_paths) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.022s
+
+OK
