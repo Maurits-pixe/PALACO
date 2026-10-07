@@ -1,0 +1,105 @@
+{
+  "manifest_id": "PALACO-EPISTEMIC-FIXTURES-2026-10",
+  "version": "0.1.0-draft",
+  "status": "DRAFT_FIXTURES_NOT_EXECUTED",
+  "canonical": false,
+  "authority_created": false,
+  "fixtures": [
+    {
+      "id": "EPI-101",
+      "name": "direct-label-overwrite",
+      "category": "ETCG",
+      "input": "current=Verified; requested=Disputed; transition_record=null",
+      "expected": "REJECT",
+      "reason": "material state changes require an explicit traceable transition"
+    },
+    {
+      "id": "EPI-102",
+      "name": "missing-provenance",
+      "category": "ETCG/KESG",
+      "input": "transition has evidence_refs but provenance_ref=null",
+      "expected": "REJECT",
+      "reason": "provenance is mandatory for a material transition"
+    },
+    {
+      "id": "EPI-103",
+      "name": "stale-time-critical-evidence",
+      "category": "KESG/KAG",
+      "input": "evidence=Verified; temporal_context=expired; purpose=immediate_execution",
+      "expected": "INSUFFICIENT",
+      "reason": "stale evidence cannot satisfy a time-critical purpose"
+    },
+    {
+      "id": "EPI-104",
+      "name": "copied-source-chain",
+      "category": "source-independence",
+      "input": "sources=A,B,C; B and C derived_from=A",
+      "expected": "PARTIALLY_CORROBORATED",
+      "reason": "repetition is not independent corroboration"
+    },
+    {
+      "id": "EPI-105",
+      "name": "contrary-opinion-only",
+      "category": "ETCG",
+      "input": "current=Verified; new_input=unattributed_opinion",
+      "expected": "NO_AUTOMATIC_DOWNGRADE",
+      "reason": "opinion is not automatically contradictory evidence"
+    },
+    {
+      "id": "EPI-106",
+      "name": "identity-conflict",
+      "category": "conflict",
+      "input": "claim_A=ObjectX:6RON-017; claim_B=ObjectX:6RON-021",
+      "expected": "IN_DOUBT",
+      "reason": "identity conflict blocks unsafe classification"
+    },
+    {
+      "id": "EPI-107",
+      "name": "resolved-conflict-replay",
+      "category": "conflict/revalidation",
+      "input": "conflict_record=resolved; prior_assertions=present",
+      "expected": "REPLAYABLE",
+      "reason": "resolution must preserve both prior assertions and the new assessment"
+    },
+    {
+      "id": "EPI-108",
+      "name": "KESG-not-KAG",
+      "category": "gate-separation",
+      "input": "KESG=Insufficient; KAG=requested",
+      "expected": "BLOCKED",
+      "reason": "evidence insufficiency cannot become purpose adequacy"
+    },
+    {
+      "id": "EPI-109",
+      "name": "KAG-not-authorization",
+      "category": "gate-separation",
+      "input": "KAG=Adequate; authorization_record=null",
+      "expected": "NO_AUTHORIZATION",
+      "reason": "adequacy does not grant permission"
+    },
+    {
+      "id": "EPI-110",
+      "name": "ci-not-runtime-authorization",
+      "category": "authority-boundary",
+      "input": "ci=PASS; evidence=SEALED; authorization_record=null",
+      "expected": "NO_RUNTIME_AUTHORIZATION",
+      "reason": "CI and evidence remain scoped results"
+    },
+    {
+      "id": "EPI-111",
+      "name": "rio-elixer-separation",
+      "category": "surface-semantics",
+      "input": "surface=RIO; capability_catalog=ELIXER",
+      "expected": "DISTINCT_LABELS",
+      "reason": "RIO remains the river/communication surface and ELIXER remains distinct"
+    },
+    {
+      "id": "EPI-112",
+      "name": "status-fidelity",
+      "category": "VORM9EVIN9",
+      "input": "internal_status=Classified; authorization=Absent",
+      "expected": "DO_NOT_RENDER_AUTHORIZED",
+      "reason": "VORM9EVIN9 must not compress distinct constitutional states"
+    }
+  ]
+}
