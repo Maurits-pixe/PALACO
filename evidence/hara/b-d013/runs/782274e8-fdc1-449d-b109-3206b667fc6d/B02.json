@@ -1,0 +1,14 @@
+{
+  "status": "RESULT_UNKNOWN",
+  "code": "NO_DURABLE_COMMIT",
+  "readProcess": {
+    "pid": 56,
+    "exit": 0
+  },
+  "writer": {
+    "pid": 48,
+    "code": null,
+    "signal": "SIGKILL",
+    "stderr": ""
+  }
+}

@@ -1,0 +1,94 @@
+TAP version 13
+# Subtest: B01 actual SIGKILL after COMMIT and new process reconstruct all atomic rows before expiry
+ok 1 - B01 actual SIGKILL after COMMIT and new process reconstruct all atomic rows before expiry
+  ---
+  duration_ms: 126.43617
+  type: 'test'
+  ...
+# Subtest: B02 SIGKILL before COMMIT loses all effects and recovery never writes
+ok 2 - B02 SIGKILL before COMMIT loses all effects and recovery never writes
+  ---
+  duration_ms: 162.944681
+  type: 'test'
+  ...
+# Subtest: B03 false ACK before durability cannot be success
+ok 3 - B03 false ACK before durability cannot be success
+  ---
+  duration_ms: 114.295252
+  type: 'test'
+  ...
+# Subtest: B04 crash-surviving revoke before decision blocks effect
+ok 4 - B04 crash-surviving revoke before decision blocks effect
+  ---
+  duration_ms: 165.61679
+  type: 'test'
+  ...
+# Subtest: B05 revoke after commit keeps historical effect but blocks new disclosure and replay
+ok 5 - B05 revoke after commit keeps historical effect but blocks new disclosure and replay
+  ---
+  duration_ms: 348.481958
+  type: 'test'
+  ...
+# Subtest: B06 lost ACK after durability reconstructs only with no second write
+ok 6 - B06 lost ACK after durability reconstructs only with no second write
+  ---
+  duration_ms: 441.074602
+  type: 'test'
+  ...
+# Subtest: B07 wrong digest cannot consume approval or write
+ok 7 - B07 wrong digest cannot consume approval or write
+  ---
+  duration_ms: 114.619684
+  type: 'test'
+  ...
+# Subtest: B07 wrong generation cannot consume approval or write
+ok 8 - B07 wrong generation cannot consume approval or write
+  ---
+  duration_ms: 109.358
+  type: 'test'
+  ...
+# Subtest: B08 context isolation before write and during recovery
+ok 9 - B08 context isolation before write and during recovery
+  ---
+  duration_ms: 277.671753
+  type: 'test'
+  ...
+# Subtest: B09 corrupt receipt is not success and replay cannot repair it
+ok 10 - B09 corrupt receipt is not success and replay cannot repair it
+  ---
+  duration_ms: 262.026925
+  type: 'test'
+  ...
+# Subtest: B10 real SQLite lock wait past expiry rejects inside transaction
+ok 11 - B10 real SQLite lock wait past expiry rejects inside transaction
+  ---
+  duration_ms: 437.466295
+  type: 'test'
+  ...
+# Subtest: B11 real concurrent duplicate writers create only one atomic effect
+ok 12 - B11 real concurrent duplicate writers create only one atomic effect
+  ---
+  duration_ms: 102.270957
+  type: 'test'
+  ...
+# Subtest: B12 native WAL stall crosses expiry: precommit sample is not timely success and recovery does not replay
+ok 13 - B12 native WAL stall crosses expiry: precommit sample is not timely success and recovery does not replay
+  ---
+  duration_ms: 1059.188234
+  type: 'test'
+  ...
+# Subtest: B13 concurrent revoke and mutation share authoritative commit order
+ok 14 - B13 concurrent revoke and mutation share authoritative commit order
+  ---
+  duration_ms: 160.140005
+  type: 'test'
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3949.202648

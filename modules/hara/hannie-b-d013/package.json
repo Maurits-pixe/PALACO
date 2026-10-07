@@ -1,0 +1,1 @@
+{"name":"@palaco/hannie-b-d013","version":"0.1.0-draft","private":true,"type":"module","engines":{"node":">=24.14.1"},"exports":"./src/index.mjs","scripts":{"test":"node --test --test-concurrency=1 tests/*.test.mjs","verify":"node tools/run-evidence.mjs"}}

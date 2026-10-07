@@ -1,0 +1,63 @@
+{
+  "kind": "B_D013_EXECUTION_EVIDENCE",
+  "runId": "26337798-33fd-4043-9fde-4a9cee421976",
+  "startedAt": "2026-10-05T10:48:20.708Z",
+  "endedAt": "2026-10-05T10:48:24.767Z",
+  "sourceCommitAtStart": "dce435805af2033977ff896f3d2ab4eb3fe8b161",
+  "sourceSetSha256": "e7bac5a75d617cea8af7eb5f8541d098c0b1722bfee6b83c158e8570cb13bde5",
+  "sourceHashes": {
+    ".github/workflows/hannie-b-d013.yml": "ba3d847943c46dcc2f03d40c397edbf71623ff1d6294966a043d0e5b377eef85",
+    "modules/hara/hannie-b-d013/CONTRACT.md": "5fa6d23c035056dd758657d21dd91991f093d222e93b22d73c2a2e4ea32de343",
+    "modules/hara/hannie-b-d013/package.json": "ee661a45cca373e4c16e22f55c27d7090430cad0402a27a815e2dcc75f87995c",
+    "modules/hara/hannie-b-d013/src/index.mjs": "a51d7a90463ef482c77afbe322e8d9862c2449854aee0fe5de18057069e7c989",
+    "modules/hara/hannie-b-d013/src/schema.sql": "2cc8c3c2d7d7b89231b6194da7f0f71fbab9a499f16e9e2dda9093f109dafdee",
+    "modules/hara/hannie-b-d013/src/value.mjs": "28dafa0e14cffaa73390632d22d14a81782f952db633cd4de8f2a83b139e5c3e",
+    "modules/hara/hannie-b-d013/src/worker.mjs": "3ba5af401613b50cf1e684735c6fde08735df8887da1d126a004d0e7d7474b2c",
+    "modules/hara/hannie-b-d013/tests/commit.test.mjs": "2841b8c3d54f495aa933cb2a2c3c95da674d14adeb0cafc6332151d6afb27eb7",
+    "modules/hara/hannie-b-d013/tests/fixture.mjs": "c1f4ef427ca7ea21f7748f4aa67397b12ddaca1b645d338893803ae91a85baee",
+    "modules/hara/hannie-b-d013/tests/wal-stall.c": "1b329bd8e637aaf1a1a363da23a5e2c847322079653d9a430d3bbb9f1209ed42",
+    "modules/hara/hannie-b-d013/tools/run-evidence.mjs": "4f77769cb1878e8cdeaf25c0abd574c8acaf03c6c2b97845fe82c8f1282ee82a"
+  },
+  "sourceUnchangedAfterRun": true,
+  "runtime": {
+    "node": "v24.19.0",
+    "nodeBinarySha256": "bc17c508ffeed0ec622934f9b7fa72f8e78da65350e63c3eceb56fa688aa5e12",
+    "os": "6.18.44",
+    "platform": "linux"
+  },
+  "nativeLibrarySha256": "3df25e4659b53121c862b8d9ffb2fa70582d3dc056a7e61cda892a5fae480a7e",
+  "compileExit": 0,
+  "testExit": 0,
+  "counts": {
+    "tests": 14,
+    "pass": 14,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "artifacts": {
+    "B01.json": "d53fc7c9a26ab22e25709cddb7a0a0bf72fdb8bf2e9d1012ee335fcd647e1509",
+    "B02.json": "4abb8a28667693c65b7060f9e8e10229ac57f58618bcb451ddf9c9299b4706bd",
+    "B03.json": "169ccbdfc180cfdcd88d6606929f4c7ff46cb885e7de3fa5c2ae5d94172afa1b",
+    "B04.json": "9f32edf08a69ee711fa85fab6b9f665fcfa2b339d5557f4d7edbddf1d6a042fc",
+    "B05.json": "1deb4f66d956111f28e9f59ec951c34315138bf2c23d204d912d602e22981047",
+    "B06.json": "7b887b70f1d5ac8d8ca9eb3e6346ac5deff478b424e14ca2b4c5de3ee7c81fba",
+    "B10.json": "a05e4016218b93e9e939a6c3030acb8eab544b9cc9e8cb17b4d0aa3a3d353eee",
+    "B11.json": "f18705eb0194b6f96d7992ab483bb397c201e47a6798ab9af407d320e51ea345",
+    "B12.json": "7ea1c7b4b4059064b07ce051ea4a8c1d2740fb30ed9f58575ee782b8d39b7573",
+    "B13.json": "9bc71d8d5a1fd54c6bf1866ff71d0ba6a58954c32ad2ce96e3fabefbcc7cb9cd",
+    "compiler.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests.tap": "bf6d95344816242ecd96919329142a6645aa58118677300efbca9ccee16888a7"
+  },
+  "checks": "PASS",
+  "scope": "New B transaction, actual SIGKILL before/after COMMIT, fresh-process read-only reconstruction, revoke ordering, lost ACK, native late WAL withheld with counterevidence preserved.",
+  "measurement": "Post-crash readback upperbounds, no precommit sample as decisionAt, no exact fsync timestamp",
+  "knownBlocker": "Late durability can retain a nonaccepted effect; upperbound receipt measurement requires independent review",
+  "independentReview": "PENDING",
+  "integration": "HOLD",
+  "production": "HOLD",
+  "proof": "NOT ISSUED",
+  "denySuiteEvidenceReused": false
+}

@@ -1,0 +1,74 @@
+{
+  "a": {
+    "status": "SUCCEEDED",
+    "receipt": {
+      "approvalId": "approval-1",
+      "auditSequence": 1,
+      "calendarId": "calendar-1",
+      "contextDigest": "f6b6f8022d9aeb50f0e871358c471708cb3968a68fabb5c609f47308f56c4e6d",
+      "deadline": 1791197333432,
+      "eventId": "event-1",
+      "generation": 1,
+      "grantId": "grant-1",
+      "operationId": "operation-1",
+      "requestDigest": "4f743aa9cb7b305c99d4244c4f4240e261b68f964827c8d95a352bb4ddebfa07",
+      "snapshotDigest": "6792436d1006010fc257febb30a65a49df550cbbec8d53d84683399478aabe24",
+      "decisionAt": 1791197303529,
+      "effectAt": 1791197303530,
+      "measurement": "AFTER_CRASH_READBACK_UPPER_BOUNDS",
+      "twoDurableMoments": false
+    },
+    "event": {
+      "id": "event-1",
+      "calendar_id": "calendar-1",
+      "revision": 1,
+      "title": "Synthetic private event"
+    },
+    "readProcess": {
+      "pid": 371,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 352,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  },
+  "b": {
+    "status": "SUCCEEDED",
+    "receipt": {
+      "approvalId": "approval-1",
+      "auditSequence": 1,
+      "calendarId": "calendar-1",
+      "contextDigest": "f6b6f8022d9aeb50f0e871358c471708cb3968a68fabb5c609f47308f56c4e6d",
+      "deadline": 1791197333432,
+      "eventId": "event-1",
+      "generation": 1,
+      "grantId": "grant-1",
+      "operationId": "operation-1",
+      "requestDigest": "4f743aa9cb7b305c99d4244c4f4240e261b68f964827c8d95a352bb4ddebfa07",
+      "snapshotDigest": "6792436d1006010fc257febb30a65a49df550cbbec8d53d84683399478aabe24",
+      "decisionAt": 1791197303529,
+      "effectAt": 1791197303530,
+      "measurement": "AFTER_CRASH_READBACK_UPPER_BOUNDS",
+      "twoDurableMoments": false
+    },
+    "event": {
+      "id": "event-1",
+      "calendar_id": "calendar-1",
+      "revision": 1,
+      "title": "Synthetic private event"
+    },
+    "readProcess": {
+      "pid": 368,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 353,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  }
+}
