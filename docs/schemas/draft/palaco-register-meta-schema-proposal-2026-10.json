@@ -130,7 +130,89 @@
             }
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "object_kind": {
+                "const": "CORE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "specialization": {
+                "properties": {
+                  "kind": {
+                    "const": "CORE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_kind": {
+                "const": "DOCUMENT"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "specialization": {
+                "properties": {
+                  "kind": {
+                    "const": "DOCUMENT"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_kind": {
+                "const": "SERVICE"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "specialization": {
+                "properties": {
+                  "kind": {
+                    "const": "SERVICE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "object_kind": {
+                "const": "CONTROL"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "specialization": {
+                "properties": {
+                  "kind": {
+                    "const": "CONTROL"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "CoreSpecialization": {
       "type": "object",
