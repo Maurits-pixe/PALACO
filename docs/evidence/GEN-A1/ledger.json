@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "entry_id": "GEN-A1-A1.1-FOUNDATION-001",
+  "recorded_at_utc": "2026-10-07T11:58:40Z",
+  "source_checkpoint": "a87905abfa882b10befd9e226b8ad96c5b18442a",
+  "evidence_path": "docs/evidence/GEN-A1/verification.json",
+  "state": "FOUNDATION_PRESENT_VERIFICATION_BLOCKED",
+  "gates": {
+    "A1.1_repository": "STRUCTURE_PRESENT_VERIFICATION_BLOCKED",
+    "A1.2_workspace": "BLOCKED",
+    "A1.3_kernel": "PENDING",
+    "A1.4_runtime": "PENDING",
+    "A1.5_ci": "NOT_VERIFIED_FOR_CANDIDATE",
+    "A1.6_bootstrap": "PENDING",
+    "A1.7_verification": "BLOCKERS_RECORDED_NOT_CERTIFIED"
+  },
+  "observed_successes": [
+    "Canonical foundation files/directories present at source checkpoint.",
+    "Seven-crate scoped compile/build/format/Clippy commands exited 0.",
+    "Five existing cross-crate tests passed with no ignored tests.",
+    "Existing PVS-002 dependency/contract guard exited 0."
+  ],
+  "unresolved": [
+    "Full-workspace compile/test/lint/format failures in unchanged palaco-la.",
+    "PVS-001 membership mismatch and GO-10 workflow audit failures.",
+    "Reproducible locked workspace and dependency vulnerability audit.",
+    "Candidate CI proof, real execution/evidence sink and bootstrap.",
+    "Independent TRIAS, Oracle and Mentor review records."
+  ],
+  "governance_invariant": "Governance may constrain execution; execution may never silently redefine governance.",
+  "certification": "NOT_CERTIFIED",
+  "gen_a2_authorized": false,
+  "first_stone_is_set": false
+}

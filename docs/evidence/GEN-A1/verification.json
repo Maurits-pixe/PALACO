@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "sprint": "GEN-A1",
+  "codename": "TILLY — THE FIRST STONE",
+  "scope": "A1.1 repository foundation consolidation only",
+  "recorded_at_utc": "2026-10-07T11:58:40Z",
+  "repository": "Maurits-pixe/PALACO",
+  "source": {
+    "baseline_commit": "96864384022191e7e6f6fd59134defbd3ae41151",
+    "checkpoint_commit": "a87905abfa882b10befd9e226b8ad96c5b18442a",
+    "checkpoint_tree": "41799e948e1f18bc672256c68a0b040b3196eed0",
+    "binding": "Rust commands ran against the worktree subsequently committed at checkpoint_commit, with no intervening changes to their source/configuration inputs. Baseline PVS and GO-10 checks ran before consolidation; the checked manifests, Rust sources, workflows and imported documentation are unchanged. Raw logs are retained in that checkpoint. This record and ledger are appended afterward.",
+    "dependency_resolution": "Cargo generated a temporary, uncommitted Cargo.lock during verification. It was removed before the checkpoint. Dependency resolution is not yet reproducibly pinned; A1.2 remains pending.",
+    "rust_source_changes": false,
+    "new_subsystems": false
+  },
+  "toolchain": {
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "rustfmt": "rustfmt 1.9.0-stable (48a229ceae 2026-09-01)",
+    "clippy": "clippy 0.1.98 (48a229ceae 2026-09-01)"
+  },
+  "execution_directory": "/home/runner/work/PALACO/PALACO",
+  "log_paths_relative_to": "docs/evidence/GEN-A1/",
+  "checks": [
+    {
+      "command": "cargo metadata --no-deps --format-version 1",
+      "exit_code": 0,
+      "log": "metadata.log",
+      "sha256": "a524426ca0a3416952aec8a2bdd048a5e4de9300b56adc0e1101b6a9d7a00d16"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "exit_code": 1,
+      "log": "fmt.log",
+      "sha256": "f8c45640d292260060be43c1b52c845798ae9bc93501df916b21c8a23d1caf21",
+      "limitation": "Existing palaco-la formatting differences; source was not reformatted."
+    },
+    {
+      "command": "cargo check --workspace --all-targets",
+      "exit_code": 101,
+      "log": "check.log",
+      "sha256": "ccf0335c4beba9cb961e941936f6fb9a694efdb4fb2dc0cbc08feaae8151966d"
+    },
+    {
+      "command": "cargo build --workspace --all-targets",
+      "exit_code": 101,
+      "log": "build.log",
+      "sha256": "fd6a222adbdf0dd5fb3c4f01fb632427be9465f523987c5a186fba335da9934d"
+    },
+    {
+      "command": "cargo test --workspace --all-targets",
+      "exit_code": 101,
+      "log": "test.log",
+      "sha256": "5f3f08d2223a46d8dc1a5e212eb8459bb7f92985841f8d7c4130f0d240c4505b",
+      "limitation": "Workspace test compilation failed; no full-workspace test PASS is claimed."
+    },
+    {
+      "command": "cargo clippy --workspace --all-targets -- -D warnings",
+      "exit_code": 101,
+      "log": "clippy.log",
+      "sha256": "593cb35a98ea031b143e288b346d8905732cf255b7d1f5dbd446e48172064f5a"
+    },
+    {
+      "command": "python3 tools/pvs001_workspace_integrity.py",
+      "exit_code": 1,
+      "log": "pvs001.log",
+      "sha256": "1c68c5db22485582ebbca2937f9f306082e978e0a4d80aaa194ada7d2e4d38a7",
+      "limitation": "Existing guard expects exactly seven members; existing palaco-la makes eight. Neither the crate nor the guard was removed or weakened."
+    },
+    {
+      "command": "python3 tools/pvs002_cross_crate_contracts.py",
+      "exit_code": 0,
+      "log": "pvs002.log",
+      "sha256": "ec32bd5af47011e326229a7ed9f1c1216b538bdd07438700f92e667d7c1a2e03"
+    },
+    {
+      "command": "python3 tools/go10_audit.py",
+      "exit_code": 1,
+      "log": "audit.log",
+      "sha256": "e006fe532117860e5138d0797b04593fdd85e82b16e87bbf2bd05e4a2cd45f90",
+      "limitation": "Existing workflows violate the audited action-pinning and permission policy. No audit PASS is claimed."
+    },
+    {
+      "command": "cargo check --workspace --exclude palaco-la --all-targets",
+      "exit_code": 0,
+      "log": "foundation-check.log",
+      "sha256": "99f71393b9903dca098310bb446022a4bdee195ea9996f351a787195555210a6",
+      "scope": "Seven existing Genesis crates only; not the full workspace."
+    },
+    {
+      "command": "cargo build --workspace --exclude palaco-la --all-targets",
+      "exit_code": 0,
+      "log": "foundation-build.log",
+      "sha256": "736e2582f563605dd272e5fb977840b0c0767377d27b6940c440caf75eec7157",
+      "scope": "Seven existing Genesis crates only; not the full workspace."
+    },
+    {
+      "command": "cargo test --workspace --exclude palaco-la --all-targets",
+      "exit_code": 0,
+      "log": "foundation-test.log",
+      "sha256": "10578a28558a4a67409f6de9656ff53210489f998d8c440e702b41517fc05884",
+      "scope": "Seven existing Genesis crates only; not the full workspace.",
+      "tests_passed": 5,
+      "tests_failed": 0,
+      "tests_ignored": 0,
+      "limitation": "Five existing cross-crate integration tests; crate unit-test targets contain zero tests. No PostgreSQL integration or real execution/bootstrap is certified."
+    },
+    {
+      "command": "cargo clippy --workspace --exclude palaco-la --all-targets -- -D warnings",
+      "exit_code": 0,
+      "log": "foundation-clippy.log",
+      "sha256": "290cfb27e58f18c73b750562d1a2533d7cf7869c860800e0542a6abb0e7a9f2c",
+      "scope": "Seven existing Genesis crates only; not the full workspace."
+    },
+    {
+      "command": "cargo fmt -p palaco-foundation -p palaco-kernel -p palaco-runtime -p palaco-eventbus -p palaco-quay -p palaco-citadel -p palaco-evolution -- --check",
+      "exit_code": 0,
+      "log": "foundation-fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scope": "Seven existing Genesis crates only; not the full workspace."
+    }
+  ],
+  "source_inspections": [
+    {
+      "method": "Local Python pathlib/tomllib assertions against the checkpoint; no persisted helper script.",
+      "observed": "All 12 canonical root/config files, 6 required directory boundaries and the 7 Genesis crate manifests/entry points are present. Existing palaco-la membership is preserved.",
+      "qualification": "Structural presence only, not a certified Repository PASS."
+    },
+    {
+      "method": "Local inspection of the seven Genesis entry points and regex scan of their eight Rust source/test files for Mutex/RwLock identifiers.",
+      "observed": "All seven entry points contain #![forbid(unsafe_code)]; no Mutex/RwLock identifiers found in those eight files.",
+      "qualification": "Source-only inspection; does not inspect dependencies or establish runtime enforcement."
+    }
+  ],
+  "ci_observation": {
+    "method": "GitHub Actions MCP workflow listing and failed-job log retrieval.",
+    "run_url": "https://github.com/Maurits-pixe/PALACO/actions/runs/37573072085",
+    "job_url": "https://github.com/Maurits-pixe/PALACO/actions/runs/37573072085/job/112635823607",
+    "workflow": "GO-04 Rust Workspace Validation",
+    "head_sha": "96864384022191e7e6f6fd59134defbd3ae41151",
+    "conclusion": "failure",
+    "observed_failure": "Formatting differences in palaco-la; Formatting step exits 1.",
+    "qualification": "Baseline main run, not a successful CI result for the checkpoint or evidence publication."
+  },
+  "blockers": [
+    "Full-workspace formatting fails in unchanged palaco-la sources.",
+    "palaco-la test compilation fails: missing Question::new in decision.rs and assessment.rs, and use of moved result in decision.rs.",
+    "PVS-001's seven-member expectation disagrees with the existing eight-member workspace.",
+    "GO-10 workflow pinning/permissions audit fails for existing workflows.",
+    "Dependency resolution is unpinned and no RustSec dependency audit was executed.",
+    "No candidate CI success, real execution/evidence sink, bootstrap or independent certification reviews established."
+  ],
+  "certification": "NOT_CERTIFIED",
+  "trias": "REVIEW_REQUIRED",
+  "oracle": "INDEPENDENT_EVIDENCE_VERIFICATION_REQUIRED",
+  "mentor": "MAINTAINABILITY_REVIEW_REQUIRED",
+  "non_claims": [
+    "NO_FULL_GEN_A1_PASS",
+    "NO_GEN_A2_AUTHORIZATION",
+    "NO_PRODUCTION_RUNTIME",
+    "NO_DEPLOYMENT",
+    "NO_DEPENDENCY_SECURITY_ATTESTATION",
+    "NO_EXTERNAL_CERTIFICATION"
+  ]
+}
