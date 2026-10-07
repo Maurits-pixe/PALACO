@@ -10,6 +10,7 @@ This index provides the canonical entry points for PALACO Foundation standards, 
 ## Read Paths
 - **RIO canonical path:** `INDEX-RIO.md`
 - **VisitCard canonical path:** `INDEX-VISITCARD.md`
+- **PALACO day canon (2026-09-08):** [`PALACO-DAG-CANON-2026-09-08.md`](../PALACO-DAG-CANON-2026-09-08.md)
 
 ## Directory Guide
 - `docs/standards/` → normative specifications
