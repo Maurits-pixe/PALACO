@@ -1,0 +1,466 @@
+TAP version 13
+# Subtest: D012-P01 exact proposal digest and five-minute/grant-bound approval
+ok 1 - D012-P01 exact proposal digest and five-minute/grant-bound approval
+  ---
+  duration_ms: 31.173007
+  type: 'test'
+  ...
+# Subtest: D012-DENY-CREATE_OWN_EVENT valid proposal and approval cannot authorize an effect
+ok 2 - D012-DENY-CREATE_OWN_EVENT valid proposal and approval cannot authorize an effect
+  ---
+  duration_ms: 7.152436
+  type: 'test'
+  ...
+# Subtest: D012-DENY-MOVE_OWN_EVENT valid proposal and approval cannot authorize an effect
+ok 3 - D012-DENY-MOVE_OWN_EVENT valid proposal and approval cannot authorize an effect
+  ---
+  duration_ms: 10.752043
+  type: 'test'
+  ...
+# Subtest: D012-DENY-EDIT_OWN_TEXT valid proposal and approval cannot authorize an effect
+ok 4 - D012-DENY-EDIT_OWN_TEXT valid proposal and approval cannot authorize an effect
+  ---
+  duration_ms: 15.648861
+  type: 'test'
+  ...
+# Subtest: D012-D01 execute refuses before argument getters, callbacks, flags and borrowed methods
+ok 5 - D012-D01 execute refuses before argument getters, callbacks, flags and borrowed methods
+  ---
+  duration_ms: 2.924308
+  type: 'test'
+  ...
+# Subtest: D012-D02 immutable instance/prototype/class and no subclass execute route
+ok 6 - D012-D02 immutable instance/prototype/class and no subclass execute route
+  ---
+  duration_ms: 3.150734
+  type: 'test'
+  ...
+# Subtest: D012-D03 direct import, package exports and factory have the same denial
+ok 7 - D012-D03 direct import, package exports and factory have the same denial
+  ---
+  duration_ms: 5.044887
+  type: 'test'
+  ...
+# Subtest: D012-P02 exact idempotent prepare is stable; altered input or origin conflicts
+ok 8 - D012-P02 exact idempotent prepare is stable; altered input or origin conflicts
+  ---
+  duration_ms: 9.880254
+  type: 'test'
+  ...
+# Subtest: D012-P03 read-only grant can prepare but cannot confirm
+ok 9 - D012-P03 read-only grant can prepare but cannot confirm
+  ---
+  duration_ms: 7.538948
+  type: 'test'
+  ...
+# Subtest: D012-G01 revoked generation cannot be revived by regrant or rollback
+ok 10 - D012-G01 revoked generation cannot be revived by regrant or rollback
+  ---
+  duration_ms: 6.542894
+  type: 'test'
+  ...
+# Subtest: D012-G02 expiry is terminal and durable across restart
+ok 11 - D012-G02 expiry is terminal and durable across restart
+  ---
+  duration_ms: 6.123693
+  type: 'test'
+  ...
+# Subtest: D012-I-subject context isolation
+ok 12 - D012-I-subject context isolation
+  ---
+  duration_ms: 5.894083
+  type: 'test'
+  ...
+# Subtest: D012-I-tenant context isolation
+ok 13 - D012-I-tenant context isolation
+  ---
+  duration_ms: 4.61428
+  type: 'test'
+  ...
+# Subtest: D012-I-citadel context isolation
+ok 14 - D012-I-citadel context isolation
+  ---
+  duration_ms: 4.996845
+  type: 'test'
+  ...
+# Subtest: D012-I-world context isolation
+ok 15 - D012-I-world context isolation
+  ---
+  duration_ms: 4.735578
+  type: 'test'
+  ...
+# Subtest: D012-I-session context isolation
+ok 16 - D012-I-session context isolation
+  ---
+  duration_ms: 4.157293
+  type: 'test'
+  ...
+# Subtest: D012-I06 context change, admission loss and policy change during callbacks deny content
+ok 17 - D012-I06 context change, admission loss and policy change during callbacks deny content
+  ---
+  duration_ms: 5.157423
+  type: 'test'
+  ...
+# Subtest: D012-I07 asynchronous and thenable dependencies are rejected
+ok 18 - D012-I07 asynchronous and thenable dependencies are rejected
+  ---
+  duration_ms: 3.112126
+  type: 'test'
+  ...
+# Subtest: D012-P04 unknown fields, action escalation and third-party effects are rejected
+ok 19 - D012-P04 unknown fields, action escalation and third-party effects are rejected
+  ---
+  duration_ms: 4.174058
+  type: 'test'
+  ...
+# Subtest: D012-T01 timezone offset, spring gap and autumn-fold validation
+ok 20 - D012-T01 timezone offset, spring gap and autumn-fold validation
+  ---
+  duration_ms: 1.189551
+  type: 'test'
+  ...
+# Subtest: D012-R01 scope/purpose/field projections and receipt rights are separate
+ok 21 - D012-R01 scope/purpose/field projections and receipt rights are separate
+  ---
+  duration_ms: 8.705735
+  type: 'test'
+  ...
+# Subtest: D012-R02 OWNER minimal historical receipt after revoke has no content; HANNIE has no receipt identity
+ok 22 - D012-R02 OWNER minimal historical receipt after revoke has no content; HANNIE has no receipt identity
+  ---
+  duration_ms: 6.897689
+  type: 'test'
+  ...
+# Subtest: D012-R03 historical version is not presented as current; repeated recovery performs no effects
+ok 23 - D012-R03 historical version is not presented as current; repeated recovery performs no effects
+  ---
+  duration_ms: 9.933913
+  type: 'test'
+  ...
+# Subtest: D012-RB-requestRef corrupted receipt gives no success or content
+ok 24 - D012-RB-requestRef corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.158555
+  type: 'test'
+  ...
+# Subtest: D012-RB-idempotencyKey corrupted receipt gives no success or content
+ok 25 - D012-RB-idempotencyKey corrupted receipt gives no success or content
+  ---
+  duration_ms: 6.376337
+  type: 'test'
+  ...
+# Subtest: D012-RB-contextDigest corrupted receipt gives no success or content
+ok 26 - D012-RB-contextDigest corrupted receipt gives no success or content
+  ---
+  duration_ms: 6.73647
+  type: 'test'
+  ...
+# Subtest: D012-RB-proposalDigest corrupted receipt gives no success or content
+ok 27 - D012-RB-proposalDigest corrupted receipt gives no success or content
+  ---
+  duration_ms: 4.823539
+  type: 'test'
+  ...
+# Subtest: D012-RB-eventId corrupted receipt gives no success or content
+ok 28 - D012-RB-eventId corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.123783
+  type: 'test'
+  ...
+# Subtest: D012-RB-eventRevision corrupted receipt gives no success or content
+ok 29 - D012-RB-eventRevision corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.253105
+  type: 'test'
+  ...
+# Subtest: D012-RB-operationId corrupted receipt gives no success or content
+ok 30 - D012-RB-operationId corrupted receipt gives no success or content
+  ---
+  duration_ms: 4.820554
+  type: 'test'
+  ...
+# Subtest: D012-RB-grantRevision corrupted receipt gives no success or content
+ok 31 - D012-RB-grantRevision corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.938759
+  type: 'test'
+  ...
+# Subtest: D012-RB-auditSequence corrupted receipt gives no success or content
+ok 32 - D012-RB-auditSequence corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.054531
+  type: 'test'
+  ...
+# Subtest: D012-RB-snapshotDigest corrupted receipt gives no success or content
+ok 33 - D012-RB-snapshotDigest corrupted receipt gives no success or content
+  ---
+  duration_ms: 4.866182
+  type: 'test'
+  ...
+# Subtest: D012-RB-approvalId corrupted receipt gives no success or content
+ok 34 - D012-RB-approvalId corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.348446
+  type: 'test'
+  ...
+# Subtest: D012-RB-policyVersion corrupted receipt gives no success or content
+ok 35 - D012-RB-policyVersion corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.039338
+  type: 'test'
+  ...
+# Subtest: D012-RB-bindingRevision corrupted receipt gives no success or content
+ok 36 - D012-RB-bindingRevision corrupted receipt gives no success or content
+  ---
+  duration_ms: 5.832262
+  type: 'test'
+  ...
+# Subtest: D012-R04 missing receipt never becomes success or an automatic retry
+ok 37 - D012-R04 missing receipt never becomes success or an automatic retry
+  ---
+  duration_ms: 5.157463
+  type: 'test'
+  ...
+# Subtest: D012-S01 source revision change blocks stale approval
+ok 38 - D012-S01 source revision change blocks stale approval
+  ---
+  duration_ms: 5.743661
+  type: 'test'
+  ...
+# Subtest: D012-S02 failed successor keeps old proposal superseded and old approval invalid
+ok 39 - D012-S02 failed successor keeps old proposal superseded and old approval invalid
+  ---
+  duration_ms: 6.525688
+  type: 'test'
+  ...
+# Subtest: D012-V-3 threshold approves advice but execute stays denied
+ok 40 - D012-V-3 threshold approves advice but execute stays denied
+  ---
+  duration_ms: 4.704693
+  type: 'test'
+  ...
+# Subtest: D012-V-4 threshold approves advice but execute stays denied
+ok 41 - D012-V-4 threshold approves advice but execute stays denied
+  ---
+  duration_ms: 4.941123
+  type: 'test'
+  ...
+# Subtest: D012-V-5 threshold approves advice but execute stays denied
+ok 42 - D012-V-5 threshold approves advice but execute stays denied
+  ---
+  duration_ms: 5.059077
+  type: 'test'
+  ...
+# Subtest: D012-V-6 threshold approves advice but execute stays denied
+ok 43 - D012-V-6 threshold approves advice but execute stays denied
+  ---
+  duration_ms: 4.785993
+  type: 'test'
+  ...
+# Subtest: D012-V-7 threshold approves advice but execute stays denied
+ok 44 - D012-V-7 threshold approves advice but execute stays denied
+  ---
+  duration_ms: 4.926972
+  type: 'test'
+  ...
+# Subtest: D012-C01 target concern spans new requests, actors/actions/sessions and selected reassessment only
+ok 45 - D012-C01 target concern spans new requests, actors/actions/sessions and selected reassessment only
+  ---
+  duration_ms: 12.724523
+  type: 'test'
+  ...
+# Subtest: D012-C02 concern survives revision and owner cannot overrule it
+ok 46 - D012-C02 concern survives revision and owner cannot overrule it
+  ---
+  duration_ms: 6.660658
+  type: 'test'
+  ...
+# Subtest: D012-C03 owner resolves dissent without extending scope or grant
+ok 47 - D012-C03 owner resolves dissent without extending scope or grant
+  ---
+  duration_ms: 5.1011
+  type: 'test'
+  ...
+# Subtest: D012-S03 schema rejects historical 301; returned snapshots are detached and frozen
+ok 48 - D012-S03 schema rejects historical 301; returned snapshots are detached and frozen
+  ---
+  duration_ms: 3.17548
+  type: 'test'
+  ...
+# Subtest: D012-S04 immutable receipt/version/audit and no title/note in audit
+ok 49 - D012-S04 immutable receipt/version/audit and no title/note in audit
+  ---
+  duration_ms: 5.263901
+  type: 'test'
+  ...
+# Subtest: D012-O01 HANNIE origin flag cannot impersonate an authenticated owner instruction
+ok 50 - D012-O01 HANNIE origin flag cannot impersonate an authenticated owner instruction
+  ---
+  duration_ms: 4.066699
+  type: 'test'
+  ...
+# Subtest: D012-R05 current event/version mismatch is not silently presented as a valid recovery
+ok 51 - D012-R05 current event/version mismatch is not silently presented as a valid recovery
+  ---
+  duration_ms: 4.570665
+  type: 'test'
+  ...
+# Subtest: D012-G03 expired consent denial inside a transaction remains terminal after rollback
+ok 52 - D012-G03 expired consent denial inside a transaction remains terminal after rollback
+  ---
+  duration_ms: 4.437838
+  type: 'test'
+  ...
+# Subtest: D012-R06 OWNER explicit receipt permission with zero content fields releases only metadata
+ok 53 - D012-R06 OWNER explicit receipt permission with zero content fields releases only metadata
+  ---
+  duration_ms: 6.018408
+  type: 'test'
+  ...
+# Subtest: D012-D04 test fixture is outside package exports
+ok 54 - D012-D04 test fixture is outside package exports
+  ---
+  duration_ms: 0.47996
+  type: 'test'
+  ...
+# Subtest: D012-R07 current version advanced during recovery callback is marked historical after wait
+ok 55 - D012-R07 current version advanced during recovery callback is marked historical after wait
+  ---
+  duration_ms: 8.029865
+  type: 'test'
+  ...
+# Subtest: HARNESS-CALIBRATION real 2400ms WAL stall and second-process late effect (privileged primitive, not candidate execution)
+ok 56 - HARNESS-CALIBRATION real 2400ms WAL stall and second-process late effect (privileged primitive, not candidate execution)
+  ---
+  duration_ms: 2596.079183
+  type: 'test'
+  ...
+# Subtest: FROZEN-TIME-grant-and-approval exact approved candidate request cannot enter armed WAL hazard
+ok 57 - FROZEN-TIME-grant-and-approval exact approved candidate request cannot enter armed WAL hazard
+  ---
+  duration_ms: 1430.517984
+  type: 'test'
+  ...
+# Subtest: FROZEN-TIME-approval-only exact approved candidate request cannot enter armed WAL hazard
+ok 58 - FROZEN-TIME-approval-only exact approved candidate request cannot enter armed WAL hazard
+  ---
+  duration_ms: 1449.288858
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-READ-I01-CONTEXT no content at expiry + 150ms
+ok 59 - FROZEN-FRESHNESS-READ-I01-CONTEXT no content at expiry + 150ms
+  ---
+  duration_ms: 406.459516
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-RECOVER-I01-CONTEXT no content at expiry + 150ms
+ok 60 - FROZEN-FRESHNESS-RECOVER-I01-CONTEXT no content at expiry + 150ms
+  ---
+  duration_ms: 404.695669
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-READ-I02-POLICY no content at expiry + 150ms
+ok 61 - FROZEN-FRESHNESS-READ-I02-POLICY no content at expiry + 150ms
+  ---
+  duration_ms: 403.929441
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-RECOVER-POLICY no content at expiry + 150ms
+ok 62 - FROZEN-FRESHNESS-RECOVER-POLICY no content at expiry + 150ms
+  ---
+  duration_ms: 403.744838
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-READ-STORAGE no content at expiry + 150ms
+ok 63 - FROZEN-FRESHNESS-READ-STORAGE no content at expiry + 150ms
+  ---
+  duration_ms: 403.625854
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-RECOVER-STORAGE no content at expiry + 150ms
+ok 64 - FROZEN-FRESHNESS-RECOVER-STORAGE no content at expiry + 150ms
+  ---
+  duration_ms: 404.321252
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-PREPARE-CONTEXT no content at expiry + 150ms
+ok 65 - FROZEN-FRESHNESS-PREPARE-CONTEXT no content at expiry + 150ms
+  ---
+  duration_ms: 405.467288
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-PREPARE-POLICY no content at expiry + 150ms
+ok 66 - FROZEN-FRESHNESS-PREPARE-POLICY no content at expiry + 150ms
+  ---
+  duration_ms: 403.778919
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-PREPARE-STORAGE no content at expiry + 150ms
+ok 67 - FROZEN-FRESHNESS-PREPARE-STORAGE no content at expiry + 150ms
+  ---
+  duration_ms: 402.996922
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-REVISE-CONTEXT no content at expiry + 150ms
+ok 68 - FROZEN-FRESHNESS-REVISE-CONTEXT no content at expiry + 150ms
+  ---
+  duration_ms: 402.639203
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-REVISE-POLICY no content at expiry + 150ms
+ok 69 - FROZEN-FRESHNESS-REVISE-POLICY no content at expiry + 150ms
+  ---
+  duration_ms: 403.89381
+  type: 'test'
+  ...
+# Subtest: FROZEN-FRESHNESS-REVISE-STORAGE no content at expiry + 150ms
+ok 70 - FROZEN-FRESHNESS-REVISE-STORAGE no content at expiry + 150ms
+  ---
+  duration_ms: 403.985275
+  type: 'test'
+  ...
+# Subtest: FRESHNESS-ACTUAL-WRITER-LOCK grant re-evaluated after SQLite contention
+ok 71 - FRESHNESS-ACTUAL-WRITER-LOCK grant re-evaluated after SQLite contention
+  ---
+  duration_ms: 557.351886
+  type: 'test'
+  ...
+# Subtest: FRESHNESS-POSITIVE explicit HANNIE title and receipt permissions before expiry survive release waits
+ok 72 - FRESHNESS-POSITIVE explicit HANNIE title and receipt permissions before expiry survive release waits
+  ---
+  duration_ms: 30.013552
+  type: 'test'
+  ...
+# Subtest: FRESHNESS-REGRANT new generation during storage callback does not revive the old request
+ok 73 - FRESHNESS-REGRANT new generation during storage callback does not revive the old request
+  ---
+  duration_ms: 6.237974
+  type: 'test'
+  ...
+# Subtest: FRESHNESS-ACTUAL-WRITER-LOCK-context loss of authority during contention denies content
+ok 74 - FRESHNESS-ACTUAL-WRITER-LOCK-context loss of authority during contention denies content
+  ---
+  duration_ms: 325.582729
+  type: 'test'
+  ...
+# Subtest: FRESHNESS-ACTUAL-WRITER-LOCK-policy loss of authority during contention denies content
+ok 75 - FRESHNESS-ACTUAL-WRITER-LOCK-policy loss of authority during contention denies content
+  ---
+  duration_ms: 322.750328
+  type: 'test'
+  ...
+# Subtest: FRESHNESS-OWNER-METADATA expiry during final callback preserves only the narrow historical exception
+ok 76 - FRESHNESS-OWNER-METADATA expiry during final callback preserves only the narrow historical exception
+  ---
+  duration_ms: 354.224283
+  type: 'test'
+  ...
+1..76
+# tests 76
+# suites 0
+# pass 76
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12449.223834

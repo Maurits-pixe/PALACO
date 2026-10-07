@@ -1,0 +1,13 @@
+{
+  "name": "@palaco/hannie-agenda-candidate",
+  "version": "0.3.3-d012.1",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24.14.0" },
+  "exports": { ".": "./src/index.mjs", "./calendar": "./src/calendar.mjs" },
+  "files": ["src", "README.md", "package.json"],
+  "scripts": {
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "verify": "node tools/run-evidence.mjs"
+  }
+}

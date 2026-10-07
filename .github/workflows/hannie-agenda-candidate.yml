@@ -1,0 +1,37 @@
+name: Hannie agenda D-012 candidate
+on:
+  push:
+    branches: ['hara/hannie-agenda-candidate-v0.3']
+    paths:
+      - 'modules/hara/hannie-agenda/**'
+      - 'evidence/hara/d012/source-manifest.json'
+      - 'evidence/hara/d012/README.md'
+      - '.github/workflows/hannie-agenda-candidate.yml'
+  pull_request:
+    paths:
+      - 'modules/hara/hannie-agenda/**'
+      - 'evidence/hara/d012/source-manifest.json'
+      - 'evidence/hara/d012/README.md'
+      - '.github/workflows/hannie-agenda-candidate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  isolated-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+      - name: Run isolated source-bound evidence
+        working-directory: modules/hara/hannie-agenda
+        run: node tools/run-evidence.mjs
+      - name: Preserve run evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hannie-d012-evidence
+          path: evidence/hara/d012/runs/
+          if-no-files-found: error

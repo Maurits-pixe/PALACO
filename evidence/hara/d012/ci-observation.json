@@ -1,0 +1,104 @@
+{
+  "observedAt": "2026-10-04T20:39:37.448Z",
+  "headSha": "428c66e31f0093ad373ec80deee7425c814cb161",
+  "runs": [
+    {
+      "id": 37232870799,
+      "name": "Hannie agenda D-012 candidate",
+      "event": "push",
+      "headSha": "428c66e31f0093ad373ec80deee7425c814cb161",
+      "htmlUrl": "https://github.com/Maurits-pixe/PALACO/actions/runs/37232870799",
+      "status": "completed",
+      "conclusion": "success",
+      "path": ".github/workflows/hannie-agenda-candidate.yml",
+      "attempt": 1,
+      "createdAt": "2026-10-04T20:38:26Z",
+      "updatedAt": "2026-10-04T20:38:57Z"
+    },
+    {
+      "id": 37232870718,
+      "name": "GO-13 Standards Conformance",
+      "event": "push",
+      "headSha": "428c66e31f0093ad373ec80deee7425c814cb161",
+      "htmlUrl": "https://github.com/Maurits-pixe/PALACO/actions/runs/37232870718",
+      "status": "completed",
+      "conclusion": "success",
+      "path": ".github/workflows/go-13-standards-conformance.yml",
+      "attempt": 1,
+      "createdAt": "2026-10-04T20:38:25Z",
+      "updatedAt": "2026-10-04T20:38:37Z"
+    }
+  ],
+  "boundary": "Observed workflow statuses, not independent review or official PALACO PROOF.",
+  "jobs": [
+    {
+      "id": 111526081038,
+      "name": "isolated-candidate",
+      "status": "completed",
+      "conclusion": "success",
+      "run_id": 37232870799,
+      "logs_url": null,
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 1
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 2
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 3
+        },
+        {
+          "name": "Run isolated source-bound evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 4
+        },
+        {
+          "name": "Preserve run evidence",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 5
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 9
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 10
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success",
+          "number": 11
+        }
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 11314736101,
+      "name": "hannie-d012-evidence",
+      "sizeInBytes": 13914,
+      "expired": false,
+      "digest": "sha256:dee71c152db35ba1c72b9b05ec38cc84f4601ab977df05f11456b3056f2b8662",
+      "createdAt": "2026-10-04T20:38:53Z"
+    }
+  ],
+  "logContents": "NOT RETRIEVED; job/step statuses and artifact metadata observed only"
+}
