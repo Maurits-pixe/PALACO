@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:palaco:draft:pms-001-object-inventory:2026-10",
+  "title": "PALACO Book V candidate object inventory",
+  "description": "Descriptive, non-canonical inventory for PMS-001 design intake.",
+  "$comment": "DRAFT_PROPOSAL. Object names do not create registry entries, authority or canonical status.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "object_types",
+    "relationship_types"
+  ],
+  "properties": {
+    "status": {
+      "const": "DRAFT_PROPOSAL"
+    },
+    "object_types": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{2,4}$"
+      },
+      "default": [
+        "FE",
+        "PDP",
+        "PCS",
+        "GOV",
+        "CAP",
+        "DOM",
+        "OBJ",
+        "POL",
+        "RSK",
+        "REQ",
+        "ARC",
+        "ADR",
+        "INT",
+        "DAT",
+        "APP",
+        "SVC",
+        "API",
+        "MOD",
+        "REP",
+        "CFG",
+        "COM",
+        "VER",
+        "TST",
+        "EVD",
+        "AUD",
+        "RUN",
+        "MON",
+        "EVT",
+        "INC",
+        "CHG"
+      ]
+    },
+    "relationship_types": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]+(?:_[A-Z]+)*$"
+      },
+      "default": [
+        "IMPLEMENTS",
+        "REALIZES",
+        "SATISFIES",
+        "DEPENDS_ON",
+        "DEFINED_BY",
+        "CONSTRAINED_BY",
+        "VERIFIED_BY",
+        "PROVEN_BY",
+        "AUDITED_BY",
+        "OWNS",
+        "APPROVES"
+      ]
+    }
+  }
+}
