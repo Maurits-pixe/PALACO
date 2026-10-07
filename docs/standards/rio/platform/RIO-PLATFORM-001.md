@@ -4,6 +4,9 @@
 ### Status
 Draft v0.1
 
+### Last Updated
+2026-10-06
+
 ### Canonical statement
 **RIO is the human-facing, cross-surface communication platform of PALACO.**
 
