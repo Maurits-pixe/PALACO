@@ -43,7 +43,7 @@ The user explicitly requires the following boundaries to be preserved while filt
 
 - no derived authority;
 - no silent state, time or history rewrite;
-- exact spelling `VORM9EVING`;
+- exact spelling `VORM9EVIN9`;
 - RIO is the river and is not ELIXER;
 - the Linnaeus/knowledge layer preserves epistemic uncertainty and provenance;
 - QUAY preserves history;
