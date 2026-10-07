@@ -1,10 +1,13 @@
 use chrono::{DateTime, Utc};
 use ed25519_dalek::Signature;
-use sqlx::{postgres::PgPool, Row};
+use sqlx::{Row, postgres::PgPool};
 use uuid::Uuid;
 
+use crate::authorization::build_authorization_issued_event;
 use crate::event::{AggregateId, EventEnvelope, EventId, SchemaVersion, Sequence};
 use crate::event_store::{EventStore, EventStoreError};
+use crate::revocation::{RevocationReceipt, build_revocation_event};
+use crate::signature::CanonicalSigner;
 use crate::verification::{CanonicalBytes, Sha256Digest};
 
 /// PostgreSQL implementation of the constitutional append-only event boundary.
@@ -23,6 +26,182 @@ impl PgEventStore {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    pub async fn append_authorization_issued(
+        &self,
+        authorization: &crate::domain::Authorization,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+    ) -> Result<EventEnvelope, EventStoreError> {
+        let aggregate_id = AggregateId::new(authorization.id.value());
+        let head = self.current_head(aggregate_id).await?;
+        let (sequence, previous_event_hash) = match head {
+            Some(event) => (event.sequence.next(), Some(event.payload_hash)),
+            None => (Sequence::genesis(), None),
+        };
+
+        let event = build_authorization_issued_event(
+            authorization,
+            sequence,
+            actor_id,
+            correlation_id,
+            causation_id,
+            previous_event_hash,
+            provenance,
+            signer,
+        )
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        self.append(aggregate_id, sequence, previous_event_hash, event.clone())
+            .await?;
+
+        Ok(event)
+    }
+
+    pub async fn active_authorization_ids_for_authority(
+        &self,
+        authority_id: crate::domain::AuthorityId,
+    ) -> Result<Vec<crate::domain::AuthorizationId>, EventStoreError> {
+        let rows = sqlx::query(
+            "SELECT aggregate_id
+             FROM (
+                 SELECT DISTINCT ON (aggregate_id)
+                        aggregate_id, event_type
+                 FROM la.events
+                 WHERE aggregate_type = 'Authorization'
+                   AND authority_reference = $1
+                 ORDER BY aggregate_id, sequence DESC
+             ) latest
+             WHERE event_type = 'AuthorizationIssued'
+             ORDER BY aggregate_id",
+        )
+        .bind(authority_id.value())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        rows.into_iter()
+            .map(|row| {
+                row.try_get::<Uuid, _>("aggregate_id")
+                    .map(crate::domain::AuthorizationId::new)
+                    .map_err(|error| EventStoreError::Persistence(error.to_string()))
+            })
+            .collect()
+    }
+
+    pub async fn invalidate_active_authorizations_for_revocation(
+        &self,
+        revocation: &RevocationReceipt,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+        observed_at: DateTime<Utc>,
+    ) -> Result<Vec<EventEnvelope>, EventStoreError> {
+        let authorization_ids = self
+            .active_authorization_ids_for_authority(revocation.authority_id)
+            .await?;
+
+        let mut events = Vec::with_capacity(authorization_ids.len());
+        for authorization_id in authorization_ids {
+            let invalidation = crate::comet::AuthorizationInvalidation {
+                propagation_id: Uuid::new_v4(),
+                revocation_id: revocation.revocation_id,
+                authority_id: revocation.authority_id,
+                authorization_id,
+                status: crate::domain::AuthorizationStatus::Revoked,
+                observed_at,
+            };
+
+            let event = self
+                .append_authorization_invalidation(
+                    &invalidation,
+                    actor_id,
+                    correlation_id,
+                    causation_id,
+                    provenance,
+                    signer,
+                )
+                .await?;
+            events.push(event);
+        }
+
+        Ok(events)
+    }
+
+    pub async fn append_revocation(
+        &self,
+        revocation: &RevocationReceipt,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+    ) -> Result<EventEnvelope, EventStoreError> {
+        let aggregate_id = AggregateId::new(revocation.authority_id.value());
+        let head = self.current_head(aggregate_id).await?;
+        let (sequence, previous_event_hash) = match head {
+            Some(event) => (event.sequence.next(), Some(event.payload_hash)),
+            None => (Sequence::genesis(), None),
+        };
+
+        let event = build_revocation_event(
+            revocation,
+            aggregate_id,
+            sequence,
+            actor_id,
+            correlation_id,
+            causation_id,
+            previous_event_hash,
+            provenance,
+            signer,
+        )
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        self.append(aggregate_id, sequence, previous_event_hash, event.clone())
+            .await?;
+
+        Ok(event)
+    }
+
+    pub async fn append_authorization_invalidation(
+        &self,
+        invalidation: &crate::comet::AuthorizationInvalidation,
+        actor_id: Uuid,
+        correlation_id: Option<Uuid>,
+        causation_id: Option<EventId>,
+        provenance: Uuid,
+        signer: &CanonicalSigner,
+    ) -> Result<EventEnvelope, EventStoreError> {
+        let aggregate_id = AggregateId::new(invalidation.authorization_id.value());
+        let head = self.current_head(aggregate_id).await?;
+        let (sequence, previous_event_hash) = match head {
+            Some(event) => (event.sequence.next(), Some(event.payload_hash)),
+            None => (Sequence::genesis(), None),
+        };
+
+        let event = crate::comet::build_authorization_invalidation_event(
+            invalidation,
+            aggregate_id,
+            sequence,
+            actor_id,
+            correlation_id,
+            causation_id,
+            previous_event_hash,
+            provenance,
+            signer,
+        )
+        .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
+
+        self.append(aggregate_id, sequence, previous_event_hash, event.clone())
+            .await?;
+
+        Ok(event)
     }
 
     pub async fn migrate(&self) -> Result<(), EventStoreError> {
@@ -141,7 +320,11 @@ impl EventStore for PgEventStore {
         .bind(event.causation_id.map(EventId::value))
         .bind(event.payload.as_slice())
         .bind(event.payload_hash.as_bytes().as_slice())
-        .bind(event.previous_event_hash.map(|digest| digest.as_bytes().to_vec()))
+        .bind(
+            event
+                .previous_event_hash
+                .map(|digest| digest.as_bytes().to_vec()),
+        )
         .bind(event.schema_version.0 as i16)
         .bind(event.provenance)
         .bind(event.signature.to_bytes().as_slice())
@@ -190,7 +373,10 @@ impl EventStore for PgEventStore {
         load_events(&self.pool, aggregate_id, Some(sequence)).await
     }
 
-    async fn current_head(&self, aggregate_id: AggregateId) -> Result<Option<EventEnvelope>, EventStoreError> {
+    async fn current_head(
+        &self,
+        aggregate_id: AggregateId,
+    ) -> Result<Option<EventEnvelope>, EventStoreError> {
         let row = sqlx::query(
             "SELECT event_id, event_type, aggregate_id, aggregate_type, sequence,
                     occurred_at, recorded_at, actor_id, authority_reference,
@@ -266,7 +452,8 @@ fn event_from_row(row: sqlx::postgres::PgRow) -> Result<EventEnvelope, EventStor
     let payload_hash_bytes: Vec<u8> = row
         .try_get("payload_hash")
         .map_err(|error| EventStoreError::Persistence(error.to_string()))?;
-    let payload_hash = digest_from_bytes(&payload_hash_bytes).map_err(EventStoreError::Persistence)?;
+    let payload_hash =
+        digest_from_bytes(&payload_hash_bytes).map_err(EventStoreError::Persistence)?;
 
     let previous_hash_bytes: Option<Vec<u8>> = row
         .try_get("previous_event_hash")

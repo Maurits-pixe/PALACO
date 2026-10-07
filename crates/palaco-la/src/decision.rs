@@ -1,8 +1,8 @@
+use crate::assessment::{AssessmentError, assess};
 use crate::domain::{
-    Decision, DecisionId, DecisionVerdict, Evidence, EpistemicState, Question, ThresholdAssessment,
+    Decision, DecisionId, DecisionVerdict, EpistemicState, Evidence, Question, ThresholdAssessment,
     ThresholdState,
 };
-use crate::assessment::{assess, AssessmentError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecisionEvaluationError {
@@ -29,6 +29,10 @@ pub fn evaluate(
 ) -> Result<DecisionEvaluation, DecisionEvaluationError> {
     if threshold.question_id != question.id {
         return Err(DecisionEvaluationError::QuestionMismatch);
+    }
+
+    if threshold.basis.is_empty() {
+        return Err(DecisionEvaluationError::MissingThresholdEvidence);
     }
 
     let assessed = assess(question.clone(), evidence, threshold)
@@ -106,11 +110,15 @@ mod tests {
         };
 
         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert!(matches!(result.map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
-        assert_eq!(
-            result.map(|value| value.decision.question_id),
-            Ok(q.id)
-        );
+        let value = match result {
+            Ok(value) => value,
+            Err(_) => {
+                assert!(false);
+                return;
+            }
+        };
+        assert_eq!(value.decision.verdict, DecisionVerdict::Allow);
+        assert_eq!(value.decision.question_id, q.id);
     }
 
     #[test]
@@ -125,10 +133,7 @@ mod tests {
         };
 
         let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert_eq!(
-            result,
-            Err(DecisionEvaluationError::ThresholdNotSatisfied)
-        );
+        assert_eq!(result, Err(DecisionEvaluationError::ThresholdNotSatisfied));
     }
 
     #[test]
@@ -144,10 +149,7 @@ mod tests {
         };
 
         let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert_eq!(
-            result,
-            Err(DecisionEvaluationError::UnusableEvidence)
-        );
+        assert_eq!(result, Err(DecisionEvaluationError::UnusableEvidence));
     }
 
     #[test]
@@ -161,6 +163,9 @@ mod tests {
         };
 
         let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
-        assert_eq!(result, Err(DecisionEvaluationError::MissingThresholdEvidence));
+        assert_eq!(
+            result,
+            Err(DecisionEvaluationError::MissingThresholdEvidence)
+        );
     }
 }

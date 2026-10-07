@@ -1,5 +1,5 @@
 use crate::domain::{
-    Evidence, EpistemicState, EpistemicStatus, Question, ThresholdAssessment, ThresholdState,
+    EpistemicState, EpistemicStatus, Evidence, Question, ThresholdAssessment, ThresholdState,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -22,6 +22,7 @@ id_type!(QuestionId);
 id_type!(EvidenceId);
 id_type!(DecisionId);
 id_type!(AuthorizationId);
+id_type!(AuthorityId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EpistemicStatus {
@@ -53,6 +54,16 @@ pub struct Question {
     pub id: QuestionId,
     pub subject: String,
     pub context: String,
+}
+
+impl Question {
+    pub fn new(id: QuestionId, subject: String, context: String) -> Self {
+        Self {
+            id,
+            subject,
+            context,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,6 +105,33 @@ pub struct Scope {
     pub purpose: String,
 }
 
+impl Scope {
+    pub fn contains(&self, requested: &Self) -> bool {
+        self.target == requested.target
+            && self.territory == requested.territory
+            && self.purpose == requested.purpose
+            && requested
+                .operations
+                .iter()
+                .all(|operation| self.operations.contains(operation))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuthorityStatus {
+    Active,
+    Suspended,
+    Revoked,
+    Expired,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Authority {
+    pub id: AuthorityId,
+    pub scope: Scope,
+    pub status: AuthorityStatus,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decision {
     pub id: DecisionId,
@@ -101,11 +139,41 @@ pub struct Decision {
     pub verdict: DecisionVerdict,
 }
 
+impl Decision {
+    pub fn is_allow(&self) -> bool {
+        matches!(self.verdict, DecisionVerdict::Allow)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AuthorizationStatus {
+    Active,
+    Suspended,
+    Revoked,
+    Expired,
+    Superseded,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Authorization {
     pub id: AuthorizationId,
     pub decision_id: DecisionId,
+    pub authority_id: AuthorityId,
     pub scope: Scope,
+    pub status: AuthorizationStatus,
+}
+
+impl Authorization {
+    pub fn is_active(&self) -> bool {
+        matches!(self.status, AuthorizationStatus::Active)
+    }
+
+    pub fn revoked(&self) -> Self {
+        Self {
+            status: AuthorizationStatus::Revoked,
+            ..self.clone()
+        }
+    }
 }
 
 impl Evidence {
@@ -113,19 +181,16 @@ impl Evidence {
         !self.source.is_empty()
             && !self.origin.is_empty()
             && !self.content_digest.is_empty()
-            && matches!(self.status, EpistemicStatus::Known | EpistemicStatus::Disputed)
+            && matches!(
+                self.status,
+                EpistemicStatus::Known | EpistemicStatus::Disputed
+            )
     }
 }
 
 impl ThresholdAssessment {
     pub fn permits_decision(&self) -> bool {
         matches!(self.state, ThresholdState::Satisfied)
-    }
-}
-
-impl Decision {
-    pub fn can_authorize(&self) -> bool {
-        matches!(self.verdict, DecisionVerdict::Allow)
     }
 }
 
@@ -160,12 +225,46 @@ mod tests {
     }
 
     #[test]
-    fn unknown_is_not_authorizable() {
+    fn unknown_decision_is_not_allow() {
         let decision = Decision {
             id: DecisionId::new(Uuid::new_v4()),
             question_id: QuestionId::new(Uuid::new_v4()),
             verdict: DecisionVerdict::Unknown,
         };
-        assert!(!decision.can_authorize());
+        assert!(!decision.is_allow());
+    }
+
+    #[test]
+    fn authority_scope_cannot_be_expanded() {
+        let authority = Scope {
+            target: "target".to_owned(),
+            operations: vec!["read".to_owned()],
+            territory: "territory".to_owned(),
+            purpose: "purpose".to_owned(),
+        };
+        let requested = Scope {
+            target: "target".to_owned(),
+            operations: vec!["read".to_owned(), "write".to_owned()],
+            territory: "territory".to_owned(),
+            purpose: "purpose".to_owned(),
+        };
+        assert!(!authority.contains(&requested));
+    }
+
+    #[test]
+    fn revoked_authorization_is_not_active() {
+        let authorization = Authorization {
+            id: AuthorizationId::new(Uuid::new_v4()),
+            decision_id: DecisionId::new(Uuid::new_v4()),
+            authority_id: AuthorityId::new(Uuid::new_v4()),
+            scope: Scope {
+                target: "target".to_owned(),
+                operations: vec!["read".to_owned()],
+                territory: "territory".to_owned(),
+                purpose: "purpose".to_owned(),
+            },
+            status: AuthorizationStatus::Revoked,
+        };
+        assert!(!authorization.is_active());
     }
 }
