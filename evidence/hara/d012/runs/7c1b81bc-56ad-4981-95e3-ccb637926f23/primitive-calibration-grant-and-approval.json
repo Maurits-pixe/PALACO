@@ -1,0 +1,31 @@
+{
+  "writer": {
+    "kind": "DONE",
+    "route": "primitive-calibration",
+    "deadlineKind": "grant-and-approval",
+    "code": null,
+    "deadline": 1791184811949,
+    "startMs": 1791184810851,
+    "endMs": 1791184813252,
+    "unchanged": false,
+    "noAuthorityCalls": true,
+    "eventCount": 1,
+    "injectorReached": true
+  },
+  "reader": {
+    "kind": "DONE",
+    "zeroAfterExpiry": true,
+    "firstEffectAt": 1791184813256,
+    "effects": 1,
+    "polls": 464
+  },
+  "native": [
+    {
+      "kind": "WAL_STALL",
+      "pathConfirmed": true,
+      "delayMs": 2400,
+      "startMs": 1791184810852,
+      "endMs": 1791184813252
+    }
+  ]
+}

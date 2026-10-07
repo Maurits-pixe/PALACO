@@ -1,0 +1,36 @@
+{
+  "kind": "D012_SOURCE_ACQUISITION",
+  "runId": "b4cf9b57-2bcf-4307-8e82-57477e01fa36",
+  "recordedAt": "2026-10-04T19:57:14.615344+00:00",
+  "repository": "Maurits-pixe/PALACO",
+  "branch": "hara/hannie-agenda-candidate-v0.3",
+  "baseCommit": "c2a5e4059c21ef11a498f85bf3499a65ccfdfc92",
+  "hashDefinition": "SHA-256 of UTF-8 JSON.stringify-equivalent compact sorted path-to-sha256 map; no trailing newline",
+  "sources": {
+    "evidence/hara/d012/sources/D-011-D-012.notion.md": "e668024853c4fcf32a2324e3bcb2d3a431c4fb3a1be5a08785a63dd976dda03f",
+    "evidence/hara/d012/sources/build-contract-v0.3.notion.md": "9bfd6385c5bc7f4a1eb3d39960f0e37ffcda55893d4ea4b419b7c3aa99d19a05",
+    "evidence/hara/d012/sources/contract-v0.2.notion.md": "51bb3849839bb72d244bb809073d9817b6fdf622e727c54d41ba80e1546a8e41",
+    "evidence/hara/d012/sources/deny-interlock-v0.3.2.notion.md": "cefb473cefafcfba0e67622ce43919e0654977a108544b5cbb11ba96d57ae05d",
+    "evidence/hara/d012/sources/late-wal-commit-finding.notion.md": "da8caa31311f5815bd31ec1985ab9087c0e4a646f565b7351882a2f76571a7a3",
+    "evidence/hara/d012/sources/read-freshness-finding.notion.md": "24a718a57c78a71df61869722549b5e43adf56a5be4df193a6ec8c05204e9421",
+    "evidence/hara/d012/sources/repair-requirements-v0.3.1.notion.md": "5f159dfb46c8bb0d53478b8418eae693bb9d66f59ad4484f60bb9ff160a07fcb",
+    "evidence/hara/d012/sources/storage-capability.notion.md": "10fb7e1bd597ba3d1db6577c9bebf640fb190eec1cef275f2cf1da9ebb71ef06"
+  },
+  "sourceSetSha256": "130506380e90ef0a5c5810061fcf0ebcaa37069978b00b80e2debe145f95be34",
+  "tests": "NOT EXECUTED",
+  "independentReview": "PENDING",
+  "integration": "HOLD",
+  "production": "HOLD",
+  "D010": "OPEN",
+  "snapshotStorage": "Full private source bytes are provided to the owner separately; this public repository contains source references and hashes only.",
+  "sourceUrls": [
+    "https://app.notion.com/p/010bc2abcab54d2bbcedb1c1be301bf9",
+    "https://app.notion.com/p/3ef29e9a126a819f9fb2c9409e1b3611",
+    "https://app.notion.com/p/3ef29e9a126a81c6b997d13ddef3cece",
+    "https://app.notion.com/p/3ef29e9a126a81bc880ee7173456c4ac",
+    "https://app.notion.com/p/3ef29e9a126a81779b05cbf3c7548a40",
+    "https://app.notion.com/p/3ef29e9a126a818d8825fb56baa3c17a",
+    "https://app.notion.com/p/3ef29e9a126a810d89b5d31b12ed8730",
+    "https://app.notion.com/p/3ad8207920724cc59999c6bdf9ebcd73"
+  ]
+}
