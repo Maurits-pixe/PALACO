@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palaco.example/schemas/visitcard-schema-bundle-001.json",
+  "title": "VisitCard Schema Bundle 001 — Draft v0.1",
+  "description": "Derived structural contract candidate for PALACO-VISITCARD-001 and the recommended PALACO-BEACON-001 payload profile. Introduction and discovery do not grant consent, connection or authority.",
+  "$comment": "DRAFT wire representation: VisitCard property spellings, nested provenance and presentation shapes are proposals derived from the logical standard and existing RIO conventions. Schema validation does not verify signatures, freshness, identifier rotation, revocation, bounded broadcast cadence, or authorization.",
+  "type": "object",
+  "oneOf": [
+    {
+      "$ref": "#/definitions/VisitCard"
+    },
+    {
+      "$ref": "#/definitions/BeaconPayload"
+    }
+  ],
+  "definitions": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "IdentityRef": {
+      "type": "string",
+      "pattern": "^palaco:identity:[A-Za-z0-9._:-]+$"
+    },
+    "ObjectType": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A PALACO-recognized object type; recognition is evaluated outside this structural schema. Examples include PERSON, CITADEL, WORLD and ELIXER."
+    },
+    "Endpoint": {
+      "type": "string",
+      "format": "uri"
+    },
+    "Validity": {
+      "type": "string",
+      "enum": [
+        "ACTIVE",
+        "EXPIRED",
+        "REVOKED"
+      ]
+    },
+    "DiscoveryMethod": {
+      "type": "string",
+      "enum": [
+        "BLE",
+        "NFC",
+        "QR",
+        "RIO Link",
+        "Web",
+        "5LEUTEL",
+        "Wearable"
+      ]
+    },
+    "Provenance": {
+      "type": "object",
+      "required": [
+        "origin_surface",
+        "origin_endpoint",
+        "evidence_refs"
+      ],
+      "properties": {
+        "origin_surface": {
+          "type": "string",
+          "enum": [
+            "mobile",
+            "web",
+            "elixer",
+            "system"
+          ]
+        },
+        "origin_endpoint": {
+          "$ref": "#/definitions/Endpoint"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/NonEmptyString"
+          },
+          "uniqueItems": true
+        },
+        "trace_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Proposed bounded origin/evidence references, following RIO field conventions. References are structural metadata, not verified proof."
+    },
+    "PresentationHints": {
+      "type": "object",
+      "required": [
+        "display_name"
+      ],
+      "properties": {
+        "display_name": {
+          "$ref": "#/definitions/NonEmptyString"
+        }
+      },
+      "additionalProperties": false,
+      "description": "Minimal proposed presentation shape; new hint fields require a reviewed schema change."
+    },
+    "VisitCard": {
+      "type": "object",
+      "required": [
+        "identity_ref",
+        "object_type",
+        "introduction",
+        "rio_endpoint",
+        "watermerk_ref",
+        "hologram_ref",
+        "provenance",
+        "validity",
+        "presentation_hints",
+        "discovery_methods"
+      ],
+      "properties": {
+        "identity_ref": {
+          "$ref": "#/definitions/IdentityRef"
+        },
+        "object_type": {
+          "$ref": "#/definitions/ObjectType"
+        },
+        "introduction": {
+          "$ref": "#/definitions/NonEmptyString"
+        },
+        "rio_endpoint": {
+          "$ref": "#/definitions/Endpoint"
+        },
+        "watermerk_ref": {
+          "$ref": "#/definitions/NonEmptyString"
+        },
+        "hologram_ref": {
+          "$ref": "#/definitions/NonEmptyString"
+        },
+        "provenance": {
+          "$ref": "#/definitions/Provenance"
+        },
+        "validity": {
+          "$ref": "#/definitions/Validity"
+        },
+        "presentation_hints": {
+          "$ref": "#/definitions/PresentationHints"
+        },
+        "discovery_methods": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/DiscoveryMethod"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "description": "The ten logical core fields of PALACO-VISITCARD-001, serialized as a Draft contract. Validity is data, not a permission decision."
+    },
+    "BeaconPayload": {
+      "type": "object",
+      "required": [
+        "P",
+        "V",
+        "T",
+        "D",
+        "E",
+        "R"
+      ],
+      "properties": {
+        "P": {
+          "type": "string",
+          "const": "PALACO"
+        },
+        "V": {
+          "$ref": "#/definitions/NonEmptyString"
+        },
+        "T": {
+          "$ref": "#/definitions/ObjectType"
+        },
+        "D": {
+          "$ref": "#/definitions/NonEmptyString"
+        },
+        "E": {
+          "$ref": "#/definitions/NonEmptyString"
+        },
+        "R": {
+          "$ref": "#/definitions/Endpoint"
+        }
+      },
+      "additionalProperties": false,
+      "description": "PALACO-BEACON-001 recommended P/V/T/D/E/R profile. No full identity profile, contact data, VisitCard body or authorization fields are allowed. Rotation and freshness require runtime verification."
+    }
+  }
+}

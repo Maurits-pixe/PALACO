@@ -1,0 +1,25 @@
+{
+  "identity_ref": "palaco:identity:person.demo",
+  "object_type": "PERSON",
+  "introduction": "PALACO demo introduction",
+  "rio_endpoint": "rio://demo/person",
+  "watermerk_ref": "palaco:watermerk:demo",
+  "hologram_ref": "palaco:hologram:demo",
+  "provenance": {
+    "origin_surface": "web",
+    "origin_endpoint": "https://palaco.example/identity/person.demo",
+    "evidence_refs": [
+      "palaco:evidence:visitcard.demo"
+    ],
+    "trace_ref": null
+  },
+  "validity": "ACTIVE",
+  "presentation_hints": {
+    "display_name": "PALACO Demo"
+  },
+  "discovery_methods": [
+    "QR",
+    "Web",
+    "RIO Link"
+  ]
+}
