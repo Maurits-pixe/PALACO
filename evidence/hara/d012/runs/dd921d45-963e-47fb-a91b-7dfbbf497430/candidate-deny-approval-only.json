@@ -1,0 +1,23 @@
+{
+  "writer": {
+    "kind": "DONE",
+    "route": "candidate-deny",
+    "deadlineKind": "approval-only",
+    "code": "STORAGE_EFFECT_DEADLINE_UNSUPPORTED",
+    "deadline": 1791146324859,
+    "startMs": 1791146323723,
+    "endMs": 1791146325009,
+    "unchanged": true,
+    "noAuthorityCalls": true,
+    "eventCount": 0,
+    "injectorReached": false
+  },
+  "reader": {
+    "kind": "DONE",
+    "zeroAfterExpiry": true,
+    "firstEffectAt": null,
+    "effects": 0,
+    "polls": 250
+  },
+  "native": []
+}

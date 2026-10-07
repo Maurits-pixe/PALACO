@@ -1,0 +1,10 @@
+{
+  "status": "COMMITTED_RESULT_WITHHELD",
+  "code": "REVOKED",
+  "operationId": "operation-1",
+  "auditSequence": 1,
+  "readProcess": {
+    "pid": 136,
+    "exit": 0
+  }
+}

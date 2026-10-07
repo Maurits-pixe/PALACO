@@ -1,0 +1,31 @@
+{
+  "kind": "B_D013_PUBLICATION_BINDING",
+  "remoteCodeCommit": "48a332dc19761626c55cd238835b19ec1f617a8f",
+  "testedLocalCodeCommit": "07618741ce1af30a6b606b272b37552d95723c09",
+  "remoteBase": "c2a5e4059c21ef11a498f85bf3499a65ccfdfc92",
+  "localContextBase": "8660ce4453ec67c04e8a65de8e56c9edba089bb5",
+  "note": "Published independently from main: only new B source files/workflow/source-manifest; inherited deny-source history omitted. Scope bytes are identical; entire repository trees are not claimed equal.",
+  "sourceSetSha256": "e8b9cb9ba232fef8808d82d2d860c50cd17a7c9cbec0e52733217483936db1b6",
+  "scopeGitBlobHashes": {
+    ".github/workflows/hannie-b-d013.yml": "b62b9a026d05b03fe61f898ab2d86a03a6d2f078",
+    "evidence/hara/b-d013/source-manifest.json": "3bfc22b89335d7fd90c830fab9797850aef9a380",
+    "modules/hara/hannie-b-d013/CONTRACT.md": "898260f87185eee07e334c19fcc52902e6ee1fe7",
+    "modules/hara/hannie-b-d013/README.md": "1ad99e92b0e5032f6d6f8407a6edad6f93051506",
+    "modules/hara/hannie-b-d013/package.json": "b12584e1385c813f4b9068b914b864f27f4b328a",
+    "modules/hara/hannie-b-d013/src/index.mjs": "c5de389db567842ba93523eec5f3c48b5de33c90",
+    "modules/hara/hannie-b-d013/src/schema.sql": "7df32b66b2c9d6fe06b447a0dd9ecfa0f64c89e1",
+    "modules/hara/hannie-b-d013/src/value.mjs": "9e175eb3ba94638be6f313d6bd95597d7f441bda",
+    "modules/hara/hannie-b-d013/src/worker.mjs": "db13c1d1b9cd3bd95039e1b5f4274e799539dd94",
+    "modules/hara/hannie-b-d013/tests/commit.test.mjs": "8fe747d6b5570680f83b8d6fafa43d92aedac4da",
+    "modules/hara/hannie-b-d013/tests/fixture.mjs": "0458a516b59564a3e3ace38087c934f6087717bc",
+    "modules/hara/hannie-b-d013/tests/wal-stall.c": "d6b480ee1a83522ad82d343b24c1dcfe3d45cd08",
+    "modules/hara/hannie-b-d013/tools/run-evidence.mjs": "87a7fe96679095845904e53ca08482d305bdc4fe"
+  },
+  "sourceAndArtifactHashCheck": "PASS",
+  "denyEvidenceReused": false,
+  "independentReview": "PENDING",
+  "acceptance": "HOLD",
+  "integration": "HOLD",
+  "production": "HOLD",
+  "proof": "NOT ISSUED"
+}

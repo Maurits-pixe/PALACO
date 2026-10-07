@@ -4,6 +4,9 @@
 ### Status
 Draft v0.1
 
+### Last Updated
+2026-10-06
+
 ### Canonical statement
 **A PALACO VisitCard is a constitutionally bounded digital introduction object for a person, Citadel, World, ELIXER, or other PALACO-recognized object type.**
 
