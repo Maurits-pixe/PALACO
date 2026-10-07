@@ -151,6 +151,23 @@
     "Dependency resolution is unpinned and no RustSec dependency audit was executed.",
     "No candidate CI success, real execution/evidence sink, bootstrap or independent certification reviews established."
   ],
+  "change_validation": {
+    "secret_scan": {
+      "status": "NO_SECRETS_DETECTED",
+      "scope": "All foundation documents/configuration, raw logs and initial JSON evidence scanned before their commits. No dependency-security certification implied."
+    },
+    "parallel_validation": {
+      "code_review": "UNAVAILABLE",
+      "code_review_limitation": "The tool reported its review binary was unavailable; its displayed Success heading is not accepted as completed review evidence.",
+      "codeql": "NO_ANALYSIS_PERFORMED",
+      "codeql_limitation": "No analyzable language changes detected; this is not a security-audit PASS."
+    },
+    "fallback_review": {
+      "method": "Read-only code-review agent reviewed baseline 96864384022191e7e6f6fd59134defbd3ae41151 through evidence-publication commit d5ed60501c5989322d09b8c811f7b2f8416dff9f.",
+      "result": "No significant issues found.",
+      "limitations": "No commands rerun; existing workspace/audit failures outside scope. Not a TRIAS, Oracle or Mentor certification."
+    }
+  },
   "certification": "NOT_CERTIFIED",
   "trias": "REVIEW_REQUIRED",
   "oracle": "INDEPENDENT_EVIDENCE_VERIFICATION_REQUIRED",
