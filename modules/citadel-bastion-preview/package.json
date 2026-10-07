@@ -1,0 +1,16 @@
+{
+  "name": "palaco-bastion-preview-candidate",
+  "version": "1.0.0-preview.1",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "dev": "vite --configLoader native",
+    "build": "node scripts/write-headers.mjs && vite build --configLoader native",
+    "preview": "vite preview --configLoader native",
+    "test": "node --test tests/bastion.test.mjs",
+    "test:browser": "node tests/browser-check.mjs"
+  },
+  "dependencies": { "vue": "3.5.43" },
+  "devDependencies": { "@vitejs/plugin-vue": "6.0.9", "vite": "7.3.7" }
+}
