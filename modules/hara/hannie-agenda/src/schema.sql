@@ -1,0 +1,26 @@
+-- New D-012 schema, not unavailable historical schema 301 or a production migration.
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS d012_meta(key TEXT PRIMARY KEY, value INTEGER NOT NULL) STRICT;
+INSERT OR IGNORE INTO d012_meta VALUES ('highest_time', 0);
+CREATE TABLE IF NOT EXISTS clock_observations(seq INTEGER PRIMARY KEY, previous INTEGER NOT NULL, observed INTEGER NOT NULL) STRICT;
+CREATE TABLE IF NOT EXISTS calendars(id TEXT PRIMARY KEY, scope TEXT NOT NULL UNIQUE, body TEXT NOT NULL CHECK(json_valid(body))) STRICT;
+CREATE TABLE IF NOT EXISTS grants(id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL REFERENCES calendars(id), revision INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('ACTIVE','REVOKED','EXPIRED')), body TEXT NOT NULL CHECK(json_valid(body)), UNIQUE(calendar_id,revision)) STRICT;
+CREATE TABLE IF NOT EXISTS events(id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL REFERENCES calendars(id), revision INTEGER NOT NULL, snapshot TEXT NOT NULL CHECK(json_valid(snapshot))) STRICT;
+CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY, context_key TEXT NOT NULL, request_ref TEXT NOT NULL, idem_key TEXT NOT NULL, target_key TEXT NOT NULL, state TEXT NOT NULL, digest TEXT NOT NULL, body TEXT NOT NULL CHECK(json_valid(body)), review TEXT NOT NULL CHECK(json_valid(review)), UNIQUE(context_key, request_ref), UNIQUE(context_key, idem_key)) STRICT;
+CREATE TABLE IF NOT EXISTS approvals(id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL UNIQUE REFERENCES proposals(id), body TEXT NOT NULL CHECK(json_valid(body)), consumed INTEGER NOT NULL DEFAULT 0 CHECK(consumed IN (0,1))) STRICT;
+CREATE TABLE IF NOT EXISTS concerns(target_key TEXT PRIMARY KEY, revision INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('OPEN','REASSESSED')), selected_proposal TEXT, selected_digest TEXT) STRICT;
+CREATE TABLE IF NOT EXISTS review_history(seq INTEGER PRIMARY KEY, proposal_id TEXT NOT NULL, body TEXT NOT NULL CHECK(json_valid(body))) STRICT;
+CREATE TABLE IF NOT EXISTS event_versions(event_id TEXT NOT NULL, revision INTEGER NOT NULL, snapshot TEXT NOT NULL CHECK(json_valid(snapshot)), digest TEXT NOT NULL, PRIMARY KEY(event_id, revision)) STRICT;
+CREATE TABLE IF NOT EXISTS mutation_audit(seq INTEGER PRIMARY KEY, operation_id TEXT NOT NULL UNIQUE, body TEXT NOT NULL CHECK(json_valid(body))) STRICT;
+CREATE TABLE IF NOT EXISTS receipts(id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL UNIQUE REFERENCES proposals(id), body TEXT NOT NULL CHECK(json_valid(body))) STRICT;
+CREATE TRIGGER IF NOT EXISTS versions_no_update BEFORE UPDATE ON event_versions BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS versions_no_delete BEFORE DELETE ON event_versions BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS receipts_no_update BEFORE UPDATE ON receipts BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS receipts_no_delete BEFORE DELETE ON receipts BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS audit_no_update BEFORE UPDATE ON mutation_audit BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS audit_no_delete BEFORE DELETE ON mutation_audit BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS clock_no_update BEFORE UPDATE ON clock_observations BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS clock_no_delete BEFORE DELETE ON clock_observations BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS reviews_no_update BEFORE UPDATE ON review_history BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+CREATE TRIGGER IF NOT EXISTS reviews_no_delete BEFORE DELETE ON review_history BEGIN SELECT RAISE(ABORT, 'IMMUTABLE'); END;
+PRAGMA user_version = 1;

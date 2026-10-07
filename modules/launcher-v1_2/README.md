@@ -19,6 +19,8 @@ Voor deze mkcert-opdracht moeten mkcert en jouw vertrouwde lokale CA al zijn ing
 
 Open **https://127.0.0.1:5173**. Dev en preview gebruiken dezelfde vaste poort en uitsluitend HTTPS. Ontbrekende/ongeldige certificaatbestanden of een bezette poort blokkeren de server. Er is geen stille HTTP-fallback.
 
+Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
+
 Een productiebundle bouwen vereist geen lokale certificaten:
 
 ```bash

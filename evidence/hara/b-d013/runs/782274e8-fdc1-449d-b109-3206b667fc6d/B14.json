@@ -1,0 +1,20 @@
+{
+  "r": {
+    "status": "RESULT_UNKNOWN",
+    "code": "NO_DURABLE_COMMIT",
+    "readProcess": {
+      "pid": 448,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 440,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  },
+  "native": {
+    "kind": "NATIVE_COMMIT_INTERRUPT",
+    "beforeWalWrite": true
+  }
+}

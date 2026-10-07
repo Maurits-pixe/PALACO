@@ -10,4 +10,6 @@ De bron gebruikt Vue 3 en Vite. `npm test` controleert de identity-binding en de
 
 De volledige achterliggende Citadel-module is niet bewezen door deze preview. De voorgestelde 30-secondenafteltekst is daarom niet als bevoegdheidscontract opgenomen. `npm run test:browser` laadt de gebouwde preview in Edge, controleert de identity-route en headers en bevestigt dat een mutatieklikwflow geen taak verandert.
 
+Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
+
 Zie [D013-REVIEW.md](D013-REVIEW.md) voor de beoordeling van de later aangeleverde SQLite-backend. Die backend is niet aangesloten.
