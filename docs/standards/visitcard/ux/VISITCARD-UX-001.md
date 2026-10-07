@@ -4,6 +4,9 @@
 ### Status
 Draft v0.1
 
+### Last Updated
+2026-10-06
+
 ### UX objective
 Make PALACO introduction understandable in one glance.
 

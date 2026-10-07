@@ -4,6 +4,9 @@
 ### Status
 Draft v0.1
 
+### Last Updated
+2026-10-06
+
 ## 1. Goal
 Provide low-latency, cross-surface conversation delivery with robust fallback.
 
