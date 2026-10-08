@@ -72,11 +72,7 @@ mod tests {
     use crate::domain::{EpistemicStatus, EvidenceId, QuestionId};
 
     fn question() -> Question {
-        Question::new(
-            QuestionId::new(Uuid::new_v4()),
-            "subject".to_owned(),
-            "context".to_owned(),
-        )
+        Question { id: QuestionId::new(Uuid::new_v4()), subject: "subject".to_owned(), context: "context".to_owned() }
     }
 
     fn evidence(question_id: QuestionId) -> Evidence {
@@ -106,9 +102,9 @@ mod tests {
         };
 
         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert!(matches!(result.map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+        assert!(matches!(result.as_ref().map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
         assert_eq!(
-            result.map(|value| value.decision.question_id),
+            result.as_ref().map(|value| value.decision.question_id),
             Ok(q.id)
         );
     }
@@ -153,6 +149,7 @@ mod tests {
     #[test]
     fn missing_basis_evidence_fails_closed() {
         let q = question();
+        let e = evidence(q.id);
         let threshold = ThresholdAssessment {
             question_id: q.id,
             state: ThresholdState::Satisfied,
@@ -160,7 +157,24 @@ mod tests {
             rationale: "missing".to_owned(),
         };
 
-        let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
+        let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
         assert_eq!(result, Err(DecisionEvaluationError::MissingThresholdEvidence));
+    }
+
+    #[test]
+    fn empty_evidence_fails_closed_at_assessment() {
+        let q = question();
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::Satisfied,
+            basis: vec![EvidenceId::new(Uuid::new_v4())],
+            rationale: "no evidence supplied".to_owned(),
+        };
+
+        let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
+        assert_eq!(
+            result,
+            Err(DecisionEvaluationError::Assessment(AssessmentError::NoEvidence))
+        );
     }
 }
