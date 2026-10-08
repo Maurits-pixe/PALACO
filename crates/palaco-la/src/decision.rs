@@ -149,6 +149,7 @@ mod tests {
     #[test]
     fn missing_basis_evidence_fails_closed() {
         let q = question();
+        let e = evidence(q.id);
         let threshold = ThresholdAssessment {
             question_id: q.id,
             state: ThresholdState::Satisfied,
@@ -156,7 +157,24 @@ mod tests {
             rationale: "missing".to_owned(),
         };
 
-        let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
+        let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
         assert_eq!(result, Err(DecisionEvaluationError::MissingThresholdEvidence));
+    }
+
+    #[test]
+    fn empty_evidence_fails_closed_at_assessment() {
+        let q = question();
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::Satisfied,
+            basis: vec![EvidenceId::new(Uuid::new_v4())],
+            rationale: "no evidence supplied".to_owned(),
+        };
+
+        let result = evaluate(q, &[], threshold, DecisionId::new(Uuid::new_v4()));
+        assert_eq!(
+            result,
+            Err(DecisionEvaluationError::Assessment(AssessmentError::NoEvidence))
+        );
     }
 }
