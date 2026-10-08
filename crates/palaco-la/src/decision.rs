@@ -72,11 +72,7 @@ mod tests {
     use crate::domain::{EpistemicStatus, EvidenceId, QuestionId};
 
     fn question() -> Question {
-        Question::new(
-            QuestionId::new(Uuid::new_v4()),
-            "subject".to_owned(),
-            "context".to_owned(),
-        )
+        Question { id: QuestionId::new(Uuid::new_v4()), subject: "subject".to_owned(), context: "context".to_owned() }
     }
 
     fn evidence(question_id: QuestionId) -> Evidence {
@@ -106,10 +102,10 @@ mod tests {
         };
 
         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert!(matches!(result.map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
+        assert!(matches!(result.as_ref().map(|value| value.decision.verdict), Ok(&DecisionVerdict::Allow)));
         assert_eq!(
-            result.map(|value| value.decision.question_id),
-            Ok(q.id)
+            result.as_ref().map(|value| value.decision.question_id),
+            Ok(&q.id)
         );
     }
 
