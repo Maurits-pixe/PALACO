@@ -102,10 +102,10 @@ mod tests {
         };
 
         let result = evaluate(q.clone(), &[e], threshold, DecisionId::new(Uuid::new_v4()));
-        assert!(matches!(result.as_ref().map(|value| value.decision.verdict), Ok(&DecisionVerdict::Allow)));
+        assert!(matches!(result.as_ref().map(|value| value.decision.verdict), Ok(DecisionVerdict::Allow)));
         assert_eq!(
             result.as_ref().map(|value| value.decision.question_id),
-            Ok(&q.id)
+            Ok(q.id)
         );
     }
 
