@@ -21,18 +21,9 @@ jobs:
   checkout:
     runs-on: ubuntu-latest
     steps:
-      - name: Require private repository read credential
-        env:
-          GENESIS_READ_TOKEN: ${{ secrets.PALACO_GENESIS_READ_TOKEN }}
-        run: |
-          if [ -z "$GENESIS_READ_TOKEN" ]; then
-            echo "::error::PALACO_GENESIS_READ_TOKEN is required with Contents read access to PALACO and palaco-genesis."
-            exit 1
-          fi
-      - name: Checkout exact candidate and private submodule
+      - name: Checkout exact candidate and public Genesis submodule
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          token: ${{ secrets.PALACO_GENESIS_READ_TOKEN }}
           submodules: true
           persist-credentials: false
       - name: Verify exact gitlink checkout
@@ -48,4 +39,4 @@ jobs:
           test -z "$(git -C genesis status --porcelain)"
           test -z "$(git status --porcelain)"
           git submodule status genesis
-          echo "Exact private Genesis gitlink checkout verified: $expected"
+          echo "Exact Genesis gitlink checkout verified: $expected"
