@@ -79,11 +79,7 @@ mod tests {
     use crate::domain::{EvidenceId, QuestionId};
 
     fn question() -> Question {
-        Question::new(
-            QuestionId::new(Uuid::new_v4()),
-            "test subject".to_owned(),
-            "test context".to_owned(),
-        )
+        Question { id: QuestionId::new(Uuid::new_v4()), subject: "test subject".to_owned(), context: "test context".to_owned() }
     }
 
     fn evidence(question_id: QuestionId) -> Evidence {
