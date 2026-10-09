@@ -1,0 +1,1 @@
+/home/runner/work/PALACO/PALACO/target/debug/libpalaco_eventbus.rlib: /home/runner/work/PALACO/PALACO/crates/palaco-eventbus/src/lib.rs /home/runner/work/PALACO/PALACO/crates/palaco-foundation/src/lib.rs

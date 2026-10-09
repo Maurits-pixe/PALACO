@@ -14,11 +14,7 @@ pub const REVOCATION_SCHEMA_V01: &str = "elixer-revocation-v0.1";
 pub const TRACE_RECEIPT_SCHEMA_V01: &str = "elixer-trace-receipt-v0.1";
 pub const SURFACE_BINDING_SCHEMA_V01: &str = "elixer-surface-binding-v0.1";
 
-const MVP_PERSONAS: [PersonaId; 3] = [
-    PersonaId::Haram,
-    PersonaId::ChingChing,
-    PersonaId::Hannie,
-];
+const MVP_PERSONAS: [PersonaId; 3] = [PersonaId::Haram, PersonaId::ChingChing, PersonaId::Hannie];
 
 /// Exact persona adapters supported by the synthetic H∆R∆ candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,14 +104,6 @@ pub enum Surface {
     CitadelWorld,
 }
 
-/// Revocation must be supplied explicitly; unknown state blocks new work.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RevocationState {
-    Active,
-    Revoked,
-    Unknown,
-}
-
 /// Read-consent contract, separate from execution authorization.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -159,9 +147,10 @@ pub struct RuntimeRequestV01 {
     pub scope: Vec<String>,
     pub authorization: Option<String>,
     pub expires_at: Option<i64>,
-    pub revocation_state: RevocationState,
+    pub revocation: Option<RevocationV01>,
     pub correlation_id: String,
     pub as_of: i64,
+    pub data_observed_at: Option<i64>,
     pub intent: RuntimeIntent,
 }
 
@@ -288,6 +277,7 @@ pub struct CapabilityPolicyV01 {
     pub schema: String,
     pub policy_version: String,
     pub allowed_scopes: Vec<String>,
+    pub max_data_age_seconds: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -314,7 +304,10 @@ pub fn evaluate(
     request: &RuntimeRequestV01,
     policy: &CapabilityPolicyV01,
 ) -> RuntimeResultV01 {
-    let mut events = vec!["request.received".to_owned(), "identity.context.checked".to_owned()];
+    let mut events = vec![
+        "request.received".to_owned(),
+        "identity.context.checked".to_owned(),
+    ];
 
     if request.schema != REQUEST_SCHEMA_V01
         || !request.who.verified
@@ -326,6 +319,8 @@ pub fn evaluate(
             request.tenant.as_str(),
             request.world.as_str(),
             request.citadel.as_str(),
+            request.what.as_str(),
+            request.why.as_str(),
             request.correlation_id.as_str(),
         ]
         .iter()
@@ -414,10 +409,7 @@ pub fn evaluate(
     }
     events.push("package.integrity.verified".to_owned());
 
-    let mut axes = status(
-        PackageStatus::IntegrityVerified,
-        FreshnessStatus::Current,
-    );
+    let mut axes = status(PackageStatus::IntegrityVerified, FreshnessStatus::Current);
     axes.evidence = if request
         .source_provenance
         .as_ref()
@@ -444,6 +436,7 @@ pub fn evaluate(
 
     if policy.schema != CAPABILITY_POLICY_SCHEMA_V01
         || policy.policy_version != manifest.policy_version
+        || policy.max_data_age_seconds <= 0
     {
         events.push("policy.unresolved".to_owned());
         return result(
@@ -458,35 +451,49 @@ pub fn evaluate(
         );
     }
 
-    match request.revocation_state {
-        RevocationState::Revoked => {
-            axes.activation = ActivationStatus::Disabled;
-            events.push("revocation.confirmed".to_owned());
-            return result(
-                request,
-                Some(&manifest),
-                ResultKind::Revoked,
-                axes,
-                Vec::new(),
-                vec!["historical trace is retained; new actions are blocked".to_owned()],
-                "ELIXER version is revoked",
-                events,
-            );
-        }
-        RevocationState::Unknown => {
-            events.push("revocation.unknown".to_owned());
-            return result(
-                request,
-                Some(&manifest),
-                ResultKind::ReviewRequired,
-                axes,
-                Vec::new(),
-                Vec::new(),
-                "revocation state cannot be established",
-                events,
-            );
-        }
-        RevocationState::Active => {}
+    let Some(revocation) = &request.revocation else {
+        events.push("revocation.unknown".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "revocation state is unavailable",
+            events,
+        );
+    };
+    if revocation.schema != REVOCATION_SCHEMA_V01
+        || revocation.elixer_id != manifest.elixer_id
+        || revocation.version != manifest.version
+        || revocation.observed_at > request.as_of
+    {
+        events.push("revocation.unresolved".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "revocation record is invalid, mismatched, or from the future",
+            events,
+        );
+    }
+    if revocation.revoked {
+        axes.activation = ActivationStatus::Disabled;
+        events.push("revocation.confirmed".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::Revoked,
+            axes,
+            Vec::new(),
+            vec!["historical trace is retained; new actions are blocked".to_owned()],
+            "ELIXER version is revoked",
+            events,
+        );
     }
 
     let Some(request_expiry) = request.expires_at else {
@@ -515,6 +522,62 @@ pub fn evaluate(
             Vec::new(),
             Vec::new(),
             "request has expired",
+            events,
+        );
+    }
+    let Some(data_observed_at) = request.data_observed_at else {
+        axes.freshness = FreshnessStatus::Unknown;
+        events.push("freshness.unknown".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "data freshness timestamp is missing",
+            events,
+        );
+    };
+    if data_observed_at > request.as_of {
+        axes.freshness = FreshnessStatus::Unknown;
+        events.push("freshness.unresolved".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "data observation timestamp is in the future",
+            events,
+        );
+    }
+    let Some(data_age) = request.as_of.checked_sub(data_observed_at) else {
+        axes.freshness = FreshnessStatus::Unknown;
+        events.push("freshness.unresolved".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "data age cannot be represented",
+            events,
+        );
+    };
+    if data_age > policy.max_data_age_seconds {
+        axes.freshness = FreshnessStatus::Stale;
+        events.push("data.stale".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::Stale,
+            axes,
+            Vec::new(),
+            vec!["stale data is not provided to persona adapters".to_owned()],
+            "data exceeds the policy freshness window",
             events,
         );
     }
@@ -591,8 +654,6 @@ pub fn evaluate(
     }
 
     axes.consent = ConsentStatus::Granted;
-    axes.activation = ActivationStatus::Active;
-    axes.conformance = ConformanceStatus::Pass;
     axes.authorization = if request.authorization.is_some() {
         AuthorizationStatus::ReferenceProvidedUnverified
     } else {
@@ -616,7 +677,7 @@ pub fn evaluate(
             ResultKind::ExecutionPendingAuthorization
         }
     };
-    result(
+    let mut evaluated = result(
         request,
         Some(&manifest),
         kind,
@@ -632,7 +693,10 @@ pub fn evaluate(
             "synthetic H∆R∆ candidate result"
         },
         events,
-    )
+    );
+    evaluated.personas = personas;
+    refresh_receipt_digest(&mut evaluated);
+    evaluated
 }
 
 /// A surface binding references the same canonical receipt; it carries no independent state.
@@ -679,16 +743,30 @@ fn status(package: PackageStatus, freshness: FreshnessStatus) -> StatusAxes {
 
 fn persona_output(persona: PersonaId, request: &RuntimeRequestV01) -> PersonaOutput {
     let response = match persona {
-        PersonaId::Haram => format!("Coordinate and explain the synthetic request: {}", request.what),
+        PersonaId::Haram => format!(
+            "Coordinate and explain the synthetic request: {}",
+            request.what
+        ),
         PersonaId::ChingChing => {
-            format!("Offer consent-first synthetic advice about: {}", request.what)
+            format!(
+                "Offer consent-first synthetic advice about: {}",
+                request.what
+            )
         }
         PersonaId::Hannie => {
-            format!("Use synthetic household context for: {}; do not mutate an agenda", request.what)
+            format!(
+                "Use synthetic household context for: {}; do not mutate an agenda",
+                request.what
+            )
         }
     };
     let dissent = if request.intent == RuntimeIntent::Execute {
-        vec!["No persona output authorizes or commits external execution".to_owned()]
+        vec![
+            "HANNIE dissent: do not infer or commit an agenda change".to_owned(),
+            "No persona output authorizes or commits external execution".to_owned(),
+        ]
+    } else if persona == PersonaId::Hannie {
+        vec!["HANNIE dissent: do not infer an agenda change from this proposal".to_owned()]
     } else {
         Vec::new()
     };
@@ -711,14 +789,7 @@ fn result(
     mut events: Vec<String>,
 ) -> RuntimeResultV01 {
     events.push(format!("result.{kind:?}"));
-    let receipt_digest = trace_digest(
-        &request.correlation_id,
-        manifest.map_or("", |item| item.elixer_id.as_str()),
-        manifest.map_or("", |item| item.version.as_str()),
-        kind,
-        &events,
-    );
-    RuntimeResultV01 {
+    let mut runtime_result = RuntimeResultV01 {
         schema: RESULT_SCHEMA_V01.to_owned(),
         kind,
         elixer_id: manifest.map(|item| item.elixer_id.clone()),
@@ -733,24 +804,50 @@ fn result(
             schema: TRACE_RECEIPT_SCHEMA_V01.to_owned(),
             correlation_id: request.correlation_id.clone(),
             events,
-            receipt_digest,
+            receipt_digest: String::new(),
         },
-    }
+    };
+    refresh_receipt_digest(&mut runtime_result);
+    runtime_result
 }
 
-fn trace_digest(
-    correlation_id: &str,
-    elixer_id: &str,
-    version: &str,
-    kind: ResultKind,
-    events: &[String],
-) -> String {
+fn refresh_receipt_digest(result: &mut RuntimeResultV01) {
+    result.trace.receipt_digest = trace_digest(result);
+}
+
+fn trace_digest(result: &RuntimeResultV01) -> String {
     let mut bytes = Vec::new();
-    for field in [correlation_id, elixer_id, version, &format!("{kind:?}")] {
+    for field in [
+        result.trace.correlation_id.as_str(),
+        result.elixer_id.as_deref().unwrap_or(""),
+        result.version.as_deref().unwrap_or(""),
+        result.package_digest.as_deref().unwrap_or(""),
+        &format!("{:?}", result.kind),
+        &format!("{:?}", result.status),
+        result.reason.as_str(),
+    ] {
         bytes.extend_from_slice(&(field.len() as u64).to_be_bytes());
         bytes.extend_from_slice(field.as_bytes());
     }
-    for event in events {
+    for items in [&result.allowed_scope, &result.limitations] {
+        bytes.extend_from_slice(&(items.len() as u64).to_be_bytes());
+        for item in items {
+            bytes.extend_from_slice(&(item.len() as u64).to_be_bytes());
+            bytes.extend_from_slice(item.as_bytes());
+        }
+    }
+    bytes.extend_from_slice(&(result.personas.len() as u64).to_be_bytes());
+    for persona in &result.personas {
+        bytes.extend_from_slice(format!("{:?}", persona.persona).as_bytes());
+        bytes.extend_from_slice(&(persona.response.len() as u64).to_be_bytes());
+        bytes.extend_from_slice(persona.response.as_bytes());
+        bytes.extend_from_slice(&(persona.dissent.len() as u64).to_be_bytes());
+        for dissent in &persona.dissent {
+            bytes.extend_from_slice(&(dissent.len() as u64).to_be_bytes());
+            bytes.extend_from_slice(dissent.as_bytes());
+        }
+    }
+    for event in &result.trace.events {
         bytes.extend_from_slice(&(event.len() as u64).to_be_bytes());
         bytes.extend_from_slice(event.as_bytes());
     }
