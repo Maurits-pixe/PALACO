@@ -3,6 +3,8 @@
 
 //! Runtime orchestration constrained by the Citadel boundary.
 
+pub mod elixer;
+
 use palaco_citadel::ExecutionBoundary;
 use palaco_foundation::{ContractDisposition, ContractError, Validatable};
 

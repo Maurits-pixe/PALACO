@@ -11,3 +11,6 @@ workspace = true
 [dependencies]
 palaco-citadel = { path = "../palaco-citadel" }
 palaco-foundation = { path = "../palaco-foundation" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
