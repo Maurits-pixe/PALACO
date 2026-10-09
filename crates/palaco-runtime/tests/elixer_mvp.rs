@@ -113,6 +113,7 @@ fn missing_provenance_is_unknown_and_never_verified() -> Result<(), Box<dyn Erro
     let result = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
     assert_eq!(result.kind, ResultKind::Explanation);
     assert_eq!(result.status.evidence, elixer::EvidenceStatus::Unknown);
+    assert_eq!(result.source_provenance, None);
     assert!(result.personas.is_empty());
     assert!(
         result
@@ -160,8 +161,18 @@ fn stale_or_unknown_freshness_never_reaches_personas() -> Result<(), Box<dyn Err
 #[test]
 fn consent_and_scope_are_separate_from_execution_authorization() -> Result<(), Box<dyn Error>> {
     let (manifest, policy, mut request) = fixture()?;
-    request.authorization = Some("unverified-authorization-reference".to_owned());
     request.intent = RuntimeIntent::Execute;
+    let missing_authorization = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
+    assert_eq!(
+        missing_authorization.kind,
+        ResultKind::ExecutionPendingAuthorization
+    );
+    assert_eq!(
+        missing_authorization.status.authorization,
+        AuthorizationStatus::Missing
+    );
+
+    request.authorization = Some("unverified-authorization-reference".to_owned());
     let result = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
     assert_eq!(result.kind, ResultKind::ExecutionPendingAuthorization);
     assert_eq!(result.status.conformance, elixer::ConformanceStatus::NotRun);
@@ -203,9 +214,15 @@ fn all_surfaces_bind_to_one_canonical_state() -> Result<(), Box<dyn Error>> {
     assert_eq!(result.personas[1].persona, PersonaId::ChingChing);
     assert_eq!(result.personas[2].persona, PersonaId::Hannie);
     assert!(!result.personas[2].dissent.is_empty());
+    assert_eq!(
+        result.source_provenance.as_deref(),
+        Some("fixture-source-001")
+    );
+    assert_eq!(result.tenant.as_deref(), Some("synthetic-tenant"));
     let elixer = bind_surface(&result, Surface::Elixer);
     let widget = bind_surface(&result, Surface::Widget);
     let rio = bind_surface(&result, Surface::Rio);
+    let citadel = bind_surface(&result, Surface::CitadelWorld);
     assert_eq!(
         elixer.canonical_receipt_digest,
         widget.canonical_receipt_digest
@@ -213,6 +230,10 @@ fn all_surfaces_bind_to_one_canonical_state() -> Result<(), Box<dyn Error>> {
     assert_eq!(
         widget.canonical_receipt_digest,
         rio.canonical_receipt_digest
+    );
+    assert_eq!(
+        rio.canonical_receipt_digest,
+        citadel.canonical_receipt_digest
     );
     Ok(())
 }
@@ -230,6 +251,17 @@ fn unresolved_identity_and_revocation_never_call_personas() -> Result<(), Box<dy
     let unknown_revocation = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
     assert_eq!(unknown_revocation.kind, ResultKind::ReviewRequired);
     assert!(unknown_revocation.personas.is_empty());
+
+    request.revocation = Some(RevocationV01 {
+        schema: elixer::REVOCATION_SCHEMA_V01.to_owned(),
+        elixer_id: request.elixer_id.clone(),
+        version: request.version.clone(),
+        revoked: false,
+        observed_at: 800,
+    });
+    let stale_revocation = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
+    assert_eq!(stale_revocation.kind, ResultKind::ReviewRequired);
+    assert!(stale_revocation.personas.is_empty());
     Ok(())
 }
 
@@ -243,5 +275,20 @@ fn trace_receipt_is_stable_and_binds_persona_results() -> Result<(), Box<dyn Err
     request.what = "different synthetic request".to_owned();
     let changed = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
     assert_ne!(first.trace.receipt_digest, changed.trace.receipt_digest);
+
+    let mut writer = elixer::TraceWriter::default();
+    assert_eq!(writer.append(first.clone()), Ok(()));
+    let mut tampered = replay;
+    tampered.personas[0].response.push_str(" tampered");
+    assert_eq!(
+        writer.append(tampered),
+        Err(elixer::TraceWriteError::InvalidReceipt)
+    );
+    assert_eq!(writer.append(changed), Ok(()));
+    assert_eq!(writer.history().len(), 2);
+    assert_eq!(
+        writer.history()[0].trace.receipt_digest,
+        first.trace.receipt_digest
+    );
     Ok(())
 }

@@ -263,6 +263,12 @@ pub struct RuntimeResultV01 {
     pub elixer_id: Option<String>,
     pub version: Option<String>,
     pub package_digest: Option<String>,
+    pub tenant: Option<String>,
+    pub world: Option<String>,
+    pub citadel: Option<String>,
+    pub policy_version: Option<String>,
+    pub source_provenance: Option<String>,
+    pub consent_reference: Option<String>,
     pub status: StatusAxes,
     pub allowed_scope: Vec<String>,
     pub limitations: Vec<String>,
@@ -295,6 +301,34 @@ pub struct SurfaceBindingV01 {
     pub schema: String,
     pub surface: Surface,
     pub canonical_receipt_digest: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TraceWriteError {
+    InvalidReceipt,
+}
+
+/// In-memory append-only receipt history for synthetic runs.
+#[derive(Debug, Default)]
+pub struct TraceWriter {
+    results: Vec<RuntimeResultV01>,
+}
+
+impl TraceWriter {
+    /// Appends a result only when its receipt still binds the complete canonical output.
+    pub fn append(&mut self, result: RuntimeResultV01) -> Result<(), TraceWriteError> {
+        if trace_digest(&result) != result.trace.receipt_digest {
+            return Err(TraceWriteError::InvalidReceipt);
+        }
+        self.results.push(result);
+        Ok(())
+    }
+
+    /// Previously appended results in append order.
+    #[must_use]
+    pub fn history(&self) -> &[RuntimeResultV01] {
+        &self.results
+    }
 }
 
 /// Evaluates a synthetic candidate. No adapter performs IO or external mutation.
@@ -478,6 +512,32 @@ pub fn evaluate(
             Vec::new(),
             Vec::new(),
             "revocation record is invalid, mismatched, or from the future",
+            events,
+        );
+    }
+    let Some(revocation_age) = request.as_of.checked_sub(revocation.observed_at) else {
+        events.push("revocation.unresolved".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "revocation record age cannot be represented",
+            events,
+        );
+    };
+    if revocation_age > policy.max_data_age_seconds {
+        events.push("revocation.stale".to_owned());
+        return result(
+            request,
+            Some(&manifest),
+            ResultKind::ReviewRequired,
+            axes,
+            Vec::new(),
+            Vec::new(),
+            "revocation record is stale",
             events,
         );
     }
@@ -795,6 +855,15 @@ fn result(
         elixer_id: manifest.map(|item| item.elixer_id.clone()),
         version: manifest.map(|item| item.version.clone()),
         package_digest: manifest.map(|item| item.package_digest.clone()),
+        tenant: manifest.map(|item| item.tenant.clone()),
+        world: manifest.map(|item| item.world.clone()),
+        citadel: manifest.map(|item| item.citadel.clone()),
+        policy_version: manifest.map(|item| item.policy_version.clone()),
+        source_provenance: request.source_provenance.clone(),
+        consent_reference: request
+            .consent
+            .as_ref()
+            .map(|consent| consent.reference.clone()),
         status,
         allowed_scope,
         limitations,
@@ -818,10 +887,18 @@ fn refresh_receipt_digest(result: &mut RuntimeResultV01) {
 fn trace_digest(result: &RuntimeResultV01) -> String {
     let mut bytes = Vec::new();
     for field in [
+        result.schema.as_str(),
+        result.trace.schema.as_str(),
         result.trace.correlation_id.as_str(),
         result.elixer_id.as_deref().unwrap_or(""),
         result.version.as_deref().unwrap_or(""),
         result.package_digest.as_deref().unwrap_or(""),
+        result.tenant.as_deref().unwrap_or(""),
+        result.world.as_deref().unwrap_or(""),
+        result.citadel.as_deref().unwrap_or(""),
+        result.policy_version.as_deref().unwrap_or(""),
+        result.source_provenance.as_deref().unwrap_or(""),
+        result.consent_reference.as_deref().unwrap_or(""),
         &format!("{:?}", result.kind),
         &format!("{:?}", result.status),
         result.reason.as_str(),
@@ -847,6 +924,7 @@ fn trace_digest(result: &RuntimeResultV01) -> String {
             bytes.extend_from_slice(dissent.as_bytes());
         }
     }
+    bytes.extend_from_slice(&(result.trace.events.len() as u64).to_be_bytes());
     for event in &result.trace.events {
         bytes.extend_from_slice(&(event.len() as u64).to_be_bytes());
         bytes.extend_from_slice(event.as_bytes());
