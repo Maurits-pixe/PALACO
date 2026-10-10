@@ -127,15 +127,16 @@ pub struct DevelopmentBootstrapResultV01 {
 pub fn evaluate_development_bootstrap(
     request: DevelopmentBootstrapRequestV01,
 ) -> DevelopmentBootstrapResultV01 {
+    let allow_rio_test = request.allow_unverified_fivecriptie_evidence
+        && request.purpose == DevelopmentBootstrapPurpose::RioMessageServiceTest;
     DevelopmentBootstrapResultV01 {
-        decision: if request.allow_unverified_fivecriptie_evidence {
+        decision: if allow_rio_test {
             DevelopmentStartupDecision::ContinueRestricted
         } else {
             DevelopmentStartupDecision::Blocked
         },
         fivecriptie_evidence: EvidenceAuthenticationState::Unverified,
-        rio_message_service_test_enabled: request.allow_unverified_fivecriptie_evidence
-            && request.purpose == DevelopmentBootstrapPurpose::RioMessageServiceTest,
+        rio_message_service_test_enabled: allow_rio_test,
         external_message_delivery_enabled: false,
         identity_issuance_enabled: false,
         authority_enabled: false,
