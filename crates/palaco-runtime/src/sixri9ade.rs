@@ -7,12 +7,12 @@
 //! services.
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::DateTime;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 pub const REQUEST_SCHEMA_V01: &str = "elixer-6ri9ade-request-v0.1";
 pub const SNAPSHOT_SCHEMA_V01: &str = "elixer-6ri9ade-trust-snapshot-v0.1";
@@ -20,7 +20,11 @@ pub const EVIDENCE_SCHEMA_V01: &str = "elixer-6ri9ade-evidence-v0.1";
 pub const RECEIPT_SCHEMA_V01: &str = "elixer-6ri9ade-human-receipt-v0.1";
 const MAX_REQUEST_AGE_MS: i64 = 15 * 60 * 1_000;
 const MAX_EVIDENCE_AGE_MS: i64 = 2 * 60 * 1_000;
+const MAX_RECEIPT_AGE_MS: i64 = 15 * 60 * 1_000;
 const MAX_SNAPSHOT_AGE_MS: i64 = 30 * 1_000;
+const MAX_CANONICAL_BODY_BYTES: usize = 16 * 1_024;
+const MAX_SNAPSHOT_ISSUERS: usize = 64;
+const MAX_REVOKED_IDS: usize = 512;
 const GUARD_DOMAIN: &[u8] = b"6RI9ADE\0guard-evidence\0v0.1\0";
 const RECEIPT_DOMAIN: &[u8] = b"6RI9ADE\0human-receipt\0v0.1\0";
 
@@ -60,14 +64,14 @@ pub enum Side {
     Receiver,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum EvidenceResult {
     Pass,
     Fail,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ReceiptStage {
     Initiation,
@@ -76,7 +80,8 @@ pub enum ReceiptStage {
 }
 
 /// A synthetic request binds the check to both parties and a narrowly scoped
-/// text-message intent. Timestamps use RFC 3339.
+/// text-message intent. Only a context digest is accepted, never message
+/// content. Timestamps use RFC 3339.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct RequestV01 {
@@ -85,7 +90,7 @@ pub struct RequestV01 {
     pub sender_id: String,
     pub receiver_id: String,
     pub scope: String,
-    pub context: String,
+    pub context_digest: String,
     pub created_at: String,
     pub expires_at: String,
 }
@@ -104,6 +109,8 @@ pub struct SignedEnvelopeV01 {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct EvidenceBodyV01 {
     pub schema: String,
+    pub issuer_id: String,
+    pub key_id: String,
     pub evidence_id: String,
     pub request_digest: String,
     pub context_digest: String,
@@ -118,6 +125,8 @@ pub struct EvidenceBodyV01 {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct HumanReceiptBodyV01 {
     pub schema: String,
+    pub issuer_id: String,
+    pub key_id: String,
     pub receipt_id: String,
     pub request_digest: String,
     pub stage: ReceiptStage,
@@ -216,6 +225,18 @@ pub struct GateResultV01 {
     pub trace_digest: String,
 }
 
+/// Inputs for one deterministic reference-gate evaluation.
+#[derive(Debug, Clone, Copy)]
+pub struct GateInputV01<'a> {
+    pub request: &'a RequestV01,
+    pub initiation: &'a SignedEnvelopeV01,
+    pub nova_admission: &'a SignedEnvelopeV01,
+    pub evidence: &'a [SignedEnvelopeV01],
+    pub final_receipts: &'a [SignedEnvelopeV01],
+    pub initial_snapshot: &'a TrustSnapshotV01,
+    pub final_snapshot: &'a TrustSnapshotV01,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Slot {
     side: Side,
@@ -226,16 +247,16 @@ struct Slot {
 /// must be identical and fresh, preventing a changed revocation/trust view
 /// from silently passing during evaluation.
 #[must_use]
-pub fn evaluate(
-    request: &RequestV01,
-    initiation: &SignedEnvelopeV01,
-    nova_admission: &SignedEnvelopeV01,
-    evidence: &[SignedEnvelopeV01],
-    final_receipts: &[SignedEnvelopeV01],
-    initial_snapshot: &TrustSnapshotV01,
-    final_snapshot: &TrustSnapshotV01,
-    now: &str,
-) -> GateResultV01 {
+pub fn evaluate(input: GateInputV01<'_>, now: &str) -> GateResultV01 {
+    let GateInputV01 {
+        request,
+        initiation,
+        nova_admission,
+        evidence,
+        final_receipts,
+        initial_snapshot,
+        final_snapshot,
+    } = input;
     let request_digest = digest_serializable(request).unwrap_or_default();
     let mut reasons = Vec::new();
     let mut checks = all_checks(CheckStatus::Hold);
@@ -243,60 +264,147 @@ pub fn evaluate(
 
     let Some(now_ms) = now_ms else {
         reasons.push("INVALID_EVALUATION_TIME");
-        return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     };
 
     let Some(created_ms) = parse_time(&request.created_at) else {
         reasons.push("INVALID_REQUEST_TIME");
-        return result(GateStatus::Stop, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     };
     let Some(request_expiry_ms) = parse_time(&request.expires_at) else {
         reasons.push("INVALID_REQUEST_TIME");
-        return result(GateStatus::Stop, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     };
     if request.schema != REQUEST_SCHEMA_V01
-        || request.request_id.is_empty()
-        || request.sender_id.is_empty()
-        || request.receiver_id.is_empty()
+        || !has_identifier(&request.request_id)
+        || !has_identifier(&request.sender_id)
+        || !has_identifier(&request.receiver_id)
         || request.sender_id == request.receiver_id
         || request.scope != "chat:text"
-        || request.context.is_empty()
+        || !is_sha256_digest(&request.context_digest)
         || created_ms > now_ms
         || request_expiry_ms <= now_ms
         || request_expiry_ms <= created_ms
         || request_expiry_ms - created_ms > MAX_REQUEST_AGE_MS
     {
         reasons.push("INVALID_OR_OUT_OF_SCOPE_REQUEST");
-        return result(GateStatus::Stop, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     }
 
     if initial_snapshot != final_snapshot {
         reasons.push("TRUST_SNAPSHOT_CHANGED");
-        return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     }
     let snapshot = initial_snapshot;
     if snapshot.schema != SNAPSHOT_SCHEMA_V01
         || snapshot.request_digest != request_digest
         || snapshot.status != SnapshotStatus::Current
+        || !valid_snapshot_registry(snapshot)
     {
         reasons.push("TRUST_SNAPSHOT_UNAVAILABLE");
-        let status = if snapshot.status == SnapshotStatus::Stop { GateStatus::Stop } else { GateStatus::Hold };
-        return result(status, request_digest, checks, reasons, false, false, false, false);
+        let status = if snapshot.status == SnapshotStatus::Stop {
+            GateStatus::Stop
+        } else {
+            GateStatus::Hold
+        };
+        return result(
+            status,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     }
     let Some(snapshot_captured_ms) = parse_time(&snapshot.captured_at) else {
         reasons.push("INVALID_TRUST_SNAPSHOT_TIME");
-        return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     };
     let Some(snapshot_expiry_ms) = parse_time(&snapshot.expires_at) else {
         reasons.push("INVALID_TRUST_SNAPSHOT_TIME");
-        return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     };
     if snapshot_captured_ms > now_ms
+        || snapshot_expiry_ms <= snapshot_captured_ms
         || now_ms - snapshot_captured_ms > MAX_SNAPSHOT_AGE_MS
         || snapshot_expiry_ms <= now_ms
     {
         reasons.push("STALE_TRUST_SNAPSHOT");
-        return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     }
 
     let initiation_body = match verify_receipt(
@@ -317,13 +425,31 @@ pub fn evaluate(
         }
         _ => {
             reasons.push("INITIATION_MISSING_OR_INVALID");
-            return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+            return result(
+                GateStatus::Hold,
+                request_digest,
+                checks,
+                reasons,
+                false,
+                false,
+                false,
+                false,
+            );
         }
     };
     let initiation_digest = envelope_digest(initiation).unwrap_or_default();
     let Some(initiation_time) = parse_time(&initiation_body.issued_at) else {
         reasons.push("INVALID_INITIATION_TIME");
-        return result(GateStatus::Hold, request_digest, checks, reasons, false, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            false,
+            false,
+            false,
+            false,
+        );
     };
 
     let admission_body = match verify_receipt(
@@ -344,29 +470,65 @@ pub fn evaluate(
         }
         _ => {
             reasons.push("NOVA_ADMISSION_MISSING_OR_INVALID");
-            return result(GateStatus::Hold, request_digest, checks, reasons, true, false, false, false);
+            return result(
+                GateStatus::Hold,
+                request_digest,
+                checks,
+                reasons,
+                true,
+                false,
+                false,
+                false,
+            );
         }
     };
     let admission_digest = envelope_digest(nova_admission).unwrap_or_default();
     let Some(admission_time) = parse_time(&admission_body.issued_at) else {
         reasons.push("INVALID_ADMISSION_TIME");
-        return result(GateStatus::Hold, request_digest, checks, reasons, true, false, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            false,
+            false,
+            false,
+        );
     };
     if admission_time <= initiation_time {
         reasons.push("ADMISSION_PRECEDES_INITIATION");
-        return result(GateStatus::Stop, request_digest, checks, reasons, true, false, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            false,
+            false,
+            false,
+        );
     }
 
     if evidence.len() > 18 {
         reasons.push("UNEXPECTED_EVIDENCE_COUNT");
-        return result(GateStatus::Stop, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
     let mut seen_slots = BTreeSet::new();
     let mut evidence_ids = BTreeSet::new();
     let mut evidence_invalid = false;
     let mut evidence_failed = false;
     let mut latest_evidence_ms = admission_time;
-    let request_context_digest = digest_bytes(request.context.as_bytes());
+    let request_context_digest = request.context_digest.as_str();
     for envelope in evidence {
         let body = match parse_evidence_body(envelope) {
             Ok(body) => body,
@@ -375,7 +537,10 @@ pub fn evaluate(
                 continue;
             }
         };
-        let slot = Slot { side: body.side, specialty: body.specialty };
+        let slot = Slot {
+            side: body.side,
+            specialty: body.specialty,
+        };
         if !seen_slots.insert(slot) || !evidence_ids.insert(body.evidence_id.clone()) {
             evidence_invalid = true;
             continue;
@@ -384,9 +549,9 @@ pub fn evaluate(
             evidence_invalid = true;
             continue;
         };
-        let signature_valid = verify_evidence(envelope, &body, request, &request_digest, snapshot, now_ms);
+        let signature_valid =
+            verify_evidence(envelope, &body, request, &request_digest, snapshot, now_ms);
         let time_valid = issued_ms > admission_time
-            && body.expires_at.as_str() != ""
             && parse_time(&body.expires_at).is_some_and(|expires_ms| {
                 issued_ms <= now_ms
                     && expires_ms > now_ms
@@ -411,39 +576,101 @@ pub fn evaluate(
     }
     if evidence_failed {
         reasons.push("SPECIALTY_EVIDENCE_FAILED");
-        return result(GateStatus::Stop, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
     if evidence_invalid {
         reasons.push("EVIDENCE_INVALID_OR_REVOKED");
-        return result(GateStatus::Hold, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
     if seen_slots.len() != 18 {
         reasons.push("SPECIALTY_EVIDENCE_INCOMPLETE");
-        return result(GateStatus::PendingEvidence, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::PendingEvidence,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
     if evidence.iter().any(|envelope| {
-        parse_evidence_body(envelope).is_ok_and(|body| {
-            body.context_digest != request_context_digest
-        })
+        parse_evidence_body(envelope)
+            .is_ok_and(|body| body.context_digest != request_context_digest)
     }) {
         reasons.push("EVIDENCE_CONTEXT_MISMATCH");
-        return result(GateStatus::Stop, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::Stop,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
 
     let evidence_digest = match evidence_set_digest(evidence) {
         Ok(digest) => digest,
         Err(()) => {
             reasons.push("EVIDENCE_DIGEST_INVALID");
-            return result(GateStatus::Hold, request_digest, checks, reasons, true, true, false, false);
+            return result(
+                GateStatus::Hold,
+                request_digest,
+                checks,
+                reasons,
+                true,
+                true,
+                false,
+                false,
+            );
         }
     };
     if final_receipts.is_empty() {
         reasons.push("FINAL_CONSENT_PENDING");
-        return result(GateStatus::PendingFinalConsent, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::PendingFinalConsent,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
     if final_receipts.len() != 2 {
         reasons.push("FINAL_CONSENT_RECEIPTS_INCOMPLETE");
-        return result(GateStatus::Hold, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
     let mut final_participants = BTreeSet::new();
     for envelope in final_receipts {
@@ -458,7 +685,16 @@ pub fn evaluate(
             Ok(body) => body,
             Err(()) => {
                 reasons.push("FINAL_CONSENT_INVALID");
-                return result(GateStatus::Hold, request_digest, checks, reasons, true, true, false, false);
+                return result(
+                    GateStatus::Hold,
+                    request_digest,
+                    checks,
+                    reasons,
+                    true,
+                    true,
+                    false,
+                    false,
+                );
             }
         };
         let participant_is_party =
@@ -471,18 +707,45 @@ pub fn evaluate(
             || parse_time(&body.issued_at).is_none_or(|time| time <= latest_evidence_ms)
         {
             reasons.push("FINAL_CONSENT_BINDING_MISMATCH");
-            return result(GateStatus::Stop, request_digest, checks, reasons, true, true, false, false);
+            return result(
+                GateStatus::Stop,
+                request_digest,
+                checks,
+                reasons,
+                true,
+                true,
+                false,
+                false,
+            );
         }
     }
     if !final_participants.contains(&request.sender_id)
         || !final_participants.contains(&request.receiver_id)
     {
         reasons.push("BOTH_FINAL_CONSENTS_REQUIRED");
-        return result(GateStatus::Hold, request_digest, checks, reasons, true, true, false, false);
+        return result(
+            GateStatus::Hold,
+            request_digest,
+            checks,
+            reasons,
+            true,
+            true,
+            false,
+            false,
+        );
     }
 
     reasons.push("REFERENCE_CHECKS_PASSED_NO_AUTHORITY_GRANTED");
-    result(GateStatus::ReferencePassed, request_digest, checks, reasons, true, true, true, true)
+    result(
+        GateStatus::ReferencePassed,
+        request_digest,
+        checks,
+        reasons,
+        true,
+        true,
+        true,
+        true,
+    )
 }
 
 /// Produces domain-separated signing bytes for synthetic fixtures and
@@ -505,9 +768,12 @@ fn verify_evidence(
     now_ms: i64,
 ) -> bool {
     body.schema == EVIDENCE_SCHEMA_V01
+        && has_identifier(&body.evidence_id)
+        && has_identifier(&body.issuer_id)
+        && has_identifier(&body.key_id)
         && body.request_digest == request_digest
-        && body.context_digest == digest_bytes(request.context.as_bytes())
-        && issuer_for_evidence(snapshot, body, now_ms).is_some_and(|issuer| {
+        && body.context_digest == request.context_digest
+        && issuer_for_evidence(snapshot, body, request, now_ms).is_some_and(|issuer| {
             !snapshot.revoked_issuer_ids.contains(&issuer.issuer_id)
                 && verify_envelope(envelope, issuer, GUARD_DOMAIN)
         })
@@ -524,8 +790,13 @@ fn verify_receipt(
     if envelope.algorithm != "Ed25519" {
         return Err(());
     }
-    let body: HumanReceiptBodyV01 = serde_json::from_value(envelope.body.clone()).map_err(|_| ())?;
+    let body: HumanReceiptBodyV01 =
+        serde_json::from_value(envelope.body.clone()).map_err(|_| ())?;
     if body.schema != RECEIPT_SCHEMA_V01
+        || !has_identifier(&body.receipt_id)
+        || !has_identifier(&body.issuer_id)
+        || !has_identifier(&body.key_id)
+        || !has_identifier(&body.participant_id)
         || body.stage != stage
         || body.request_digest != request_digest
         || snapshot.revoked_evidence_ids.contains(&body.receipt_id)
@@ -538,7 +809,7 @@ fn verify_receipt(
         || expiry <= now_ms
         || expiry > parse_time(&request.expires_at).ok_or(())?
         || expiry <= body_time
-        || expiry - body_time > MAX_EVIDENCE_AGE_MS
+        || expiry - body_time > MAX_RECEIPT_AGE_MS
     {
         return Err(());
     }
@@ -549,16 +820,21 @@ fn verify_receipt(
     } else {
         return Err(());
     };
-    let issuer = snapshot.issuers.iter().find(|issuer| {
-        issuer.participant_id == body.participant_id
-            && issuer.side == side
-            && issuer.specialty.is_none()
-            && issuer.receipt_stages.contains(&stage)
-            && issuer.valid_from.as_str() <= body.issued_at.as_str()
-            && issuer.valid_until.as_str() >= body.expires_at.as_str()
-            && !snapshot.revoked_issuer_ids.contains(&issuer.issuer_id)
-    }).ok_or(())?;
-    if !issuer_current(issuer, now_ms) || !verify_envelope(envelope, issuer, RECEIPT_DOMAIN) {
+    let issuer = snapshot
+        .issuers
+        .iter()
+        .find(|issuer| {
+            issuer.issuer_id == body.issuer_id
+                && issuer.key_id == body.key_id
+                && issuer.participant_id == body.participant_id
+                && issuer.side == side
+                && issuer.specialty.is_none()
+                && issuer.receipt_stages.contains(&stage)
+                && issuer_valid_for(issuer, body_time, expiry, now_ms)
+                && !snapshot.revoked_issuer_ids.contains(&issuer.issuer_id)
+        })
+        .ok_or(())?;
+    if !verify_envelope(envelope, issuer, RECEIPT_DOMAIN) {
         return Err(());
     }
     Ok(body)
@@ -567,54 +843,127 @@ fn verify_receipt(
 fn issuer_for_evidence<'a>(
     snapshot: &'a TrustSnapshotV01,
     body: &EvidenceBodyV01,
+    request: &RequestV01,
     now_ms: i64,
 ) -> Option<&'a TrustedIssuerV01> {
+    let participant_id = match body.side {
+        Side::Sender => &request.sender_id,
+        Side::Receiver => &request.receiver_id,
+    };
+    let issued_ms = parse_time(&body.issued_at)?;
+    let expires_ms = parse_time(&body.expires_at)?;
     snapshot.issuers.iter().find(|issuer| {
-        issuer.side == body.side
+        issuer.issuer_id == body.issuer_id
+            && issuer.key_id == body.key_id
+            && issuer.participant_id.as_str() == participant_id.as_str()
+            && issuer.side == body.side
             && issuer.specialty == Some(body.specialty)
             && issuer.receipt_stages.is_empty()
-            && issuer.participant_id
-                == if body.side == Side::Sender {
-                    snapshot
-                        .issuers
-                        .iter()
-                        .find(|candidate| candidate.side == Side::Sender && candidate.specialty.is_none())
-                        .map_or("", |candidate| candidate.participant_id.as_str())
-                } else {
-                    snapshot
-                        .issuers
-                        .iter()
-                        .find(|candidate| candidate.side == Side::Receiver && candidate.specialty.is_none())
-                        .map_or("", |candidate| candidate.participant_id.as_str())
-                }
-            && issuer_current(issuer, now_ms)
-            && issuer.valid_from.as_str() <= body.issued_at.as_str()
-            && issuer.valid_until.as_str() >= body.expires_at.as_str()
+            && issuer_valid_for(issuer, issued_ms, expires_ms, now_ms)
     })
 }
 
-fn issuer_current(issuer: &TrustedIssuerV01, now_ms: i64) -> bool {
-    parse_time(&issuer.valid_from).is_some_and(|time| time <= now_ms)
-        && parse_time(&issuer.valid_until).is_some_and(|time| time > now_ms)
+fn issuer_valid_for(
+    issuer: &TrustedIssuerV01,
+    issued_ms: i64,
+    expires_ms: i64,
+    now_ms: i64,
+) -> bool {
+    parse_time(&issuer.valid_from).is_some_and(|time| time <= issued_ms && time <= now_ms)
+        && parse_time(&issuer.valid_until).is_some_and(|time| time >= expires_ms && time > now_ms)
 }
 
-fn verify_envelope(
-    envelope: &SignedEnvelopeV01,
-    issuer: &TrustedIssuerV01,
-    domain: &[u8],
-) -> bool {
+fn valid_snapshot_registry(snapshot: &TrustSnapshotV01) -> bool {
+    if !has_identifier(&snapshot.revision)
+        || snapshot.issuers.is_empty()
+        || snapshot.issuers.len() > MAX_SNAPSHOT_ISSUERS
+        || snapshot.revoked_evidence_ids.len() > MAX_REVOKED_IDS
+        || snapshot.revoked_issuer_ids.len() > MAX_REVOKED_IDS
+        || snapshot
+            .revoked_evidence_ids
+            .iter()
+            .chain(&snapshot.revoked_issuer_ids)
+            .any(|id| !has_identifier(id))
+    {
+        return false;
+    }
+    let mut issuer_keys = BTreeSet::new();
+    let mut specialties = BTreeSet::new();
+    let mut receipt_stages = BTreeSet::new();
+    for issuer in &snapshot.issuers {
+        let Some(valid_from) = parse_time(&issuer.valid_from) else {
+            return false;
+        };
+        let Some(valid_until) = parse_time(&issuer.valid_until) else {
+            return false;
+        };
+        if issuer.public_key.len() != 43 {
+            return false;
+        }
+        let Ok(public_key) = URL_SAFE_NO_PAD.decode(&issuer.public_key) else {
+            return false;
+        };
+        if !has_identifier(&issuer.issuer_id)
+            || !has_identifier(&issuer.key_id)
+            || !has_identifier(&issuer.participant_id)
+            || valid_until <= valid_from
+            || public_key.len() != 32
+            || URL_SAFE_NO_PAD.encode(&public_key) != issuer.public_key
+            || !issuer_keys.insert((issuer.issuer_id.as_str(), issuer.key_id.as_str()))
+        {
+            return false;
+        }
+        if let Some(specialty) = issuer.specialty {
+            if !issuer.receipt_stages.is_empty() || !specialties.insert((issuer.side, specialty)) {
+                return false;
+            }
+        } else {
+            if issuer.receipt_stages.is_empty()
+                || issuer
+                    .receipt_stages
+                    .iter()
+                    .any(|stage| !receipt_stages.insert((issuer.side, *stage)))
+            {
+                return false;
+            }
+        }
+    }
+    [Side::Sender, Side::Receiver].into_iter().all(|side| {
+        Specialty::ALL
+            .into_iter()
+            .all(|specialty| specialties.contains(&(side, specialty)))
+    }) && [
+        (Side::Sender, ReceiptStage::Initiation),
+        (Side::Sender, ReceiptStage::FinalConsent),
+        (Side::Receiver, ReceiptStage::NovaAdmission),
+        (Side::Receiver, ReceiptStage::FinalConsent),
+    ]
+    .into_iter()
+    .all(|stage| receipt_stages.contains(&stage))
+}
+
+fn verify_envelope(envelope: &SignedEnvelopeV01, issuer: &TrustedIssuerV01, domain: &[u8]) -> bool {
     if envelope.algorithm != "Ed25519" {
+        return false;
+    }
+    if issuer.public_key.len() != 43 {
         return false;
     }
     let Ok(public_key_bytes) = URL_SAFE_NO_PAD.decode(&issuer.public_key) else {
         return false;
     };
+    if URL_SAFE_NO_PAD.encode(&public_key_bytes) != issuer.public_key {
+        return false;
+    }
     let Ok(public_key_array) = <[u8; 32]>::try_from(public_key_bytes.as_slice()) else {
         return false;
     };
     let Ok(public_key) = VerifyingKey::from_bytes(&public_key_array) else {
         return false;
     };
+    if envelope.signature.len() != 86 {
+        return false;
+    }
     let Ok(signature_bytes) = URL_SAFE_NO_PAD.decode(&envelope.signature) else {
         return false;
     };
@@ -674,34 +1023,92 @@ fn signing_bytes(domain: &[u8], body: &Value) -> Result<Vec<u8>, serde_json::Err
 }
 
 fn canonical_json(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
+    canonical_json_at_depth(value, 0)
+}
+
+fn canonical_json_at_depth(value: &Value, depth: usize) -> Result<Vec<u8>, serde_json::Error> {
+    if depth > 64 {
+        return Err(canonical_error("JSON nesting exceeds the contract limit"));
+    }
     match value {
-        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => serde_json::to_vec(value),
+        Value::Null | Value::Bool(_) => serde_json::to_vec(value),
+        Value::Number(number) => {
+            let safe_integer = number.as_i64().is_some_and(|integer| {
+                (-9_007_199_254_740_991..=9_007_199_254_740_991).contains(&integer)
+            }) || number
+                .as_u64()
+                .is_some_and(|integer| integer <= 9_007_199_254_740_991);
+            if safe_integer {
+                serde_json::to_vec(value)
+            } else {
+                Err(canonical_error(
+                    "Only interoperable JSON integers are accepted",
+                ))
+            }
+        }
+        Value::String(string) => {
+            if string.len() > MAX_CANONICAL_BODY_BYTES {
+                return Err(canonical_error("JSON string exceeds the contract limit"));
+            }
+            serde_json::to_vec(value)
+        }
         Value::Array(values) => {
             let mut output = Vec::from(b"[".as_slice());
             for (index, item) in values.iter().enumerate() {
                 if index > 0 {
                     output.push(b',');
                 }
-                output.extend(canonical_json(item)?);
+                output.extend(canonical_json_at_depth(item, depth + 1)?);
+                if output.len() > MAX_CANONICAL_BODY_BYTES {
+                    return Err(canonical_error("JSON body exceeds the contract limit"));
+                }
             }
             output.push(b']');
             Ok(output)
         }
         Value::Object(values) => {
-            let sorted: BTreeMap<_, _> = values.iter().collect();
+            let mut sorted: Vec<_> = values.iter().collect();
+            sorted.sort_by(|(left, _), (right, _)| left.encode_utf16().cmp(right.encode_utf16()));
             let mut output = Vec::from(b"{".as_slice());
             for (index, (key, item)) in sorted.iter().enumerate() {
                 if index > 0 {
                     output.push(b',');
                 }
+                if key.len() > MAX_CANONICAL_BODY_BYTES {
+                    return Err(canonical_error(
+                        "JSON property name exceeds the contract limit",
+                    ));
+                }
                 output.extend(serde_json::to_vec(key)?);
                 output.push(b':');
-                output.extend(canonical_json(item)?);
+                output.extend(canonical_json_at_depth(item, depth + 1)?);
+                if output.len() > MAX_CANONICAL_BODY_BYTES {
+                    return Err(canonical_error("JSON body exceeds the contract limit"));
+                }
             }
             output.push(b'}');
             Ok(output)
         }
     }
+}
+
+fn canonical_error(message: &str) -> serde_json::Error {
+    <serde_json::Error as serde::ser::Error>::custom(message)
+}
+
+fn has_identifier(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"-_.:".contains(&byte))
+}
+
+fn is_sha256_digest(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn parse_time(timestamp: &str) -> Option<i64> {
@@ -714,12 +1121,14 @@ fn all_checks(status: CheckStatus) -> Vec<SpecialtyCheck> {
     [Side::Sender, Side::Receiver]
         .into_iter()
         .flat_map(|side| {
-            Specialty::ALL.into_iter().map(move |specialty| SpecialtyCheck {
-                side,
-                specialty,
-                status,
-                evidence_id: None,
-            })
+            Specialty::ALL
+                .into_iter()
+                .map(move |specialty| SpecialtyCheck {
+                    side,
+                    specialty,
+                    status,
+                    evidence_id: None,
+                })
         })
         .collect()
 }
@@ -781,6 +1190,9 @@ fn result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::{Signer, SigningKey};
+    use std::collections::BTreeMap;
+    use std::error::Error;
 
     #[test]
     fn specialty_inventory_contains_nine_distinct_controls() {
@@ -789,10 +1201,480 @@ mod tests {
     }
 
     #[test]
-    fn canonical_signing_bytes_ignore_object_insertion_order() -> Result<(), Box<dyn std::error::Error>> {
+    fn canonical_signing_bytes_ignore_object_insertion_order()
+    -> Result<(), Box<dyn std::error::Error>> {
         let first: Value = serde_json::from_str(r#"{"z":1,"a":{"y":true,"b":"x"}}"#)?;
         let second: Value = serde_json::from_str(r#"{"a":{"b":"x","y":true},"z":1}"#)?;
         assert_eq!(guard_signing_bytes(&first)?, guard_signing_bytes(&second)?);
+        Ok(())
+    }
+
+    struct Fixture {
+        request: RequestV01,
+        snapshot: TrustSnapshotV01,
+        initiation: SignedEnvelopeV01,
+        nova_admission: SignedEnvelopeV01,
+        evidence: Vec<SignedEnvelopeV01>,
+        final_receipts: Vec<SignedEnvelopeV01>,
+        keys: BTreeMap<String, SigningKey>,
+    }
+
+    impl Fixture {
+        fn new() -> Result<Self, Box<dyn Error>> {
+            let request = RequestV01 {
+                schema: REQUEST_SCHEMA_V01.to_owned(),
+                request_id: "synthetic-request-001".to_owned(),
+                sender_id: "synthetic-sender".to_owned(),
+                receiver_id: "synthetic-receiver".to_owned(),
+                scope: "chat:text".to_owned(),
+                context_digest: digest_bytes(b"synthetic-context-001"),
+                created_at: "2030-01-01T00:00:00Z".to_owned(),
+                expires_at: "2030-01-01T00:10:00Z".to_owned(),
+            };
+            let request_digest = digest_serializable(&request)?;
+            let mut issuers = Vec::new();
+            let mut keys = BTreeMap::new();
+            let mut seed = 1_u8;
+            for (side, participant_id, stages) in [
+                (
+                    Side::Sender,
+                    request.sender_id.as_str(),
+                    vec![ReceiptStage::Initiation, ReceiptStage::FinalConsent],
+                ),
+                (
+                    Side::Receiver,
+                    request.receiver_id.as_str(),
+                    vec![ReceiptStage::NovaAdmission, ReceiptStage::FinalConsent],
+                ),
+            ] {
+                let (issuer, key) = Self::issuer(&mut seed, participant_id, side, None, stages);
+                keys.insert(issuer.issuer_id.clone(), key);
+                issuers.push(issuer);
+            }
+            for side in [Side::Sender, Side::Receiver] {
+                let participant_id = match side {
+                    Side::Sender => request.sender_id.as_str(),
+                    Side::Receiver => request.receiver_id.as_str(),
+                };
+                for specialty in Specialty::ALL {
+                    let (issuer, key) =
+                        Self::issuer(&mut seed, participant_id, side, Some(specialty), Vec::new());
+                    keys.insert(issuer.issuer_id.clone(), key);
+                    issuers.push(issuer);
+                }
+            }
+            let snapshot = TrustSnapshotV01 {
+                schema: SNAPSHOT_SCHEMA_V01.to_owned(),
+                revision: "synthetic-snapshot-001".to_owned(),
+                request_digest: request_digest.clone(),
+                captured_at: "2030-01-01T00:04:40Z".to_owned(),
+                expires_at: "2030-01-01T00:06:00Z".to_owned(),
+                status: SnapshotStatus::Current,
+                issuers,
+                revoked_evidence_ids: Vec::new(),
+                revoked_issuer_ids: Vec::new(),
+            };
+            let mut fixture = Self {
+                request,
+                snapshot,
+                initiation: Self::placeholder(),
+                nova_admission: Self::placeholder(),
+                evidence: Vec::new(),
+                final_receipts: Vec::new(),
+                keys,
+            };
+            fixture.initiation = fixture.receipt(
+                "synthetic-initiation-001",
+                ReceiptStage::Initiation,
+                "synthetic-sender",
+                None,
+                None,
+                None,
+                "2030-01-01T00:01:00Z",
+            )?;
+            let initiation_digest =
+                envelope_digest(&fixture.initiation).map_err(|_| "invalid initiation digest")?;
+            fixture.nova_admission = fixture.receipt(
+                "synthetic-nova-001",
+                ReceiptStage::NovaAdmission,
+                "synthetic-receiver",
+                Some(initiation_digest),
+                None,
+                None,
+                "2030-01-01T00:02:00Z",
+            )?;
+            let request_digest = digest_serializable(&fixture.request)?;
+            let context_digest = fixture.request.context_digest.clone();
+            for side in [Side::Sender, Side::Receiver] {
+                for specialty in Specialty::ALL {
+                    let issuer = fixture
+                        .snapshot
+                        .issuers
+                        .iter()
+                        .find(|issuer| issuer.side == side && issuer.specialty == Some(specialty))
+                        .ok_or("missing synthetic issuer")?
+                        .clone();
+                    let body = EvidenceBodyV01 {
+                        schema: EVIDENCE_SCHEMA_V01.to_owned(),
+                        issuer_id: issuer.issuer_id.clone(),
+                        key_id: issuer.key_id.clone(),
+                        evidence_id: format!("evidence-{}-{specialty:?}", side_code(side)),
+                        request_digest: request_digest.clone(),
+                        context_digest: context_digest.clone(),
+                        side,
+                        specialty,
+                        result: EvidenceResult::Pass,
+                        issued_at: "2030-01-01T00:03:50Z".to_owned(),
+                        expires_at: "2030-01-01T00:05:45Z".to_owned(),
+                    };
+                    let envelope = fixture.sign(body, &issuer.issuer_id, false)?;
+                    fixture.evidence.push(envelope);
+                }
+            }
+            let evidence_digest =
+                evidence_set_digest(&fixture.evidence).map_err(|_| "invalid evidence digest")?;
+            let initiation_digest =
+                envelope_digest(&fixture.initiation).map_err(|_| "invalid initiation digest")?;
+            let admission_digest =
+                envelope_digest(&fixture.nova_admission).map_err(|_| "invalid admission digest")?;
+            for participant_id in ["synthetic-sender", "synthetic-receiver"] {
+                fixture.final_receipts.push(fixture.receipt(
+                    &format!("final-{participant_id}"),
+                    ReceiptStage::FinalConsent,
+                    participant_id,
+                    Some(initiation_digest.clone()),
+                    Some(admission_digest.clone()),
+                    Some(evidence_digest.clone()),
+                    "2030-01-01T00:04:55Z",
+                )?);
+            }
+            Ok(fixture)
+        }
+
+        fn issuer(
+            seed: &mut u8,
+            participant_id: &str,
+            side: Side,
+            specialty: Option<Specialty>,
+            receipt_stages: Vec<ReceiptStage>,
+        ) -> (TrustedIssuerV01, SigningKey) {
+            let key = SigningKey::from_bytes(&[*seed; 32]);
+            let issuer_id = format!("issuer-{}", *seed);
+            let key_id = format!("key-{}", *seed);
+            *seed = seed.saturating_add(1);
+            let issuer = TrustedIssuerV01 {
+                issuer_id,
+                participant_id: participant_id.to_owned(),
+                side,
+                specialty,
+                receipt_stages,
+                key_id,
+                public_key: URL_SAFE_NO_PAD.encode(key.verifying_key().to_bytes()),
+                valid_from: "2030-01-01T00:00:00Z".to_owned(),
+                valid_until: "2030-01-01T00:09:00Z".to_owned(),
+            };
+            (issuer, key)
+        }
+
+        fn placeholder() -> SignedEnvelopeV01 {
+            SignedEnvelopeV01 {
+                algorithm: "Ed25519".to_owned(),
+                body: Value::Null,
+                signature: String::new(),
+            }
+        }
+
+        #[allow(clippy::too_many_arguments)]
+        fn receipt(
+            &self,
+            receipt_id: &str,
+            stage: ReceiptStage,
+            participant_id: &str,
+            initiation_digest: Option<String>,
+            admission_digest: Option<String>,
+            evidence_set_digest: Option<String>,
+            issued_at: &str,
+        ) -> Result<SignedEnvelopeV01, Box<dyn Error>> {
+            let side = if participant_id == self.request.sender_id {
+                Side::Sender
+            } else {
+                Side::Receiver
+            };
+            let issuer = self
+                .snapshot
+                .issuers
+                .iter()
+                .find(|issuer| {
+                    issuer.participant_id == participant_id
+                        && issuer.side == side
+                        && issuer.specialty.is_none()
+                        && issuer.receipt_stages.contains(&stage)
+                })
+                .ok_or("missing receipt issuer")?;
+            self.sign(
+                HumanReceiptBodyV01 {
+                    schema: RECEIPT_SCHEMA_V01.to_owned(),
+                    issuer_id: issuer.issuer_id.clone(),
+                    key_id: issuer.key_id.clone(),
+                    receipt_id: receipt_id.to_owned(),
+                    request_digest: digest_serializable(&self.request)?,
+                    stage,
+                    participant_id: participant_id.to_owned(),
+                    initiation_digest,
+                    admission_digest,
+                    evidence_set_digest,
+                    issued_at: issued_at.to_owned(),
+                    expires_at: "2030-01-01T00:06:00Z".to_owned(),
+                },
+                &issuer.issuer_id,
+                true,
+            )
+        }
+
+        fn sign<T: Serialize>(
+            &self,
+            body: T,
+            issuer_id: &str,
+            receipt: bool,
+        ) -> Result<SignedEnvelopeV01, Box<dyn Error>> {
+            let body = serde_json::to_value(body)?;
+            let bytes = if receipt {
+                receipt_signing_bytes(&body)?
+            } else {
+                guard_signing_bytes(&body)?
+            };
+            let key = self.keys.get(issuer_id).ok_or("missing signing key")?;
+            Ok(SignedEnvelopeV01 {
+                algorithm: "Ed25519".to_owned(),
+                body,
+                signature: URL_SAFE_NO_PAD.encode(key.sign(&bytes).to_bytes()),
+            })
+        }
+
+        fn result(&self) -> GateResultV01 {
+            evaluate(self.input(), "2030-01-01T00:04:57Z")
+        }
+
+        fn input(&self) -> GateInputV01<'_> {
+            GateInputV01 {
+                request: &self.request,
+                initiation: &self.initiation,
+                nova_admission: &self.nova_admission,
+                evidence: &self.evidence,
+                final_receipts: &self.final_receipts,
+                initial_snapshot: &self.snapshot,
+                final_snapshot: &self.snapshot,
+            }
+        }
+    }
+
+    fn side_code(side: Side) -> &'static str {
+        match side {
+            Side::Sender => "sender",
+            Side::Receiver => "receiver",
+        }
+    }
+
+    #[test]
+    fn all_eighteen_signed_checks_and_separate_human_gates_pass_without_authority()
+    -> Result<(), Box<dyn Error>> {
+        let fixture = Fixture::new()?;
+        let first_body =
+            parse_evidence_body(&fixture.evidence[0]).map_err(|_| "invalid test evidence body")?;
+        assert!(
+            verify_evidence(
+                &fixture.evidence[0],
+                &first_body,
+                &fixture.request,
+                &digest_serializable(&fixture.request)?,
+                &fixture.snapshot,
+                parse_time("2030-01-01T00:04:57Z").ok_or("invalid test time")?,
+            ),
+            "evidence signature or issuer binding rejected"
+        );
+        let result = fixture.result();
+        assert_eq!(
+            result.status,
+            GateStatus::ReferencePassed,
+            "{:?}",
+            result.reason_codes
+        );
+        assert_eq!(result.specialty_checks.len(), 18);
+        assert!(
+            result
+                .specialty_checks
+                .iter()
+                .all(|check| check.status == CheckStatus::Pass)
+        );
+        assert!(result.initiation_accepted);
+        assert!(result.nova_admission_accepted);
+        assert!(result.final_sender_consent);
+        assert!(result.final_receiver_consent);
+        assert!(!result.can_open_contact);
+        assert_eq!(result.operative_authority, "NONE");
+        assert!(!result.external_side_effect);
+        Ok(())
+    }
+
+    #[test]
+    fn missing_evidence_waits_and_never_opens_contact() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        fixture.evidence.pop();
+        let result = fixture.result();
+        assert_eq!(
+            result.status,
+            GateStatus::PendingEvidence,
+            "{:?}",
+            result.reason_codes
+        );
+        assert!(!result.can_open_contact);
+        assert!(!result.external_side_effect);
+        Ok(())
+    }
+
+    #[test]
+    fn changed_signed_evidence_fails_closed() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let body = fixture.evidence[0]
+            .body
+            .as_object_mut()
+            .ok_or("evidence body must be an object")?;
+        body.insert("result".to_owned(), Value::String("FAIL".to_owned()));
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn revoked_evidence_holds_even_when_its_signature_is_valid() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let body: EvidenceBodyV01 = serde_json::from_value(fixture.evidence[0].body.clone())?;
+        fixture.snapshot.revoked_evidence_ids.push(body.evidence_id);
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn revoked_issuer_holds_even_when_evidence_is_current() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let body: EvidenceBodyV01 = serde_json::from_value(fixture.evidence[0].body.clone())?;
+        fixture.snapshot.revoked_issuer_ids.push(body.issuer_id);
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn signed_but_expired_evidence_holds() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let mut body: EvidenceBodyV01 = serde_json::from_value(fixture.evidence[0].body.clone())?;
+        body.expires_at = "2030-01-01T00:04:56Z".to_owned();
+        fixture.evidence[0] = fixture.sign(body.clone(), &body.issuer_id, false)?;
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn signed_context_mismatch_holds() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let mut body: EvidenceBodyV01 = serde_json::from_value(fixture.evidence[0].body.clone())?;
+        body.context_digest = digest_bytes(b"different synthetic context");
+        fixture.evidence[0] = fixture.sign(body.clone(), &body.issuer_id, false)?;
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn signed_failure_result_stops() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let mut body: EvidenceBodyV01 = serde_json::from_value(fixture.evidence[0].body.clone())?;
+        body.result = EvidenceResult::Fail;
+        fixture.evidence[0] = fixture.sign(body.clone(), &body.issuer_id, false)?;
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Stop);
+        assert!(!result.can_open_contact);
+        assert!(!result.external_side_effect);
+        Ok(())
+    }
+
+    #[test]
+    fn changed_trust_snapshot_holds() -> Result<(), Box<dyn Error>> {
+        let fixture = Fixture::new()?;
+        let mut changed_snapshot = fixture.snapshot.clone();
+        changed_snapshot.revision = "replacement-revision".to_owned();
+        let result = evaluate(
+            GateInputV01 {
+                final_snapshot: &changed_snapshot,
+                ..fixture.input()
+            },
+            "2030-01-01T00:04:57Z",
+        );
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn final_receipts_must_bind_the_exact_evidence_set() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        let body = fixture.final_receipts[0]
+            .body
+            .as_object_mut()
+            .ok_or("receipt body must be an object")?;
+        body.insert(
+            "evidenceSetDigest".to_owned(),
+            Value::String("different-evidence-set".to_owned()),
+        );
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn expired_request_stops() -> Result<(), Box<dyn Error>> {
+        let fixture = Fixture::new()?;
+        let result = evaluate(fixture.input(), "2030-01-01T00:11:00Z");
+        assert_eq!(result.status, GateStatus::Stop);
+        assert!(!result.can_open_contact);
+        assert!(!result.external_side_effect);
+        Ok(())
+    }
+
+    #[test]
+    fn missing_final_consent_remains_pending() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        fixture.final_receipts.clear();
+        let result = fixture.result();
+        assert_eq!(
+            result.status,
+            GateStatus::PendingFinalConsent,
+            "{:?}",
+            result.reason_codes
+        );
+        assert!(!result.final_sender_consent);
+        assert!(!result.final_receiver_consent);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_nova_signature_does_not_admit_receiver() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        fixture.nova_admission.signature = URL_SAFE_NO_PAD.encode([0_u8; 64]);
+        let result = fixture.result();
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(result.initiation_accepted, "{:?}", result.reason_codes);
+        assert!(!result.nova_admission_accepted);
+        assert!(!result.can_open_contact);
         Ok(())
     }
 }

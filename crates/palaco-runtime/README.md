@@ -20,3 +20,25 @@ the same receipt digest and does not maintain a separate state. Conformance
 passing does not activate the candidate. `TraceWriter` retains validated
 results append-only in memory for the lifetime of the process; durable storage
 and independent release review remain outside this MVP.
+
+## 6RI9ADE reference gate
+
+`sixri9ade` is an executable, synthetic-only reference evaluator for the
+PALACO-Citadel 6RI9ADE concept. It requires nine signed specialty results for
+each side (18 total), a sender initiation, a separately signed receiver
+NOVA-admission receipt, and distinct sender/receiver final-consent receipts
+bound to the same request, admission, and complete evidence-set digest.
+
+The evaluator checks Ed25519 signatures against an explicitly host-supplied
+trust snapshot, request/context binding, freshness, bounded validity, and
+revocations. Missing evidence and stale trust return HOLD/pending; invalid,
+expired, or revoked evidence never passes. A passing reference result still
+sets `canOpenContact=false`, `operativeAuthority=NONE`, and
+`externalSideEffect=false`. The returned trace digest is not durable storage.
+
+This Rust binding is not a production service or a claim of wire-level
+conformance with the separate concept PR. In particular, it cannot authenticate
+the host-supplied trust snapshot and is not connected to real accounts, NOVA,
+E2EE, bodyguard services, message delivery, a RIO surface, or external
+execution. All test keys and examples are synthetic. Passing tests do not
+activate or authorize anything.
