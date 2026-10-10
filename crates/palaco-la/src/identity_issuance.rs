@@ -80,6 +80,13 @@ pub enum IssuanceReviewState {
 #[cfg(debug_assertions)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DevelopmentBootstrapPurpose {
+    RioMessageServiceTest,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum DevelopmentStartupDecision {
     Blocked,
     ContinueRestricted,
@@ -96,6 +103,7 @@ pub enum EvidenceAuthenticationState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DevelopmentBootstrapRequestV01 {
+    pub purpose: DevelopmentBootstrapPurpose,
     pub allow_unverified_fivecriptie_evidence: bool,
 }
 
@@ -105,6 +113,8 @@ pub struct DevelopmentBootstrapRequestV01 {
 pub struct DevelopmentBootstrapResultV01 {
     pub decision: DevelopmentStartupDecision,
     pub fivecriptie_evidence: EvidenceAuthenticationState,
+    pub rio_message_service_test_enabled: bool,
+    pub external_message_delivery_enabled: bool,
     pub identity_issuance_enabled: bool,
     pub authority_enabled: bool,
 }
@@ -124,6 +134,9 @@ pub fn evaluate_development_bootstrap(
             DevelopmentStartupDecision::Blocked
         },
         fivecriptie_evidence: EvidenceAuthenticationState::Unverified,
+        rio_message_service_test_enabled: request.allow_unverified_fivecriptie_evidence
+            && request.purpose == DevelopmentBootstrapPurpose::RioMessageServiceTest,
+        external_message_delivery_enabled: false,
         identity_issuance_enabled: false,
         authority_enabled: false,
     }

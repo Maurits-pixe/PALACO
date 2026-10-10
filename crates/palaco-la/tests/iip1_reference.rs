@@ -4,8 +4,8 @@ use palaco_la::identity_issuance::{
 };
 #[cfg(debug_assertions)]
 use palaco_la::identity_issuance::{
-    DevelopmentBootstrapRequestV01, DevelopmentStartupDecision, EvidenceAuthenticationState,
-    evaluate_development_bootstrap,
+    DevelopmentBootstrapPurpose, DevelopmentBootstrapRequestV01, DevelopmentStartupDecision,
+    EvidenceAuthenticationState, evaluate_development_bootstrap,
 };
 
 fn evidence(reference: &str) -> EvidenceReferenceV01 {
@@ -203,17 +203,21 @@ fn strict_request_contract_rejects_unknown_fields() {
 #[test]
 fn development_startup_override_is_opt_in_and_never_authenticates_or_issues() {
     let blocked = evaluate_development_bootstrap(DevelopmentBootstrapRequestV01 {
+        purpose: DevelopmentBootstrapPurpose::RioMessageServiceTest,
         allow_unverified_fivecriptie_evidence: false,
     });
     assert_eq!(blocked.decision, DevelopmentStartupDecision::Blocked);
 
     let continued = evaluate_development_bootstrap(DevelopmentBootstrapRequestV01 {
+        purpose: DevelopmentBootstrapPurpose::RioMessageServiceTest,
         allow_unverified_fivecriptie_evidence: true,
     });
     assert_eq!(
         continued.decision,
         DevelopmentStartupDecision::ContinueRestricted
     );
+    assert!(continued.rio_message_service_test_enabled);
+    assert!(!continued.external_message_delivery_enabled);
     assert_eq!(
         continued.fivecriptie_evidence,
         EvidenceAuthenticationState::Unverified

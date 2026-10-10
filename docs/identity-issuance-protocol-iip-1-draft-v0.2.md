@@ -65,12 +65,17 @@ and independent security/governance approval are defined and implemented.
 ## Temporary development startup continuation
 
 `evaluate_development_bootstrap` is compiled only when Rust debug assertions are
-enabled. It is opt-in for each startup request; without opt-in it remains
-blocked. With opt-in it returns `CONTINUE_RESTRICTED`, while explicitly keeping
-5CRIPTIE evidence `UNVERIFIED`, identity issuance disabled, and authority
-disabled. It does not alter IIP review or make an authentication claim. The API
-is absent from optimized release builds and is not connected to a production
-startup or authentication service.
+enabled and accepts only the `RIO_MESSAGE_SERVICE_TEST` purpose. It is opt-in for
+each startup request; without opt-in it remains blocked. With opt-in it returns
+`CONTINUE_RESTRICTED`, while explicitly keeping 5CRIPTIE evidence `UNVERIFIED`,
+identity issuance disabled, authority disabled, and external message delivery
+disabled. It does not alter IIP review or make an authentication claim.
+
+This repository contains no live RIO message service or delivery path. The
+development API only provides a restricted startup decision for a test
+integration to consume; it does not itself start or connect to a service. It is
+absent from optimized release builds and is not connected to production startup
+or authentication.
 
 ## Verification
 
