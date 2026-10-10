@@ -62,6 +62,16 @@ The production gate remains HOLD until evidence authenticity, current consent,
 anchored provenance, issuer authorization, durable review records, revocation,
 and independent security/governance approval are defined and implemented.
 
+## Temporary development startup continuation
+
+`evaluate_development_bootstrap` is compiled only when Rust debug assertions are
+enabled. It is opt-in for each startup request; without opt-in it remains
+blocked. With opt-in it returns `CONTINUE_RESTRICTED`, while explicitly keeping
+5CRIPTIE evidence `UNVERIFIED`, identity issuance disabled, and authority
+disabled. It does not alter IIP review or make an authentication claim. The API
+is absent from optimized release builds and is not connected to a production
+startup or authentication service.
+
 ## Verification
 
 Run the reference contract tests with:

@@ -77,6 +77,58 @@ pub enum IssuanceReviewState {
     SyntheticApprovalOnly,
 }
 
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum DevelopmentStartupDecision {
+    Blocked,
+    ContinueRestricted,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum EvidenceAuthenticationState {
+    Unverified,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DevelopmentBootstrapRequestV01 {
+    pub allow_unverified_fivecriptie_evidence: bool,
+}
+
+#[cfg(debug_assertions)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DevelopmentBootstrapResultV01 {
+    pub decision: DevelopmentStartupDecision,
+    pub fivecriptie_evidence: EvidenceAuthenticationState,
+    pub identity_issuance_enabled: bool,
+    pub authority_enabled: bool,
+}
+
+/// Allows a caller to continue development startup without accepting evidence as verified.
+///
+/// This API is absent from optimized release builds and does not affect IIP evaluation.
+#[cfg(debug_assertions)]
+#[must_use]
+pub fn evaluate_development_bootstrap(
+    request: DevelopmentBootstrapRequestV01,
+) -> DevelopmentBootstrapResultV01 {
+    DevelopmentBootstrapResultV01 {
+        decision: if request.allow_unverified_fivecriptie_evidence {
+            DevelopmentStartupDecision::ContinueRestricted
+        } else {
+            DevelopmentStartupDecision::Blocked
+        },
+        fivecriptie_evidence: EvidenceAuthenticationState::Unverified,
+        identity_issuance_enabled: false,
+        authority_enabled: false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IipReferenceResultV01 {

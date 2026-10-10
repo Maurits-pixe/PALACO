@@ -2,6 +2,11 @@ use palaco_la::identity_issuance::{
     AccountStatus, EvidenceReferenceV01, IIP_REQUEST_SCHEMA_V01, IipRequestV01,
     IssuanceReviewState, ReviewState, evaluate_reference,
 };
+#[cfg(debug_assertions)]
+use palaco_la::identity_issuance::{
+    DevelopmentBootstrapRequestV01, DevelopmentStartupDecision, EvidenceAuthenticationState,
+    evaluate_development_bootstrap,
+};
 
 fn evidence(reference: &str) -> EvidenceReferenceV01 {
     EvidenceReferenceV01 {
@@ -192,6 +197,29 @@ fn strict_request_contract_rejects_unknown_fields() {
     let with_unknown = serialized.trim_end_matches('}').to_owned() + ",\"account_activated\":true}";
 
     assert!(serde_json::from_str::<IipRequestV01>(&with_unknown).is_err());
+}
+
+#[cfg(debug_assertions)]
+#[test]
+fn development_startup_override_is_opt_in_and_never_authenticates_or_issues() {
+    let blocked = evaluate_development_bootstrap(DevelopmentBootstrapRequestV01 {
+        allow_unverified_fivecriptie_evidence: false,
+    });
+    assert_eq!(blocked.decision, DevelopmentStartupDecision::Blocked);
+
+    let continued = evaluate_development_bootstrap(DevelopmentBootstrapRequestV01 {
+        allow_unverified_fivecriptie_evidence: true,
+    });
+    assert_eq!(
+        continued.decision,
+        DevelopmentStartupDecision::ContinueRestricted
+    );
+    assert_eq!(
+        continued.fivecriptie_evidence,
+        EvidenceAuthenticationState::Unverified
+    );
+    assert!(!continued.identity_issuance_enabled);
+    assert!(!continued.authority_enabled);
 }
 
 use sha2::Digest;
