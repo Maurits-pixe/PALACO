@@ -38,6 +38,11 @@ These checks produce review states, `identity_validated`, and at most
 proof of subject identity, ownership, consent, provenance anchoring, or issuer
 authority.
 
+The reference contract hashes the exact UTF-8 bytes of `source_state`; it does
+not define canonical encoding or authenticate the claimed anchor. A production
+contract still needs an approved canonical byte format and verifiable trust
+chain.
+
 ## Not implemented
 
 The reference evaluator always returns:

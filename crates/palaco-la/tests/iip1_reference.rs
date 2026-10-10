@@ -63,6 +63,8 @@ fn valid_request() -> IipRequestV01 {
 fn complete_reference_review_never_creates_an_identity_or_authority() {
     let result = evaluate_reference(&valid_request());
 
+    assert_eq!(result.account_review, ReviewState::Pass);
+    assert_eq!(result.dossier_review, ReviewState::Pass);
     assert_eq!(result.subject_review, ReviewState::Pass);
     assert_eq!(result.owner_review, ReviewState::Pass);
     assert_eq!(result.consent_review, ReviewState::Pass);
@@ -135,11 +137,23 @@ fn provenance_requires_anchored_identifiable_source_history_and_matching_digest(
 fn account_and_ownership_are_independent_gates() {
     let mut blocked = valid_request();
     blocked.account_blocked = true;
-    assert!(!evaluate_reference(&blocked).identity_validated);
+    let blocked_result = evaluate_reference(&blocked);
+    assert_eq!(blocked_result.account_review, ReviewState::Fail);
+    assert!(!blocked_result.identity_validated);
 
     let mut inactive = valid_request();
     inactive.account_status = AccountStatus::Inactive;
-    assert!(!evaluate_reference(&inactive).identity_validated);
+    assert_eq!(
+        evaluate_reference(&inactive).account_review,
+        ReviewState::Fail
+    );
+
+    let mut non_provisional = valid_request();
+    non_provisional.dossier_provisional = false;
+    assert_eq!(
+        evaluate_reference(&non_provisional).dossier_review,
+        ReviewState::Fail
+    );
 
     let mut wrong_owner = valid_request();
     wrong_owner.owner_dossier_ref = "another-dossier".to_owned();

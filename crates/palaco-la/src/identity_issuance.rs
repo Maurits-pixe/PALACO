@@ -81,6 +81,8 @@ pub enum IssuanceReviewState {
 #[serde(deny_unknown_fields)]
 pub struct IipReferenceResultV01 {
     pub schema: String,
+    pub account_review: ReviewState,
+    pub dossier_review: ReviewState,
     pub subject_review: ReviewState,
     pub owner_review: ReviewState,
     pub consent_review: ReviewState,
@@ -96,6 +98,19 @@ pub struct IipReferenceResultV01 {
 /// Evaluates synthetic IIP-1 assertions. It cannot create an identity or confer authority.
 #[must_use]
 pub fn evaluate_reference(request: &IipRequestV01) -> IipReferenceResultV01 {
+    let account_review = if request.account_status == AccountStatus::Active
+        && !request.account_blocked
+        && !request.account_revoked
+    {
+        ReviewState::Pass
+    } else {
+        ReviewState::Fail
+    };
+    let dossier_review = if request.dossier_provisional && valid_identifier(&request.dossier_ref) {
+        ReviewState::Pass
+    } else {
+        ReviewState::Fail
+    };
     let subject_review = if request.subject_confirmed
         && !request.mailbox_control_only
         && valid_reference(&request.subject_evidence)
@@ -148,11 +163,8 @@ pub fn evaluate_reference(request: &IipRequestV01) -> IipReferenceResultV01 {
     };
 
     let identity_validated = request.schema == IIP_REQUEST_SCHEMA_V01
-        && request.account_status == AccountStatus::Active
-        && !request.account_blocked
-        && !request.account_revoked
-        && request.dossier_provisional
-        && valid_identifier(&request.dossier_ref)
+        && account_review == ReviewState::Pass
+        && dossier_review == ReviewState::Pass
         && subject_review == ReviewState::Pass
         && owner_review == ReviewState::Pass
         && consent_review == ReviewState::Pass
@@ -178,6 +190,8 @@ pub fn evaluate_reference(request: &IipRequestV01) -> IipReferenceResultV01 {
 
     IipReferenceResultV01 {
         schema: "iip-1-reference-result-v0.1".to_owned(),
+        account_review,
+        dossier_review,
         subject_review,
         owner_review,
         consent_review,
