@@ -46,6 +46,14 @@ snapshots; the evaluator itself cannot establish either trust boundary. All test
 keys and examples are synthetic. Passing tests do not activate or authorize
 anything.
 
+The Rust/Node bridge status, known schema and digest differences, shared
+primitive vector commands, and host snapshot-provider boundary are documented
+in [`docs/6ri9ade-runtime-bridge-v0.1.md`](../../docs/6ri9ade-runtime-bridge-v0.1.md).
+The `evaluate_with_snapshot_provider` API verifies two provider-signed snapshots
+against a host-configured anchor. It does not provision that anchor or provide
+a production snapshot service; the standalone CLI remains a caller-supplied,
+synthetic local evaluator.
+
 ### Run the reference evaluator
 
 The Rust CLI reads one strict JSON bundle from standard input and writes one

@@ -18,6 +18,7 @@ pub const REQUEST_SCHEMA_V01: &str = "elixer-6ri9ade-request-v0.1";
 pub const SNAPSHOT_SCHEMA_V01: &str = "elixer-6ri9ade-trust-snapshot-v0.1";
 pub const EVIDENCE_SCHEMA_V01: &str = "elixer-6ri9ade-evidence-v0.1";
 pub const RECEIPT_SCHEMA_V01: &str = "elixer-6ri9ade-human-receipt-v0.1";
+pub const SIGNED_SNAPSHOT_SCHEMA_V01: &str = "elixer-6ri9ade-signed-snapshot-v0.1";
 const MAX_REQUEST_AGE_MS: i64 = 15 * 60 * 1_000;
 const MAX_EVIDENCE_AGE_MS: i64 = 2 * 60 * 1_000;
 const MAX_RECEIPT_AGE_MS: i64 = 15 * 60 * 1_000;
@@ -25,8 +26,8 @@ const MAX_SNAPSHOT_AGE_MS: i64 = 30 * 1_000;
 const MAX_CANONICAL_BODY_BYTES: usize = 16 * 1_024;
 const MAX_SNAPSHOT_ISSUERS: usize = 64;
 const MAX_REVOKED_IDS: usize = 512;
-const GUARD_DOMAIN: &[u8] = b"6RI9ADE\0guard-evidence\0v0.1\0";
-const RECEIPT_DOMAIN: &[u8] = b"6RI9ADE\0human-receipt\0v0.1\0";
+const REFERENCE_DOMAIN: &[u8] = b"PALACO/6RI9ADE/REFERENCE-EVIDENCE/v0.1\0";
+const SNAPSHOT_DOMAIN: &[u8] = b"PALACO/6RI9ADE/TRUST-SNAPSHOT/v0.1\0";
 
 /// The nine independent controls required for each participant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -158,6 +159,53 @@ pub struct TrustSnapshotV01 {
     pub revoked_issuer_ids: Vec<String>,
 }
 
+/// A provider-signed snapshot. Its signature authenticates the bytes only when
+/// the configured anchor is itself provisioned through a trusted host channel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct SignedTrustSnapshotV01 {
+    pub schema: String,
+    pub provider_id: String,
+    pub key_id: String,
+    pub snapshot: TrustSnapshotV01,
+    pub signature: String,
+}
+
+/// Host-configured trust anchor. The evaluator cannot establish how the host
+/// obtained or protected this key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SnapshotTrustAnchorV01 {
+    pub provider_id: String,
+    pub key_id: String,
+    pub public_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotProviderError {
+    Unavailable,
+    Invalid,
+}
+
+/// Host-owned synchronous snapshot and clock source. Implementations must read
+/// the authoritative source on every call; this trait is an integration
+/// boundary, not a trusted implementation or production provider.
+pub trait TrustSnapshotProvider {
+    fn current_time(&self) -> Result<String, SnapshotProviderError>;
+    fn load_snapshot(
+        &self,
+        request_digest: &str,
+    ) -> Result<SignedTrustSnapshotV01, SnapshotProviderError>;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GateEvidenceInputV01<'a> {
+    pub request: &'a RequestV01,
+    pub initiation: &'a SignedEnvelopeV01,
+    pub nova_admission: &'a SignedEnvelopeV01,
+    pub evidence: &'a [SignedEnvelopeV01],
+    pub final_receipts: &'a [SignedEnvelopeV01],
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SnapshotStatus {
@@ -211,6 +259,8 @@ pub struct SpecialtyCheck {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct GateResultV01 {
     pub schema: String,
+    pub mode: String,
+    pub classification: String,
     pub status: GateStatus,
     pub request_digest: String,
     pub specialty_checks: Vec<SpecialtyCheck>,
@@ -221,6 +271,7 @@ pub struct GateResultV01 {
     pub final_receiver_consent: bool,
     pub can_open_contact: bool,
     pub operative_authority: String,
+    pub runtime_connected: bool,
     pub external_side_effect: bool,
     pub trace_digest: String,
 }
@@ -764,15 +815,144 @@ pub fn evaluate(input: GateInputV01<'_>, now: &str) -> GateResultV01 {
     )
 }
 
+/// Loads and verifies two independent signed snapshots before evaluating.
+/// Any unavailable or invalid trust/clock input returns HOLD. A successful
+/// signature only proves that the configured anchor signed the snapshot; the
+/// host remains responsible for securely provisioning that anchor and provider.
+#[must_use]
+pub fn evaluate_with_snapshot_provider(
+    input: GateEvidenceInputV01<'_>,
+    provider: &impl TrustSnapshotProvider,
+    anchor: &SnapshotTrustAnchorV01,
+) -> GateResultV01 {
+    let request_digest = digest_serializable(input.request).unwrap_or_default();
+    let hold = || {
+        result(
+            GateStatus::Hold,
+            request_digest.clone(),
+            all_checks(CheckStatus::Hold),
+            vec!["TRUST_SNAPSHOT_UNAVAILABLE_OR_UNTRUSTED"],
+            false,
+            false,
+            false,
+            false,
+        )
+    };
+
+    let Ok(time_before) = provider.current_time() else {
+        return hold();
+    };
+    let Some(time_before_ms) = parse_time(&time_before) else {
+        return hold();
+    };
+    let Ok(first) = provider.load_snapshot(&request_digest) else {
+        return hold();
+    };
+    let Ok(second) = provider.load_snapshot(&request_digest) else {
+        return hold();
+    };
+    let Ok(time_after) = provider.current_time() else {
+        return hold();
+    };
+    let Some(time_after_ms) = parse_time(&time_after) else {
+        return hold();
+    };
+    if time_after_ms < time_before_ms {
+        return hold();
+    }
+
+    let Some(first_snapshot) = verify_signed_snapshot(&first, anchor) else {
+        return hold();
+    };
+    let Some(second_snapshot) = verify_signed_snapshot(&second, anchor) else {
+        return hold();
+    };
+
+    evaluate(
+        GateInputV01 {
+            request: input.request,
+            initiation: input.initiation,
+            nova_admission: input.nova_admission,
+            evidence: input.evidence,
+            final_receipts: input.final_receipts,
+            initial_snapshot: &first_snapshot,
+            final_snapshot: &second_snapshot,
+        },
+        &time_after,
+    )
+}
+
 /// Produces domain-separated signing bytes for synthetic fixtures and
-/// independent test tooling.
+/// independent test tooling. This uses the Node reference's evidence domain.
 pub fn guard_signing_bytes(body: &Value) -> Result<Vec<u8>, serde_json::Error> {
-    signing_bytes(GUARD_DOMAIN, body)
+    reference_signing_bytes(body)
 }
 
 /// Produces domain-separated signing bytes for synthetic human receipts.
 pub fn receipt_signing_bytes(body: &Value) -> Result<Vec<u8>, serde_json::Error> {
-    signing_bytes(RECEIPT_DOMAIN, body)
+    reference_signing_bytes(body)
+}
+
+/// Canonical Node-reference signing bytes for a JSON evidence or receipt body.
+pub fn reference_signing_bytes(body: &Value) -> Result<Vec<u8>, serde_json::Error> {
+    signing_bytes(REFERENCE_DOMAIN, body)
+}
+
+/// Canonical JSON used by this Rust bridge, tested against shared Node vectors.
+pub fn reference_canonical_json(value: &Value) -> Result<String, serde_json::Error> {
+    String::from_utf8(canonical_json(value)?)
+        .map_err(<serde_json::Error as serde::ser::Error>::custom)
+}
+
+/// SHA-256 of the bridge's canonical JSON representation.
+pub fn reference_digest(value: &Value) -> Result<String, serde_json::Error> {
+    Ok(digest_bytes(&canonical_json(value)?))
+}
+
+/// Produces the signed bytes for the Rust bridge's provider snapshot envelope.
+pub fn trust_snapshot_signing_bytes(
+    envelope: &SignedTrustSnapshotV01,
+) -> Result<Vec<u8>, serde_json::Error> {
+    let payload = serde_json::json!({
+        "schema": envelope.schema,
+        "providerId": envelope.provider_id,
+        "keyId": envelope.key_id,
+        "snapshot": envelope.snapshot,
+    });
+    signing_bytes(SNAPSHOT_DOMAIN, &payload)
+}
+
+fn verify_signed_snapshot(
+    envelope: &SignedTrustSnapshotV01,
+    anchor: &SnapshotTrustAnchorV01,
+) -> Option<TrustSnapshotV01> {
+    if envelope.schema != SIGNED_SNAPSHOT_SCHEMA_V01
+        || envelope.provider_id != anchor.provider_id
+        || envelope.key_id != anchor.key_id
+        || !has_identifier(&anchor.provider_id)
+        || !has_identifier(&anchor.key_id)
+        || anchor.public_key.len() != 43
+        || envelope.signature.len() != 86
+    {
+        return None;
+    }
+    let public_key_bytes = URL_SAFE_NO_PAD.decode(&anchor.public_key).ok()?;
+    if public_key_bytes.len() != 32
+        || URL_SAFE_NO_PAD.encode(&public_key_bytes) != anchor.public_key
+    {
+        return None;
+    }
+    let public_key_array = <[u8; 32]>::try_from(public_key_bytes.as_slice()).ok()?;
+    let public_key = VerifyingKey::from_bytes(&public_key_array).ok()?;
+    let signature_bytes = URL_SAFE_NO_PAD.decode(&envelope.signature).ok()?;
+    if signature_bytes.len() != 64 || URL_SAFE_NO_PAD.encode(&signature_bytes) != envelope.signature
+    {
+        return None;
+    }
+    let signature = Signature::from_slice(&signature_bytes).ok()?;
+    let bytes = trust_snapshot_signing_bytes(envelope).ok()?;
+    public_key.verify(&bytes, &signature).ok()?;
+    Some(envelope.snapshot.clone())
 }
 
 fn verify_evidence(
@@ -791,7 +971,7 @@ fn verify_evidence(
         && body.context_digest == request.context_digest
         && issuer_for_evidence(snapshot, body, request, now_ms).is_some_and(|issuer| {
             !snapshot.revoked_issuer_ids.contains(&issuer.issuer_id)
-                && verify_envelope(envelope, issuer, GUARD_DOMAIN)
+                && verify_envelope(envelope, issuer, REFERENCE_DOMAIN)
         })
 }
 
@@ -850,7 +1030,7 @@ fn verify_receipt(
                 && !snapshot.revoked_issuer_ids.contains(&issuer.issuer_id)
         })
         .ok_or(())?;
-    if !verify_envelope(envelope, issuer, RECEIPT_DOMAIN) {
+    if !verify_envelope(envelope, issuer, REFERENCE_DOMAIN) {
         return Err(());
     }
     Ok(body)
@@ -1188,6 +1368,8 @@ fn result(
     let trace_digest = digest_serializable(&trace_body).unwrap_or_default();
     GateResultV01 {
         schema: "elixer-6ri9ade-result-v0.1".to_owned(),
+        mode: "REFERENCE_ONLY".to_owned(),
+        classification: "SYNTHETIC_ONLY".to_owned(),
         status,
         request_digest,
         specialty_checks,
@@ -1198,6 +1380,7 @@ fn result(
         final_receiver_consent,
         can_open_contact: false,
         operative_authority: "NONE".to_owned(),
+        runtime_connected: false,
         external_side_effect: false,
         trace_digest,
     }
@@ -1207,6 +1390,7 @@ fn result(
 mod tests {
     use super::*;
     use ed25519_dalek::{Signer, SigningKey};
+    use std::cell::Cell;
     use std::collections::BTreeMap;
     use std::error::Error;
 
@@ -1491,6 +1675,94 @@ mod tests {
         }
     }
 
+    struct TestSnapshotProvider {
+        snapshots: Vec<Result<SignedTrustSnapshotV01, SnapshotProviderError>>,
+        times: Vec<Result<String, SnapshotProviderError>>,
+        snapshot_calls: Cell<usize>,
+        time_calls: Cell<usize>,
+    }
+
+    impl TestSnapshotProvider {
+        fn new(
+            snapshots: Vec<Result<SignedTrustSnapshotV01, SnapshotProviderError>>,
+            times: Vec<Result<String, SnapshotProviderError>>,
+        ) -> Self {
+            Self {
+                snapshots,
+                times,
+                snapshot_calls: Cell::new(0),
+                time_calls: Cell::new(0),
+            }
+        }
+    }
+
+    impl TrustSnapshotProvider for TestSnapshotProvider {
+        fn current_time(&self) -> Result<String, SnapshotProviderError> {
+            let index = self.time_calls.get();
+            self.time_calls.set(index + 1);
+            self.times
+                .get(index)
+                .cloned()
+                .unwrap_or(Err(SnapshotProviderError::Unavailable))
+        }
+
+        fn load_snapshot(
+            &self,
+            _request_digest: &str,
+        ) -> Result<SignedTrustSnapshotV01, SnapshotProviderError> {
+            let index = self.snapshot_calls.get();
+            self.snapshot_calls.set(index + 1);
+            self.snapshots
+                .get(index)
+                .cloned()
+                .unwrap_or(Err(SnapshotProviderError::Unavailable))
+        }
+    }
+
+    fn sign_snapshot(
+        snapshot: TrustSnapshotV01,
+        key: &SigningKey,
+    ) -> Result<SignedTrustSnapshotV01, Box<dyn Error>> {
+        let mut envelope = SignedTrustSnapshotV01 {
+            schema: SIGNED_SNAPSHOT_SCHEMA_V01.to_owned(),
+            provider_id: "synthetic-host-snapshot-provider".to_owned(),
+            key_id: "synthetic-host-root-v1".to_owned(),
+            snapshot,
+            signature: String::new(),
+        };
+        envelope.signature = URL_SAFE_NO_PAD.encode(
+            key.sign(&trust_snapshot_signing_bytes(&envelope)?)
+                .to_bytes(),
+        );
+        Ok(envelope)
+    }
+
+    fn test_anchor(key: &SigningKey) -> SnapshotTrustAnchorV01 {
+        SnapshotTrustAnchorV01 {
+            provider_id: "synthetic-host-snapshot-provider".to_owned(),
+            key_id: "synthetic-host-root-v1".to_owned(),
+            public_key: URL_SAFE_NO_PAD.encode(key.verifying_key().to_bytes()),
+        }
+    }
+
+    fn evaluate_from_provider(
+        fixture: &Fixture,
+        provider: &TestSnapshotProvider,
+        anchor: &SnapshotTrustAnchorV01,
+    ) -> GateResultV01 {
+        evaluate_with_snapshot_provider(
+            GateEvidenceInputV01 {
+                request: &fixture.request,
+                initiation: &fixture.initiation,
+                nova_admission: &fixture.nova_admission,
+                evidence: &fixture.evidence,
+                final_receipts: &fixture.final_receipts,
+            },
+            provider,
+            anchor,
+        )
+    }
+
     #[test]
     fn all_eighteen_signed_checks_and_separate_human_gates_pass_without_authority()
     -> Result<(), Box<dyn Error>> {
@@ -1691,6 +1963,78 @@ mod tests {
         assert!(result.initiation_accepted, "{:?}", result.reason_codes);
         assert!(!result.nova_admission_accepted);
         assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn trusted_provider_requires_two_identical_signed_snapshots() -> Result<(), Box<dyn Error>> {
+        let fixture = Fixture::new()?;
+        let key = SigningKey::from_bytes(&[91_u8; 32]);
+        let signed = sign_snapshot(fixture.snapshot.clone(), &key)?;
+        let provider = TestSnapshotProvider::new(
+            vec![Ok(signed.clone()), Ok(signed)],
+            vec![
+                Ok("2030-01-01T00:04:56Z".to_owned()),
+                Ok("2030-01-01T00:04:57Z".to_owned()),
+            ],
+        );
+        let result = evaluate_from_provider(&fixture, &provider, &test_anchor(&key));
+        assert_eq!(result.status, GateStatus::ReferencePassed);
+        assert_eq!(provider.snapshot_calls.get(), 2);
+        assert_eq!(provider.time_calls.get(), 2);
+        assert!(!result.can_open_contact);
+        assert_eq!(result.operative_authority, "NONE");
+        assert!(!result.external_side_effect);
+        Ok(())
+    }
+
+    #[test]
+    fn untrusted_or_changed_snapshot_returns_hold() -> Result<(), Box<dyn Error>> {
+        let fixture = Fixture::new()?;
+        let trusted_key = SigningKey::from_bytes(&[92_u8; 32]);
+        let other_key = SigningKey::from_bytes(&[93_u8; 32]);
+        let trusted = sign_snapshot(fixture.snapshot.clone(), &trusted_key)?;
+        let untrusted = sign_snapshot(fixture.snapshot.clone(), &other_key)?;
+        let provider = TestSnapshotProvider::new(
+            vec![Ok(trusted), Ok(untrusted)],
+            vec![
+                Ok("2030-01-01T00:04:56Z".to_owned()),
+                Ok("2030-01-01T00:04:57Z".to_owned()),
+            ],
+        );
+        let result = evaluate_from_provider(&fixture, &provider, &test_anchor(&trusted_key));
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn unavailable_snapshot_or_non_monotonic_clock_returns_hold() -> Result<(), Box<dyn Error>> {
+        let fixture = Fixture::new()?;
+        let key = SigningKey::from_bytes(&[94_u8; 32]);
+        let signed = sign_snapshot(fixture.snapshot.clone(), &key)?;
+        let unavailable = TestSnapshotProvider::new(
+            vec![Err(SnapshotProviderError::Unavailable)],
+            vec![
+                Ok("2030-01-01T00:04:56Z".to_owned()),
+                Ok("2030-01-01T00:04:57Z".to_owned()),
+            ],
+        );
+        assert_eq!(
+            evaluate_from_provider(&fixture, &unavailable, &test_anchor(&key)).status,
+            GateStatus::Hold
+        );
+        let clock_reversed = TestSnapshotProvider::new(
+            vec![Ok(signed.clone()), Ok(signed)],
+            vec![
+                Ok("2030-01-01T00:04:57Z".to_owned()),
+                Ok("2030-01-01T00:04:56Z".to_owned()),
+            ],
+        );
+        assert_eq!(
+            evaluate_from_provider(&fixture, &clock_reversed, &test_anchor(&key)).status,
+            GateStatus::Hold
+        );
         Ok(())
     }
 }
