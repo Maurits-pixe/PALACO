@@ -5,6 +5,7 @@ pub mod decision;
 pub mod domain;
 pub mod event;
 pub mod event_store;
+pub mod identity_issuance;
 pub mod persistence;
 pub mod signature;
 pub mod verification;
