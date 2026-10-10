@@ -3,7 +3,10 @@ use crate::verification::Sha256Digest;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EventStoreError {
-    SequenceConflict { expected: Sequence, actual: Sequence },
+    SequenceConflict {
+        expected: Sequence,
+        actual: Sequence,
+    },
     PredecessorConflict,
     DuplicateEvent,
     Persistence(String),

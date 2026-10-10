@@ -39,6 +39,41 @@ function proof() {
     <section class="section"><p class="eyebrow">Verify</p><h2>Search identity, Citadel, Watermerk or provenance reference.</h2><form data-verification><label for="reference">Reference</label><input id="reference" name="reference" autocomplete="off" placeholder="LA-001, identity or Watermerk"><button class="button" type="submit">Verify</button></form><output id="verification-result" aria-live="polite"></output></section>`);
 }
 
+function account() {
+  return page(`${header('PALACO · CONSUMER ACCESS', 'Your account starts with your consent.', 'A secure sign-in experience is being prepared for the first 4,444 PALACO pioneers.')}
+    <section class="section account-notice" aria-labelledby="account-status">
+      <p class="badge" id="account-status">PREVIEW · NOT CONNECTED</p>
+      <h2>No account is created or authenticated here.</h2>
+      <p>This public website has no identity provider or account backend. These controls are intentionally unavailable and do not collect credentials, email addresses or recovery information.</p>
+      <p>Signing in will identify an account to a service; it will not by itself prove a PALACO identity, grant a role, authorize an action or activate access to a Citadel.</p>
+    </section>
+    <section class="section"><div class="grid account-grid">
+      <article class="card"><p class="eyebrow">01 · Sign in</p><h3>Passkey first</h3><p>Planned: passkey sign-in where supported, with an accessible verified-email fallback and abuse-resistant rate limits.</p><button class="button" type="button" disabled aria-describedby="account-status">Sign in · unavailable</button></article>
+      <article class="card"><p class="eyebrow">02 · Create account</p><h3>Verify before access</h3><p>Planned: verified contact, clear privacy notice, explicit consent and a separate, bounded pioneer admission status.</p><button class="button" type="button" disabled aria-describedby="account-status">Create account · unavailable</button></article>
+      <article class="card"><p class="eyebrow">03 · Recover</p><h3>Recovery without shortcuts</h3><p>Recovery will use a verified, rate-limited process with user notifications. Support will never sign in as you or silently change your permissions.</p><button class="button" type="button" disabled aria-describedby="account-status">Recover account · unavailable</button></article>
+    </div></section>
+    <section class="section"><p class="eyebrow">Separate states</p><h2>Account · identity · pioneer place · authority</h2><p>These are distinct records. A pioneer number is not a credential, role, Citadel membership or authorization. No live enrollment or place count is shown in this preview.</p>${link('industrie/admin','View Industrie admin preview')}</section>`);
+}
+
+function industrieAdmin() {
+  return page(`${header('PALACO INDUSTRIE · OPERATIONS', 'Access administration', 'A role-separated operational concept for the pioneer pilot.')}
+    <section class="section account-notice" aria-labelledby="admin-status">
+      <p class="badge" id="admin-status">SYNTHETIC PREVIEW · NO ADMIN BACKEND</p>
+      <h2>No real users, places or actions are available.</h2>
+      <p>This page is a design preview only. It reads no account data, changes no records and grants no access. All operational actions remain disabled until a reviewed server-side service exists.</p>
+    </section>
+    <section class="section"><p class="eyebrow">Capacity boundary</p><div class="grid account-grid">
+      <article class="card"><p class="eyebrow">Pioneer cohort</p><h3>Maximum 4,444</h3><p>Fixed program limit. Live places remaining: <strong>NOT CONNECTED</strong>. No estimated or client-maintained count is presented as canonical.</p></article>
+      <article class="card"><p class="eyebrow">Admission</p><h3>Server transaction required</h3><p>Admission must atomically claim a unique place under the cap and append its status change to the audit history.</p><button class="button" type="button" disabled aria-describedby="admin-status">Manage invitations · unavailable</button></article>
+      <article class="card"><p class="eyebrow">Audit</p><h3>Append-only record</h3><p>Actor, role, reason, target reference, decision, timestamp and correlation reference; never passwords, session tokens or unnecessary personal data.</p><p><span class="badge">AUDIT SOURCE NOT CONNECTED</span></p></article>
+    </div></section>
+    <section class="section"><p class="eyebrow">Separated administrator roles</p><div class="grid account-grid">
+      <article class="card"><h3>Support</h3><p>May guide recovery and view minimal support status. Cannot impersonate an account, issue roles or authorize actions.</p></article>
+      <article class="card"><h3>Pioneer operations</h3><p>May manage invitations and admission status within policy. Each change requires an attributable reason and confirmation.</p></article>
+      <article class="card"><h3>Security administrator</h3><p>May revoke credentials and contain security incidents. High-impact role or policy changes require independent approval.</p></article>
+    </div><p>Administrator sign-in requires a separately protected service, individual accounts, strong MFA/passkeys and least privilege. Login or role membership alone never authorizes external execution.</p>${link('account','Consumer account preview')}</section>`);
+}
+
 function detail(route) {
   const map = {
     'elixirs': ['Elixirs','Curated experiences within the PALACO ecosystem.','No public Elixir records are registered in this baseline. Every future item will expose origin, Citadel, Watermerk, provenance and status.'],
@@ -52,7 +87,8 @@ function detail(route) {
     'constitution': ['Constitution','The public rules underlying the architecture.','Purpose · Identity · Boundaries · Authority · Provenance · Status · Review · Revocation · Evolution.']
   };
   const [title, subtitle, body] = map[route] || ['The path is not found','The requested architectural location does not currently exist.','Return to the PALACO threshold.'];
-  return page(`${header(`PALACO · ${title.toUpperCase()}`, title, subtitle)}<section class="section"><h2>${body}</h2><p>Current public status: <span class="badge">DRAFT</span> <span class="badge">UNVERIFIED</span></p>${link('','Return to PALACO')}</section>`);
+  const industryAdminLink = route === 'industrie' ? `<section class="section"><p class="eyebrow">Pioneer pilot · operations concept</p><h2>Consumer access and operational administration stay separate.</h2><p>The account experience and the Industrie administration preview are not connected to a live identity service.</p>${link('account','Consumer account preview')} ${link('industrie/admin','Industrie admin preview')}</section>` : '';
+  return page(`${header(`PALACO · ${title.toUpperCase()}`, title, subtitle)}<section class="section"><h2>${body}</h2><p>Current public status: <span class="badge">DRAFT</span> <span class="badge">UNVERIFIED</span></p>${link('','Return to PALACO')}</section>${industryAdminLink}`);
 }
 
 function syncNavigation(routeName) {
@@ -68,6 +104,8 @@ function route() {
   const raw = location.hash.replace(/^#\/?/, '').replace(/\/$/, '') || '';
   const main = document.querySelector('#main');
   if (raw === '' || raw === 'enter') main.innerHTML = home();
+  else if (raw === 'account') main.innerHTML = account();
+  else if (raw === 'industrie/admin') main.innerHTML = industrieAdmin();
   else if (raw === 'citadels' || raw === 'citadels/la-001') main.innerHTML = citadels(raw);
   else if (raw === 'proof' || raw === 'proof/verify') main.innerHTML = proof();
   else if (raw === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
