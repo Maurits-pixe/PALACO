@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: palaco-rio-temporary
+    runtime: static
+    plan: free
+    rootDir: website
+    buildCommand: echo "Publishing static RIO preview"
+    staticPublishPath: .
+    routes:
+      - type: rewrite
+        source: /
+        destination: /studio.html
