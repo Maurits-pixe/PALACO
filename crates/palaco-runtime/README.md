@@ -45,3 +45,26 @@ execution. Callers must supply a trusted clock and independently reload both
 snapshots; the evaluator itself cannot establish either trust boundary. All test
 keys and examples are synthetic. Passing tests do not activate or authorize
 anything.
+
+### Run the reference evaluator
+
+The Rust CLI reads one strict JSON bundle from standard input and writes one
+JSON result to standard output:
+
+```sh
+cargo run -p palaco-runtime --bin sixri9ade < bundle.json
+```
+
+The bundle uses schema `elixer-6ri9ade-bundle-v0.1` and contains
+`request`, `initiation`, `novaAdmission`, `evidence` (the signed specialty
+envelopes), `finalReceipts`, `initialSnapshot`, and `finalSnapshot`. Each
+contract follows the corresponding v0.1 type above; unknown fields are rejected.
+The evaluator uses the process clock, accepts at most 1 MiB from stdin, and
+returns a structured HOLD/STOP/PENDING result as JSON. Exit code 2 means the
+input could not be processed; an evaluation that returns a restrictive status
+is still a successful evaluation and exits 0.
+
+This command is useful for local contract evaluation only. The two snapshot
+fields must be independently obtained by the host, but their authenticity is
+not established by the CLI. It makes no network calls and does not deliver
+messages, open contact, or enable authority.

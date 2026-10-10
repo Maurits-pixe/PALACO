@@ -237,6 +237,20 @@ pub struct GateInputV01<'a> {
     pub final_snapshot: &'a TrustSnapshotV01,
 }
 
+/// Strict JSON input accepted by the standalone reference evaluator.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct GateBundleV01 {
+    pub schema: String,
+    pub request: RequestV01,
+    pub initiation: SignedEnvelopeV01,
+    pub nova_admission: SignedEnvelopeV01,
+    pub evidence: Vec<SignedEnvelopeV01>,
+    pub final_receipts: Vec<SignedEnvelopeV01>,
+    pub initial_snapshot: TrustSnapshotV01,
+    pub final_snapshot: TrustSnapshotV01,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Slot {
     side: Side,
