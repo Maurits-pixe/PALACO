@@ -77,6 +77,25 @@ integration to consume; it does not itself start or connect to a service. It is
 absent from optimized release builds and is not connected to production startup
 or authentication.
 
+### Provisional RIO test access declaration
+
+The project owner provisionally designates these two accounts as eligible to
+request the restricted development startup continuation for RIO message-service
+testing:
+
+- `mauritsvangeen@hotmail.com`
+- `iii6v9@gmail.com`
+
+This designation is limited to the development test purpose above. It grants no
+5CRIPTIE evidence verification, identity issuance, operative authority, or
+external message delivery. It is a governance record only: the current helper
+does not authenticate users or enforce this account list. Email text alone is
+not proof of account control or identity. Before relying on this designation,
+an authenticated account provider must bind verified account identifiers to
+the eligibility policy, and the test integration must enforce that policy
+server-side. Until then, this document must not be treated as a working access
+control or permission to connect to a live service.
+
 ## Verification
 
 Run the reference contract tests with:
