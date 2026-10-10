@@ -243,9 +243,10 @@ struct Slot {
     specialty: Specialty,
 }
 
-/// Evaluates a reference-only gate against two host snapshots. Both snapshots
-/// must be identical and fresh, preventing a changed revocation/trust view
-/// from silently passing during evaluation.
+/// Evaluates a reference-only gate against two independently loaded host
+/// snapshots and a host-supplied current time. Both snapshots must be identical
+/// and fresh; callers are responsible for supplying trusted clock and snapshot
+/// reads. No execution or contact side effect is possible through this API.
 #[must_use]
 pub fn evaluate(input: GateInputV01<'_>, now: &str) -> GateResultV01 {
     let GateInputV01 {
@@ -390,6 +391,7 @@ pub fn evaluate(input: GateInputV01<'_>, now: &str) -> GateResultV01 {
         );
     };
     if snapshot_captured_ms > now_ms
+        || snapshot_captured_ms < created_ms
         || snapshot_expiry_ms <= snapshot_captured_ms
         || now_ms - snapshot_captured_ms > MAX_SNAPSHOT_AGE_MS
         || snapshot_expiry_ms <= now_ms

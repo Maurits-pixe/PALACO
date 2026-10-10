@@ -23,8 +23,9 @@ and independent release review remain outside this MVP.
 
 ## 6RI9ADE reference gate
 
-`sixri9ade` is an executable, synthetic-only reference evaluator for the
-PALACO-Citadel 6RI9ADE concept. It requires nine signed specialty results for
+`sixri9ade` is an executable, synthetic-only reference evaluator informed by
+the [PALACO-Citadel 6RI9ADE concept PR #35](https://github.com/Maurits-pixe/PALACO-Citadel/pull/35).
+It requires nine signed specialty results for
 each side (18 total), a sender initiation, a separately signed receiver
 NOVA-admission receipt, and distinct sender/receiver final-consent receipts
 bound to the same request, admission, and complete evidence-set digest.
@@ -40,5 +41,7 @@ This Rust binding is not a production service or a claim of wire-level
 conformance with the separate concept PR. In particular, it cannot authenticate
 the host-supplied trust snapshot and is not connected to real accounts, NOVA,
 E2EE, bodyguard services, message delivery, a RIO surface, or external
-execution. All test keys and examples are synthetic. Passing tests do not
-activate or authorize anything.
+execution. Callers must supply a trusted clock and independently reload both
+snapshots; the evaluator itself cannot establish either trust boundary. All test
+keys and examples are synthetic. Passing tests do not activate or authorize
+anything.
