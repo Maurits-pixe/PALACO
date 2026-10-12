@@ -410,8 +410,8 @@ async fn start(State(state): State<AppState>, headers: HeaderMap) -> Result<Resp
         .client
         .authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
-            CsrfToken::new_random,
-            Nonce::new_random,
+            || CsrfToken::new(random_token()),
+            || Nonce::new(random_token()),
         )
         .set_pkce_challenge(challenge)
         .url();

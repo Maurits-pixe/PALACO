@@ -107,6 +107,81 @@ fixture. The sanitized result is `evidence/browser-summary.json`; runtime files,
 environment dumps and authentication traces must not be uploaded.
 A passing verification run does not change any HOLD gate.
 
+## Private protocol: first RIO test on two physical phones
+
+Status: **PREPARATION ONLY**. This protocol has not been executed on phones and
+does not open ACCOUNT-1, real invitations, contact access or production.
+
+### What the current slice proves
+
+The current fixture can prove native OIDC login, server-bound synthetic identity,
+isolated BFF sessions, CSRF protection, logout and expiry. Two browser contexts
+are a useful preliminary check. They do not prove a RIO connection between two
+physical devices: this account slice has no peer connection or message-delivery
+endpoint.
+
+`localhost` on a phone refers to that phone. The existing BFF deliberately binds
+the developer computer's loopback interface, and its exact host, issuer and
+callback checks are fixed for that local fixture. Copying its URL to two phones
+cannot produce the requested device test.
+
+### Smallest separate staging path
+
+Use one existing developer computer and two test phones on the same private
+Wi-Fi. Keep the account fixture unchanged. Prepare a separate, explicit
+synthetic phone-test configuration before making any listener reachable:
+
+1. Define two distinct, exact HTTPS names reachable from both phones: one for
+   the BFF and one for the identity provider. Do not reuse one hostname with
+   different ports, because browser cookies are not isolated by port.
+2. Provide private DNS or equivalent routing for those names to the developer
+   computer, and certificates trusted by both phones. A local test CA needs
+   deliberate installation and removal on the two test devices; no certificate
+   warning bypass may be treated as evidence of a trusted connection.
+3. Use a gateway on the private LAN to forward only the intended BFF and IdP
+   endpoints to their existing loopback listeners. Configure the separate BFF
+   build with its exact public test origin, exact issuer/authorization/token/JWKS
+   endpoints and exact HTTPS callback. Configure Keycloak's hostname and
+   confidential-client redirect URI to the same agreed values. Preserve its
+   endpoint allowlist, Secure host-only cookies, PKCE, nonce and state checks.
+   A proxy host rewrite alone cannot make the current callback and Origin
+   checks valid for phones.
+4. Limit access to the test LAN/devices, generate a fresh synthetic realm and
+   client secret for the run, and retain no real account or contact data.
+   Confirm the environment still reports `SYNTHETIC_ONLY`, `ACCOUNT-1 HOLD`,
+   `operativeAuthority NONE` and no contact access.
+5. Implement and verify the RIO transport path that establishes a reciprocal
+   connection between the two synthetic actors. Define its exact invitation,
+   acceptance and test-message behavior, its session authorization and its
+   sanitized connection evidence before calling the device test ready.
+
+This is a preparation route, not a deployment instruction. It requires explicit
+staging configuration, a trusted network/TLS setup and a working transport
+slice. This change creates none of those external resources.
+
+### Device rehearsal and acceptance
+
+Record only `Phone A`, `Phone B`, OS/browser versions, the tested commit,
+the two test hostnames and UTC scenario times. Do not record phone numbers,
+device serials, email addresses, passwords, cookies, tokens or private keys.
+
+| Step | Phone A | Phone B | Required result |
+| --- | --- | --- | --- |
+| Reachability | Open the agreed BFF HTTPS name | Open the same BFF HTTPS name | Both display the same tested build with trusted TLS |
+| Synthetic login | Sign in as TST-alpha | Sign in as TST-beta | Server returns the corresponding fixed synthetic subject/account; HOLD status remains visible |
+| Isolation | Read own account/session state | Read own account/session state | Neither phone obtains the other actor's state or authority |
+| First RIO connection | Start the defined synthetic connection request | Accept that request through the defined transport path | Both devices receive one matching connection result linked to the two synthetic actors |
+| Transport proof | Send a fresh synthetic challenge | Receive it and return a matching response | Delivery is observed on the other physical device; one connection identifier and timing pair match |
+| Local logout | Log out the current BFF session | Keep its session open | A loses account/transport access; B remains bound to beta |
+| Expiry/restart | Retry after the agreed session lifetime or service restart | Retry independently | Expired or cleared sessions receive an authorization failure and require fresh login |
+| Cleanup | Close the test | Close the test | Stop gateway/IdP/BFF, remove generated secrets and temporary trust/DNS setup; keep only sanitized evidence |
+
+The first genuine two-phone RIO connection is **PASS** only when the reciprocal
+connection and challenge/response steps succeed on the two physical phones.
+A successful pair of logins is recorded as **AUTH PASS / TRANSPORT NOT TESTED**.
+Any missing staging, TLS, transport or physical-device evidence remains
+**NOT RUN**. Automated localhost checks never replace the physical-device result.
+
 ## Version evidence
 
 The exact image tag is pinned to the maintained release listed by the

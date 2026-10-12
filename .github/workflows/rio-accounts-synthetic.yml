@@ -41,12 +41,6 @@ jobs:
           cargo --version
           node --version
           python --version
-      - name: Bootstrap pinned dependency records
-        run: |
-          cargo generate-lockfile --manifest-path services/rio-accounts/Cargo.toml
-          npm install --prefix verification/rio-accounts --package-lock-only --ignore-scripts --no-audit --no-fund
-          cargo fmt --manifest-path services/rio-accounts/Cargo.toml
-          python verification/rio-accounts/ci-evidence.py sources
       - name: Check fixture and browser sources
         run: |
           python -m py_compile verification/rio-accounts/fixture.py verification/rio-accounts/ci-evidence.py
