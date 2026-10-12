@@ -142,6 +142,16 @@ async function login(page, user, { rotate = false } = {}) {
   page.on('request', observe);
   try {
     const authorization = await beginLogin(page, { rotate });
+    if (rotate) {
+      // Starting reauthentication retains the current session until callback success.
+      const retainedSessionPage = await page.context().newPage();
+      try {
+        await retainedSessionPage.goto(BFF);
+        await assertOwnAccount(retainedSessionPage, user.username);
+      } finally {
+        await retainedSessionPage.close();
+      }
+    }
     await test.step('real-idp-login', async () => {
       await page.locator('input[name="username"]').fill(user.username);
       await page.locator('input[name="password"]').fill(user.password);

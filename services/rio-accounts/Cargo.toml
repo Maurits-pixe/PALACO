@@ -6,12 +6,16 @@ rust-version = "1.90"
 license = "MIT OR Apache-2.0"
 publish = false
 
+[[bin]]
+name = "rio-accounts-dev"
+path = "src/main.rs"
+
 # Isolated T02 candidate. No dependency on the unmerged runtime candidate.
 [workspace]
 
 [dependencies]
 axum = "=0.8.6"
-axum-server = { version = "=0.7.2", features = ["tls-rustls-no-provider"] }
+axum-server = { version = "=0.8.0", features = ["tls-rustls-no-provider"] }
 base64 = "=0.22.1"
 openidconnect = { version = "=4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
 rand = "=0.8.5"

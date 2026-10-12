@@ -1,6 +1,6 @@
-use std::net::SocketAddr;
 use axum_server::tls_rustls::RustlsConfig;
 use rio_accounts::{AppState, DevConfig, router};
+use std::net::SocketAddr;
 
 #[tokio::main]
 async fn main() {
