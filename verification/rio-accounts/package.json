@@ -1,0 +1,17 @@
+{
+  "name": "rio-accounts-browser-verification",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Real OIDC browser verification for the loopback-only synthetic RIO account sandbox",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "check": "node --check playwright.config.mjs && node --check safe-reporter.mjs && node --check tests/accounts.spec.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

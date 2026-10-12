@@ -1,0 +1,27 @@
+# Synthetic loopback development fixture only. Do not deploy this file.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.8.0
+    command:
+      - start-dev
+      - --import-realm
+      - --db=dev-mem
+      - --hostname=http://127.0.0.1:8089
+      - --http-port=8089
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: rio-synthetic-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${RIO_KC_ADMIN_PASSWORD:?run fixture.py prepare first}
+    ports:
+      - "127.0.0.1:8089:8089"
+    volumes:
+      - type: bind
+        source: "${RIO_RUNTIME_DIR:?run fixture.py prepare first}/rio-synthetic-realm.json"
+        target: /opt/keycloak/data/import/rio-synthetic-realm.json
+        read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 1g
+    restart: "no"
+networks:
+  default:
+    internal: true

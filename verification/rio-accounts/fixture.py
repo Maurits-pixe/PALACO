@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+"""Prepare and run the isolated synthetic Keycloak/BFF fixture."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+from pathlib import Path
+import secrets
+import shutil
+import subprocess
+import sys
+import time
+from urllib.error import URLError
+from urllib.request import build_opener, ProxyHandler, HTTPRedirectHandler
+
+ROOT = Path(__file__).resolve().parent
+REPO = ROOT.parents[1]
+RUNTIME = ROOT / ".runtime"
+ISSUER = "http://127.0.0.1:8089/realms/rio-synthetic"
+CLIENT_ID = "rio-bff"
+CALLBACK = "https://localhost:8088/auth/callback"
+SUBJECTS = {
+    "alpha": "11111111-1111-4111-8111-111111111111",
+    "beta": "22222222-2222-4222-8222-222222222222",
+}
+PRIVATE_FILES = ("compose.env", "bff.env", "test-credentials.json", "metadata.json", "tls-cert.pem", "tls-key.pem")
+GENERATED_FILES = (*PRIVATE_FILES, "rio-synthetic-realm.json")
+
+class NoRedirects(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def runtime_path(name: str) -> Path:
+    path = RUNTIME / name
+    if RUNTIME.is_symlink() or path.is_symlink():
+        raise RuntimeError("The fixture refuses symlinked runtime files.")
+    return path
+
+def write_new(name: str, text: str, mode: int = 0o600) -> None:
+    fd = os.open(runtime_path(name), os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as output:
+        output.write(text)
+    if os.name != "nt":
+        os.chmod(runtime_path(name), mode)
+
+def user_profile() -> dict:
+    # This fixture must never ask for an email/name during login.
+    attributes = []
+    for name in ("username", "email", "firstName", "lastName"):
+        attribute = {
+            "name": name,
+            "permissions": {"view": ["admin", "user"], "edit": ["admin"]},
+            "multivalued": False,
+            "validations": {"length": {"max": 255}},
+        }
+        if name == "username":
+            attribute["validations"] = {
+                "length": {"min": 3, "max": 64},
+                "username-prohibited-characters": {},
+                "up-username-not-idn-homograph": {},
+            }
+        elif name == "email":
+            attribute["validations"]["email"] = {}
+        attributes.append(attribute)
+    return {"attributes": attributes, "groups": [], "unmanagedAttributePolicy": "DISABLED"}
+
+def realm(client_secret: str, credentials: dict) -> dict:
+    return {
+        "id": "rio-synthetic",
+        "realm": "rio-synthetic",
+        "enabled": True,
+        "displayName": "RIO synthetic development fixture",
+        "sslRequired": "none",
+        "registrationAllowed": False,
+        "registrationEmailAsUsername": False,
+        "loginWithEmailAllowed": False,
+        "resetPasswordAllowed": False,
+        "rememberMe": False,
+        "verifyEmail": False,
+        "editUsernameAllowed": False,
+        "bruteForceProtected": True,
+        "defaultSignatureAlgorithm": "RS256",
+        "accessTokenLifespan": 60,
+        "ssoSessionIdleTimeout": 300,
+        "ssoSessionMaxLifespan": 900,
+        "revokeRefreshToken": True,
+        "refreshTokenMaxReuse": 0,
+        "eventsEnabled": False,
+        "smtpServer": {},
+        "identityProviders": [],
+        "components": {
+            "org.keycloak.userprofile.UserProfileProvider": [
+                {
+                    "providerId": "declarative-user-profile",
+                    "subComponents": {},
+                    "config": {"kc.user.profile.config": [json.dumps(user_profile())]},
+                }
+            ]
+        },
+        "clients": [
+            {
+                "clientId": CLIENT_ID,
+                "name": "RIO synthetic BFF",
+                "enabled": True,
+                "protocol": "openid-connect",
+                "publicClient": False,
+                "clientAuthenticatorType": "client-secret",
+                "secret": client_secret,
+                "standardFlowEnabled": True,
+                "implicitFlowEnabled": False,
+                "directAccessGrantsEnabled": False,
+                "serviceAccountsEnabled": False,
+                "authorizationServicesEnabled": False,
+                "fullScopeAllowed": False,
+                "redirectUris": [CALLBACK],
+                "webOrigins": [],
+                "defaultClientScopes": [],
+                "optionalClientScopes": [],
+                "attributes": {
+                    "pkce.code.challenge.method": "S256",
+                    "id.token.signed.response.alg": "RS256",
+                    "oauth2.device.authorization.grant.enabled": "false",
+                    "oidc.ciba.grant.enabled": "false",
+                },
+            }
+        ],
+        "users": [
+            {
+                "id": data["subject"],
+                "username": data["username"],
+                "enabled": True,
+                "emailVerified": False,
+                "requiredActions": [],
+                "credentials": [
+                    {"type": "password", "value": data["password"], "temporary": False}
+                ],
+            }
+            for data in credentials.values()
+        ],
+    }
+
+def prepare() -> None:
+    if RUNTIME.is_symlink():
+        raise RuntimeError("The fixture refuses a symlinked runtime directory.")
+    present = [runtime_path(name).exists() for name in GENERATED_FILES]
+    if all(present):
+        print("Synthetic runtime already prepared; reuse until fixture.py down.")
+        return
+    if any(present):
+        raise RuntimeError("Incomplete runtime. Stop the fixture, then run fixture.py down.")
+    RUNTIME.mkdir(mode=0o700, exist_ok=True)
+    if os.name != "nt":
+        os.chmod(RUNTIME, 0o700)
+    if not shutil.which("openssl"):
+        raise RuntimeError("OpenSSL is required to generate the one-day loopback certificate.")
+    credentials = {
+        label: {
+            "username": f"TST-{label}",
+            "subject": subject,
+            "password": secrets.token_urlsafe(24),
+        }
+        for label, subject in SUBJECTS.items()
+    }
+    admin_password = secrets.token_urlsafe(32)
+    client_secret = secrets.token_hex(32)
+    project_name = "rio-accounts-synthetic-" + secrets.token_hex(4)
+    metadata = {"project": project_name, "issuer": ISSUER, "clientId": CLIENT_ID}
+    write_new("metadata.json", json.dumps(metadata, indent=2) + "\n")
+    write_new("test-credentials.json", json.dumps(credentials, indent=2) + "\n")
+    write_new(
+        "compose.env",
+        f"COMPOSE_PROJECT_NAME={project_name}\n"
+        f"RIO_RUNTIME_DIR={RUNTIME.as_posix()}\n"
+        f"RIO_KC_ADMIN_PASSWORD={admin_password}\n",
+    )
+    write_new(
+        "bff.env",
+        "RIO_DEV_MODE=SYNTHETIC_ONLY\n"
+        f"RIO_DEV_CLIENT_SECRET={client_secret}\n"
+        f"RIO_DEV_TLS_CERT={runtime_path('tls-cert.pem')}\n"
+        f"RIO_DEV_TLS_KEY={runtime_path('tls-key.pem')}\n",
+    )
+    write_new("tls-cert.pem", "")
+    write_new("tls-key.pem", "")
+    certificate = subprocess.run(
+        [
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+            "-days", "1", "-subj", "/CN=RIO synthetic loopback",
+            "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost",
+            "-keyout", str(runtime_path("tls-key.pem")),
+            "-out", str(runtime_path("tls-cert.pem")),
+        ],
+        capture_output=True,
+        check=False,
+    )
+    if certificate.returncode != 0:
+        raise RuntimeError("OpenSSL could not generate the loopback certificate.")
+    if os.name != "nt":
+        for name in ("tls-cert.pem", "tls-key.pem"):
+            os.chmod(runtime_path(name), 0o600)
+    # A single file bind mount must be readable by Keycloak UID 1000.
+    # Host access remains restricted by the owner-only .runtime directory.
+    write_new("rio-synthetic-realm.json", json.dumps(realm(client_secret, credentials), indent=2) + "\n", 0o644)
+    print("Prepared private synthetic runtime; credentials were not printed.")
+
+def compose(*arguments: str) -> None:
+    metadata_path = runtime_path("metadata.json")
+    if not metadata_path.exists():
+        raise RuntimeError("No prepared fixture runtime. Run fixture.py prepare first.")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    if not re.fullmatch(r"rio-accounts-synthetic-[0-9a-f]{8}", metadata.get("project", "")):
+        raise RuntimeError("Invalid synthetic Compose project; refusing container changes.")
+    subprocess.run(
+        [
+            "docker", "compose",
+            "--env-file", str(runtime_path("compose.env")),
+            "--file", str(ROOT / "compose.yaml"),
+            "--project-name", metadata["project"],
+            *arguments,
+        ],
+        check=True,
+        cwd=ROOT,
+    )
+
+def wait_for_discovery(timeout: float = 180) -> None:
+    opener = build_opener(ProxyHandler({}), NoRedirects())
+    deadline = time.monotonic() + timeout
+    url = ISSUER + "/.well-known/openid-configuration"
+    while time.monotonic() < deadline:
+        try:
+            with opener.open(url, timeout=2) as response:
+                document = json.load(response)
+            if document.get("issuer") == ISSUER:
+                print("Synthetic Keycloak discovery is ready.")
+                return
+        except (URLError, TimeoutError, OSError, ValueError):
+            pass
+        time.sleep(1)
+    raise RuntimeError("Synthetic Keycloak discovery did not become ready.")
+
+def read_bff_environment() -> dict:
+    values = {}
+    for line in runtime_path("bff.env").read_text(encoding="utf-8").splitlines():
+        if line:
+            key, value = line.split("=", 1)
+            values[key] = value
+    return values
+
+def run_bff() -> None:
+    env = os.environ.copy()
+    env.update(read_bff_environment())
+    binary = REPO / "services" / "rio-accounts" / "target" / "debug" / "rio-accounts-dev"
+    if os.name == "nt":
+        binary = binary.with_suffix(".exe")
+    if not binary.is_file():
+        raise RuntimeError("Build services/rio-accounts first with cargo build --manifest-path services/rio-accounts/Cargo.toml.")
+    os.chdir(REPO)
+    if os.name != "nt":
+        # Keep the CI background PID as the BFF process so termination reaches it.
+        os.execve(str(binary), [str(binary)], env)
+    subprocess.run([str(binary)], check=True, cwd=REPO, env=env)
+
+def down() -> None:
+    if runtime_path("metadata.json").exists():
+        compose("down", "--volumes", "--remove-orphans")
+    # Remove only our known generated files. Never recurse over an arbitrary path.
+    for name in GENERATED_FILES:
+        path = runtime_path(name)
+        if path.exists():
+            path.unlink()
+    print("Synthetic containers/network and generated credentials removed.")
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("prepare", "up", "run-bff", "down"))
+    arguments = parser.parse_args()
+    try:
+        if arguments.command == "prepare":
+            prepare()
+        elif arguments.command == "up":
+            prepare()
+            compose("up", "-d")
+            wait_for_discovery()
+        elif arguments.command == "run-bff":
+            run_bff()
+        else:
+            down()
+    except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
+        print(f"Fixture failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
