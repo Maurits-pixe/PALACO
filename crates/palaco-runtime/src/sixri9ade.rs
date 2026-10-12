@@ -1821,6 +1821,21 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_specialty_evidence_holds_without_side_effects() -> Result<(), Box<dyn Error>> {
+        let mut fixture = Fixture::new()?;
+        fixture.evidence[17] = fixture.evidence[0].clone();
+
+        let result = fixture.result();
+
+        assert_eq!(result.status, GateStatus::Hold);
+        assert!(!result.can_open_contact);
+        assert_eq!(result.operative_authority, "NONE");
+        assert!(!result.runtime_connected);
+        assert!(!result.external_side_effect);
+        Ok(())
+    }
+
+    #[test]
     fn changed_signed_evidence_fails_closed() -> Result<(), Box<dyn Error>> {
         let mut fixture = Fixture::new()?;
         let body = fixture.evidence[0]
@@ -1924,6 +1939,22 @@ mod tests {
         let result = fixture.result();
         assert_eq!(result.status, GateStatus::Hold);
         assert!(!result.can_open_contact);
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_final_consent_participant_stops_without_side_effects() -> Result<(), Box<dyn Error>>
+    {
+        let mut fixture = Fixture::new()?;
+        fixture.final_receipts[1] = fixture.final_receipts[0].clone();
+
+        let result = fixture.result();
+
+        assert_eq!(result.status, GateStatus::Stop);
+        assert!(!result.can_open_contact);
+        assert_eq!(result.operative_authority, "NONE");
+        assert!(!result.runtime_connected);
+        assert!(!result.external_side_effect);
         Ok(())
     }
 
