@@ -132,17 +132,16 @@ export async function nativeConsent(page, button, testInfo) {
       response.request().method() === 'POST', { timeout: 10_000 }),
     activate(page, page.locator(button), testInfo),
   ]);
-  // First prove that the native POST completed. Playwright's response.json() can
-  // lose the body when a keyboard-activated control immediately changes focus.
-  // Read the authoritative, actor-bound receipt through the same browser session;
-  // the separate PostgreSQL HTTP contract verifies the POST response envelope.
-  const completed = await response.finished();
-  expect(completed).toBeNull();
-  if (!response.ok()) return { status: response.status(), data: null };
+  // Playwright can observe POST response headers before its response-body
+  // lifecycle settles. Keep the real POST status and verify a successful action
+  // by reading the committed, actor-bound receipt through the same session.
+  // The separate PostgreSQL HTTP contract verifies the POST response envelope.
+  const status = response.status();
+  if (!response.ok()) return { status, data: null };
   const confirmed = await consent(page);
   expect(confirmed.status).toBe(200);
   receiptFrom(confirmed);
-  return { status: response.status(), data: confirmed.data };
+  return { status, data: confirmed.data };
 }
 
 export async function retainCookie(context) {
