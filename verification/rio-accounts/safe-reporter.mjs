@@ -83,6 +83,39 @@ function safeStudioSetup(annotations) {
   };
 }
 
+const DURABLE_LOGIN_STAGES = new Set([
+  'initial', 'creating-context', 'opening-bff', 'landing', 'starting-oidc',
+  'waiting-for-provider', 'submitting-credentials', 'waiting-for-bff',
+  'waiting-for-account', 'ready',
+]);
+const DURABLE_PAGE_KINDS = new Set(['unavailable', 'bff-home', 'provider', 'other']);
+
+// Annotations are NOT trusted. Copy only fixed enums and booleans to CI output.
+// Never render a raw exception/URL, Keycloak message, account name or bearer.
+export function safeDurableLoginObservation(annotations) {
+  if (!Array.isArray(annotations)) return undefined;
+  const items = annotations.filter(item => item?.type === 'rio-durable-login-observation');
+  if (items.length !== 1 || typeof items[0].description !== 'string' ||
+      items[0].description.length > 512) return undefined;
+  let source;
+  try { source = JSON.parse(items[0].description); } catch { return undefined; }
+  if (!source || typeof source !== 'object' || Array.isArray(source) ||
+      Object.keys(source).sort().join('|') !==
+        'accountVisible|actorCase|loginButtonVisible|pageKind|stage' ||
+      !['alpha', 'alphaPeer', 'beta'].includes(source.actorCase) ||
+      !DURABLE_LOGIN_STAGES.has(source.stage) ||
+      !DURABLE_PAGE_KINDS.has(source.pageKind) ||
+      !(source.loginButtonVisible === null || typeof source.loginButtonVisible === 'boolean') ||
+      !(source.accountVisible === null || typeof source.accountVisible === 'boolean')) return undefined;
+  return {
+    actorCase: source.actorCase,
+    stage: source.stage,
+    pageKind: source.pageKind,
+    loginButtonVisible: source.loginButtonVisible,
+    accountVisible: source.accountVisible,
+  };
+}
+
 function safeMobileErrorLocations(result) {
   const found = new Map();
   const errors = Array.isArray(result.errors) ? [...result.errors] : [];
@@ -161,6 +194,8 @@ export default class SafeReporter {
       phases,
       failedLines: result.status === 'passed' ? [] : [...failedLines].sort((a, b) => a - b),
       ...(id === 'RIO-E2E-04' ? { logoutObservation: safeLogoutObservation(test.annotations) } : {}),
+      ...(id === 'RIO-DURABLE-01' && result.status !== 'passed' && this.durablePhase === 'prepare'
+        ? { loginObservation: safeDurableLoginObservation(test.annotations) } : {}),
     };
     this.results.push(row);
     process.stdout.write(`${id}: ${row.status}${row.failedLines.length ? ' (source lines ' + row.failedLines.join(', ') + ')' : ''}\n`);
