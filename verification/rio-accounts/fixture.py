@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import re
@@ -309,6 +310,35 @@ def provider_error_details(sanitized: str) -> list[str]:
             break
     return details
 
+def public_port_bindings(raw: object) -> list[dict]:
+    """Keep only validated public port/address metadata; never Docker environment."""
+    bindings = []
+    if not isinstance(raw, dict):
+        return bindings
+    for container_port, values in raw.items():
+        if not isinstance(container_port, str) or not re.fullmatch(r"[0-9]{1,5}/(?:tcp|udp)", container_port):
+            continue
+        if not 1 <= int(container_port.split("/", 1)[0]) <= 65535:
+            continue
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if not isinstance(value, dict):
+                continue
+            host_ip, host_port = value.get("HostIp"), value.get("HostPort")
+            if not isinstance(host_ip, str) or not isinstance(host_port, str):
+                continue
+            if not re.fullmatch(r"[0-9]{1,5}", host_port):
+                continue
+            try:
+                host_ip = str(ipaddress.ip_address(host_ip))
+            except ValueError:
+                continue
+            if 1 <= int(host_port) <= 65535:
+                bindings.append({"containerPort": container_port, "hostIp": host_ip,
+                                 "hostPort": int(host_port)})
+    return bindings[:8]
+
 def diagnostics() -> None:
     """Print fixed diagnostic categories only; never raw provider logs/configuration."""
     metadata = json.loads(runtime_path("metadata.json").read_text(encoding="utf-8"))
@@ -317,19 +347,23 @@ def diagnostics() -> None:
         raise RuntimeError("Invalid diagnostic project.")
     container = project + "-keycloak-1"
     status = subprocess.run(
-        ["docker", "inspect", container, "--format", "{{json .State}}"],
+        ["docker", "inspect", container, "--format", "{{json .State}}\n{{json .NetworkSettings.Ports}}"],
         capture_output=True, text=True, check=False,
     )
     state = {}
+    port_bindings = []
     if status.returncode == 0:
         try:
-            raw = json.loads(status.stdout)
+            public_lines = status.stdout.splitlines()
+            raw = json.loads(public_lines[0])
+            if len(public_lines) > 1:
+                port_bindings = public_port_bindings(json.loads(public_lines[1]))
             state = {
                 "Running": raw.get("Running") if type(raw.get("Running")) is bool else None,
                 "ExitCode": raw.get("ExitCode") if type(raw.get("ExitCode")) is int and 0 <= raw["ExitCode"] <= 255 else None,
                 "OOMKilled": raw.get("OOMKilled") if type(raw.get("OOMKilled")) is bool else None,
             }
-        except ValueError:
+        except (ValueError, IndexError, TypeError, AttributeError):
             state = {"unavailable": True}
     logs = subprocess.run(
         ["docker", "logs", "--tail", "100", container],
@@ -355,7 +389,8 @@ def diagnostics() -> None:
         "has_error": "error" in data,
     }
     print("RIO_PROVIDER_DIAGNOSTIC " + json.dumps(
-        {"state": state, "categories": categories, "errorDetails": error_details},
+        {"state": state, "portBindings": port_bindings,
+         "categories": categories, "errorDetails": error_details},
         separators=(",", ":")))
     # A reached HTTP response is public status metadata, never its response content.
     try:

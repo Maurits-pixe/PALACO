@@ -25,4 +25,4 @@ services:
     restart: "no"
 networks:
   default:
-    internal: true
+    driver: bridge

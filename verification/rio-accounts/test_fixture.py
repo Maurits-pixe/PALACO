@@ -198,7 +198,11 @@ class FixtureSecurityTests(unittest.TestCase):
         self.assertIn("--db=dev-mem", compose)
         self.assertIn("--verbose", compose)
         self.assertIn("@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741", compose)
-        self.assertIn("internal: true", compose)
+        self.assertNotIn("internal: true", compose)
+        self.assertIn("driver: bridge", compose)
+        self.assertNotIn("network_mode: host", compose)
+        self.assertNotIn('"8089:8089"', compose)
+        self.assertNotIn('"0.0.0.0:8089:8089"', compose)
         self.assertIn("read_only: true", compose)
         self.assertNotIn("localhost:8089", compose)
         ignored = MODULE_PATH.with_name(".gitignore").read_text(encoding="utf-8").splitlines()
@@ -266,6 +270,21 @@ class FixtureSecurityTests(unittest.TestCase):
         payload = 'ERROR: UserProfile invalid {"credentials":[{"password":"anything"}]}'
         self.assertEqual(fixture.provider_error_details(payload),
                          ["CONFIGURATION_OR_DATABASE_PAYLOAD_REDACTED"])
+
+
+    def test_public_port_diagnostics_accept_only_validated_metadata(self):
+        fake_secret = fixture.secrets.token_hex(32)
+        ports = {
+            "8089/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8089", "Env": fake_secret}],
+            "8443/tcp": None,
+            fake_secret: [{"HostIp": "127.0.0.1", "HostPort": "8089"}],
+            "9000/tcp": [{"HostIp": fake_secret, "HostPort": "9000"}],
+            "9001/tcp": [{"HostIp": "127.0.0.1", "HostPort": fake_secret}],
+        }
+        result = fixture.public_port_bindings(ports)
+        self.assertEqual(result, [{"containerPort": "8089/tcp", "hostIp": "127.0.0.1", "hostPort": 8089}])
+        self.assertTrue(fake_secret not in json.dumps(result), "Port diagnostics must not expose unrelated metadata.")
+        self.assertEqual(fixture.public_port_bindings(None), [])
 
 if __name__ == "__main__":
     unittest.main()

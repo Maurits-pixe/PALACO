@@ -6,7 +6,8 @@ remain **HOLD**. There is no Render deployment or production identity connection
 
 ## Prerequisites and launch
 
-Use Python 3.11 or later, OpenSSL, Docker with Compose v2, and the repository's
+Use Python 3.11 or later, OpenSSL, Docker Engine 28 or later with Compose v2,
+and the repository's
 Rust toolchain. From the repository root:
 
 ```sh
@@ -27,7 +28,7 @@ from the identity provider's 127.0.0.1 hostname. It uses TLS and Secure cookies
 with no insecure HTTP cookie fallback. Manual browsers may require accepting this generated local certificate.
 
 `prepare` and `up` reuse an already complete runtime. Stop the BFF, then reset
-the container, its isolated network and generated credentials with:
+the container, its dedicated bridge and generated credentials with:
 
 ```sh
 python verification/rio-accounts/fixture.py down
@@ -80,8 +81,13 @@ On POSIX, the runtime directory is owner-only `0700`, and private files are
 single-file read-only bind mount; its host parent remains `0700`.
 On Windows, these files inherit the user's directory ACL; use a private checkout.
 
-Keycloak publishes only `127.0.0.1:8089` and uses an internal Compose network,
-an in-memory database, no persistent data volume and no restart policy.
+Keycloak publishes only `127.0.0.1:8089` and uses a normal bridge created for
+its unique Compose project, an in-memory database, no persistent data volume
+and no restart policy. This bridge permits container egress; it is not an
+outbound network filter. Inbound host access is restricted by the explicit
+loopback port mapping. The host BFF keeps its exact provider allowlist,
+disables proxies and redirects, and binds only the host loopback interface.
+Docker Engine 28 or later is required for the documented loopback-port boundary.
 Cleanup targets only the generated `rio-accounts-synthetic-<random>` project.
 `run-bff` launches the built `services/rio-accounts/target/debug/rio-accounts-dev`
 executable (with `.exe` on Windows) from the repository root.
@@ -91,7 +97,8 @@ executable (with `.exe` on Windows) from the repository root.
 If discovery fails, run `python verification/rio-accounts/fixture.py diagnostics`
 before cleanup. The diagnostic reads provider logs privately, replaces every
 generated client secret and user/admin password, scrubs other token-like values,
-and emits only bounded startup error explanations plus public container state.
+and emits only bounded startup error explanations, typed public container state
+and validated published-port bindings. It does not print Docker environment fields.
 Missing redaction inputs suppress all provider details. Raw provider logs,
 configuration bodies and runtime files must not be exported.
 The provider uses verbose startup internally so a cause can be diagnosed without
@@ -210,3 +217,11 @@ The optional profile configuration follows the
 The disabled unmanaged-attribute representation follows the actual
 [26.8.0 UPConfig enum](https://github.com/keycloak/keycloak/blob/26.8.0/core/src/main/java/org/keycloak/representations/userprofile/config/UPConfig.java)
 and [DefaultAttributes null-policy behavior](https://github.com/keycloak/keycloak/blob/26.8.0/server-spi-private/src/main/java/org/keycloak/userprofile/DefaultAttributes.java).
+
+The per-project bridge and loopback publication follow Docker's
+[Compose networking](https://docs.docker.com/compose/how-tos/networking/)
+and [port publishing](https://docs.docker.com/engine/network/port-publishing/)
+documentation. Docker's [internal network mode](https://docs.docker.com/reference/cli/docker/network/create/#network-internal-mode---internal)
+restricts network routing. This runner showed failed published-port discovery
+while the IdP was listening on an internal network; the fixture uses a normal
+bridge so host discovery can reach the IdP.
