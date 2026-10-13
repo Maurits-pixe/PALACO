@@ -14,7 +14,7 @@ Own-session checks close protected controls when the server rejects or cannot es
 
 ## Purpose-bound consent
 
-GET /api/consent derives the actor only from the current server session. POST requires exact Origin, JSON content type, X-CSRF-Token and the strict object {scope, granted, revision}, under the existing256-byte limit. The sole scope is RIO_SYNTHETIC_SESSION_TEST_V1.
+GET /api/consent derives the actor only from the current server session. POST requires exact Origin, JSON content type, X-CSRF-Token and the strict object {scope, granted, revision}, under the existing 256-byte limit. The sole scope is RIO_SYNTHETIC_SESSION_TEST_V1.
 
 The envelope contains a receipt {scope, granted, revision, expiresAt} and fixed closed-account/authority flags. A granted receipt is a bounded synthetic test choice. It activates no personal account, contact room, Government seat, trusted reviewer or external execution.
 
@@ -28,7 +28,7 @@ The note lives in page memory. Import makes no server write; export serializes t
 
 ## Mobile and accessibility evidence
 
-The intended checks cover390-pixel Android Chromium emulation, a320-pixel narrow viewport, desktop keyboard interaction, visible focus, accessible names/landmarks, checkbox/button operation and live status semantics. The layout follows [W3C reflow guidance](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html); meaningful status updates follow [W3C status-message guidance](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html).
+The intended checks cover 390-pixel Android Chromium emulation, a 320-pixel narrow viewport, desktop keyboard interaction, visible focus, accessible names/landmarks, checkbox/button operation and live status semantics. The layout follows [W3C reflow guidance](https://www.w3.org/WAI/WCAG22/Understanding/reflow.html); meaningful status updates follow [W3C status-message guidance](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html).
 
 Automated DOM/ARIA and keyboard checks are evidence for those tested paths. They do not claim actual Android hardware testing, a manual screen-reader run or full accessibility certification. Independent review remains open.
 

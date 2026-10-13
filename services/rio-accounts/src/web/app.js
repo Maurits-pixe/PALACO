@@ -26,6 +26,7 @@
     let pollTimer;
     let idleTimer;
     let absoluteTimer;
+    let receiptTimer;
     let draft = { title: '', note: '' };
     let importRead = 0;
 
@@ -46,6 +47,7 @@
         clearTimeout(pollTimer);
         clearTimeout(idleTimer);
         clearTimeout(absoluteTimer);
+        clearTimeout(receiptTimer);
     }
 
     function renderControls() {
@@ -103,25 +105,64 @@
         else unavailable('De testsessie kon niet veilig worden gecontroleerd. Probeer opnieuw.');
     }
 
-    async function request(path, options = {}) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
+    async function consumeJson(response) {
+        const type = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (type !== 'application/json' || !response.body) throw new Error('invalid response');
+        const length = response.headers.get('content-length');
+        if (length !== null && (!/^[0-9]+$/.test(length) || Number(length) > 16384)) {
+            throw new Error('oversized response');
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8', { fatal: true });
+        let bytes = 0;
+        let content = '';
         try {
-            return await fetch(path, {
-                credentials: 'same-origin', cache: 'no-store', redirect: 'error',
-                ...options, signal: controller.signal
-            });
+            while (true) {
+                const chunk = await reader.read();
+                if (chunk.done) break;
+                bytes += chunk.value.byteLength;
+                if (bytes > 16384) throw new Error('oversized response');
+                content += decoder.decode(chunk.value, { stream: true });
+            }
+            content += decoder.decode();
+            return JSON.parse(content);
+        } catch (error) {
+            void reader.cancel().catch(() => {});
+            throw error;
         } finally {
-            clearTimeout(timeout);
+            reader.releaseLock();
         }
     }
 
-    async function readJson(response) {
-        const type = response.headers.get('content-type') || '';
-        if (!type.toLowerCase().startsWith('application/json')) throw new Error('invalid response');
-        const content = await response.text();
-        if (content.length > 16384) throw new Error('oversized response');
-        return JSON.parse(content);
+    async function request(path, options = {}) {
+        const controller = new AbortController();
+        let timer;
+        const deadline = new Promise((resolve, reject) => {
+            timer = setTimeout(() => {
+                controller.abort();
+                reject(new Error('request timed out'));
+            }, 8000);
+        });
+        const operation = (async () => {
+            const response = await fetch(path, {
+                credentials: 'same-origin', cache: 'no-store', redirect: 'error',
+                ...options, signal: controller.signal
+            });
+            const envelope = { status: response.status, ok: response.ok, headers: response.headers };
+            if (response.ok) envelope.payload = await consumeJson(response);
+            else if (response.body) void response.body.cancel().catch(() => {});
+            return envelope;
+        })();
+        try {
+            return await Promise.race([operation, deadline]);
+        } finally {
+            clearTimeout(timer);
+            controller.abort();
+        }
+    }
+
+    function readJson(response) {
+        return response.payload;
     }
 
     function validMe(me) {
@@ -132,7 +173,7 @@
             && (me.accountId === 'TST-alpha' || me.accountId === 'TST-beta')
             && me.actorKind === 'SYNTHETIC_DEV_ACTOR'
             && me.credentialControl === 'VERIFIED_DEV_OIDC'
-            && typeof me.csrfToken === 'string' && /^[A-Za-z0-9_-]{32,128}$/.test(me.csrfToken);
+            && typeof me.csrfToken === 'string' && /^[A-Za-z0-9_-]{43}$/.test(me.csrfToken);
     }
 
     function validatedReceipt(envelope) {
@@ -143,9 +184,35 @@
         if (!exactKeys(value, ['scope', 'granted', 'revision', 'expiresAt'])
             || value.scope !== SCOPE || typeof value.granted !== 'boolean'
             || !Number.isSafeInteger(value.revision) || value.revision < 0
-            || !(value.expiresAt === null || (Number.isSafeInteger(value.expiresAt) && value.expiresAt > 0))
-            || (value.granted && value.expiresAt === null)) throw new Error('invalid receipt');
+            || (value.granted
+                ? !(Number.isSafeInteger(value.expiresAt) && value.expiresAt > 0)
+                : value.expiresAt !== null)) throw new Error('invalid receipt');
         return { scope: SCOPE, granted: value.granted, revision: value.revision, expiresAt: value.expiresAt };
+    }
+
+    function displayReceipt(value, response) {
+        clearTimeout(receiptTimer);
+        receipt = value;
+        elements.consentStatus.textContent = value.granted
+            ? 'Je toestemming is actief voor deze oefensessie.'
+            : 'Je hebt geen actieve toestemming voor deze oefensessie.';
+        if (value.granted) {
+            const stamp = epoch;
+            const expire = () => {
+                if (stamp !== epoch || receipt !== value) return;
+                receipt = undefined;
+                elements.consentStatus.textContent = 'De geldigheid moet opnieuw worden gecontroleerd. Bekijk de huidige keuze opnieuw.';
+                renderControls();
+            };
+            // HTTP Date has second precision. Close conservatively before its possible upper bound.
+            const serverDate = Date.parse(response.headers.get('date') || '');
+            const observed = Math.max(Date.now(), serverDate + 1000);
+            const remaining = Number.isFinite(serverDate)
+                ? Math.max(0, Math.min(60000, value.expiresAt - observed)) : 0;
+            if (remaining === 0) expire();
+            else receiptTimer = setTimeout(expire, remaining);
+        }
+        renderControls();
     }
 
     function armIdleDeadline() {
@@ -190,6 +257,7 @@
         const stamp = epoch;
         const round = ++receiptRead;
         receipt = undefined;
+        clearTimeout(receiptTimer);
         elements.choice.checked = false;
         reading = true;
         elements.consentStatus.textContent = 'Toestemming wordt gecontroleerd.';
@@ -203,12 +271,8 @@
             }
             const value = validatedReceipt(await readJson(response));
             if (stamp !== epoch || round !== receiptRead) return;
-            receipt = value;
             reading = false;
-            elements.consentStatus.textContent = value.granted
-                ? 'Je toestemming is actief voor deze oefensessie.'
-                : 'Je hebt geen actieve toestemming voor deze oefensessie.';
-            renderControls();
+            displayReceipt(value, response);
             if (message) showFeedback(message, focus);
         } catch {
             if (stamp === epoch && round === receiptRead) unavailable();
@@ -274,12 +338,8 @@
             const value = validatedReceipt(await readJson(response));
             if (stamp !== epoch) return;
             if (value.granted !== granted || value.revision <= revision) throw new Error('unconfirmed choice');
-            receipt = value;
             busy = false;
-            elements.consentStatus.textContent = value.granted
-                ? 'Je toestemming is actief voor deze oefensessie.'
-                : 'Je hebt geen actieve toestemming voor deze oefensessie.';
-            renderControls();
+            displayReceipt(value, response);
             showFeedback(value.granted
                 ? 'Je toestemming voor deze oefensessie is bevestigd. Persoonlijke toegang blijft gesloten.'
                 : 'Je toestemming is ingetrokken. Persoonlijke toegang blijft gesloten.', true);

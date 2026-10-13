@@ -399,14 +399,12 @@ pub fn router(state: AppState) -> Router {
         )
         .route(
             "/app.css",
-            get(|| async {
-                (
-                    [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
-                    STYLE,
-                )
-            }),
+            get(|| async { ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], STYLE) }),
         )
-        .route("/api/consent", get(consent_http::read).post(consent_http::write))
+        .route(
+            "/api/consent",
+            get(consent_http::read).post(consent_http::write),
+        )
         .route("/healthz", get(health))
         .route("/api/status", get(|| async { Json(status()) }))
         .route("/auth/start", get(start))
@@ -1430,10 +1428,18 @@ mod tests {
         let state = test_state()?;
         for (path, expected_type, expected_status) in [
             ("/", Some("text/html; charset=utf-8"), StatusCode::OK),
-            ("/app.js", Some("text/javascript; charset=utf-8"), StatusCode::OK),
+            (
+                "/app.js",
+                Some("text/javascript; charset=utf-8"),
+                StatusCode::OK,
+            ),
             ("/app.css", Some("text/css; charset=utf-8"), StatusCode::OK),
             ("/src/consent_http.rs", None, StatusCode::NOT_FOUND),
-            ("/.runtime/test-credentials.json", None, StatusCode::NOT_FOUND),
+            (
+                "/.runtime/test-credentials.json",
+                None,
+                StatusCode::NOT_FOUND,
+            ),
         ] {
             let response = router(state.clone())
                 .oneshot(
@@ -1446,19 +1452,29 @@ mod tests {
             assert_eq!(response.status(), expected_status);
             if let Some(content_type) = expected_type {
                 assert_eq!(
-                    response.headers().get("content-type").and_then(|value| value.to_str().ok()),
+                    response
+                        .headers()
+                        .get("content-type")
+                        .and_then(|value| value.to_str().ok()),
                     Some(content_type),
                 );
             }
-            let csp = response.headers().get("content-security-policy")
-                .ok_or_else(|| io::Error::other("missing asset policy"))?.to_str()?;
+            let csp = response
+                .headers()
+                .get("content-security-policy")
+                .ok_or_else(|| io::Error::other("missing asset policy"))?
+                .to_str()?;
             assert!(csp.contains("script-src 'self'"));
             assert!(csp.contains("style-src 'self'"));
             assert!(!csp.contains("unsafe-inline"));
-            assert_eq!(response.headers().get("cache-control")
-                .and_then(|value| value.to_str().ok()), Some("no-store"));
+            assert_eq!(
+                response
+                    .headers()
+                    .get("cache-control")
+                    .and_then(|value| value.to_str().ok()),
+                Some("no-store")
+            );
         }
         Ok(())
     }
-
 }

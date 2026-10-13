@@ -791,10 +791,10 @@ def database_case_tags(captured: str) -> list[str]:
     return found
 
 def database_failure_location(captured: str) -> dict | None:
-    # Rust 1.90's default panic header; only this fixed repository source is allowed.
+    # Default Rust panic header; only the two fixed contract sources are allowed.
     header = re.compile(
         r"thread '[^'\r\n]{1,200}' panicked at "
-        r"(?:services/rio-accounts/)?src/storage\.rs:"
+        r"(?:services/rio-accounts/)?src/(storage|consent_http)\.rs:"
         r"([1-9][0-9]{0,5}):([1-9][0-9]{0,5}):"
     )
     for line in captured.splitlines():
@@ -802,8 +802,8 @@ def database_failure_location(captured: str) -> dict | None:
             continue
         match = header.fullmatch(line)
         if match:
-            return {"path": "services/rio-accounts/src/storage.rs",
-                    "line": int(match[1]), "column": int(match[2])}
+            return {"path": "services/rio-accounts/src/" + match[1] + ".rs",
+                    "line": int(match[2]), "column": int(match[3])}
     return None
 
 def run_database_test(test_filter: str) -> None:

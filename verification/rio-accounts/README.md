@@ -247,6 +247,45 @@ The private saved state is `.runtime/durable-browser-state.json`, mode 0600,
 deleted after final verification and also removed by `down` after failures.
 A managed Linux CI run is still required before claiming these new checks pass.
 
+## Mobile account and local Studio checks (T04)
+
+The same BFF origin serves the mobile account page, `/app.js` and `/app.css`.
+It reads only the signed-in fictitious account and its own stored receipt. The
+native checkbox is never preselected; an explicit confirmation applies only to
+`RIO_SYNTHETIC_SESSION_TEST_V1`. Revocation and both logout actions remain
+server-checked. A conflicting revision reloads the current receipt and requires
+a fresh choice. Expired or uncertain account state clears the protected view;
+recovery requires an explicit check.
+
+`GET /api/consent` reads the current session's own receipt. `POST /api/consent`
+requires the same-origin session, its `X-CSRF-Token` and exactly the JSON keys
+`scope`, `granted` and `revision`. There is no caller-selected account or owner.
+The actual PostgreSQL/router proof runs before the BFF starts:
+
+```sh
+python verification/rio-accounts/fixture.py run-consent-http-tests
+```
+
+After the existing default and durable browser checks, run:
+
+```sh
+cd verification/rio-accounts
+npx playwright test --config=mobile/playwright.config.mjs
+```
+
+This suite exercises Chromium Android emulation and desktop keyboard/native
+control behavior, 320 CSS-pixel reflow, local concept file download/import,
+real receipt ownership/CSRF/revision checks, expiry and a controlled database
+outage with explicit recovery. Browser emulation and DOM/ARIA checks do not
+establish a physical Android or screen-reader acceptance result.
+
+Studio keeps only an in-memory title (80 characters) and note (2,000 characters).
+Its explicit JSON export/import uses `RIO_LOCAL_DRAFT_V1`, marks the data
+`UNVERIFIED`, keeps all authority/consent flags closed and caps the file at
+12,288 UTF-8 bytes. It never posts that content, stores a login in the browser
+or converts imported data into an identity or consent. Page close/reload clears
+the in-memory concept. See [the T04 contract](../../specs/rio-accounts/T04-MOBILE.md).
+
 ## Private protocol: first RIO test on two physical phones
 
 Status: **PREPARATION ONLY**. This protocol has not been executed on phones and

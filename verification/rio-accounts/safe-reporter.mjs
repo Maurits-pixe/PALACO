@@ -10,6 +10,11 @@ const CASES = new Map([
   ['RIO-DURABLE-02', 'Database outage denies access until controlled BFF recovery'],
   ['RIO-DURABLE-03', 'Restart preserves own sessions and actor-scoped revocation'],
   ['RIO-DURABLE-04', 'Saved revoked cookies stay denied after another BFF restart'],
+  ['RIO-MOBILE-01', 'Native consent controls preserve focus and reflow'],
+  ['RIO-MOBILE-02', 'Real local draft downloads cannot become account authority'],
+  ['RIO-MOBILE-03', 'Own consent uses session CSRF and a fresh choice after CAS conflict'],
+  ['RIO-MOBILE-04', 'Real expiry closes consent while preserving the local draft'],
+  ['RIO-MOBILE-05', 'Database uncertainty closes the UI until explicit recovery'],
 ]);
 const PHASES = new Set([
   'initial-access', 'authorization-contract', 'real-idp-login',
@@ -19,8 +24,12 @@ const PHASES = new Set([
   'durable-real-login', 'durable-private-state', 'durable-database-outage',
   'durable-database-recovery', 'durable-connection-stays-closed', 'durable-restart-access', 'durable-cross-actor-csrf',
   'durable-native-revocation', 'durable-revocation-after-restart', 'durable-unaffected-actor',
+  'mobile-native-semantics', 'mobile-reflow', 'mobile-local-download',
+  'mobile-import-rejection', 'mobile-studio-isolation', 'mobile-consent-isolation',
+  'mobile-consent-cas', 'mobile-expiry-closure', 'mobile-database-closure', 'mobile-explicit-recovery',
 ]);
 
+const MOBILE_SURFACES = new Set(['android-emulation', 'desktop-keyboard']);
 const DURABLE_PHASES = new Set(['prepare', 'outage', 'revoke', 'verify']);
 
 const FEEDBACK_BUCKETS = new Set(['empty', 'read_failed', 'logout_failed', 'logged_out', 'other', 'unavailable']);
@@ -58,6 +67,13 @@ export default class SafeReporter {
     if (options.durablePhase !== undefined && !DURABLE_PHASES.has(options.durablePhase)) {
       throw new Error('Unsupported synthetic durable reporter phase');
     }
+    if (options.mobileVerification !== undefined && typeof options.mobileVerification !== 'boolean') {
+      throw new Error('Unsupported synthetic mobile reporter option');
+    }
+    if (options.mobileVerification && options.durablePhase) {
+      throw new Error('Synthetic browser evidence modes must remain separate');
+    }
+    this.mobileVerification = options.mobileVerification === true;
     this.durablePhase = options.durablePhase;
   }
 
@@ -67,7 +83,7 @@ export default class SafeReporter {
   onError() { this.suiteErrors += 1; }
 
   onTestEnd(test, result) {
-    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
+    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-5])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
     const phases = [];
     const failedLines = new Set();
     const walk = steps => {
@@ -80,11 +96,14 @@ export default class SafeReporter {
       }
     };
     walk(result.steps);
+    const projectName = this.mobileVerification ? test.parent?.project()?.name : undefined;
+    const surface = MOBILE_SURFACES.has(projectName) ? projectName : 'unknown';
     const row = {
       id,
       title: CASES.get(id) ?? 'Unexpected test case',
       status: result.status,
       durationMs: Math.round(result.duration),
+      ...(this.mobileVerification ? { surface } : {}),
       phases,
       failedLines: result.status === 'passed' ? [] : [...failedLines].sort((a, b) => a - b),
       ...(id === 'RIO-E2E-04' ? { logoutObservation: safeLogoutObservation(test.annotations) } : {}),
@@ -104,15 +123,25 @@ export default class SafeReporter {
       productionAccounts: 'HOLD',
       realInvitations: 'HOLD',
       ...(this.durablePhase ? { durablePhase: this.durablePhase } : {}),
+      ...(this.mobileVerification ? {
+        verificationScope: 'synthetic-browser-emulation',
+        physicalAndroidVerified: false,
+        manualScreenReaderVerified: false,
+      } : {}),
       tests: this.results,
     };
     await mkdir('evidence', { recursive: true });
     const path = this.durablePhase
       ? 'evidence/browser-durable-' + this.durablePhase + '-summary.json'
-      : 'evidence/browser-summary.json';
+      : this.mobileVerification
+        ? 'evidence/browser-mobile-summary.json'
+        : 'evidence/browser-summary.json';
     await writeFile(path, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
     if (this.durablePhase) {
       process.stdout.write('RIO_DURABLE_BROWSER_SUMMARY ' + JSON.stringify(summary) + '\n');
+    }
+    if (this.mobileVerification) {
+      process.stdout.write('RIO_MOBILE_BROWSER_SUMMARY ' + JSON.stringify(summary) + '\n');
     }
     process.stdout.write(`RIO browser verification: ${result.status}\n`);
   }

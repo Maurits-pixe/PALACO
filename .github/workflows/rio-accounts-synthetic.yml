@@ -17,27 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  authoring:
-    name: Normalize public candidate source
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Checkout exact candidate
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Install repository-pinned formatter
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
-        with:
-          toolchain: 1.98.1
-          components: rustfmt
-      - name: Normalize public Rust source
-        run: |
-          cargo fmt --manifest-path services/rio-accounts/Cargo.toml
-          python verification/rio-accounts/ci-evidence.py sources
   verify:
-    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -70,7 +50,8 @@ jobs:
           node --check verification/rio-accounts/playwright.durable.config.mjs
           node --check verification/rio-accounts/durable/durable.spec.mjs
           node --check services/rio-accounts/src/web/app.js
-          node --check verification/rio-accounts/playwright.mobile.config.mjs
+          node --check verification/rio-accounts/mobile/playwright.config.mjs
+          node --check verification/rio-accounts/mobile/helpers.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
       - name: Build and verify isolated Rust service
@@ -124,7 +105,7 @@ jobs:
         run: npx playwright test --config=playwright.durable.config.mjs
       - name: Mobile account and local Studio browser verification
         working-directory: verification/rio-accounts
-        run: npx playwright test --config=playwright.mobile.config.mjs
+        run: npx playwright test --config=mobile/playwright.config.mjs
       - name: Execute isolated database backup and restoration
         run: |
           python verification/rio-accounts/fixture.py stop-bff
