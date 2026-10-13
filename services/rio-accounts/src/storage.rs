@@ -229,7 +229,8 @@ async fn reject_business<T>(tx: Transaction<'_>, error: StoreError) -> Result<T,
         // Unknown database outcomes are never acknowledged or replaced by memory state.
         return Err(error);
     }
-    tx.batch_execute("ROLLBACK TO SAVEPOINT rio_business").await?;
+    tx.batch_execute("ROLLBACK TO SAVEPOINT rio_business")
+        .await?;
     tx.commit().await?;
     Err(error)
 }
@@ -1040,13 +1041,19 @@ mod tests {
             ("expired-consent-write", 2),
         ] {
             let (expired, anti_forgery) = login(&store, label, "TST-alpha", None).await?;
-            let observed_before: i64 = raw.query_one(
-                "SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint", &[],
-            ).await?.try_get(0)?;
+            let observed_before: i64 = raw
+                .query_one(
+                    "SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint",
+                    &[],
+                )
+                .await?
+                .try_get(0)?;
             // A rejected call must advance an older guard, rather than just retaining equality.
             raw.execute(
-                "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1", &[&(observed_before-5)],
-            ).await?;
+                "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1",
+                &[&(observed_before - 5)],
+            )
+            .await?;
             raw.execute(
                 "UPDATE rio_synthetic.sessions SET created_ms=created_ms-31000,touched_ms=touched_ms-31000,\
                  idle_expires_ms=idle_expires_ms-31000,absolute_expires_ms=absolute_expires_ms-31000 WHERE token_hash=$1",
@@ -1055,22 +1062,44 @@ mod tests {
             let rejection = match deny_kind {
                 0 => store.logout(expired, &anti_forgery).await.err(),
                 1 => store.read_consent(expired).await.err(),
-                _ => store.set_consent(expired, &anti_forgery, CONSENT_SCOPE, true, 0).await.err(),
+                _ => store
+                    .set_consent(expired, &anti_forgery, CONSENT_SCOPE, true, 0)
+                    .await
+                    .err(),
             };
             assert_eq!(rejection, Some(StoreError::Revoked));
-            let retained: i64 = raw.query_one(
-                "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1", &[&expired.to_vec()],
-            ).await?.try_get(0)?;
-            assert_eq!(retained, 0, "logical rejection durably removes the expired session");
-            let observed_after: i64 = raw.query_one(
-                "SELECT last_ms FROM rio_synthetic.store_guard WHERE id=1", &[],
-            ).await?.try_get(0)?;
-            assert!(observed_after >= observed_before, "rejection retains its observed durable clock");
+            let retained: i64 = raw
+                .query_one(
+                    "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1",
+                    &[&expired.to_vec()],
+                )
+                .await?
+                .try_get(0)?;
+            assert_eq!(
+                retained, 0,
+                "logical rejection durably removes the expired session"
+            );
+            let observed_after: i64 = raw
+                .query_one(
+                    "SELECT last_ms FROM rio_synthetic.store_guard WHERE id=1",
+                    &[],
+                )
+                .await?
+                .try_get(0)?;
+            assert!(
+                observed_after >= observed_before,
+                "rejection retains its observed durable clock"
+            );
             // Even a privileged fixture clock rewind cannot restore a deleted bearer row.
             raw.execute(
-                "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1", &[&observed_before],
-            ).await?;
-            assert_eq!(restarted.load_session(expired).await.err(), Some(StoreError::Revoked));
+                "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1",
+                &[&observed_before],
+            )
+            .await?;
+            assert_eq!(
+                restarted.load_session(expired).await.err(),
+                Some(StoreError::Revoked)
+            );
         }
 
         eprintln!("CASE T03_SCHEMA");
