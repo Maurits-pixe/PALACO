@@ -47,6 +47,8 @@ jobs:
           python -m unittest discover -s verification/rio-accounts -p test_fixture.py
           node --check verification/rio-accounts/tests/accounts.spec.mjs
           node --check verification/rio-accounts/safe-reporter.mjs
+          node --check verification/rio-accounts/test_safe_reporter.mjs
+          node --test verification/rio-accounts/test_safe_reporter.mjs
           node --check verification/rio-accounts/playwright.durable.config.mjs
           node --check verification/rio-accounts/durable/durable.spec.mjs
           node --check services/rio-accounts/src/web/app.js
