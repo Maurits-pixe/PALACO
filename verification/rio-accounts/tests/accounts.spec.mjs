@@ -9,6 +9,7 @@ const EXPECTED_USERS = {
   beta: { username: 'TST-beta', subject: '22222222-2222-4222-8222-222222222222' },
 };
 let credentials;
+const pageErrorCounts = new WeakMap();
 
 test.beforeAll(async () => {
   credentials = JSON.parse(await readFile(new URL('../.runtime/test-credentials.json', import.meta.url), 'utf8'));
@@ -23,11 +24,77 @@ test.beforeAll(async () => {
 });
 
 async function contextFor(browser) {
-  return browser.newContext({
+  const context = await browser.newContext({
     ignoreHTTPSErrors: true,
     acceptDownloads: false,
     serviceWorkers: 'block',
   });
+  context.on('page', page => {
+    const counter = { count: 0 };
+    pageErrorCounts.set(page, counter);
+    page.on('pageerror', () => { counter.count += 1; });
+  });
+  return context;
+}
+
+async function clickLogoutWithObservation(page, testInfo) {
+  const observation = {
+    logoutRequests: 0, logoutResponses: 0, logoutFailedRequests: 0,
+    otherBffPosts: 0, logoutStatuses: [], pageErrors: 0,
+    logoutButtonVisibleBefore: false, logoutButtonEnabledBefore: false,
+    logoutButtonVisibleAfter: false, clickCompleted: false,
+    responseMatched: false, feedbackBucket: 'unavailable',
+  };
+  const isLogout = request => {
+    try {
+      const url = new URL(request.url());
+      return url.origin === BFF && url.pathname === '/auth/logout' && request.method() === 'POST';
+    } catch { return false; }
+  };
+  const onRequest = request => {
+    if (isLogout(request)) observation.logoutRequests += 1;
+    else {
+      try {
+        if (new URL(request.url()).origin === BFF && request.method() === 'POST') observation.otherBffPosts += 1;
+      } catch {}
+    }
+  };
+  const onResponse = response => {
+    if (isLogout(response.request())) {
+      observation.logoutResponses += 1;
+      if (observation.logoutStatuses.length < 16) observation.logoutStatuses.push(response.status());
+    }
+  };
+  const onFailedRequest = request => {
+    if (isLogout(request)) observation.logoutFailedRequests += 1;
+  };
+  page.on('request', onRequest);
+  page.on('response', onResponse);
+  page.on('requestfailed', onFailedRequest);
+  try {
+    observation.logoutButtonVisibleBefore = await page.locator('#logout').isVisible();
+    observation.logoutButtonEnabledBefore = await page.locator('#logout').isEnabled({ timeout: 1000 });
+    const [response] = await Promise.all([
+      page.waitForResponse(response => response.url() === BFF + '/auth/logout' &&
+        response.request().method() === 'POST', { timeout: 10_000 }),
+      page.locator('#logout').click({ timeout: 10_000 }).then(() => { observation.clickCompleted = true; }),
+    ]);
+    observation.responseMatched = true;
+    return response;
+  } finally {
+    page.off('request', onRequest);
+    page.off('response', onResponse);
+    page.off('requestfailed', onFailedRequest);
+    observation.pageErrors = pageErrorCounts.get(page)?.count ?? 0;
+    observation.logoutButtonVisibleAfter = await page.locator('#logout').isVisible().catch(() => false);
+    const feedback = await page.locator('#feedback').textContent({ timeout: 1000 }).catch(() => null);
+    observation.feedbackBucket = feedback === null ? 'unavailable' :
+      feedback === '' ? 'empty' :
+      feedback === 'Afmelden is niet gelukt.' ? 'logout_failed' :
+      feedback === 'De testsessie kon niet worden gelezen.' ? 'read_failed' :
+      feedback === 'Lokale testsessie afgemeld. De identity-provider heeft een afzonderlijke sessie.' ? 'logged_out' : 'other';
+    testInfo.annotations.push({ type: 'rio-logout-observation', description: JSON.stringify(observation) });
+  }
 }
 
 async function readMe(page) {
@@ -254,7 +321,7 @@ test('[RIO-E2E-03] Invalid credentials create no BFF session', async ({ browser 
   }
 });
 
-test('[RIO-E2E-04] Logout invalidates the session without affecting another user', async ({ browser }) => {
+test('[RIO-E2E-04] Logout invalidates the session without affecting another user', async ({ browser }, testInfo) => {
   const alpha = await contextFor(browser);
   const alphaPeer = await contextFor(browser);
   const beta = await contextFor(browser);
@@ -283,11 +350,7 @@ test('[RIO-E2E-04] Logout invalidates the session without affecting another user
         }
       };
       alphaPage.on('request', observeLogout);
-      const [logoutResponse] = await Promise.all([
-        alphaPage.waitForResponse(response => response.url() === BFF + '/auth/logout' &&
-          response.request().method() === 'POST'),
-        alphaPage.locator('#logout').click(),
-      ]);
+      const logoutResponse = await clickLogoutWithObservation(alphaPage, testInfo);
       alphaPage.off('request', observeLogout);
       expect(await logoutResponse.json()).toEqual({
         loggedOut: true, providerLogout: 'NOT_REQUESTED', mode: 'SYNTHETIC_ONLY',

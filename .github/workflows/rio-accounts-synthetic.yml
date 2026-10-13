@@ -47,10 +47,6 @@ jobs:
           python -m unittest discover -s verification/rio-accounts -p test_fixture.py
           node --check verification/rio-accounts/tests/accounts.spec.mjs
           node --check verification/rio-accounts/safe-reporter.mjs
-      - name: Normalize changed Rust source for candidate verification
-        run: |
-          cargo fmt --manifest-path services/rio-accounts/Cargo.toml
-          python verification/rio-accounts/ci-evidence.py sources
       - name: Build and verify isolated Rust service
         run: |
           cargo fmt --manifest-path services/rio-accounts/Cargo.toml -- --check

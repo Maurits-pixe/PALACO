@@ -1014,7 +1014,11 @@ mod tests {
                 Some("localhost:8088"),
                 StatusCode::BAD_REQUEST,
             ),
-            ("https://localhost/api/status", None, StatusCode::BAD_REQUEST),
+            (
+                "https://localhost/api/status",
+                None,
+                StatusCode::BAD_REQUEST,
+            ),
         ] {
             let mut request = axum::http::Request::builder()
                 .version(axum::http::Version::HTTP_2)

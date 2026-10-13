@@ -14,6 +14,31 @@ const PHASES = new Set([
   'no-browser-tokens', 'hold-status', 'session-rotation', 'provider-session-preserved',
 ]);
 
+const FEEDBACK_BUCKETS = new Set(['empty', 'read_failed', 'logout_failed', 'logged_out', 'other', 'unavailable']);
+
+function safeLogoutObservation(annotations) {
+  const annotation = annotations.find(item => item.type === 'rio-logout-observation');
+  if (typeof annotation?.description !== 'string' || annotation.description.length > 2048) return undefined;
+  let source;
+  try { source = JSON.parse(annotation.description); } catch { return undefined; }
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
+  const result = {};
+  for (const key of ['logoutRequests', 'logoutResponses', 'logoutFailedRequests', 'otherBffPosts', 'pageErrors']) {
+    if (!Number.isInteger(source[key]) || source[key] < 0 || source[key] > 1000) return undefined;
+    result[key] = source[key];
+  }
+  for (const key of ['logoutButtonVisibleBefore', 'logoutButtonEnabledBefore', 'logoutButtonVisibleAfter', 'clickCompleted', 'responseMatched']) {
+    if (typeof source[key] !== 'boolean') return undefined;
+    result[key] = source[key];
+  }
+  if (!Array.isArray(source.logoutStatuses) || source.logoutStatuses.length > 16 ||
+      source.logoutStatuses.some(value => !Number.isInteger(value) || value < 100 || value > 599)) return undefined;
+  result.logoutStatuses = source.logoutStatuses;
+  if (!FEEDBACK_BUCKETS.has(source.feedbackBucket)) return undefined;
+  result.feedbackBucket = source.feedbackBucket;
+  return result;
+}
+
 // Raw Playwright diagnostics can contain URLs, cookie values or fill arguments.
 // This is the only reporter; artifacts contain only fixed IDs and status fields.
 export default class SafeReporter {
@@ -45,7 +70,8 @@ export default class SafeReporter {
       status: result.status,
       durationMs: Math.round(result.duration),
       phases,
-      failedLines: [...failedLines].sort((a, b) => a - b),
+      failedLines: result.status === 'passed' ? [] : [...failedLines].sort((a, b) => a - b),
+      ...(id === 'RIO-E2E-04' ? { logoutObservation: safeLogoutObservation(test.annotations) } : {}),
     };
     this.results.push(row);
     process.stdout.write(`${id}: ${row.status}${row.failedLines.length ? ' (source lines ' + row.failedLines.join(', ') + ')' : ''}\n`);
