@@ -87,6 +87,18 @@ jobs:
           if test -f verification/rio-accounts/evidence/browser-summary.json; then
             python verification/rio-accounts/ci-evidence.py summary
           fi
+      - name: Emit bounded provider startup diagnostics
+        if: failure()
+        run: |
+          if test -f verification/rio-accounts/.runtime/metadata.json; then
+            python verification/rio-accounts/fixture.py diagnostics
+          fi
+      - name: Emit public image and dependency metadata
+        if: always()
+        run: |
+          if docker image inspect quay.io/keycloak/keycloak:26.8.0 > /dev/null 2>&1; then
+            python verification/rio-accounts/ci-evidence.py inputs
+          fi
       - name: End synthetic runtime
         if: always()
         run: |

@@ -224,6 +224,50 @@ def compose(*arguments: str) -> None:
         cwd=ROOT,
     )
 
+def diagnostics() -> None:
+    """Print fixed diagnostic categories only; never raw provider logs/configuration."""
+    metadata = json.loads(runtime_path("metadata.json").read_text(encoding="utf-8"))
+    project = metadata.get("project", "")
+    if not re.fullmatch(r"rio-accounts-synthetic-[0-9a-f]{8}", project):
+        raise RuntimeError("Invalid diagnostic project.")
+    container = project + "-keycloak-1"
+    status = subprocess.run(
+        ["docker", "inspect", container, "--format", "{{json .State}}"],
+        capture_output=True, text=True, check=False,
+    )
+    state = {}
+    if status.returncode == 0:
+        try:
+            raw = json.loads(status.stdout)
+            state = {key: raw.get(key) for key in ("Running", "ExitCode", "OOMKilled")}
+        except ValueError:
+            state = {"unavailable": True}
+    logs = subprocess.run(
+        ["docker", "logs", "--tail", "100", container],
+        capture_output=True, text=True, check=False,
+    )
+    data = (logs.stdout + logs.stderr).lower()
+    categories = {
+        "server_listening": "listening on" in data,
+        "startup_failed": "failed to start" in data or "error running" in data,
+        "unknown_option": "unknown option" in data,
+        "database_error": "database" in data and "error" in data,
+        "permission_denied": "permission denied" in data,
+        "profile_error": "profile" in data and ("error" in data or "invalid" in data),
+        "realm_import_error": "import" in data and "error" in data,
+        "out_of_memory": "outofmemory" in data or "out of memory" in data,
+        "has_error": "error" in data,
+    }
+    print("RIO_PROVIDER_DIAGNOSTIC " + json.dumps(
+        {"state": state, "categories": categories}, separators=(",", ":")))
+    # A reached HTTP response is public status metadata, never its response content.
+    try:
+        opener = build_opener(ProxyHandler({}), NoRedirects())
+        with opener.open(ISSUER + "/.well-known/openid-configuration", timeout=2) as response:
+            print("RIO_DISCOVERY_STATUS " + str(response.status))
+    except Exception:
+        print("RIO_DISCOVERY_STATUS UNREACHABLE")
+
 def wait_for_discovery(timeout: float = 180) -> None:
     opener = build_opener(ProxyHandler({}), NoRedirects())
     deadline = time.monotonic() + timeout
@@ -274,7 +318,7 @@ def down() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "up", "run-bff", "down"))
+    parser.add_argument("command", choices=("prepare", "up", "run-bff", "down", "diagnostics"))
     arguments = parser.parse_args()
     try:
         if arguments.command == "prepare":
@@ -285,6 +329,8 @@ def main() -> int:
             wait_for_discovery()
         elif arguments.command == "run-bff":
             run_bff()
+        elif arguments.command == "diagnostics":
+            diagnostics()
         else:
             down()
     except (RuntimeError, subprocess.CalledProcessError, OSError) as error:
