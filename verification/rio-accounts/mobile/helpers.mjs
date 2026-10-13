@@ -132,16 +132,28 @@ export async function nativeConsent(page, button, testInfo) {
       response.request().method() === 'POST', { timeout: 10_000 }),
     activate(page, page.locator(button), testInfo),
   ]);
-  // Playwright can observe POST response headers before its response-body
-  // lifecycle settles. Keep the real POST status and verify a successful action
-  // by reading the committed, actor-bound receipt through the same session.
-  // The separate PostgreSQL HTTP contract verifies the POST response envelope.
+  // A native POST is complete only when the server has committed the choice.
+  // Verify its actual durable receipt through the browser context's shared
+  // cookie jar, not an ephemeral page.evaluate() execution context: that may
+  // disappear while Chromium settles a keyboard/touch interaction. This GET
+  // cannot grant consent and must remain bound to the original actor session.
   const status = response.status();
   if (!response.ok()) return { status, data: null };
-  const confirmed = await consent(page);
-  expect(confirmed.status).toBe(200);
-  receiptFrom(confirmed);
-  return { status, data: confirmed.data };
+  const readback = await page.context().request.get(BFF + '/api/consent', {
+    timeout: 8000, maxRedirects: 0, failOnStatusCode: false,
+  });
+  try {
+    expect(readback.status()).toBe(200);
+    expect((readback.headers()['content-type'] || '').split(';')[0].trim().toLowerCase())
+      .toBe('application/json');
+    const bytes = await readback.body();
+    expect(bytes.byteLength).toBeLessThanOrEqual(16384);
+    const data = JSON.parse(bytes.toString('utf8'));
+    receiptFrom({ status: 200, data });
+    return { status, data };
+  } finally {
+    await readback.dispose();
+  }
 }
 
 export async function retainCookie(context) {
