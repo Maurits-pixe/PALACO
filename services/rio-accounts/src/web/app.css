@@ -1,0 +1,105 @@
+[hidden] { display: none !important; }
+
+:root {
+  color-scheme: light;
+  --navy: #102c45;
+  --yellow: #ffd350;
+  --coral: #f29a84;
+  --teal: #bdded6;
+  --cream: #faf7ed;
+  --paper: #ffffff;
+  --muted: #40586b;
+  --line: #d4dedf;
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 1.25rem; }
+body { margin: 0; color: var(--navy); background: var(--cream); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 1rem; line-height: 1.55; }
+a { color: inherit; }
+button, input, textarea { font: inherit; }
+button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:disabled, input:disabled { cursor: not-allowed; }
+button:disabled { opacity: .55; }
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--navy); outline-offset: 4px; }
+.skip-link { position: absolute; z-index: 3; top: .65rem; left: .65rem; padding: .7rem 1rem; background: var(--paper); border: 2px solid var(--navy); border-radius: .7rem; transform: translateY(-180%); }
+.skip-link:focus { transform: translateY(0); }
+.site-header { border-bottom: 2px solid var(--navy); background: var(--yellow); }
+.header-inner, .main-nav, .page, .site-footer p { width: min(100% - 2rem, 70rem); margin-inline: auto; }
+.header-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding-block: 1.25rem; }
+.brand { text-decoration: none; display: inline-flex; flex-direction: column; align-items: flex-start; }
+.brand-mark { display: inline-flex; align-items: baseline; font-size: 2.9rem; line-height: 1; font-weight: 900; letter-spacing: -.08em; }
+.brand-dot { width: .42em; height: .42em; margin-left: .15em; background: var(--coral); border: 2px solid var(--navy); border-radius: 50%; }
+.brand-caption { margin-top: .35rem; font-size: .75rem; font-weight: 650; }
+.test-badge, .draft-badge { display: inline-block; padding: .35rem .75rem; border: 1.5px solid var(--navy); border-radius: 999px; font-size: .78rem; font-weight: 750; line-height: 1.45; }
+.test-badge { background: var(--cream); }
+.main-nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; padding-bottom: .75rem; }
+.main-nav a { min-height: 44px; display: inline-flex; align-items: center; padding: .4rem .25rem; text-decoration-thickness: 2px; text-underline-offset: .3em; font-weight: 750; }
+.page { padding-block: 2.25rem 3rem; }
+.hero { display: grid; gap: 1.5rem; padding-bottom: 1.25rem; }
+.eyebrow { margin: 0 0 .65rem; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: 0; font-size: clamp(2.35rem, 6vw, 4.5rem); line-height: 1.05; letter-spacing: -.05em; font-weight: 850; }
+.hero-copy { max-width: 35rem; margin-block: 1.15rem 0; font-size: 1.08rem; }
+.boundary-note { align-self: start; background: var(--teal); border: 2px solid var(--navy); border-radius: 1.5rem; padding: 1.2rem; }
+.note-symbol { display: block; font-size: 2.15rem; font-weight: 800; line-height: 1; }
+.boundary-note p { margin-block: .75rem; font-size: .94rem; font-weight: 600; }
+.state-label { display: inline-block; background: var(--paper); padding: .3rem .6rem; border-radius: .5rem; font-size: .8rem; font-weight: 750; }
+.feedback { margin: .75rem 0; padding: 0; max-width: 70ch; overflow-wrap: anywhere; }
+.feedback:not(:empty) { border-left: 4px solid var(--navy); padding: .65rem .9rem; background: var(--paper); border-radius: 0 .65rem .65rem 0; }
+.retry-row { margin-block: .75rem 1.25rem; }
+.retry-row:has(> [hidden]) { margin: 0; }
+.account-grid { display: grid; gap: 1.1rem; margin-top: 1rem; align-items: start; }
+.card { border: 2px solid var(--navy); border-radius: 1.5rem; background: var(--paper); padding: 1.35rem; min-width: 0; }
+.card-heading { display: flex; align-items: center; gap: .75rem; margin-bottom: .8rem; }
+.card-heading .eyebrow { margin: 0; }
+.step-mark { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 2.15rem; height: 2.15rem; border: 1.5px solid var(--navy); border-radius: 50%; font-size: .77rem; font-weight: 800; background: var(--yellow); }
+h2 { margin: 0 0 .7rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.025em; }
+.card p { margin-block: .65rem 1rem; }
+.button { min-height: 48px; max-width: 100%; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--navy); border-radius: .8rem; padding: .7rem 1rem; font-weight: 750; line-height: 1.35; text-align: center; text-decoration: none; white-space: normal; overflow-wrap: anywhere; }
+.button-primary { color: var(--paper); background: var(--navy); }
+.button-primary:hover:not(:disabled) { background: #254b65; }
+.button-outline { color: var(--navy); background: var(--paper); }
+.button-outline:hover:not(:disabled) { background: var(--cream); }
+.button-quiet { color: var(--navy); background: transparent; border-color: transparent; text-decoration: underline; text-underline-offset: .2em; }
+.button-quiet:hover:not(:disabled) { background: var(--cream); }
+.button-stack { display: flex; flex-direction: column; align-items: stretch; gap: .6rem; margin-top: 1.1rem; }
+.small-label { color: var(--muted); font-size: .85rem; font-weight: 650; }
+.account-name { font-size: 1.65rem; font-weight: 850; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.muted { color: var(--muted); font-size: .9rem; }
+.quiet-note { padding: .8rem; border-radius: .7rem; background: var(--cream); color: var(--muted); font-size: .9rem; }
+.consent-card .step-mark { background: var(--coral); }
+.receipt-state { border-left: 4px solid var(--teal); padding: .7rem .85rem; background: var(--cream); border-radius: 0 .7rem .7rem 0; font-weight: 650; }
+.choice { display: flex; align-items: flex-start; gap: .75rem; padding: .95rem; border: 1.5px solid var(--line); border-radius: .85rem; line-height: 1.45; }
+.choice input { flex: 0 0 1.35rem; width: 1.35rem; height: 1.35rem; margin: .13rem 0 0; accent-color: var(--navy); }
+.choice span { min-width: 0; }
+.studio-card { margin-top: 1.1rem; }
+.studio-card .step-mark { background: var(--teal); }
+.studio-intro { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.studio-intro p { max-width: 55ch; }
+.draft-badge { background: var(--yellow); margin-bottom: 1.15rem; }
+.studio-fields { display: grid; gap: 1rem; }
+.field label, .file-field label { display: block; margin-bottom: .45rem; font-size: .95rem; font-weight: 750; }
+.field input, .field textarea { width: 100%; min-width: 0; border: 1.5px solid var(--navy); border-radius: .75rem; background: var(--paper); color: var(--navy); padding: .8rem; }
+.field input { min-height: 48px; }
+.field textarea { resize: vertical; min-height: 9rem; }
+.field-help { margin: .35rem 0 .65rem !important; color: var(--muted); font-size: .8rem; }
+.studio-actions { display: flex; flex-direction: column; align-items: stretch; gap: .75rem; margin-block: 1.25rem; }
+.file-field { min-width: 0; border: 1.5px solid var(--line); border-radius: .75rem; padding: .8rem; }
+.file-field input { display: block; width: 100%; max-width: 100%; min-width: 0; font-size: .85rem; }
+.file-field input::file-selector-button { min-height: 44px; max-width: 100%; border: 1.5px solid var(--navy); border-radius: .5rem; margin-right: .5rem; padding: .5rem .65rem; color: var(--navy); background: var(--cream); font-weight: 650; cursor: pointer; }
+.studio-feedback { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+.site-footer { background: var(--navy); color: var(--cream); padding-block: 1.25rem; }
+.site-footer p { font-size: .85rem; }
+
+@media (min-width: 48rem) {
+  .page { padding-top: 3.1rem; }
+  .hero { grid-template-columns: minmax(0, 1.35fr) minmax(0, .8fr); gap: 3rem; }
+  .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { padding: 1.7rem; }
+  .studio-intro { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 2rem; }
+  .draft-badge { max-width: 15rem; flex-shrink: 0; }
+  .studio-actions { flex-direction: row; align-items: center; flex-wrap: wrap; }
+  .file-field { flex: 1 1 17rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .button { transition: background-color .15s ease; }
+}

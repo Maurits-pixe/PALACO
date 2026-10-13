@@ -761,6 +761,7 @@ def database_diagnostics() -> None:
 
 DATABASE_TEST_FILTERS = {
     "postgres_storage_contract",
+    "postgres_consent_http_contract",
     "postgres_prepare_restore_proof",
     "postgres_verify_restored_snapshot",
 }
@@ -771,6 +772,8 @@ DATABASE_CASE_TAGS = frozenset((
     "CASE T03_ROTATE_FIRST", "CASE T03_REVOKE_FIRST", "CASE T03_RACE",
     "CASE T03_FAMILY", "CASE T03_EXPIRY", "CASE T03_SCHEMA", "CASE T03_CLOCK",
     "CASE T03_BACKUP_PREPARE", "CASE T03_RESTORE_BEFORE", "CASE T03_RESTORE_FENCE",
+    "CASE T04_SETUP", "CASE T04_OWN_RECEIPT", "CASE T04_CSRF", "CASE T04_CAS",
+    "CASE T04_REVOKE", "CASE T04_EXPIRY", "CASE T04_UNAVAILABLE", "CASE T04_RECOVERY",
     "CASE T03_DURABILITY_ALPHA_LOGIN", "CASE T03_DURABILITY_BETA_LOGIN",
     "CASE T03_DURABILITY_BEFORELOAD", "CASE T03_DURABILITY_RECONNECT",
     "CASE T03_DURABILITY_AFTERLOAD", "CASE T03_LOGIN_BEGIN",
@@ -838,6 +841,9 @@ def run_database_test(test_filter: str) -> None:
 def run_storage_tests() -> None:
     run_database_test("postgres_storage_contract")
 
+def run_consent_http_tests() -> None:
+    run_database_test("postgres_consent_http_contract")
+
 def prepare_restore_proof() -> None:
     if owned_bff() is not None:
         raise RuntimeError("Stop the owned BFF before preparing the native restore proof.")
@@ -871,7 +877,7 @@ def down() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=("prepare", "up", "run-bff", "down", "diagnostics", "db-diagnostics",
-                                                "start-bff", "stop-bff", "restart-bff",
+                                                "start-bff", "stop-bff", "restart-bff", "run-consent-http-tests",
                                                 "stop-db", "start-db", "backup-db", "restore-db",
                                                 "run-storage-tests", "prepare-restore-proof"))
     arguments = parser.parse_args()
@@ -905,6 +911,8 @@ def main() -> int:
             restore_database()
         elif arguments.command == "run-storage-tests":
             run_storage_tests()
+        elif arguments.command == "run-consent-http-tests":
+            run_consent_http_tests()
         elif arguments.command == "prepare-restore-proof":
             prepare_restore_proof()
         else:

@@ -13,6 +13,7 @@ SOURCES = (
     "services/rio-accounts/src/lib.rs",
     "services/rio-accounts/src/main.rs",
     "services/rio-accounts/src/storage.rs",
+    "services/rio-accounts/src/consent_http.rs",
     "verification/rio-accounts/package-lock.json",
 )
 if len(sys.argv) != 2 or sys.argv[1] not in ("sources", "summary", "inputs"):

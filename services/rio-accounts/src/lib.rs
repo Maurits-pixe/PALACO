@@ -36,6 +36,7 @@ use std::{
     time::{Duration, Instant},
 };
 use storage::{PgStore, StoreError};
+mod consent_http;
 use tokio::sync::{Mutex, Semaphore};
 
 /// Fixed HTTPS BFF origin; the listener remains bound to IPv4 loopback.
@@ -396,6 +397,16 @@ pub fn router(state: AppState) -> Router {
                 )
             }),
         )
+        .route(
+            "/app.css",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+                    STYLE,
+                )
+            }),
+        )
+        .route("/api/consent", get(consent_http::read).post(consent_http::write))
         .route("/healthz", get(health))
         .route("/api/status", get(|| async { Json(status()) }))
         .route("/auth/start", get(start))
@@ -474,7 +485,7 @@ async fn boundary(request: Request, next: Next) -> Response {
         ("x-frame-options", "DENY"),
         (
             "content-security-policy",
-            "default-src 'none'; script-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+            "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
         ),
     ] {
         response
@@ -784,51 +795,9 @@ async fn logout_all(
     end_session(&state, &headers, &body, true).await
 }
 
-const INDEX: &str = r#"<!doctype html>
-<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RIO · synthetische accountproef</title><script src="/app.js" defer></script></head>
-<body><main><h1>RIO accountproef</h1><p id="status">Uitsluitend synthetisch. ACCOUNT-1: HOLD. Contact en bevoegdheden gesloten.</p>
-<p>Deze lokale proef bewaart testsessies in een eigen database. Herstart behoudt geldige sessies; afmelden trekt ze blijvend in.</p>
-<a id="start-login" href="/auth/start">Aanmelden met synthetische testgebruiker</a>
-<section id="account" hidden><h2>Testaccount</h2><p id="account-id"></p>
-<button id="logout" type="button">Deze sessie afmelden</button>
-<button id="logout-all" type="button">Alle lokale testsessies afmelden</button></section>
-<p id="feedback" role="status"></p></main></body></html>"#;
-const SCRIPT: &str = r#"'use strict';
-(async () => {
-    const account = document.getElementById('account');
-    const feedback = document.getElementById('feedback');
-    let csrf;
-    try {
-        const response = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
-        if (response.status === 401) return;
-        if (!response.ok) throw new Error();
-        const me = await response.json();
-        document.getElementById('account-id').textContent = me.accountId;
-        document.getElementById('start-login').hidden = true;
-        account.hidden = false;
-        csrf = me.csrfToken;
-    } catch { feedback.textContent = 'De testsessie kon niet worden gelezen.'; return; }
-    for (const id of ['logout', 'logout-all']) {
-        document.getElementById(id).addEventListener('click', async () => {
-            try {
-                const response = await fetch('/auth/' + id, {
-                    method: 'POST', credentials: 'same-origin',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: '{}'
-                });
-                if (!response.ok) throw new Error();
-                const result = await response.json();
-                if (result.loggedOut !== true || result.mode !== 'SYNTHETIC_ONLY'
-                    || result.providerLogout !== 'NOT_REQUESTED') throw new Error();
-                csrf = undefined;
-                document.getElementById('account-id').textContent = '';
-                account.hidden = true;
-                document.getElementById('start-login').hidden = false;
-                feedback.textContent = 'Lokale testsessie afgemeld. De identity-provider heeft een afzonderlijke sessie.';
-            } catch { feedback.textContent = 'Afmelden is niet gelukt.'; }
-        });
-    }
-})();"#;
+const INDEX: &str = include_str!("web/index.html");
+const SCRIPT: &str = include_str!("web/app.js");
+const STYLE: &str = include_str!("web/app.css");
 
 #[cfg(test)]
 mod tests {
@@ -1456,4 +1425,40 @@ mod tests {
         assert_eq!(body["accountActive"], false);
         Ok(())
     }
+    #[tokio::test]
+    async fn account_assets_use_same_origin_csp_and_hide_server_sources() -> TestResult {
+        let state = test_state()?;
+        for (path, expected_type, expected_status) in [
+            ("/", Some("text/html; charset=utf-8"), StatusCode::OK),
+            ("/app.js", Some("text/javascript; charset=utf-8"), StatusCode::OK),
+            ("/app.css", Some("text/css; charset=utf-8"), StatusCode::OK),
+            ("/src/consent_http.rs", None, StatusCode::NOT_FOUND),
+            ("/.runtime/test-credentials.json", None, StatusCode::NOT_FOUND),
+        ] {
+            let response = router(state.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(path)
+                        .header("host", "localhost:8088")
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(response.status(), expected_status);
+            if let Some(content_type) = expected_type {
+                assert_eq!(
+                    response.headers().get("content-type").and_then(|value| value.to_str().ok()),
+                    Some(content_type),
+                );
+            }
+            let csp = response.headers().get("content-security-policy")
+                .ok_or_else(|| io::Error::other("missing asset policy"))?.to_str()?;
+            assert!(csp.contains("script-src 'self'"));
+            assert!(csp.contains("style-src 'self'"));
+            assert!(!csp.contains("unsafe-inline"));
+            assert_eq!(response.headers().get("cache-control")
+                .and_then(|value| value.to_str().ok()), Some("no-store"));
+        }
+        Ok(())
+    }
+
 }
