@@ -96,7 +96,7 @@ jobs:
       - name: Emit public image and dependency metadata
         if: always()
         run: |
-          if docker image inspect quay.io/keycloak/keycloak:26.8.0 > /dev/null 2>&1; then
+          if docker image inspect quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741 > /dev/null 2>&1; then
             python verification/rio-accounts/ci-evidence.py inputs
           fi
       - name: End synthetic runtime

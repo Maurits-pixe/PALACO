@@ -94,7 +94,8 @@ class FixtureSecurityTests(unittest.TestCase):
         attributes = {attribute["name"]: attribute for attribute in profile["attributes"]}
         for name in ("email", "firstName", "lastName"):
             self.assertNotIn("required", attributes[name])
-        self.assertEqual(profile["unmanagedAttributePolicy"], "DISABLED")
+        self.assertNotIn("unmanagedAttributePolicy", profile)
+        # UPConfig only accepts ENABLED, ADMIN_VIEW or ADMIN_EDIT; absent means disabled.
 
     def test_runtime_secrets_are_random_private_and_never_printed(self):
         output, run = self.prepare()
@@ -195,11 +196,76 @@ class FixtureSecurityTests(unittest.TestCase):
         self.assertIn("quay.io/keycloak/keycloak:26.8.0", compose)
         self.assertIn('"127.0.0.1:8089:8089"', compose)
         self.assertIn("--db=dev-mem", compose)
+        self.assertIn("--verbose", compose)
+        self.assertIn("@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741", compose)
         self.assertIn("internal: true", compose)
         self.assertIn("read_only: true", compose)
         self.assertNotIn("localhost:8089", compose)
         ignored = MODULE_PATH.with_name(".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn(".runtime/", ignored)
+
+
+    def test_provider_diagnostics_redact_all_runtime_secrets_and_unknown_tokens(self):
+        self.prepare()
+        secrets_to_hide = fixture.runtime_secret_values()
+        unknown_token = fixture.secrets.token_hex(32)
+        private_log = (
+            "INFO: normal startup configuration\n"
+            "ERROR: UserProfile configuration invalid for username: " + " ".join(secrets_to_hide) + "\n"
+            "Caused by: org.keycloak.component.ComponentValidationException: "
+            "Validator 'username-prohibited-characters' defined for attribute 'username' doesn't exist\n"
+            "ERROR: Failed to import realm: token=" + unknown_token + "\n"
+            "DEBUG: profile configuration details must stay private\n"
+        )
+        runs = [
+            SimpleNamespace(returncode=0, stdout=json.dumps({"Running": False, "ExitCode": 1, "OOMKilled": False,
+                                                          "Error": unknown_token}), stderr=""),
+            SimpleNamespace(returncode=0, stdout=private_log, stderr=""),
+        ]
+        output = io.StringIO()
+        with patch.object(fixture.subprocess, "run", side_effect=runs):
+            with patch.object(fixture, "build_opener", side_effect=fixture.URLError("unreachable")):
+                with redirect_stdout(output):
+                    fixture.diagnostics()
+        emitted = output.getvalue()
+        for value in [*secrets_to_hide, unknown_token]:
+            self.assertTrue(value not in emitted, "Provider diagnostics must not disclose secret material.")
+        self.assertNotIn("DEBUG:", emitted)
+        document = json.loads(emitted.splitlines()[0].split(" ", 1)[1])
+        self.assertEqual(document["state"], {"Running": False, "ExitCode": 1, "OOMKilled": False})
+        self.assertTrue(any("ComponentValidationException" in line for line in document["errorDetails"]))
+        self.assertTrue(any("username-prohibited-characters" in line for line in document["errorDetails"]))
+        self.assertTrue(any("[REDACTED_TOKEN]" in line for line in document["errorDetails"]))
+
+    def test_diagnostics_missing_redaction_inputs_fail_closed(self):
+        self.prepare()
+        (fixture.RUNTIME / "test-credentials.json").unlink()
+        private_token = fixture.secrets.token_hex(32)
+        runs = [
+            SimpleNamespace(returncode=0, stdout=json.dumps({"Running": private_token,
+                                                          "ExitCode": private_token, "OOMKilled": private_token}), stderr=""),
+            SimpleNamespace(returncode=0, stdout="ERROR: Failed to import realm " + private_token, stderr=""),
+        ]
+        output = io.StringIO()
+        with patch.object(fixture.subprocess, "run", side_effect=runs):
+            with patch.object(fixture, "build_opener", side_effect=fixture.URLError("unreachable")):
+                with redirect_stdout(output):
+                    fixture.diagnostics()
+        emitted = output.getvalue()
+        self.assertTrue(private_token not in emitted, "Missing redaction inputs must not expose provider output.")
+        document = json.loads(emitted.splitlines()[0].split(" ", 1)[1])
+        self.assertEqual(document["errorDetails"], ["REDACTION_INPUTS_UNAVAILABLE"])
+        self.assertEqual(document["state"], {"Running": None, "ExitCode": None, "OOMKilled": None})
+
+    def test_provider_details_are_bounded_and_configuration_payloads_are_suppressed(self):
+        raw = "\n".join(f"ERROR: UserProfile invalid attribute field-{index}: " + ("x " * 1000)
+                        for index in range(20))
+        details = fixture.provider_error_details(raw)
+        self.assertEqual(len(details), 8)
+        self.assertTrue(all(len(line) <= 900 for line in details))
+        payload = 'ERROR: UserProfile invalid {"credentials":[{"password":"anything"}]}'
+        self.assertEqual(fixture.provider_error_details(payload),
+                         ["CONFIGURATION_OR_DATABASE_PAYLOAD_REDACTED"])
 
 if __name__ == "__main__":
     unittest.main()

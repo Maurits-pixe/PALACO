@@ -1,9 +1,10 @@
 # Synthetic loopback development fixture only. Do not deploy this file.
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.0
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741
     command:
       - start-dev
+      - --verbose
       - --import-realm
       - --db=dev-mem
       - --hostname=http://127.0.0.1:8089

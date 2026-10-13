@@ -40,7 +40,7 @@ The certificate expires after one day. Do not reuse an old runtime after expiry.
 
 | Item | Fixed fixture value |
 | --- | --- |
-| Keycloak image | `quay.io/keycloak/keycloak:26.8.0` |
+| Keycloak image | `quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741` |
 | Issuer | `http://127.0.0.1:8089/realms/rio-synthetic` |
 | Confidential client | `rio-bff` |
 | Exact callback | `https://localhost:8088/auth/callback` |
@@ -53,6 +53,9 @@ Its default and optional client scopes are empty; the BFF requests `openid`.
 User registration, password reset, email login and email sending are disabled.
 The imported profile makes email and names optional. Neither synthetic user
 has an email address, a real person's name or a dossier identifier.
+The profile intentionally omits `unmanagedAttributePolicy`: the pinned 26.8
+runtime represents the disabled policy by absence/null. Its enum does not
+accept the UI label `DISABLED` as an import value.
 
 No passwords, private keys or client secrets are committed. Python generates
 the confidential client secret as 32 random bytes encoded as 64 hexadecimal
@@ -82,6 +85,17 @@ an in-memory database, no persistent data volume and no restart policy.
 Cleanup targets only the generated `rio-accounts-synthetic-<random>` project.
 `run-bff` launches the built `services/rio-accounts/target/debug/rio-accounts-dev`
 executable (with `.exe` on Windows) from the repository root.
+
+## Safe startup diagnostics
+
+If discovery fails, run `python verification/rio-accounts/fixture.py diagnostics`
+before cleanup. The diagnostic reads provider logs privately, replaces every
+generated client secret and user/admin password, scrubs other token-like values,
+and emits only bounded startup error explanations plus public container state.
+Missing redaction inputs suppress all provider details. Raw provider logs,
+configuration bodies and runtime files must not be exported.
+The provider uses verbose startup internally so a cause can be diagnosed without
+publishing an unfiltered stack trace.
 
 ## Browser verification
 
@@ -186,9 +200,13 @@ Any missing staging, TLS, transport or physical-device evidence remains
 
 The exact image tag is pinned to the maintained release listed by the
 [official Keycloak downloads page](https://www.keycloak.org/downloads), checked
-on 2026-10-12. An immutable registry digest must be recorded after the first
-verified image pull; this fixture currently pins the release tag, not a digest.
+on 2026-10-12. The immutable digest was observed in CI run 38378364460 on
+2026-10-13 and is now pinned alongside the release tag.
 The loopback development startup and realm import follow the
 [official container guide](https://www.keycloak.org/server/containers).
 The optional profile configuration follows the
 [26.8.0 declarative user profile implementation](https://github.com/keycloak/keycloak/blob/26.8.0/services/src/main/java/org/keycloak/userprofile/DeclarativeUserProfileProvider.java).
+
+The disabled unmanaged-attribute representation follows the actual
+[26.8.0 UPConfig enum](https://github.com/keycloak/keycloak/blob/26.8.0/core/src/main/java/org/keycloak/representations/userprofile/config/UPConfig.java)
+and [DefaultAttributes null-policy behavior](https://github.com/keycloak/keycloak/blob/26.8.0/server-spi-private/src/main/java/org/keycloak/userprofile/DefaultAttributes.java).

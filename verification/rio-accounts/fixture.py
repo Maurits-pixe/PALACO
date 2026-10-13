@@ -64,7 +64,9 @@ def user_profile() -> dict:
         elif name == "email":
             attribute["validations"]["email"] = {}
         attributes.append(attribute)
-    return {"attributes": attributes, "groups": [], "unmanagedAttributePolicy": "DISABLED"}
+    # Keycloak 26.8 represents disabled unmanaged attributes by an absent/null policy.
+    # DISABLED is a UI label, not an accepted UPConfig enum value.
+    return {"attributes": attributes, "groups": []}
 
 def realm(client_secret: str, credentials: dict) -> dict:
     return {
@@ -224,6 +226,89 @@ def compose(*arguments: str) -> None:
         cwd=ROOT,
     )
 
+def runtime_secret_values() -> list[str]:
+    """Collect every generated password/client secret before handling provider output."""
+    values = set()
+    for name in ("compose.env", "bff.env"):
+        for line in runtime_path(name).read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition("=")
+            if separator and ("PASSWORD" in key or "SECRET" in key):
+                values.add(value)
+    credentials = json.loads(runtime_path("test-credentials.json").read_text(encoding="utf-8"))
+    for user in credentials.values():
+        values.add(user["password"])
+    imported = json.loads(runtime_path("rio-synthetic-realm.json").read_text(encoding="utf-8"))
+    for client in imported.get("clients", []):
+        if client.get("secret"):
+            values.add(client["secret"])
+    for user in imported.get("users", []):
+        for credential in user.get("credentials", []):
+            if credential.get("value"):
+                values.add(credential["value"])
+    return sorted((value for value in values if value), key=len, reverse=True)
+
+def sanitize_provider_output(raw: str, secret_values: list[str]) -> str:
+    """Redact runtime values and token-like strings; never return untouched log output."""
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", raw)
+    for value in secret_values:
+        text = text.replace(value, "[REDACTED]")
+        text = text.replace(json.dumps(value)[1:-1], "[REDACTED]")
+    text = re.sub(
+        r"-----BEGIN [^-]*PRIVATE KEY-----[\s\S]*?-----END [^-]*PRIVATE KEY-----",
+        "[REDACTED_PRIVATE_KEY]", text,
+    )
+    # Preserve only known public diagnostic identifiers across generic token scrubbing.
+    public_tokens = (
+        "username-prohibited-characters", "up-username-not-idn-homograph",
+        "person-name-prohibited-characters", "ComponentValidationException",
+        "DeclarativeUserProfileProvider", "UnsupportedOperationException",
+        "IllegalArgumentException", "PersistenceException",
+        "UnmanagedAttributePolicy", "unmanagedAttributePolicy",
+        "JdbcSQLIntegrityConstraintViolationException", "JdbcSQLDataException",
+    )
+    placeholders = {}
+    for index, token in enumerate(public_tokens):
+        marker = f"<public{index}>"
+        if token in text:
+            text = text.replace(token, marker)
+            placeholders[marker] = token
+    text = re.sub(r"(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{24,}(?![A-Za-z0-9_-])",
+                  "[REDACTED_TOKEN]", text)
+    text = re.sub(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+                  "[REDACTED_ADDRESS]", text)
+    text = re.sub(r"https?://[^\s\"'<>]+", "[REDACTED_URL]", text)
+    for marker, token in placeholders.items():
+        text = text.replace(marker, token)
+    return "".join(character for character in text
+                   if character in "\n\t" or ord(character) >= 32)
+
+def provider_error_details(sanitized: str) -> list[str]:
+    """Expose bounded startup error explanations, excluding configuration/data dumps."""
+    details = []
+    error_level = re.compile(r"(?:^ERROR:|\bERROR\s+\[|^\s*Caused by:)", re.IGNORECASE)
+    known_reason = re.compile(
+        r"failed to (?:start|import|read|create|initialize|connect)|"
+        r"user.?profile|validator|attribute|unknown option|"
+        r"componentvalidationexception|illegalargumentexception|"
+        r"persistenceexception|jdbcsql|database|permission denied|"
+        r"cannot deserialize|unrecognized field|out.?of.?memory",
+        re.IGNORECASE,
+    )
+    for line in sanitized.splitlines():
+        if not error_level.search(line) or not known_reason.search(line):
+            continue
+        # Values/configuration bodies remain private even after redaction.
+        if re.search(r'"(?:secret|password|credentials)"\s*:|PRIVATE KEY|INSERT INTO|SELECT .+ FROM',
+                     line, re.IGNORECASE):
+            detail = "CONFIGURATION_OR_DATABASE_PAYLOAD_REDACTED"
+        else:
+            detail = re.sub(r"\s+", " ", line).strip()[:900]
+        if detail not in details:
+            details.append(detail)
+        if len(details) == 8:
+            break
+    return details
+
 def diagnostics() -> None:
     """Print fixed diagnostic categories only; never raw provider logs/configuration."""
     metadata = json.loads(runtime_path("metadata.json").read_text(encoding="utf-8"))
@@ -239,14 +324,25 @@ def diagnostics() -> None:
     if status.returncode == 0:
         try:
             raw = json.loads(status.stdout)
-            state = {key: raw.get(key) for key in ("Running", "ExitCode", "OOMKilled")}
+            state = {
+                "Running": raw.get("Running") if type(raw.get("Running")) is bool else None,
+                "ExitCode": raw.get("ExitCode") if type(raw.get("ExitCode")) is int and 0 <= raw["ExitCode"] <= 255 else None,
+                "OOMKilled": raw.get("OOMKilled") if type(raw.get("OOMKilled")) is bool else None,
+            }
         except ValueError:
             state = {"unavailable": True}
     logs = subprocess.run(
         ["docker", "logs", "--tail", "100", container],
         capture_output=True, text=True, check=False,
     )
-    data = (logs.stdout + logs.stderr).lower()
+    try:
+        sanitized = sanitize_provider_output(logs.stdout + logs.stderr, runtime_secret_values())
+        error_details = provider_error_details(sanitized)
+    except (OSError, ValueError, KeyError, TypeError):
+        # Fail closed: incomplete redaction inputs never expose provider messages.
+        sanitized = ""
+        error_details = ["REDACTION_INPUTS_UNAVAILABLE"]
+    data = sanitized.lower()
     categories = {
         "server_listening": "listening on" in data,
         "startup_failed": "failed to start" in data or "error running" in data,
@@ -259,7 +355,8 @@ def diagnostics() -> None:
         "has_error": "error" in data,
     }
     print("RIO_PROVIDER_DIAGNOSTIC " + json.dumps(
-        {"state": state, "categories": categories}, separators=(",", ":")))
+        {"state": state, "categories": categories, "errorDetails": error_details},
+        separators=(",", ":")))
     # A reached HTTP response is public status metadata, never its response content.
     try:
         opener = build_opener(ProxyHandler({}), NoRedirects())
