@@ -692,6 +692,9 @@ const SCRIPT: &str = r#"'use strict';
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: '{}'
                 });
                 if (!response.ok) throw new Error();
+                const result = await response.json();
+                if (result.loggedOut !== true || result.mode !== 'SYNTHETIC_ONLY'
+                    || result.providerLogout !== 'NOT_REQUESTED') throw new Error();
                 csrf = undefined;
                 document.getElementById('account-id').textContent = '';
                 account.hidden = true;

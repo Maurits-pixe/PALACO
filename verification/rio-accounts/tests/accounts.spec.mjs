@@ -340,7 +340,7 @@ test('[RIO-E2E-04] Logout invalidates the session without affecting another user
       await assertOwnAccount(alphaPage, credentials.alpha.username);
     });
     await test.step('logout', async () => {
-      const idpCookiesBefore = (await alpha.cookies(ISSUER))
+      const idpCookiesBefore = (await alpha.cookies(ISSUER + '/protocol/openid-connect/auth'))
         .filter(cookie => cookie.name.startsWith('KEYCLOAK_'))
         .map(({ name, value }) => [name, value]).sort();
       let providerLogoutRequested = false;
@@ -358,7 +358,7 @@ test('[RIO-E2E-04] Logout invalidates the session without affecting another user
       await test.step('provider-session-preserved', async () => {
         expect(providerLogoutRequested).toBe(false);
         expect(idpCookiesBefore.length > 0).toBe(true);
-        const idpCookiesAfter = (await alpha.cookies(ISSUER))
+        const idpCookiesAfter = (await alpha.cookies(ISSUER + '/protocol/openid-connect/auth'))
           .filter(cookie => cookie.name.startsWith('KEYCLOAK_'))
           .map(({ name, value }) => [name, value]).sort();
         expect(JSON.stringify(idpCookiesBefore) === JSON.stringify(idpCookiesAfter)).toBe(true);
