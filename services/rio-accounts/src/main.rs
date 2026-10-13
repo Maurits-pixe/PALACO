@@ -13,6 +13,15 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = DevConfig::from_env()?;
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments == ["--recovery-fence"] {
+        AppState::recovery_fence(&config).await?;
+        println!("RIO synthetic restore fence committed; restored sessions stay closed.");
+        return Ok(());
+    }
+    if !arguments.is_empty() {
+        return Err(std::io::Error::other("unsupported synthetic service command").into());
+    }
     let tls = RustlsConfig::from_pem_file(&config.tls_cert, &config.tls_key).await?;
     let state = AppState::discover(&config).await?;
     let address = SocketAddr::from(([127, 0, 0, 1], 8088));

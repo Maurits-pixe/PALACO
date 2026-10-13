@@ -200,6 +200,14 @@ class FixtureSecurityTests(unittest.TestCase):
         self.assertIn("@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741", compose)
         self.assertNotIn("internal: true", compose)
         self.assertIn("driver: bridge", compose)
+        self.assertIn("postgres:18.6-bookworm@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c", compose)
+        self.assertIn('"127.0.0.1:8090:5432"', compose)
+        self.assertIn("rio_pg_data:/var/lib/postgresql", compose)
+        self.assertNotIn("rio_pg_data:/var/lib/postgresql/data", compose)
+        self.assertIn("--auth-host=scram-sha-256 --auth-local=scram-sha-256", compose)
+        self.assertNotIn('"8090:5432"', compose)
+        self.assertNotIn('"0.0.0.0:8090:5432"', compose)
+        self.assertNotIn("POSTGRES_HOST_AUTH_METHOD: trust", compose)
         self.assertNotIn("network_mode: host", compose)
         self.assertNotIn('"8089:8089"', compose)
         self.assertNotIn('"0.0.0.0:8089:8089"', compose)
@@ -285,6 +293,248 @@ class FixtureSecurityTests(unittest.TestCase):
         self.assertEqual(result, [{"containerPort": "8089/tcp", "hostIp": "127.0.0.1", "hostPort": 8089}])
         self.assertTrue(fake_secret not in json.dumps(result), "Port diagnostics must not expose unrelated metadata.")
         self.assertEqual(fixture.public_port_bindings(None), [])
+
+
+    def test_database_credentials_are_generated_private_and_exact_loopback(self):
+        output, _ = self.prepare()
+        values = fixture.database_environment()
+        primary = fixture.urlsplit(values["RIO_DEV_DATABASE_URL"])
+        restored = fixture.urlsplit(values["RIO_PG_RESTORE_TEST_URL"])
+        password = primary.password
+        self.assertTrue(re.fullmatch(r"[0-9a-f]{64}", password or "") is not None)
+        self.assertTrue(restored.password == password)
+        self.assertTrue(values["RIO_DEV_DATABASE_URL"] == values["RIO_PG_TEST_URL"])
+        self.assertEqual((primary.hostname, primary.port, primary.username, primary.path, primary.query),
+                         ("127.0.0.1", 8090, "rio_dev", "/rio_synthetic", "sslmode=disable"))
+        self.assertEqual(restored.path, "/rio_synthetic_restore")
+        compose_env = (fixture.RUNTIME / "compose.env").read_text(encoding="utf-8")
+        self.assertTrue("RIO_PG_PASSWORD=" + password + "\n" in compose_env)
+        self.assertTrue(password not in output and values["RIO_DEV_DATABASE_URL"] not in output)
+        self.assertEqual(json.loads((fixture.RUNTIME / "metadata.json").read_text())["storage"], "POSTGRES_T03")
+
+    def test_database_configuration_rejects_remote_or_ambiguous_urls(self):
+        self.prepare()
+        good = fixture.read_bff_environment()
+        invalid = [
+            good["RIO_DEV_DATABASE_URL"].replace("127.0.0.1", "example.invalid"),
+            good["RIO_DEV_DATABASE_URL"].replace(":8090", ":5432"),
+            good["RIO_DEV_DATABASE_URL"].replace("rio_dev:", "postgres:"),
+            good["RIO_DEV_DATABASE_URL"].replace("/rio_synthetic?", "/rio_synthetic_restore?"),
+            good["RIO_DEV_DATABASE_URL"].replace("sslmode=disable", "sslmode=require"),
+            good["RIO_DEV_DATABASE_URL"] + "#fragment",
+            good["RIO_DEV_DATABASE_URL"].replace("postgresql://", "postgres://"),
+        ]
+        for url in invalid:
+            values = dict(good, RIO_DEV_DATABASE_URL=url, RIO_PG_TEST_URL=url)
+            with patch.object(fixture, "read_bff_environment", return_value=values):
+                with self.assertRaisesRegex(RuntimeError, "Invalid fixed local"):
+                    fixture.database_environment()
+
+    def test_legacy_runtime_requires_explicit_cleanup_instead_of_reinitializing(self):
+        self.prepare()
+        metadata = fixture.RUNTIME / "metadata.json"
+        data = json.loads(metadata.read_text())
+        data.pop("storage")
+        metadata.write_text(json.dumps(data), encoding="utf-8")
+        with patch.object(fixture.subprocess, "run") as run:
+            with self.assertRaisesRegex(RuntimeError, "predates T03"):
+                fixture.prepare()
+            run.assert_not_called()
+
+    def test_inherited_compose_settings_cannot_override_private_credentials(self):
+        names = ("RIO_PG_PASSWORD", "RIO_KC_ADMIN_PASSWORD", "RIO_RUNTIME_DIR", "COMPOSE_PROJECT_NAME")
+        with patch.dict(fixture.os.environ, {name: "override" for name in names}):
+            environment = fixture.compose_environment()
+        self.assertTrue(all(name not in environment for name in names))
+
+    def test_database_readiness_requires_a_successful_authenticated_query(self):
+        self.prepare()
+        results = [
+            SimpleNamespace(returncode=1, stdout=b"1", stderr=b"private"),
+            SimpleNamespace(returncode=0, stdout=b"0", stderr=b""),
+            SimpleNamespace(returncode=0, stdout=b"1\n", stderr=b""),
+        ]
+        with patch.object(fixture, "private_compose", side_effect=results) as run:
+            with patch.object(fixture.time, "sleep"):
+                with redirect_stdout(io.StringIO()):
+                    fixture.wait_for_database(timeout=1)
+        self.assertEqual(run.call_count, 3)
+        command = run.call_args.args[-1]
+        self.assertIn('export PGPASSWORD="$POSTGRES_PASSWORD"', command)
+        self.assertIn("SELECT 1", command)
+        self.assertTrue(self.database_password() not in command)
+
+    def database_password(self):
+        return fixture.urlsplit(fixture.read_bff_environment()["RIO_DEV_DATABASE_URL"]).password
+
+    def test_native_dump_is_private_bounded_and_never_contains_password_arguments(self):
+        self.prepare()
+        seen = []
+        def dump(*arguments, **options):
+            seen.extend(arguments)
+            options["stdout"].write(b"PGDMP-synthetic-unit-test")
+            return SimpleNamespace(returncode=0)
+        output = io.StringIO()
+        with patch.object(fixture, "private_compose", side_effect=dump):
+            with redirect_stdout(output):
+                fixture.backup_database()
+        path = fixture.RUNTIME / "db-backup.dump"
+        self.assertTrue(path.is_file())
+        if os.name != "nt":
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        self.assertTrue(self.database_password() not in " ".join(seen))
+        self.assertTrue(self.database_password() not in output.getvalue())
+        self.assertIn("--schema=rio_synthetic", seen[-1])
+        self.assertIn("--format=custom", seen[-1])
+        with patch.object(fixture, "private_compose") as run:
+            with self.assertRaisesRegex(RuntimeError, "refusing overwrite"):
+                fixture.backup_database()
+            run.assert_not_called()
+
+    def test_failed_dump_removes_only_its_new_private_archive(self):
+        self.prepare()
+        with patch.object(fixture, "private_compose", return_value=SimpleNamespace(returncode=1)):
+            with self.assertRaisesRegex(RuntimeError, "backup failed"):
+                fixture.backup_database()
+        self.assertFalse((fixture.RUNTIME / "db-backup.dump").exists())
+        self.assertTrue((fixture.RUNTIME / "bff.env").is_file())
+
+    def test_restore_uses_fixed_isolated_database_and_verifies_before_fencing(self):
+        self.prepare()
+        fixture.write_new("db-backup.dump", "synthetic-unit-archive")
+        commands = []
+        def restore(*arguments, **options):
+            commands.append(arguments[-1])
+            if "pg_restore" in arguments[-1]:
+                self.assertIsNotNone(options.get("stdin"))
+            return SimpleNamespace(returncode=0)
+        output = io.StringIO()
+        with patch.object(fixture, "private_compose", side_effect=restore):
+            with patch.object(fixture, "run_database_test") as verify:
+                with patch.object(fixture.subprocess, "Popen") as start:
+                    with redirect_stdout(output):
+                        fixture.restore_database()
+                    start.assert_not_called()
+                verify.assert_called_once_with("postgres_verify_restored_snapshot")
+        self.assertEqual(len(commands), 3)
+        self.assertIn("dropdb", commands[0])
+        self.assertIn("rio_synthetic_restore", commands[0])
+        self.assertNotIn("dropdb -w -h 127.0.0.1 -U rio_dev --if-exists --force rio_synthetic ", commands[0])
+        self.assertIn("createdb", commands[1])
+        self.assertIn("pg_restore", commands[2])
+        self.assertTrue(all(self.database_password() not in command for command in commands))
+        self.assertEqual(output.getvalue().strip(), "RIO_DATABASE_RESTORE_PROOF_PASSED")
+
+    def test_failed_restore_does_not_run_or_claim_recovery_proof(self):
+        self.prepare()
+        fixture.write_new("db-backup.dump", "synthetic-unit-archive")
+        output = io.StringIO()
+        results = [SimpleNamespace(returncode=0), SimpleNamespace(returncode=0), SimpleNamespace(returncode=1)]
+        with patch.object(fixture, "private_compose", side_effect=results):
+            with patch.object(fixture, "run_database_test") as verify:
+                with redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, "database restore failed"):
+                        fixture.restore_database()
+                verify.assert_not_called()
+        self.assertNotIn("PASSED", output.getvalue())
+
+    def test_backup_symlink_is_refused_without_touching_target(self):
+        self.prepare()
+        target = self.root / "outside.dump"
+        target.write_bytes(b"keep")
+        self.symlink(fixture.RUNTIME / "db-backup.dump", target)
+        with patch.object(fixture, "private_compose") as run:
+            with self.assertRaisesRegex(RuntimeError, "symlinked runtime files"):
+                fixture.restore_database()
+            run.assert_not_called()
+        self.assertEqual(target.read_bytes(), b"keep")
+
+    def test_cleanup_removes_private_browser_state_dump_and_process_log(self):
+        self.prepare()
+        for name in fixture.OPTIONAL_RUNTIME_FILES:
+            fixture.write_new(name, "private-test-value")
+        sentinel = fixture.RUNTIME / "unrelated-note.txt"
+        sentinel.write_text("keep", encoding="utf-8")
+        with patch.object(fixture, "stop_bff") as stop:
+            with patch.object(fixture, "compose"):
+                with redirect_stdout(io.StringIO()):
+                    fixture.down()
+            stop.assert_called_once_with()
+        self.assertEqual({path.name for path in fixture.RUNTIME.iterdir()}, {"unrelated-note.txt"})
+
+    def test_process_ownership_mismatch_refuses_signals(self):
+        self.prepare()
+        token = "a" * 64
+        fixture.write_new("bff-process.json", json.dumps({"pid": 321, "processToken": token, "startTicks": "19"}))
+        identity = {"startTicks": "19", "binary": str((self.root / "rio-accounts-dev").resolve()),
+                    "environment": b"RIO_FIXTURE_PROCESS_TOKEN=" + b"b" * 64}
+        with patch.object(fixture, "process_identity", return_value=identity):
+            with patch.object(fixture, "bff_binary", return_value=self.root / "rio-accounts-dev"):
+                with patch.object(fixture.os, "pidfd_open", create=True) as signal_open:
+                    with self.assertRaisesRegex(RuntimeError, "ownership mismatch"):
+                        fixture.stop_bff()
+                    signal_open.assert_not_called()
+
+    def test_restart_proves_a_changed_owned_generation_without_public_identifiers(self):
+        before = (321, {"startTicks": "19", "processToken": "a" * 64})
+        after = (322, {"startTicks": "20", "processToken": "b" * 64})
+        output = io.StringIO()
+        with patch.object(fixture, "owned_bff", side_effect=[before, after]):
+            with patch.object(fixture, "stop_bff") as stop:
+                with patch.object(fixture, "start_bff") as start:
+                    with redirect_stdout(output):
+                        fixture.restart_bff()
+                    stop.assert_called_once_with()
+                    start.assert_called_once_with()
+        self.assertTrue('"generationChanged":true' in output.getvalue())
+        self.assertNotIn("321", output.getvalue())
+        self.assertNotIn("startTicks", output.getvalue())
+        self.assertTrue("a" * 64 not in output.getvalue())
+
+    def test_restart_refuses_an_unchanged_or_missing_owned_generation(self):
+        same = (321, {"startTicks": "19", "processToken": "a" * 64})
+        for generations in ([None], [same, same]):
+            with patch.object(fixture, "owned_bff", side_effect=generations):
+                with patch.object(fixture, "stop_bff"):
+                    with patch.object(fixture, "start_bff"):
+                        with self.assertRaisesRegex(RuntimeError, "generation"):
+                            fixture.restart_bff()
+
+    def test_database_test_runner_filters_harness_and_publishes_only_fixed_summaries(self):
+        self.prepare()
+        secret = self.database_password()
+        result = SimpleNamespace(returncode=0, stdout=
+            "PRIVATE: " + secret + "\n"
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.03s\n",
+            stderr=secret)
+        output = io.StringIO()
+        with patch.object(fixture.subprocess, "run", return_value=result) as run:
+            with redirect_stdout(output):
+                fixture.run_storage_tests()
+        arguments = run.call_args.args[0]
+        self.assertIn("postgres_storage_contract", arguments)
+        self.assertNotIn("postgres_prepare_restore_proof", arguments)
+        self.assertIn("--locked", arguments)
+        self.assertIn("--ignored", arguments)
+        self.assertTrue(secret not in " ".join(arguments))
+        self.assertTrue(secret not in output.getvalue())
+        document = json.loads(output.getvalue().split(" ", 1)[1])
+        self.assertIs(document["success"], True)
+
+    def test_database_test_runner_rejects_zero_tests_and_arbitrary_failure_lines(self):
+        self.prepare()
+        secret = self.database_password()
+        results = [
+            SimpleNamespace(returncode=0, stdout="test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s\n", stderr=""),
+            SimpleNamespace(returncode=1, stdout="test result: FAILED. 0 passed; 1 failed; " + secret, stderr=secret),
+        ]
+        for result in results:
+            output = io.StringIO()
+            with patch.object(fixture.subprocess, "run", return_value=result):
+                with redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, "failed or did not run"):
+                        fixture.run_storage_tests()
+            self.assertTrue(secret not in output.getvalue())
 
 if __name__ == "__main__":
     unittest.main()

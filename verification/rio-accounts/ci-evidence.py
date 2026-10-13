@@ -12,6 +12,7 @@ SOURCES = (
     "services/rio-accounts/Cargo.lock",
     "services/rio-accounts/src/lib.rs",
     "services/rio-accounts/src/main.rs",
+    "services/rio-accounts/src/storage.rs",
     "verification/rio-accounts/package-lock.json",
 )
 if len(sys.argv) != 2 or sys.argv[1] not in ("sources", "summary", "inputs"):
@@ -36,7 +37,14 @@ else:
     ).stdout.strip()
     if not result.startswith("quay.io/keycloak/keycloak@sha256:"):
         raise SystemExit("Unrecognized development image digest")
-    data = {"schema": "rio-account-dev-build-inputs/v1", "keycloak": result}
+    postgres = subprocess.run(
+        ["docker", "image", "inspect", "postgres:18.6-bookworm@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c",
+         "--format", "{{index .RepoDigests 0}}"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if not postgres.startswith("postgres@sha256:"):
+        raise SystemExit("Unrecognized synthetic PostgreSQL image digest")
+    data = {"schema": "rio-account-dev-build-inputs/v2", "keycloak": result, "postgres": postgres}
     for name in ("services/rio-accounts/Cargo.lock", "verification/rio-accounts/package-lock.json"):
         data[name] = hashlib.sha256((REPO / name).read_bytes()).hexdigest()
     print("RIO_BUILD_INPUTS " + json.dumps(data, separators=(",", ":")))

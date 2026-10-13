@@ -23,6 +23,30 @@ services:
     security_opt: ["no-new-privileges:true"]
     mem_limit: 1g
     restart: "no"
+  postgres:
+    image: postgres:18.6-bookworm@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c
+    environment:
+      POSTGRES_USER: rio_dev
+      POSTGRES_DB: rio_synthetic
+      POSTGRES_PASSWORD: ${RIO_PG_PASSWORD:?run fixture.py prepare first}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    command: ["postgres", "-c", "max_connections=20", "-c", "shared_buffers=64MB"]
+    ports:
+      - "127.0.0.1:8090:5432"
+    volumes:
+      - rio_pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U rio_dev -d rio_synthetic"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
+    security_opt: ["no-new-privileges:true"]
+    shm_size: 128mb
+    mem_limit: 512m
+    restart: "no"
+volumes:
+  rio_pg_data:
 networks:
   default:
     driver: bridge

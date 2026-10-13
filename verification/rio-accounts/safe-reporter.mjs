@@ -6,13 +6,22 @@ const CASES = new Map([
   ['RIO-E2E-03', 'Invalid credentials create no BFF session'],
   ['RIO-E2E-04', 'Logout invalidates the session without affecting another user'],
   ['RIO-E2E-05', 'Expired sessions no longer authorize account access'],
+  ['RIO-DURABLE-01', 'Save actual OIDC sessions privately before BFF restart'],
+  ['RIO-DURABLE-02', 'Database outage denies access until controlled BFF recovery'],
+  ['RIO-DURABLE-03', 'Restart preserves own sessions and actor-scoped revocation'],
+  ['RIO-DURABLE-04', 'Saved revoked cookies stay denied after another BFF restart'],
 ]);
 const PHASES = new Set([
   'initial-access', 'authorization-contract', 'real-idp-login',
   'cookie-contract', 'own-account', 'context-isolation', 'invalid-session',
   'invalid-credentials', 'logout-csrf', 'logout', 'expired-session',
   'no-browser-tokens', 'hold-status', 'session-rotation', 'provider-session-preserved',
+  'durable-real-login', 'durable-private-state', 'durable-database-outage',
+  'durable-database-recovery', 'durable-connection-stays-closed', 'durable-restart-access', 'durable-cross-actor-csrf',
+  'durable-native-revocation', 'durable-revocation-after-restart', 'durable-unaffected-actor',
 ]);
+
+const DURABLE_PHASES = new Set(['prepare', 'outage', 'revoke', 'verify']);
 
 const FEEDBACK_BUCKETS = new Set(['empty', 'read_failed', 'logout_failed', 'logged_out', 'other', 'unavailable']);
 
@@ -45,13 +54,20 @@ export default class SafeReporter {
   results = [];
   suiteErrors = 0;
 
+  constructor(options = {}) {
+    if (options.durablePhase !== undefined && !DURABLE_PHASES.has(options.durablePhase)) {
+      throw new Error('Unsupported synthetic durable reporter phase');
+    }
+    this.durablePhase = options.durablePhase;
+  }
+
   printsToStdio() { return true; }
   onStdOut() {}
   onStdErr() {}
   onError() { this.suiteErrors += 1; }
 
   onTestEnd(test, result) {
-    const id = /^\[(RIO-E2E-0[1-5])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
+    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
     const phases = [];
     const failedLines = new Set();
     const walk = steps => {
@@ -87,10 +103,17 @@ export default class SafeReporter {
       credentials: 'synthetic-runtime-only',
       productionAccounts: 'HOLD',
       realInvitations: 'HOLD',
+      ...(this.durablePhase ? { durablePhase: this.durablePhase } : {}),
       tests: this.results,
     };
     await mkdir('evidence', { recursive: true });
-    await writeFile('evidence/browser-summary.json', JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+    const path = this.durablePhase
+      ? 'evidence/browser-durable-' + this.durablePhase + '-summary.json'
+      : 'evidence/browser-summary.json';
+    await writeFile(path, JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
+    if (this.durablePhase) {
+      process.stdout.write('RIO_DURABLE_BROWSER_SUMMARY ' + JSON.stringify(summary) + '\n');
+    }
     process.stdout.write(`RIO browser verification: ${result.status}\n`);
   }
 }

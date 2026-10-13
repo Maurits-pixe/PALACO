@@ -1,4 +1,4 @@
-# T01/T02 — Synthetic RIO account development scope
+# T01/T02/T03 — Synthetic RIO account development scope
 
 Status: ENGINEERING CANDIDATE / SYNTHETIC_ONLY. ACCOUNT-1, integration and production stay HOLD.
 
@@ -33,7 +33,7 @@ The BFF uses maintained [openidconnect4.0.1](https://docs.rs/openidconnect/4.0.1
 - Client code stores no login tokens; it reads only its own synthetic account and holds the CSRF value in page memory.
 - All status/me responses remain SYNTHETIC_ONLY, accountActive=false, operativeAuthority=NONE, canOpenContact=false and ACCOUNT-1 HOLD. Local logout does not pretend to end the separate IdP session.
 
-Session limits in this disposable fixture are idle30seconds and absolute60seconds; transactions expire after300seconds. These are development settings, not accepted production assurance policy. Restart intentionally loses T02 memory. Durable PostgreSQL, consent, recovery/mail, independent security/privacy/operations review and real invitations remain T03–T07.
+Session limits in this disposable fixture are idle30seconds and absolute60seconds; transactions expire after300seconds. These are development settings, not accepted production assurance policy. T02 used process memory. T03 replaces the session runtime with a separate local PostgreSQL fixture and adds bounded synthetic records, purpose-bound consent, actor-specific revocation and recovery fencing. Unfinished login nonce/PKCE material still closes on restart. See [the T03 storage contract](T03-STORAGE.md) for the exact durability/restore boundary and required evidence. Recovery/mail, independent security/privacy/operations review and real invitations remain later tasks.
 
 ## Evidence and unfinished work
 
