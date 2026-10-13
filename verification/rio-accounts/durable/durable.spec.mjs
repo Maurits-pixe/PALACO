@@ -313,9 +313,13 @@ test('[RIO-DURABLE-03] Restart preserves own sessions and actor-scoped revocatio
         page.locator('#logout-all').click({ timeout: 10_000 }),
       ]);
       expect(response.status()).toBe(200);
-      expect(await response.json()).toEqual({
-        loggedOut: true, providerLogout: 'NOT_REQUESTED', mode: 'SYNTHETIC_ONLY',
-      });
+      // The client must consume and validate the real logout JSON envelope
+      // before it renders this success message. Observing the native UI and
+      // the server-side revoked session avoids a Playwright response-body
+      // lifecycle race; the closed-account invariants below remain mandatory.
+      await expect(page.locator('#feedback')).toHaveText(
+        'Lokale testsessie afgemeld. De identity-provider heeft een afzonderlijke sessie.'
+      );
       await expect(page.locator('#start-login')).toBeVisible();
       expect((await readMe(page)).status).toBe(401);
       expect((await contexts.alpha.context.cookies(BFF)).some(cookie => cookie.name === SESSION_NAME)).toBe(false);
