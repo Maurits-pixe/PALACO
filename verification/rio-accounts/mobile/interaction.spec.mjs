@@ -59,13 +59,55 @@ test('[RIO-MOBILE-01] Native consent controls preserve focus and reflow', async 
 
 test('[RIO-MOBILE-02] Real local draft downloads cannot become account authority', async ({ page }, testInfo) => {
   const credentials = await users();
-  await login(page, credentials.alpha, testInfo);
-  await chooseConsent(page, testInfo);
-  receiptFrom(await nativeConsent(page, '#consent-save', testInfo));
-  const receiptBefore = receiptFrom(await consent(page));
-  expect(receiptBefore.granted).toBe(true);
-  const privateCsrf = (await me(page)).data.csrfToken;
-  const privateCookie = (await page.context().cookies(BFF)).find(cookie => cookie.name === '__Host-rio_session').value;
+  let receiptBefore;
+  let privateCsrf;
+  let privateCookie;
+  const observation = {
+    stage: 'login', grantStatus: null, receiptStatus: null, meStatus: null,
+    hasSessionCookie: null, accountVisible: false, pageErrors: 0, feedbackBucket: 'unavailable',
+  };
+  const pageError = () => { observation.pageErrors += 1; };
+  page.on('pageerror', pageError);
+  try {
+    await test.step('mobile-studio-setup', async () => {
+      await login(page, credentials.alpha, testInfo);
+      observation.stage = 'choose';
+      await chooseConsent(page, testInfo);
+      observation.stage = 'grant';
+      const grant = await nativeConsent(page, '#consent-save', testInfo);
+      observation.grantStatus = grant.status;
+      receiptFrom(grant);
+      observation.stage = 'receipt-read';
+      const stored = await consent(page);
+      observation.receiptStatus = stored.status;
+      receiptBefore = receiptFrom(stored);
+      expect(receiptBefore.granted).toBe(true);
+      observation.stage = 'me-read';
+      const own = await me(page);
+      observation.meStatus = own.status;
+      expect(own.status).toBe(200);
+      expect(typeof own.data?.csrfToken === 'string').toBe(true);
+      privateCsrf = own.data.csrfToken;
+      observation.stage = 'cookie-read';
+      const session = (await page.context().cookies(BFF)).find(cookie => cookie.name === '__Host-rio_session');
+      observation.hasSessionCookie = Boolean(session);
+      expect(observation.hasSessionCookie).toBe(true);
+      privateCookie = session.value;
+      observation.stage = 'ready';
+    });
+  } finally {
+    page.off('pageerror', pageError);
+    observation.accountVisible = await page.locator('#account-id').isVisible().catch(() => false);
+    const feedback = await page.locator('#feedback').textContent({ timeout: 1000 }).catch(() => null);
+    observation.feedbackBucket = feedback === null ? 'unavailable' :
+      feedback === '' ? 'empty' :
+      feedback === 'Je toestemming voor deze oefensessie is bevestigd. Persoonlijke toegang blijft gesloten.' ? 'confirmed' :
+      feedback === 'RIO is tijdelijk niet beschikbaar. Controleer je testsessie opnieuw.' ? 'service_unavailable' :
+      feedback === 'De testsessie is verlopen of niet meer beschikbaar. Meld je opnieuw aan.' ? 'expired' :
+      feedback === 'De testsessie is gewijzigd. Controleer je eigen account opnieuw.' ? 'changed' :
+      feedback === 'De testsessie kon niet veilig worden gecontroleerd. Probeer opnieuw.' ? 'invalid_response' : 'other';
+    testInfo.annotations.push({ type: 'rio-mobile-studio-setup', description: JSON.stringify(observation) });
+  }
   const note = '<img src=x onerror="window.rioDraftInjected=true">\nEen lokaal testconcept.';
   const observer = observeWrites(page);
   try {

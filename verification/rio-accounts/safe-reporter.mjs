@@ -24,7 +24,7 @@ const PHASES = new Set([
   'durable-real-login', 'durable-private-state', 'durable-database-outage',
   'durable-database-recovery', 'durable-connection-stays-closed', 'durable-restart-access', 'durable-cross-actor-csrf',
   'durable-native-revocation', 'durable-revocation-after-restart', 'durable-unaffected-actor',
-  'mobile-native-semantics', 'mobile-reflow', 'mobile-local-download',
+  'mobile-native-semantics', 'mobile-reflow', 'mobile-studio-setup', 'mobile-local-download',
   'mobile-import-rejection', 'mobile-studio-isolation', 'mobile-consent-isolation',
   'mobile-consent-cas', 'mobile-expiry-closure', 'mobile-database-closure', 'mobile-explicit-recovery',
 ]);
@@ -55,6 +55,54 @@ function safeLogoutObservation(annotations) {
   if (!FEEDBACK_BUCKETS.has(source.feedbackBucket)) return undefined;
   result.feedbackBucket = source.feedbackBucket;
   return result;
+}
+
+const STUDIO_SETUP_STAGES = new Set(['login', 'choose', 'grant', 'receipt-read', 'me-read', 'cookie-read', 'ready']);
+const SETUP_FEEDBACK = new Set([
+  'unavailable', 'empty', 'confirmed', 'service_unavailable', 'expired', 'changed', 'invalid_response', 'other',
+]);
+
+function safeStudioSetup(annotations) {
+  const item = annotations.find(annotation => annotation.type === 'rio-mobile-studio-setup');
+  if (typeof item?.description !== 'string' || item.description.length > 2048) return undefined;
+  let source;
+  try { source = JSON.parse(item.description); } catch { return undefined; }
+  if (!source || typeof source !== 'object' || Array.isArray(source) ||
+      !STUDIO_SETUP_STAGES.has(source.stage) || !SETUP_FEEDBACK.has(source.feedbackBucket) ||
+      typeof source.accountVisible !== 'boolean' ||
+      !(source.hasSessionCookie === null || typeof source.hasSessionCookie === 'boolean') ||
+      !Number.isInteger(source.pageErrors) || source.pageErrors < 0 || source.pageErrors > 1000) return undefined;
+  const statuses = {};
+  for (const key of ['grantStatus', 'receiptStatus', 'meStatus']) {
+    if (!(source[key] === null || (Number.isInteger(source[key]) && source[key] >= 100 && source[key] <= 599))) return undefined;
+    statuses[key] = source[key];
+  }
+  return {
+    stage: source.stage, ...statuses, hasSessionCookie: source.hasSessionCookie,
+    accountVisible: source.accountVisible, pageErrors: source.pageErrors, feedbackBucket: source.feedbackBucket,
+  };
+}
+
+function safeMobileErrorLocations(result) {
+  const found = new Map();
+  const errors = Array.isArray(result.errors) ? [...result.errors] : [];
+  if (result.error && !errors.includes(result.error)) errors.push(result.error);
+  for (const error of errors) {
+    if (typeof error?.stack !== 'string' || error.stack.length > 100000) continue;
+    for (const frame of error.stack.split('\n').slice(0, 200)) {
+      if (!/^\s*at\s/.test(frame)) continue;
+      const match = frame.replaceAll('\\', '/').match(
+        /\/verification\/rio-accounts\/mobile\/(interaction\.spec\.mjs|consent\.spec\.mjs|helpers\.mjs):(\d+):(\d+)\)?\s*$/
+      );
+      if (!match) continue;
+      const line = Number(match[2]);
+      const column = Number(match[3]);
+      if (!Number.isInteger(line) || line < 1 || line > 10000 ||
+          !Number.isInteger(column) || column < 1 || column > 10000) continue;
+      found.set(match[1] + ':' + line + ':' + column, { source: match[1], line, column });
+    }
+  }
+  return [...found.values()].slice(0, 16);
 }
 
 // Raw Playwright diagnostics can contain URLs, cookie values or fill arguments.
@@ -98,12 +146,18 @@ export default class SafeReporter {
     walk(result.steps);
     const projectName = this.mobileVerification ? test.parent?.project()?.name : undefined;
     const surface = MOBILE_SURFACES.has(projectName) ? projectName : 'unknown';
+    const errorLocations = this.mobileVerification && result.status !== 'passed'
+      ? safeMobileErrorLocations(result) : [];
+    for (const location of errorLocations) failedLines.add(location.line);
     const row = {
       id,
       title: CASES.get(id) ?? 'Unexpected test case',
       status: result.status,
       durationMs: Math.round(result.duration),
       ...(this.mobileVerification ? { surface } : {}),
+      ...(errorLocations.length ? { errorLocations } : {}),
+      ...(id === 'RIO-MOBILE-02' && result.status !== 'passed'
+        ? { setupObservation: safeStudioSetup(test.annotations) } : {}),
       phases,
       failedLines: result.status === 'passed' ? [] : [...failedLines].sort((a, b) => a - b),
       ...(id === 'RIO-E2E-04' ? { logoutObservation: safeLogoutObservation(test.annotations) } : {}),

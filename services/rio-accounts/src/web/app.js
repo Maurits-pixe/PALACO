@@ -155,9 +155,11 @@
         })();
         try {
             return await Promise.race([operation, deadline]);
+        } catch (error) {
+            controller.abort();
+            throw error;
         } finally {
             clearTimeout(timer);
-            controller.abort();
         }
     }
 
