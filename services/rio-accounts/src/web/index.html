@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>RIO · jouw accountproef</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Direct naar de inhoud</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="RIO accountproef, beginpagina"><span class="brand-mark">RIO<span class="brand-dot" aria-hidden="true"></span></span><span class="brand-caption">een plek om te beginnen</span></a>
+      <span class="test-badge">Alleen de proef</span>
+    </div>
+    <nav class="main-nav" aria-label="Op deze pagina">
+      <a href="#account-area">Account</a>
+      <a href="#consent-area">Toestemming</a>
+      <a href="#studio-area">Studio</a>
+    </nav>
+  </header>
+
+  <main id="main" class="page" tabindex="-1">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Begin klein. Kies bewust.</p>
+        <h1 id="page-title">Je eigen plek.<br>Met jouw keuze.</h1>
+        <p class="hero-copy">Bekijk je eigen proefaccount, kies waarvoor je toestemming geeft en werk rustig aan een lokaal concept.</p>
+      </div>
+      <aside class="boundary-note" aria-label="Grenzen van deze proef">
+        <span class="note-symbol" aria-hidden="true">↗</span>
+        <p id="status">Dit is een synthetische accountproef. Persoonlijke toegang en contactmogelijkheden blijven gesloten.</p>
+        <span id="session-state" class="state-label">Sessie wordt gecontroleerd</span>
+      </aside>
+    </section>
+
+    <p id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+    <div class="retry-row"><button id="retry-session" class="button button-primary" type="button" hidden>Opnieuw controleren</button></div>
+
+    <div class="account-grid">
+      <section id="account-area" class="card account-card" aria-labelledby="account-title">
+        <div class="card-heading"><span class="step-mark" aria-hidden="true">01</span><p class="eyebrow">Jouw beginpunt</p></div>
+        <h2 id="account-title">Je proefaccount</h2>
+        <p id="login-info">Meld je aan met een synthetische testgebruiker. Je ziet alleen je eigen proefaccount.</p>
+        <a id="start-login" href="/auth/start" class="button button-primary">Aanmelden met synthetische testgebruiker</a>
+        <section id="account" class="account-details" aria-label="Aangemelde testsessie" hidden>
+          <p class="small-label">Je bent aangemeld als</p>
+          <p id="account-id" class="account-name"></p>
+          <p class="muted">Dit proefaccount geeft geen persoonlijke toegang, contacttoegang of bevoegdheden.</p>
+          <div class="button-stack">
+            <button id="logout" class="button button-outline" type="button">Deze sessie afmelden</button>
+            <button id="logout-all" class="button button-quiet" type="button">Alle lokale testsessies afmelden</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="consent-area" class="card consent-card" aria-labelledby="consent-title">
+        <div class="card-heading"><span class="step-mark" aria-hidden="true">02</span><p class="eyebrow">Een bewuste keuze</p></div>
+        <h2 id="consent-title">Jouw toestemming</h2>
+        <p>Alleen voor deze oefensessie. Toestemming opent geen persoonlijke toegang of contactmogelijkheden.</p>
+        <p id="consent-guest" class="quiet-note">Meld je eerst aan om je eigen keuze te bekijken.</p>
+        <div id="consent-panel" hidden>
+          <p id="consent-status" class="receipt-state" role="status" aria-live="polite" aria-atomic="true">Toestemming wordt gecontroleerd.</p>
+          <form id="consent-form">
+            <label class="choice" for="consent-choice">
+              <input id="consent-choice" type="checkbox" disabled>
+              <span>Ik geef toestemming voor deze oefensessie. Ik weet dat dit geen persoonlijke toegang geeft.</span>
+            </label>
+            <div class="button-stack">
+              <button id="consent-save" class="button button-primary" type="submit" disabled>Mijn keuze bevestigen</button>
+              <button id="consent-revoke" class="button button-outline" type="button" disabled>Toestemming intrekken</button>
+              <button id="consent-refresh" class="button button-quiet" type="button" disabled>Huidige keuze opnieuw bekijken</button>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <section id="studio-area" class="card studio-card" aria-labelledby="studio-title-heading">
+      <div class="studio-intro">
+        <div>
+          <div class="card-heading"><span class="step-mark" aria-hidden="true">03</span><p class="eyebrow">Ruimte voor een idee</p></div>
+          <h2 id="studio-title-heading">Je lokale Studio</h2>
+          <p>Een titel en een notitie om iets uit te proberen. Je concept blijft in deze open pagina en is niet geverifieerd.</p>
+        </div>
+        <span class="draft-badge">Lokaal concept · niet geverifieerd</span>
+      </div>
+      <div class="studio-fields">
+        <div class="field"><label for="studio-title">Titel van je concept</label><input id="studio-title" type="text" maxlength="80" autocomplete="off" aria-describedby="studio-title-help"><p id="studio-title-help" class="field-help">Maximaal 80 tekens.</p></div>
+        <div class="field"><label for="studio-note">Notitie</label><textarea id="studio-note" rows="5" maxlength="2000" autocomplete="off" aria-describedby="studio-note-help"></textarea><p id="studio-note-help" class="field-help">Maximaal 2.000 tekens. De inhoud wordt niet naar de server gestuurd.</p></div>
+      </div>
+      <p class="quiet-note">Een conceptbestand bevat alleen je titel en notitie. Het bewijst geen account of toestemming. Sluiten of herladen wist het concept uit deze pagina.</p>
+      <div class="studio-actions">
+        <button id="studio-export" class="button button-primary" type="button">Conceptbestand bewaren</button>
+        <div class="file-field"><label for="studio-import">Conceptbestand openen</label><input id="studio-import" type="file" accept=".json,application/json" aria-describedby="studio-file-help"></div>
+        <button id="studio-clear" class="button button-quiet" type="button">Lokaal concept wissen</button>
+      </div>
+      <p id="studio-file-help" class="field-help">Alleen het afgesproken conceptformaat, maximaal 12 KB. Openen wijzigt geen account of toestemming.</p>
+      <p id="studio-feedback" class="studio-feedback" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+    </section>
+
+    <noscript><p class="quiet-note">Voor het bekijken van je testsessie en het werken aan een lokaal concept is JavaScript nodig.</p></noscript>
+  </main>
+  <footer class="site-footer"><p>RIO · Je kiest zelf. Deze omgeving blijft een proef.</p></footer>
+</body>
+</html>

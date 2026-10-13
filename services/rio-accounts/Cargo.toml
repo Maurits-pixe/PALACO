@@ -1,0 +1,39 @@
+[package]
+name = "rio-accounts"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[[bin]]
+name = "rio-accounts-dev"
+path = "src/main.rs"
+
+# Isolated T02 candidate. No dependency on the unmerged runtime candidate.
+[workspace]
+
+[dependencies]
+axum = "=0.8.6"
+axum-server = { version = "=0.8.0", features = ["tls-rustls-no-provider"] }
+base64 = "=0.22.1"
+openidconnect = { version = "=4.0.1", default-features = false, features = ["reqwest", "rustls-tls"] }
+rand = "=0.8.5"
+reqwest = { version = "=0.12.24", default-features = false, features = ["rustls-tls"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+serde_urlencoded = "=0.7.1"
+sha2 = "=0.10.9"
+tokio-postgres = "=0.7.18"
+tokio = { version = "=1.48.0", features = ["macros", "rt-multi-thread", "sync", "signal"] }
+
+[dev-dependencies]
+rsa = { version = "=0.9.8", features = ["pem"] }
+tower = { version = "=0.5.2", features = ["util"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+todo = "deny"
