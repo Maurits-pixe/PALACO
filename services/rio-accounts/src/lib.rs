@@ -3,7 +3,6 @@
 //! No production actor, enrollment, contact, identity issuance or external execution.
 /// Durable synthetic storage; browser service admits only the primary loopback fixture.
 pub mod storage;
-use storage::{PgStore, StoreError};
 use axum::{
     Json, Router,
     body::Bytes,
@@ -36,6 +35,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use storage::{PgStore, StoreError};
 use tokio::sync::{Mutex, Semaphore};
 
 /// Fixed HTTPS BFF origin; the listener remains bound to IPv4 loopback.
@@ -91,7 +91,9 @@ impl DevConfig {
         )?;
         config.database_url = std::env::var("RIO_DEV_DATABASE_URL").unwrap_or_default();
         if config.database_url.is_empty() {
-            return Err(io::Error::other("synthetic database configuration required"));
+            return Err(io::Error::other(
+                "synthetic database configuration required",
+            ));
         }
         Ok(config)
     }
@@ -245,20 +247,30 @@ impl AppState {
         let url = reqwest::Url::parse(&config.database_url)
             .map_err(|_| io::Error::other("restore database configuration invalid"))?;
         if url.path() != "/rio_synthetic_restore" {
-            return Err(io::Error::other("recovery command requires isolated restore database"));
+            return Err(io::Error::other(
+                "recovery command requires isolated restore database",
+            ));
         }
         // The storage connection applies the restore fence transaction before exposing a handle.
-        let db = PgStore::connect_local(&config.database_url).await
+        let db = PgStore::connect_local(&config.database_url)
+            .await
             .map_err(|_| io::Error::other("restore database unavailable"))?;
-        db.health().await.map_err(|_| io::Error::other("restore fence unavailable"))
+        db.health()
+            .await
+            .map_err(|_| io::Error::other("restore fence unavailable"))
     }
     /// Discover only the fixed synthetic IdP through the bounded, allowlisted transport.
     pub async fn discover(config: &DevConfig) -> Result<Self, io::Error> {
         if config.database_url.contains("rio_synthetic_restore") {
-            return Err(io::Error::other("restored database cannot serve browser sessions"));
+            return Err(io::Error::other(
+                "restored database cannot serve browser sessions",
+            ));
         }
-        let db = Arc::new(PgStore::connect_local(&config.database_url).await
-            .map_err(|_| io::Error::other("synthetic database unavailable"))?);
+        let db = Arc::new(
+            PgStore::connect_local(&config.database_url)
+                .await
+                .map_err(|_| io::Error::other("synthetic database unavailable"))?,
+        );
         let http = GuardedHttp(
             reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
@@ -384,10 +396,7 @@ pub fn router(state: AppState) -> Router {
                 )
             }),
         )
-        .route(
-            "/healthz",
-            get(health),
-        )
+        .route("/healthz", get(health))
         .route("/api/status", get(|| async { Json(status()) }))
         .route("/auth/start", get(start))
         .route("/auth/callback", get(callback))
@@ -408,7 +417,9 @@ async fn health(State(state): State<AppState>) -> Result<Json<Value>, ApiError> 
     } else if !cfg!(test) {
         return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE));
     }
-    Ok(Json(json!({"status":"ok","mode":"SYNTHETIC_ONLY","account1":"HOLD"})))
+    Ok(Json(
+        json!({"status":"ok","mode":"SYNTHETIC_ONLY","account1":"HOLD"}),
+    ))
 }
 fn storage_error(error: StoreError) -> ApiError {
     ApiError(match error {
@@ -490,7 +501,9 @@ async fn start(State(state): State<AppState>, headers: HeaderMap) -> Result<Resp
     store.prune(now);
     if let Some(previous) = cookie(&headers, FLOW_COOKIE)? {
         if let Some(db) = &state.db {
-            db.discard_login(hash(&previous)).await.map_err(storage_error)?;
+            db.discard_login(hash(&previous))
+                .await
+                .map_err(storage_error)?;
         }
         store.flows.remove(&hash(&previous));
     }
@@ -500,7 +513,8 @@ async fn start(State(state): State<AppState>, headers: HeaderMap) -> Result<Resp
     if let Some(db) = &state.db {
         let previous_session = cookie(&headers, SESSION_COOKIE)?.map(|value| hash(&value));
         db.begin_login(hash(&transaction), hash(csrf.secret()), previous_session)
-            .await.map_err(storage_error)?;
+            .await
+            .map_err(storage_error)?;
     } else if !cfg!(test) {
         return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE));
     }
@@ -561,15 +575,22 @@ async fn finish_callback(
         .and_then(|p| p.state.as_deref())
         .unwrap_or("");
     // Burn the in-process nonce/PKCE holder even when durable storage is unavailable.
-    let flow_result = state
-        .store
-        .lock()
-        .await
-        .consume_flow(&transaction, input_state, Instant::now());
+    let flow_result =
+        state
+            .store
+            .lock()
+            .await
+            .consume_flow(&transaction, input_state, Instant::now());
     // Delete the matching durable fence before validating the state or exchanging a code.
     let permit = if let Some(db) = &state.db {
-        Some(db.consume_login(hash(&transaction), hash(input_state)).await.map_err(storage_error)?)
-    } else { None };
+        Some(
+            db.consume_login(hash(&transaction), hash(input_state))
+                .await
+                .map_err(storage_error)?,
+        )
+    } else {
+        None
+    };
     let flow = flow_result?;
     let params = parsed.map_err(|_| ApiError(StatusCode::BAD_REQUEST))?;
     if params.error.is_some() || params.iss.as_deref().is_some_and(|iss| iss != ISSUER) {
@@ -618,7 +639,8 @@ async fn finish_callback(
     if let Some(db) = &state.db {
         let permit = permit.ok_or(ApiError(StatusCode::SERVICE_UNAVAILABLE))?;
         db.replace_session(permit, account_id, hash(&session_token), random_token())
-            .await.map_err(storage_error)?;
+            .await
+            .map_err(storage_error)?;
     } else {
         #[cfg(test)]
         {
@@ -631,9 +653,15 @@ async fn finish_callback(
             if store.sessions.len() >= MAX_SESSIONS {
                 return Err(ApiError(StatusCode::TOO_MANY_REQUESTS));
             }
-            store.sessions.insert(hash(&session_token), Session {
-                account_id, csrf: random_token(), created: now, touched: now,
-            });
+            store.sessions.insert(
+                hash(&session_token),
+                Session {
+                    account_id,
+                    csrf: random_token(),
+                    created: now,
+                    touched: now,
+                },
+            );
         }
         #[cfg(not(test))]
         return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE));
@@ -673,18 +701,20 @@ async fn me(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Va
     } else {
         #[cfg(test)]
         {
-            let session = state.store.lock().await.session(&hash(&token), Instant::now())?;
+            let session = state
+                .store
+                .lock()
+                .await
+                .session(&hash(&token), Instant::now())?;
             (session.account_id, session.csrf)
         }
         #[cfg(not(test))]
         return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE));
     };
-    Ok(Json(
-        json!({"accountId":account_id, "csrfToken":csrf,
+    Ok(Json(json!({"accountId":account_id, "csrfToken":csrf,
         "actorKind":"SYNTHETIC_DEV_ACTOR", "credentialControl":"VERIFIED_DEV_OIDC",
         "accountActive":false,"mode":"SYNTHETIC_ONLY","operativeAuthority":"NONE",
-        "canOpenContact":false,"account1":"HOLD"}),
-    ))
+        "canOpenContact":false,"account1":"HOLD"})))
 }
 fn mutation_headers(headers: &HeaderMap) -> Result<&str, ApiError> {
     if unique_header(headers, "origin")? != Some(ORIGIN)
@@ -723,7 +753,9 @@ async fn end_session(
                 return Err(ApiError(StatusCode::FORBIDDEN));
             }
             if all {
-                store.sessions.retain(|_, candidate| candidate.account_id != session.account_id);
+                store
+                    .sessions
+                    .retain(|_, candidate| candidate.account_id != session.account_id);
             } else {
                 store.sessions.remove(&key);
             }

@@ -184,8 +184,9 @@ and emits only bounded startup error explanations, typed public container state
 and validated published-port bindings. It does not print Docker environment fields.
 Missing redaction inputs suppress all provider details. The generated database
 password/URLs and private process/browser values are also included in redaction.
-Use `fixture.py db-diagnostics` for only typed PostgreSQL state and validated
-loopback port bindings; it never exports database logs or environment fields. Raw provider logs,
+Use `fixture.py db-diagnostics` for only typed PostgreSQL state, validated
+loopback port bindings and fixed startup-reason booleans. It reads logs privately
+and never exports database log text or environment fields. Raw provider logs,
 configuration bodies and runtime files must not be exported.
 The provider uses verbose startup internally so a cause can be diagnosed without
 publishing an unfiltered stack trace.

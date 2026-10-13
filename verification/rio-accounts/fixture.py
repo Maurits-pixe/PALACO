@@ -562,8 +562,10 @@ def database_environment() -> dict:
             valid = False
         if not valid:
             raise RuntimeError("Invalid fixed local synthetic database configuration.")
-    if values["RIO_DEV_DATABASE_URL"] != values["RIO_PG_TEST_URL"]:
-        raise RuntimeError("Synthetic database test URL differs from serving URL.")
+    if (values["RIO_DEV_DATABASE_URL"] != values["RIO_PG_TEST_URL"]
+            or values["RIO_PG_RESTORE_TEST_URL"] != values["RIO_DEV_DATABASE_URL"].replace(
+                "/rio_synthetic?", "/rio_synthetic_restore?")):
+        raise RuntimeError("Synthetic database test URLs differ from the fixed serving credentials.")
     return values
 
 def bff_binary() -> Path:
@@ -738,14 +740,61 @@ def database_diagnostics() -> None:
             bindings = public_port_bindings(json.loads(lines[1]))
         except (ValueError, IndexError, TypeError, AttributeError):
             state = {"unavailable": True}
+    logs = subprocess.run(
+        ["docker", "logs", project + "-postgres-1"], capture_output=True, text=True, check=False,
+    )
+    private_output = logs.stdout + "\n" + logs.stderr if logs.returncode == 0 else ""
+    # Fixed reason booleans only; no database log text is ever exported.
+    indicators = {
+        "serverReady": r"database system is ready to accept connections",
+        "passwordAuthenticationFailed": r"password authentication failed",
+        "initializationFailed": r"initdb: error|database is uninitialized",
+        "permissionDenied": r"permission denied|could not change permissions",
+        "diskSpaceFailure": r"no space left on device",
+        "incompatibleDataDirectory": r"incompatible with server|old databases detected|18\+",
+        "fatalError": r"(?:^|\n).*FATAL:",
+    }
+    reasons = {key: bool(re.search(pattern, private_output, re.IGNORECASE))
+               for key, pattern in indicators.items()}
     print("RIO_DATABASE_DIAGNOSTIC " + json.dumps(
-        {"state": state, "portBindings": bindings}, separators=(",", ":")))
+        {"state": state, "portBindings": bindings, "startupIndicators": reasons}, separators=(",", ":")))
 
 DATABASE_TEST_FILTERS = {
     "postgres_storage_contract",
     "postgres_prepare_restore_proof",
     "postgres_verify_restored_snapshot",
 }
+
+DATABASE_CASE_TAGS = frozenset((
+    "CASE T03_SETUP", "CASE T03_ATOMIC_FLOW", "CASE T03_DURABILITY",
+    "CASE T03_TENANT", "CASE T03_CONSENT", "CASE T03_LOGOUT_ALL",
+    "CASE T03_ROTATE_FIRST", "CASE T03_REVOKE_FIRST", "CASE T03_RACE",
+    "CASE T03_FAMILY", "CASE T03_EXPIRY", "CASE T03_SCHEMA", "CASE T03_CLOCK",
+    "CASE T03_BACKUP_PREPARE", "CASE T03_RESTORE_BEFORE", "CASE T03_RESTORE_FENCE",
+))
+
+def database_case_tags(captured: str) -> list[str]:
+    found = []
+    for line in captured.splitlines():
+        if line in DATABASE_CASE_TAGS and line not in found:
+            found.append(line)
+    return found
+
+def database_failure_location(captured: str) -> dict | None:
+    # Rust 1.90's default panic header; only this fixed repository source is allowed.
+    header = re.compile(
+        r"thread '[^'\r\n]{1,200}' panicked at "
+        r"(?:services/rio-accounts/)?src/storage\.rs:"
+        r"([1-9][0-9]{0,5}):([1-9][0-9]{0,5}):"
+    )
+    for line in captured.splitlines():
+        if len(line) > 512:
+            continue
+        match = header.fullmatch(line)
+        if match:
+            return {"path": "services/rio-accounts/src/storage.rs",
+                    "line": int(match[1]), "column": int(match[2])}
+    return None
 
 def run_database_test(test_filter: str) -> None:
     if test_filter not in DATABASE_TEST_FILTERS:
@@ -772,7 +821,10 @@ def run_database_test(test_filter: str) -> None:
             failed += int(match[3])
     success = result.returncode == 0 and passed == 1 and failed == 0
     print("RIO_DATABASE_TEST_SUMMARY " + json.dumps(
-        {"test": test_filter, "success": success, "summaries": summaries}, separators=(",", ":")))
+        {"test": test_filter, "success": success, "summaries": summaries,
+         "cases": database_case_tags(result.stdout + "\n" + result.stderr),
+         "failureLocation": database_failure_location(result.stdout + "\n" + result.stderr) if not success else None},
+        separators=(",", ":")))
     if not success:
         raise RuntimeError("Synthetic database proof test failed or did not run exactly once.")
 

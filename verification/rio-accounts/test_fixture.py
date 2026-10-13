@@ -330,6 +330,17 @@ class FixtureSecurityTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Invalid fixed local"):
                     fixture.database_environment()
 
+
+    def test_restore_database_uses_the_same_generated_credentials(self):
+        self.prepare()
+        values = fixture.read_bff_environment()
+        password = fixture.urlsplit(values["RIO_PG_RESTORE_TEST_URL"]).password
+        different = "c" * 64 if password != "c" * 64 else "d" * 64
+        values["RIO_PG_RESTORE_TEST_URL"] = values["RIO_PG_RESTORE_TEST_URL"].replace(password, different)
+        with patch.object(fixture, "read_bff_environment", return_value=values):
+            with self.assertRaisesRegex(RuntimeError, "fixed serving credentials"):
+                fixture.database_environment()
+
     def test_legacy_runtime_requires_explicit_cleanup_instead_of_reinitializing(self):
         self.prepare()
         metadata = fixture.RUNTIME / "metadata.json"
@@ -535,6 +546,85 @@ class FixtureSecurityTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "failed or did not run"):
                         fixture.run_storage_tests()
             self.assertTrue(secret not in output.getvalue())
+
+
+    def test_database_diagnostics_publish_only_typed_state_and_fixed_reason_booleans(self):
+        self.prepare()
+        password = self.database_password()
+        state = json.dumps({"Running": True, "ExitCode": 0, "OOMKilled": False, "Error": password})
+        ports = json.dumps({"5432/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8090", "Env": password}]})
+        results = [
+            SimpleNamespace(returncode=0, stdout=state + "\n" + ports, stderr=""),
+            SimpleNamespace(returncode=0, stdout=
+                "database system is ready to accept connections\nFATAL: password authentication failed " + password,
+                stderr=password),
+        ]
+        output = io.StringIO()
+        with patch.object(fixture.subprocess, "run", side_effect=results):
+            with redirect_stdout(output):
+                fixture.database_diagnostics()
+        self.assertTrue(password not in output.getvalue())
+        document = json.loads(output.getvalue().split(" ", 1)[1])
+        self.assertIs(document["startupIndicators"]["serverReady"], True)
+        self.assertIs(document["startupIndicators"]["passwordAuthenticationFailed"], True)
+        self.assertTrue(all(type(value) is bool for value in document["startupIndicators"].values()))
+        self.assertEqual(document["state"], {"Running": True, "ExitCode": 0, "OOMKilled": False})
+        self.assertEqual(document["portBindings"], [
+            {"containerPort": "5432/tcp", "hostIp": "127.0.0.1", "hostPort": 8090}])
+
+
+    def test_database_failure_location_keeps_only_fixed_source_and_numeric_coordinates(self):
+        self.prepare()
+        secret = self.database_password()
+        for source in ("src/storage.rs", "services/rio-accounts/src/storage.rs"):
+            result = SimpleNamespace(returncode=1, stdout=
+                "thread '" + secret + "' panicked at " + source + ":123:9:\n"
+                "assertion failed: " + secret + "\n"
+                "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.03s\n",
+                stderr="postgresql://private-secret@remote.invalid/db")
+            output = io.StringIO()
+            with patch.object(fixture.subprocess, "run", return_value=result):
+                with redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, "failed or did not run"):
+                        fixture.run_storage_tests()
+            document = json.loads(output.getvalue().split(" ", 1)[1])
+            self.assertEqual(document["failureLocation"],
+                             {"path": "services/rio-accounts/src/storage.rs", "line": 123, "column": 9})
+            self.assertTrue(secret not in output.getvalue())
+            self.assertNotIn("assertion failed", output.getvalue())
+            self.assertNotIn("remote.invalid", output.getvalue())
+
+    def test_database_failure_location_rejects_arbitrary_sources_payloads_and_unbounded_numbers(self):
+        raw_lines = [
+            "thread 'test' panicked at https://example.invalid/src/storage.rs:1:2:",
+            "thread 'test' panicked at /tmp/private/src/storage.rs:1:2:",
+            "thread 'test' panicked at src/lib.rs:1:2:",
+            "thread 'test' panicked at src/storage.rs:0:2:",
+            "thread 'test' panicked at src/storage.rs:1000000:2:",
+            "thread 'test' panicked at src/storage.rs:1:2: private-assertion",
+            "Error: StoreError",
+        ]
+        for raw in raw_lines:
+            self.assertIsNone(fixture.database_failure_location(raw))
+
+
+    def test_database_test_runner_allows_only_exact_fixed_case_tags(self):
+        self.prepare()
+        password = self.database_password()
+        result = SimpleNamespace(returncode=1, stdout=
+            "CASE T03_SETUP\nCASE T03_TENANT\nCASE T03_SETUP\n"
+            "CASE T03_SETUP " + password + "\nCASE T03_" + password + "\nError: StoreError\n",
+            stderr="private assertion: " + password)
+        output = io.StringIO()
+        with patch.object(fixture.subprocess, "run", return_value=result):
+            with redirect_stdout(output):
+                with self.assertRaisesRegex(RuntimeError, "failed or did not run"):
+                    fixture.run_storage_tests()
+        document = json.loads(output.getvalue().split(" ", 1)[1])
+        self.assertEqual(document["cases"], ["CASE T03_SETUP", "CASE T03_TENANT"])
+        self.assertIsNone(document["failureLocation"])
+        self.assertTrue(password not in output.getvalue())
+        self.assertNotIn("StoreError", output.getvalue())
 
 if __name__ == "__main__":
     unittest.main()
