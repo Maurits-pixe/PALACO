@@ -88,10 +88,14 @@ async function cookieFor(context, page) {
   };
 }
 
-async function login(page, user) {
+async function login(page, user, observation) {
+  observation.stage = 'opening-bff';
   await page.goto(BFF);
+  observation.stage = 'landing';
   expect((await readMe(page)).status).toBe(401);
+  observation.stage = 'starting-oidc';
   await page.locator('#start-login').click();
+  observation.stage = 'waiting-for-provider';
   await page.waitForURL(url => url.origin === 'http://127.0.0.1:8089' &&
     url.pathname === '/realms/rio-synthetic/protocol/openid-connect/auth');
   const query = new URL(page.url()).searchParams;
@@ -106,9 +110,13 @@ async function login(page, user) {
   expect(await page.locator('a[href*="/registrations"]').count()).toBe(0);
   await page.locator('input[name="username"]').fill(user.username);
   await page.locator('input[name="password"]').fill(user.password);
+  observation.stage = 'submitting-credentials';
   await page.locator('#kc-login').click();
+  observation.stage = 'waiting-for-bff';
   await page.waitForURL(url => url.origin === BFF && url.pathname === '/');
+  observation.stage = 'waiting-for-account';
   await expect(page.locator('#account-id')).toHaveText(user.username);
+  observation.stage = 'ready';
 }
 
 async function mutation(page, path, csrfToken) {
@@ -213,16 +221,19 @@ async function closeContexts(contexts) {
   await Promise.all(Object.values(contexts).map(({ context }) => context.close()));
 }
 
-test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', async ({ browser }) => {
+test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', async ({ browser }, testInfo) => {
   const contexts = {};
   const saved = {};
+  const observation = { actorCase: 'alpha', stage: 'initial' };
   try {
     await test.step('durable-real-login', async () => {
       for (const name of ACCOUNT_NAMES) {
+        observation.actorCase = name;
+        observation.stage = 'creating-context';
         const context = await contextFor(browser);
         const page = await context.newPage();
         contexts[name] = { context, page };
-        await login(page, credentials[name === 'beta' ? 'beta' : 'alpha']);
+        await login(page, credentials[name === 'beta' ? 'beta' : 'alpha'], observation);
       }
     });
     await test.step('durable-private-state', async () => {
@@ -236,6 +247,28 @@ test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', 
       expect(new Set(ACCOUNT_NAMES.map(name => saved[name].csrfToken)).size).toBe(3);
       await saveState(saved);
     });
+  } catch (error) {
+    // Emit only enumerated synthetic case/stage and booleans. Never record URLs,
+    // credentials, cookies, provider error text, DOM contents or raw exceptions.
+    const page = contexts[observation.actorCase]?.page;
+    let pageKind = 'unavailable';
+    let loginButtonVisible = null;
+    let accountVisible = null;
+    if (page) {
+      try {
+        const url = new URL(page.url());
+        pageKind = url.origin === BFF && url.pathname === '/' ? 'bff-home'
+          : url.origin === ISSUER.replace('/realms/rio-synthetic', '') ? 'provider'
+            : 'other';
+      } catch { pageKind = 'unavailable'; }
+      loginButtonVisible = await page.locator('#start-login').isVisible().catch(() => null);
+      accountVisible = await page.locator('#account-id').isVisible().catch(() => null);
+    }
+    testInfo.annotations.push({
+      type: 'rio-durable-login-observation',
+      description: JSON.stringify({ ...observation, pageKind, loginButtonVisible, accountVisible }),
+    });
+    throw error;
   } finally {
     await closeContexts(contexts);
   }
