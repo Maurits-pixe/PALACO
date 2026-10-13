@@ -17,6 +17,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  authoring:
+    name: Normalize public candidate source
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: 1.98.1
+          components: rustfmt
+      - name: Emit only allowlisted public source
+        run: |
+          cargo fmt --manifest-path services/rio-accounts/Cargo.toml
+          python verification/rio-accounts/ci-evidence.py sources
+
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 30

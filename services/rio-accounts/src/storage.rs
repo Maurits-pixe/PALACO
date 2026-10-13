@@ -364,22 +364,20 @@ impl PgStore {
     /// Confirm that the current database and schema are reachable. Failure closes readiness.
     pub async fn health(&self) -> Result<(), StoreError> {
         self.timed(async {
-            let client = self.inner.client.lock().await;
-            let row = client
-                .query_one(
-                    "SELECT schema_version,mode,account_active,last_ms,\
-                 floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS observed \
-                 FROM rio_synthetic.store_guard WHERE id=1",
-                    &[],
-                )
-                .await?;
+            let mut client = self.inner.client.lock().await;
+            let tx = client.transaction().await?;
+            locked(&tx).await?;
+            let row = tx.query_one(
+                "SELECT schema_version,mode,account_active FROM rio_synthetic.store_guard WHERE id=1",
+                &[],
+            ).await?;
             if row.try_get::<_, i32>(0)? != 1
                 || row.try_get::<_, String>(1)? != "SYNTHETIC_ONLY"
                 || row.try_get::<_, bool>(2)?
-                || row.try_get::<_, i64>("observed")? < row.try_get::<_, i64>("last_ms")?
             {
                 return Err(StoreError::Unavailable);
             }
+            tx.commit().await?;
             Ok(())
         })
         .await
@@ -1043,8 +1041,12 @@ mod tests {
         ] {
             let (expired, anti_forgery) = login(&store, label, "TST-alpha", None).await?;
             let observed_before: i64 = raw.query_one(
-                "SELECT last_ms FROM rio_synthetic.store_guard WHERE id=1", &[],
+                "SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint", &[],
             ).await?.try_get(0)?;
+            // A rejected call must advance an older guard, rather than just retaining equality.
+            raw.execute(
+                "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1", &[&(observed_before-5)],
+            ).await?;
             raw.execute(
                 "UPDATE rio_synthetic.sessions SET created_ms=created_ms-31000,touched_ms=touched_ms-31000,\
                  idle_expires_ms=idle_expires_ms-31000,absolute_expires_ms=absolute_expires_ms-31000 WHERE token_hash=$1",
