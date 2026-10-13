@@ -611,8 +611,17 @@ class FixtureSecurityTests(unittest.TestCase):
     def test_database_test_runner_allows_only_exact_fixed_case_tags(self):
         self.prepare()
         password = self.database_password()
+        fixed_diagnostics = [
+            "CASE T03_DURABILITY_ALPHA_LOGIN", "CASE T03_DURABILITY_BETA_LOGIN",
+            "CASE T03_DURABILITY_BEFORELOAD", "CASE T03_DURABILITY_RECONNECT",
+            "CASE T03_DURABILITY_AFTERLOAD", "CASE T03_LOGIN_BEGIN",
+            "CASE T03_LOGIN_CONSUME", "CASE T03_LOGIN_REPLACE",
+            "CASE T03_SQL_TYPE", "CASE T03_SQL_CLOSED", "CASE T03_SQL_CONSTRAINT",
+            "CASE T03_SQL_DATABASE", "CASE T03_SQL_OTHER",
+        ]
         result = SimpleNamespace(returncode=1, stdout=
-            "CASE T03_SETUP\nCASE T03_TENANT\nCASE T03_SETUP\n"
+            "CASE T03_SETUP\nCASE T03_TENANT\nCASE T03_SETUP\n" +
+            "\n".join(fixed_diagnostics) + "\n" +
             "CASE T03_SETUP " + password + "\nCASE T03_" + password + "\nError: StoreError\n",
             stderr="private assertion: " + password)
         output = io.StringIO()
@@ -621,7 +630,7 @@ class FixtureSecurityTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "failed or did not run"):
                     fixture.run_storage_tests()
         document = json.loads(output.getvalue().split(" ", 1)[1])
-        self.assertEqual(document["cases"], ["CASE T03_SETUP", "CASE T03_TENANT"])
+        self.assertEqual(document["cases"], ["CASE T03_SETUP", "CASE T03_TENANT"] + fixed_diagnostics)
         self.assertIsNone(document["failureLocation"])
         self.assertTrue(password not in output.getvalue())
         self.assertNotIn("StoreError", output.getvalue())

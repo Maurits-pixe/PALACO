@@ -18,11 +18,11 @@ Opaque session cookies and login transaction references are stored by SHA256 dig
 
 Session issue, replacement, consent changes and revocation use database transactions and actor/tenant fences. Caller identity comes from the stored session and fixed issuer/subject binding, never a browser-provided actor. SQL operations carry explicit ownership predicates. Logout-all increments only the caller's actor epoch. An authorization flow started before that revocation cannot create a fresh session using its stale epoch.
 
-A successful mutation response follows its committed database transaction. Database failure or uncertain completion gives a closed response; there is no memory-authentication fallback. Health reflects actual storage connectivity. Development limits remain idle30seconds, absolute60seconds and login300seconds; these are test settings, not accepted production policy.
+A successful mutation response follows its committed database transaction. Database failure, clock rollback or uncertain completion gives a closed response and poisons that database connection; there is no memory-authentication fallback. Once the fixed database is ready and its clock is trustworthy, a controlled BFF restart establishes a fresh connection. Health reflects actual storage connectivity. Development limits remain idle30seconds, absolute60seconds and login300seconds; these are test settings, not accepted production policy.
 
 ## Restart and restore contract
 
-A normal BFF restart preserves unexpired committed sessions, stable CSRF metadata and revocation state. Returning an old cookie does not recover a revoked session.
+A normal BFF restart preserves unexpired committed sessions, stable CSRF metadata and revocation state. Returning an old cookie does not recover a revoked session. A rotated cookie can only carry a negative revocation request, with its original CSRF and absolute deadline; it cannot read an account or issue another session. This bounded record allows a concurrent logout to close the replacement family in either transaction order.
 
 A restore is a different operation. PostgreSQL's [SQL dump and restoration](https://www.postgresql.org/docs/18/backup-dump.html) recovers a snapshot rather than later revocations. The isolated restore fixture therefore applies a durable recovery fence before any restored record is used: all restored session bearers and pending authorizations are invalidated, actor epochs advance and contact consent stays closed. Restored enrollment placeholders remain inactive. Fresh sign-in is required; ordinary restart does not trigger this fence.
 

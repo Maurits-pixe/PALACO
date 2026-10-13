@@ -1,15 +1,21 @@
 //! T03 PostgreSQL storage for two fictitious actors only.
 //! No OIDC token, password, raw session cookie, personal identity or contact authority is stored.
+use sha2::{Digest, Sha256};
 use std::{
     fmt,
     future::Future,
     str::FromStr,
-    sync::{Arc, atomic::{AtomicBool, Ordering}},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
-use sha2::{Digest, Sha256};
 use tokio::{sync::Mutex, task::AbortHandle, time::timeout};
-use tokio_postgres::{Client, Config, NoTls, Row, Transaction, config::{Host, SslMode}};
+use tokio_postgres::{
+    Client, Config, NoTls, Row, Transaction,
+    config::{Host, SslMode},
+};
 
 /// SHA-256 of an opaque cookie or state. Raw cookie credentials never enter this module.
 pub type Key = [u8; 32];
@@ -44,7 +50,26 @@ impl fmt::Display for StoreError {
 }
 impl std::error::Error for StoreError {}
 impl From<tokio_postgres::Error> for StoreError {
-    fn from(_: tokio_postgres::Error) -> Self { Self::Unavailable }
+    fn from(_error: tokio_postgres::Error) -> Self {
+        #[cfg(test)]
+        {
+            let diagnostic = if _error.is_closed() {
+                "CASE T03_SQL_CLOSED"
+            } else if std::error::Error::source(&_error)
+                .is_some_and(|cause| cause.is::<tokio_postgres::types::WrongType>())
+            {
+                "CASE T03_SQL_TYPE"
+            } else {
+                match _error.code().map(|code| code.code()) {
+                    Some("23502" | "23503" | "23505" | "23514") => "CASE T03_SQL_CONSTRAINT",
+                    Some(_) => "CASE T03_SQL_DATABASE",
+                    None => "CASE T03_SQL_OTHER",
+                }
+            };
+            eprintln!("{diagnostic}");
+        }
+        Self::Unavailable
+    }
 }
 
 /// A move-only authorization fence returned by atomic login consumption.
@@ -93,24 +118,36 @@ struct Inner {
     connection: AbortHandle,
 }
 impl Drop for Inner {
-    fn drop(&mut self) { self.connection.abort(); }
+    fn drop(&mut self) {
+        self.connection.abort();
+    }
 }
 
 /// A bounded, transactionally serialized synthetic store. No memory fallback is provided.
 #[derive(Clone)]
-pub struct PgStore { inner: Arc<Inner> }
+pub struct PgStore {
+    inner: Arc<Inner>,
+}
 
 fn local_config(url: &str) -> Result<(Config, bool), StoreError> {
-    if !url.starts_with("postgresql://") || url.len() > 512 { return Err(StoreError::Invalid); }
+    if !url.starts_with("postgresql://") || url.len() > 512 {
+        return Err(StoreError::Invalid);
+    }
     let mut config = Config::from_str(url).map_err(|_| StoreError::Invalid)?;
     let host_ok = matches!(config.get_hosts(), [Host::Tcp(host)] if host == "127.0.0.1");
     let restore = config.get_dbname() == Some("rio_synthetic_restore");
-    if !host_ok || !config.get_hostaddrs().is_empty() || config.get_ports() != [8090]
+    if !host_ok
+        || !config.get_hostaddrs().is_empty()
+        || config.get_ports() != [8090]
         || config.get_user() != Some("rio_dev")
         || !(config.get_dbname() == Some("rio_synthetic") || restore)
-        || config.get_options().is_some() || config.get_application_name().is_some()
+        || config.get_options().is_some()
+        || config.get_application_name().is_some()
         || config.get_ssl_mode() != SslMode::Disable
-        || !config.get_password().is_some_and(|p| p.len() == 64 && p.iter().all(u8::is_ascii_hexdigit)) {
+        || !config
+            .get_password()
+            .is_some_and(|p| p.len() == 64 && p.iter().all(u8::is_ascii_hexdigit))
+    {
         return Err(StoreError::Invalid);
     }
     config.connect_timeout(Duration::from_secs(8));
@@ -118,34 +155,67 @@ fn local_config(url: &str) -> Result<(Config, bool), StoreError> {
     Ok((config, restore))
 }
 fn actor(id: &str) -> Result<(&'static str, usize), StoreError> {
-    match id { "TST-alpha" => Ok(("TST-alpha", 0)), "TST-beta" => Ok(("TST-beta", 1)), _ => Err(StoreError::Forbidden) }
+    match id {
+        "TST-alpha" => Ok(("TST-alpha", 0)),
+        "TST-beta" => Ok(("TST-beta", 1)),
+        _ => Err(StoreError::Forbidden),
+    }
 }
 fn valid_csrf(value: &str) -> bool {
-    value.len() == 43 && value.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    value.len() == 43
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 fn csrf_matches(expected: &str, supplied: &str) -> bool {
-    valid_csrf(supplied) && Sha256::digest(expected.as_bytes()) == Sha256::digest(supplied.as_bytes())
+    valid_csrf(supplied)
+        && Sha256::digest(expected.as_bytes()) == Sha256::digest(supplied.as_bytes())
 }
 fn session_record(row: &Row) -> Result<SessionRecord, StoreError> {
     let id: String = row.try_get("account_id")?;
     let (account_id, _) = actor(&id)?;
     Ok(SessionRecord {
-        account_id, csrf: row.try_get("csrf")?,
-        created_ms: row.try_get("created_ms")?, touched_ms: row.try_get("touched_ms")?,
-        expires_ms: row.try_get("absolute_expires_ms")?, version: row.try_get("version")?,
+        account_id,
+        csrf: row.try_get("csrf")?,
+        created_ms: row.try_get("created_ms")?,
+        touched_ms: row.try_get("touched_ms")?,
+        expires_ms: row.try_get("absolute_expires_ms")?,
+        version: row.try_get("version")?,
         tenant_id: row.try_get("tenant_id")?,
     })
 }
 async fn locked(tx: &Transaction<'_>) -> Result<i64, StoreError> {
-    let row = tx.query_one(
-        "SELECT schema_version,last_ms FROM rio_synthetic.store_guard WHERE id=1 FOR UPDATE", &[]).await?;
-    if row.try_get::<_, i32>("schema_version")? != 1 { return Err(StoreError::Unavailable); }
+    let row = tx
+        .query_one(
+            "SELECT schema_version,last_ms FROM rio_synthetic.store_guard WHERE id=1 FOR UPDATE",
+            &[],
+        )
+        .await?;
+    if row.try_get::<_, i32>("schema_version")? != 1 {
+        return Err(StoreError::Unavailable);
+    }
     // Read the wall clock after the lock is held, so waiting transactions do not compare stale observations.
-    let observed: i64 = tx.query_one("SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint", &[]).await?.try_get(0)?;
-    if observed < row.try_get::<_, i64>("last_ms")? { return Err(StoreError::Unavailable); }
+    let observed: i64 = tx
+        .query_one(
+            "SELECT floor(extract(epoch FROM clock_timestamp())*1000)::bigint",
+            &[],
+        )
+        .await?
+        .try_get(0)?;
+    if observed < row.try_get::<_, i64>("last_ms")? {
+        return Err(StoreError::Unavailable);
+    }
     let now = observed;
-    tx.execute("UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1", &[&now]).await?;
-    tx.execute("DELETE FROM rio_synthetic.auth_transactions WHERE expires_ms <= $1", &[&now]).await?;
+    tx.execute(
+        "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1",
+        &[&now],
+    )
+    .await?;
+    tx.execute(
+        "DELETE FROM rio_synthetic.auth_transactions WHERE expires_ms <= $1",
+        &[&now],
+    )
+    .await?;
     tx.execute(
         "DELETE FROM rio_synthetic.sessions s USING rio_synthetic.accounts a \
          WHERE s.account_id=a.account_id AND ((NOT s.rotated AND s.idle_expires_ms <= $1) OR s.absolute_expires_ms <= $1 \
@@ -166,30 +236,55 @@ async fn current_session(tx: &Transaction<'_>, key: &[u8]) -> Result<SessionReco
         .ok_or(StoreError::Revoked)?;
     session_record(&row)
 }
-async fn negative_session(tx: &Transaction<'_>, key: &[u8]) -> Result<(SessionRecord, Vec<u8>), StoreError> {
-    let row = tx.query_opt(
-        "SELECT s.* FROM rio_synthetic.sessions s JOIN rio_synthetic.accounts a \
+async fn negative_session(
+    tx: &Transaction<'_>,
+    key: &[u8],
+) -> Result<(SessionRecord, Vec<u8>), StoreError> {
+    let row = tx
+        .query_opt(
+            "SELECT s.* FROM rio_synthetic.sessions s JOIN rio_synthetic.accounts a \
          ON (s.account_id,s.owner_id,s.tenant_id)=(a.account_id,a.owner_id,a.tenant_id) \
-         WHERE s.token_hash=$1 AND s.version=a.version AND a.status='SYNTHETIC_ENABLED'", &[&key]).await?
+         WHERE s.token_hash=$1 AND s.version=a.version AND a.status='SYNTHETIC_ENABLED'",
+            &[&key],
+        )
+        .await?
         .ok_or(StoreError::Revoked)?;
     Ok((session_record(&row)?, row.try_get("family_hash")?))
 }
-async fn audit(tx: &Transaction<'_>, id: Option<&str>, event: &str, now: i64, positive: bool) -> Result<(), StoreError> {
-    let count: i64 = tx.query_one("SELECT count(*) FROM rio_synthetic.audit_events", &[]).await?.try_get(0)?;
+async fn audit(
+    tx: &Transaction<'_>,
+    id: Option<&str>,
+    event: &str,
+    now: i64,
+    positive: bool,
+) -> Result<(), StoreError> {
+    let count: i64 = tx
+        .query_one("SELECT count(*) FROM rio_synthetic.audit_events", &[])
+        .await?
+        .try_get(0)?;
     // Reserve room for closing all bounded active sessions and consent grants.
-    if positive && count >= 4000 { return Err(StoreError::Capacity); }
+    if positive && count >= 4000 {
+        return Err(StoreError::Capacity);
+    }
     if count >= 4096 {
         // Preserve negative revocation; declare overflow honestly without manufacturing an audit event.
         tx.execute(
             "UPDATE rio_synthetic.store_guard SET audit_full=true,\
-             audit_suppressed=LEAST(audit_suppressed+1,9223372036854775806) WHERE id=1", &[]).await?;
+             audit_suppressed=LEAST(audit_suppressed+1,9223372036854775806) WHERE id=1",
+            &[],
+        )
+        .await?;
         return Ok(());
     }
     let row = tx.query_one(
         "INSERT INTO rio_synthetic.audit_events(account_id,event_type,at_ms) VALUES($1,$2,$3) RETURNING id",
         &[&id,&event,&now]).await?;
     let event_id: i64 = row.try_get(0)?;
-    tx.execute("INSERT INTO rio_synthetic.outbox(audit_id) VALUES($1)", &[&event_id]).await?;
+    tx.execute(
+        "INSERT INTO rio_synthetic.outbox(audit_id) VALUES($1)",
+        &[&event_id],
+    )
+    .await?;
     Ok(())
 }
 
@@ -198,24 +293,37 @@ impl PgStore {
     /// The isolated restore database is fenced before this method returns.
     pub async fn connect_local(url: &str) -> Result<Self, StoreError> {
         let (config, restore) = local_config(url)?;
-        let (client, connection) = timeout(Duration::from_secs(8), config.connect(NoTls)).await
-            .map_err(|_| StoreError::Unavailable)?.map_err(|_| StoreError::Unavailable)?;
+        let (client, connection) = timeout(Duration::from_secs(8), config.connect(NoTls))
+            .await
+            .map_err(|_| StoreError::Unavailable)?
+            .map_err(|_| StoreError::Unavailable)?;
         let healthy = Arc::new(AtomicBool::new(true));
         let signal = healthy.clone();
         let task = tokio::spawn(async move {
             let _ = connection.await;
             signal.store(false, Ordering::SeqCst);
         });
-        let store = Self { inner: Arc::new(Inner {
-            client: Mutex::new(client), healthy, connection: task.abort_handle(),
-        }) };
+        let store = Self {
+            inner: Arc::new(Inner {
+                client: Mutex::new(client),
+                healthy,
+                connection: task.abort_handle(),
+            }),
+        };
         store.migrate().await?;
-        if restore { store.recover_after_restore().await?; }
+        if restore {
+            store.recover_after_restore().await?;
+        }
         Ok(store)
     }
 
-    async fn timed<T>(&self, work: impl Future<Output=Result<T, StoreError>>) -> Result<T, StoreError> {
-        if !self.inner.healthy.load(Ordering::SeqCst) { return Err(StoreError::Unavailable); }
+    async fn timed<T>(
+        &self,
+        work: impl Future<Output = Result<T, StoreError>>,
+    ) -> Result<T, StoreError> {
+        if !self.inner.healthy.load(Ordering::SeqCst) {
+            return Err(StoreError::Unavailable);
+        }
         let result = match timeout(Duration::from_secs(5), work).await {
             Ok(result) => result,
             Err(_) => Err(StoreError::Unavailable),
@@ -232,40 +340,62 @@ impl PgStore {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
-            tx.execute("SELECT pg_advisory_xact_lock(918873280)", &[]).await?;
-            tx.batch_execute(include_str!("../migrations/0001_synthetic_accounts.sql")).await?;
+            tx.execute("SELECT pg_advisory_xact_lock(918873280)", &[])
+                .await?;
+            tx.batch_execute(include_str!("../migrations/0001_synthetic_accounts.sql"))
+                .await?;
             tx.commit().await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Confirm that the current database and schema are reachable. Failure closes readiness.
     pub async fn health(&self) -> Result<(), StoreError> {
         self.timed(async {
             let client = self.inner.client.lock().await;
-            let row = client.query_one(
-                "SELECT schema_version,mode,account_active,last_ms,\
+            let row = client
+                .query_one(
+                    "SELECT schema_version,mode,account_active,last_ms,\
                  floor(extract(epoch FROM clock_timestamp())*1000)::bigint AS observed \
-                 FROM rio_synthetic.store_guard WHERE id=1", &[]).await?;
-            if row.try_get::<_, i32>(0)? != 1 || row.try_get::<_, String>(1)? != "SYNTHETIC_ONLY"
-                || row.try_get::<_, bool>(2)? || row.try_get::<_, i64>("observed")? < row.try_get::<_, i64>("last_ms")? {
+                 FROM rio_synthetic.store_guard WHERE id=1",
+                    &[],
+                )
+                .await?;
+            if row.try_get::<_, i32>(0)? != 1
+                || row.try_get::<_, String>(1)? != "SYNTHETIC_ONLY"
+                || row.try_get::<_, bool>(2)?
+                || row.try_get::<_, i64>("observed")? < row.try_get::<_, i64>("last_ms")?
+            {
                 return Err(StoreError::Unavailable);
             }
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Report whether the bounded audit retention is full; negative revocation remains available.
     pub async fn audit_full(&self) -> Result<bool, StoreError> {
         self.timed(async {
             let client = self.inner.client.lock().await;
-            let row = client.query_one("SELECT audit_full FROM rio_synthetic.store_guard WHERE id=1", &[]).await?;
+            let row = client
+                .query_one(
+                    "SELECT audit_full FROM rio_synthetic.store_guard WHERE id=1",
+                    &[],
+                )
+                .await?;
             Ok(row.try_get(0)?)
-        }).await
+        })
+        .await
     }
 
     /// Persist only hashes and revocation epochs for a short, one-use login transaction.
-    pub async fn begin_login(&self, transaction_hash: Key, state_hash: Key, previous_session: Option<Key>) -> Result<(), StoreError> {
+    pub async fn begin_login(
+        &self,
+        transaction_hash: Key,
+        state_hash: Key,
+        previous_session: Option<Key>,
+    ) -> Result<(), StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -302,14 +432,23 @@ impl PgStore {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
             locked(&tx).await?;
-            tx.execute("DELETE FROM rio_synthetic.auth_transactions WHERE transaction_hash=$1", &[&transaction_hash.to_vec()]).await?;
+            tx.execute(
+                "DELETE FROM rio_synthetic.auth_transactions WHERE transaction_hash=$1",
+                &[&transaction_hash.to_vec()],
+            )
+            .await?;
             tx.commit().await?;
             Ok(())
-        }).await
+        })
+        .await
     }
 
     /// Atomically consume the matching transaction. Wrong state burns it before rejection.
-    pub async fn consume_login(&self, transaction_hash: Key, state_hash: Key) -> Result<LoginPermit, StoreError> {
+    pub async fn consume_login(
+        &self,
+        transaction_hash: Key,
+        state_hash: Key,
+    ) -> Result<LoginPermit, StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -321,18 +460,30 @@ impl PgStore {
             tx.commit().await?;
             let row = row.ok_or(StoreError::Invalid)?;
             let expected: Vec<u8> = row.try_get("state_hash")?;
-            if expected.as_slice() != state_hash || row.try_get::<_, i64>("expires_ms")? <= now { return Err(StoreError::Invalid); }
+            if expected.as_slice() != state_hash || row.try_get::<_, i64>("expires_ms")? <= now {
+                return Err(StoreError::Invalid);
+            }
             Ok(LoginPermit {
-                versions: [row.try_get("alpha_version")?,row.try_get("beta_version")?],
-                predecessor: row.try_get("predecessor_hash")?, expires_ms: row.try_get("expires_ms")?,
+                versions: [row.try_get("alpha_version")?, row.try_get("beta_version")?],
+                predecessor: row.try_get("predecessor_hash")?,
+                expires_ms: row.try_get("expires_ms")?,
             })
-        }).await
+        })
+        .await
     }
 
     /// Create a session only after current account epoch and predecessor are revalidated at commit.
-    pub async fn replace_session(&self, permit: LoginPermit, account_id: &str, token_hash: Key, csrf: String) -> Result<SessionRecord, StoreError> {
+    pub async fn replace_session(
+        &self,
+        permit: LoginPermit,
+        account_id: &str,
+        token_hash: Key,
+        csrf: String,
+    ) -> Result<SessionRecord, StoreError> {
         let (account_id, index) = actor(account_id)?;
-        if !valid_csrf(&csrf) { return Err(StoreError::Invalid); }
+        if !valid_csrf(&csrf) {
+            return Err(StoreError::Invalid);
+        }
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -386,7 +537,7 @@ impl PgStore {
                 Err(error) => return Err(error),
             }
             let row = tx.query_one(
-                "UPDATE rio_synthetic.sessions SET touched_ms=$2,idle_expires_ms=LEAST($2+30000,absolute_expires_ms) \
+                "UPDATE rio_synthetic.sessions SET touched_ms=$2::bigint,idle_expires_ms=LEAST($2::bigint+30000::bigint,absolute_expires_ms) \
                  WHERE token_hash=$1 RETURNING *", &[&key,&now]).await?;
             let record = session_record(&row)?;
             tx.commit().await?;
@@ -404,7 +555,12 @@ impl PgStore {
         self.end_session(token_hash, supplied_csrf, true).await
     }
 
-    async fn end_session(&self, token_hash: Key, supplied_csrf: &str, all: bool) -> Result<(), StoreError> {
+    async fn end_session(
+        &self,
+        token_hash: Key,
+        supplied_csrf: &str,
+        all: bool,
+    ) -> Result<(), StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -449,9 +605,17 @@ impl PgStore {
     }
 
     /// Change only the exact bounded test scope with CSRF, current epoch and receipt revision checks.
-    pub async fn set_consent(&self, token_hash: Key, supplied_csrf: &str, scope: &str,
-        granted: bool, expected_revision: i64) -> Result<ConsentRecord, StoreError> {
-        if scope != CONSENT_SCOPE || expected_revision < 0 { return Err(StoreError::Forbidden); }
+    pub async fn set_consent(
+        &self,
+        token_hash: Key,
+        supplied_csrf: &str,
+        scope: &str,
+        granted: bool,
+        expected_revision: i64,
+    ) -> Result<ConsentRecord, StoreError> {
+        if scope != CONSENT_SCOPE || expected_revision < 0 {
+            return Err(StoreError::Forbidden);
+        }
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -495,31 +659,50 @@ mod tests {
     use super::*;
     use tokio::task::JoinHandle;
 
-    fn key(label: &str) -> Key { Sha256::digest(label.as_bytes()).into() }
-    fn csrf(label: u8) -> String { char::from(label).to_string().repeat(43) }
+    fn key(label: &str) -> Key {
+        Sha256::digest(label.as_bytes()).into()
+    }
+    fn csrf(label: u8) -> String {
+        char::from(label).to_string().repeat(43)
+    }
     fn test_url(name: &str) -> Result<String, StoreError> {
         std::env::var(name).map_err(|_| StoreError::Invalid)
     }
     async fn raw(url: &str) -> Result<(Client, JoinHandle<()>), StoreError> {
         let (config, _) = local_config(url)?;
         let (client, connection) = config.connect(NoTls).await?;
-        let task = tokio::spawn(async move { let _ = connection.await; });
+        let task = tokio::spawn(async move {
+            let _ = connection.await;
+        });
         Ok((client, task))
     }
-    async fn login(store: &PgStore, label: &str, id: &str, parent: Option<Key>) -> Result<(Key, String), StoreError> {
+    async fn login(
+        store: &PgStore,
+        label: &str,
+        id: &str,
+        parent: Option<Key>,
+    ) -> Result<(Key, String), StoreError> {
         let transaction = key(&format!("transaction:{label}"));
         let state = key(&format!("state:{label}"));
         let token = key(&format!("token:{label}"));
         let anti_forgery = csrf(if id == "TST-beta" { b'z' } else { b'a' });
+        eprintln!("CASE T03_LOGIN_BEGIN");
         store.begin_login(transaction, state, parent).await?;
+        eprintln!("CASE T03_LOGIN_CONSUME");
         let permit = store.consume_login(transaction, state).await?;
-        store.replace_session(permit, id, token, anti_forgery.clone()).await?;
+        eprintln!("CASE T03_LOGIN_REPLACE");
+        store
+            .replace_session(permit, id, token, anti_forgery.clone())
+            .await?;
         Ok((token, anti_forgery))
     }
 
     #[test]
     fn configuration_and_scope_are_fixed_before_network_io() {
-        let url = format!("postgresql://rio_dev:{}@127.0.0.1:8090/rio_synthetic?sslmode=disable", "a".repeat(64));
+        let url = format!(
+            "postgresql://rio_dev:{}@127.0.0.1:8090/rio_synthetic?sslmode=disable",
+            "a".repeat(64)
+        );
         assert!(local_config(&url).is_ok());
         for wrong in [
             url.replace("127.0.0.1", "attacker.example"),
@@ -529,7 +712,12 @@ mod tests {
             url.replace("sslmode=disable", "sslmode=require"),
             format!("{url}&hostaddr=192.0.2.1"),
             format!("{url}&options=-csynchronous_commit%3Doff"),
-        ] { assert!(local_config(&wrong).is_err(), "unapproved connection parameters are rejected"); }
+        ] {
+            assert!(
+                local_config(&wrong).is_err(),
+                "unapproved connection parameters are rejected"
+            );
+        }
         assert!(actor("verified-browser-role").is_err());
         assert!(!valid_csrf("short"));
     }
@@ -551,37 +739,72 @@ mod tests {
         let transaction = key("atomic-transaction");
         let state = key("atomic-state");
         store.begin_login(transaction, state, None).await?;
-        let (one, two) = tokio::join!(store.consume_login(transaction, state), other.consume_login(transaction, state));
-        assert!(one.is_ok() != two.is_ok(), "exactly one independent client consumes the transaction");
+        let (one, two) = tokio::join!(
+            store.consume_login(transaction, state),
+            other.consume_login(transaction, state)
+        );
+        assert!(
+            one.is_ok() != two.is_ok(),
+            "exactly one independent client consumes the transaction"
+        );
         store.begin_login(key("wrong-state"), state, None).await?;
-        assert_eq!(store.consume_login(key("wrong-state"), key("bad")).await.err(), Some(StoreError::Invalid));
-        assert_eq!(store.consume_login(key("wrong-state"), state).await.err(), Some(StoreError::Invalid));
+        assert_eq!(
+            store
+                .consume_login(key("wrong-state"), key("bad"))
+                .await
+                .err(),
+            Some(StoreError::Invalid)
+        );
+        assert_eq!(
+            store.consume_login(key("wrong-state"), state).await.err(),
+            Some(StoreError::Invalid)
+        );
         store.begin_login(key("expired-flow"), state, None).await?;
         raw.execute("UPDATE rio_synthetic.auth_transactions SET created_ms=created_ms-301000,expires_ms=expires_ms-301000 \
             WHERE transaction_hash=$1", &[&key("expired-flow").to_vec()]).await?;
-        assert_eq!(store.consume_login(key("expired-flow"), state).await.err(), Some(StoreError::Invalid));
+        assert_eq!(
+            store.consume_login(key("expired-flow"), state).await.err(),
+            Some(StoreError::Invalid)
+        );
 
         eprintln!("CASE T03_DURABILITY");
         // Durable own-tenant sessions and stable CSRF survive a fresh store/process connection.
+        eprintln!("CASE T03_DURABILITY_ALPHA_LOGIN");
         let (alpha, alpha_csrf) = login(&store, "durable-alpha", "TST-alpha", None).await?;
+        eprintln!("CASE T03_DURABILITY_BETA_LOGIN");
         let (beta, beta_csrf) = login(&store, "durable-beta", "TST-beta", None).await?;
+        eprintln!("CASE T03_DURABILITY_BEFORELOAD");
         let before = store.load_session(alpha).await?;
+        eprintln!("CASE T03_DURABILITY_RECONNECT");
         let restarted = PgStore::connect_local(&url).await?;
+        eprintln!("CASE T03_DURABILITY_AFTERLOAD");
         let after = restarted.load_session(alpha).await?;
         assert_eq!(after.account_id, "TST-alpha");
         assert_eq!(after.tenant_id, "tenant-TST-alpha");
-        assert!(after.csrf == alpha_csrf, "ordinary reconnect preserves this session anti-forgery value");
+        assert!(
+            after.csrf == alpha_csrf,
+            "ordinary reconnect preserves this session anti-forgery value"
+        );
         assert_eq!(after.expires_ms, before.expires_ms);
         assert_eq!(store.load_session(beta).await?.account_id, "TST-beta");
-        assert_eq!(store.logout(alpha, &beta_csrf).await.err(), Some(StoreError::Forbidden));
+        assert_eq!(
+            store.logout(alpha, &beta_csrf).await.err(),
+            Some(StoreError::Forbidden)
+        );
         // The same actor's separate session also cannot substitute its CSRF.
-        let tx = key("other-csrf-tx"); let state2 = key("other-csrf-state");
+        let tx = key("other-csrf-tx");
+        let state2 = key("other-csrf-state");
         store.begin_login(tx, state2, None).await?;
         let permit = store.consume_login(tx, state2).await?;
         let alpha_peer = key("alpha-peer");
         let peer_csrf = csrf(b'b');
-        store.replace_session(permit, "TST-alpha", alpha_peer, peer_csrf.clone()).await?;
-        assert_eq!(store.logout(alpha, &peer_csrf).await.err(), Some(StoreError::Forbidden));
+        store
+            .replace_session(permit, "TST-alpha", alpha_peer, peer_csrf.clone())
+            .await?;
+        assert_eq!(
+            store.logout(alpha, &peer_csrf).await.err(),
+            Some(StoreError::Forbidden)
+        );
 
         eprintln!("CASE T03_TENANT");
         // Composite owner/tenant FK rejects a cross-tenant session even through trusted fixture SQL.
@@ -591,79 +814,156 @@ mod tests {
              SELECT $1,$1,'TST-alpha','owner-TST-alpha','tenant-TST-beta',version,$2,$3,$3,$4,$5 \
              FROM rio_synthetic.accounts WHERE account_id='TST-alpha'",
             &[&key("cross-tenant").to_vec(),&csrf(b'c'),&before.created_ms,&(before.created_ms+IDLE_MS),&(before.created_ms+ABSOLUTE_MS)]).await;
-        assert!(cross.is_err(), "foreign tenant cannot be associated with the alpha actor");
-        let bindings: i64 = raw.query_one("SELECT count(*) FROM rio_synthetic.auth_bindings", &[]).await?.try_get(0)?;
+        assert!(
+            cross.is_err(),
+            "foreign tenant cannot be associated with the alpha actor"
+        );
+        let bindings: i64 = raw
+            .query_one("SELECT count(*) FROM rio_synthetic.auth_bindings", &[])
+            .await?
+            .try_get(0)?;
         assert_eq!(bindings, 2);
 
         eprintln!("CASE T03_CONSENT");
         // Consent is exact-scope, actor-owned, current-version and revision-bound.
         let receipt = store.read_consent(alpha).await?;
-        let accepted = store.set_consent(alpha, &alpha_csrf, CONSENT_SCOPE, true, receipt.revision).await?;
+        let accepted = store
+            .set_consent(alpha, &alpha_csrf, CONSENT_SCOPE, true, receipt.revision)
+            .await?;
         assert!(accepted.granted);
-        assert!(!store.read_consent(beta).await?.granted, "alpha consent does not grant beta consent");
-        assert_eq!(store.set_consent(alpha, &alpha_csrf, "CONTACT_OR_IDENTITY", true, accepted.revision).await.err(),
-            Some(StoreError::Forbidden));
-        assert_eq!(store.set_consent(alpha, &alpha_csrf, CONSENT_SCOPE, false, receipt.revision).await.err(),
-            Some(StoreError::Conflict));
+        assert!(
+            !store.read_consent(beta).await?.granted,
+            "alpha consent does not grant beta consent"
+        );
+        assert_eq!(
+            store
+                .set_consent(
+                    alpha,
+                    &alpha_csrf,
+                    "CONTACT_OR_IDENTITY",
+                    true,
+                    accepted.revision
+                )
+                .await
+                .err(),
+            Some(StoreError::Forbidden)
+        );
+        assert_eq!(
+            store
+                .set_consent(alpha, &alpha_csrf, CONSENT_SCOPE, false, receipt.revision)
+                .await
+                .err(),
+            Some(StoreError::Conflict)
+        );
 
         eprintln!("CASE T03_LOGOUT_ALL");
         // A logout-all closes both alpha sessions and a previously authorized login fence.
-        store.begin_login(key("pending-alpha"), state, Some(alpha_peer)).await?;
+        store
+            .begin_login(key("pending-alpha"), state, Some(alpha_peer))
+            .await?;
         let pending = store.consume_login(key("pending-alpha"), state).await?;
         store.logout_all(alpha, &alpha_csrf).await?;
-        assert_eq!(store.load_session(alpha).await.err(), Some(StoreError::Revoked));
-        assert_eq!(store.load_session(alpha_peer).await.err(), Some(StoreError::Revoked));
-        assert_eq!(store.replace_session(pending, "TST-alpha", key("stale-alpha"), csrf(b'c')).await.err(), Some(StoreError::Revoked));
+        assert_eq!(
+            store.load_session(alpha).await.err(),
+            Some(StoreError::Revoked)
+        );
+        assert_eq!(
+            store.load_session(alpha_peer).await.err(),
+            Some(StoreError::Revoked)
+        );
+        assert_eq!(
+            store
+                .replace_session(pending, "TST-alpha", key("stale-alpha"), csrf(b'c'))
+                .await
+                .err(),
+            Some(StoreError::Revoked)
+        );
         assert_eq!(other.load_session(beta).await?.account_id, "TST-beta");
         // Fresh authentication after revocation is permitted; the stale cookie confers no predecessor authority.
-        let (fresh, fresh_csrf) = login(&store, "fresh-after-revoke", "TST-alpha", Some(alpha)).await?;
+        let (fresh, fresh_csrf) =
+            login(&store, "fresh-after-revoke", "TST-alpha", Some(alpha)).await?;
         assert!(!store.read_consent(fresh).await?.granted);
 
         eprintln!("CASE T03_ROTATE_FIRST");
         // Both serializations of real predecessor rotation versus negative revocation close descendants.
-        store.begin_login(key("rotate-first-tx"), state, Some(fresh)).await?;
+        store
+            .begin_login(key("rotate-first-tx"), state, Some(fresh))
+            .await?;
         let rotate = store.consume_login(key("rotate-first-tx"), state).await?;
         let child = key("rotate-first-child");
         let child_csrf = csrf(b'd');
-        store.replace_session(rotate, "TST-alpha", child, child_csrf.clone()).await?;
-        assert_eq!(store.load_session(fresh).await.err(), Some(StoreError::Revoked));
+        store
+            .replace_session(rotate, "TST-alpha", child, child_csrf.clone())
+            .await?;
+        assert_eq!(
+            store.load_session(fresh).await.err(),
+            Some(StoreError::Revoked)
+        );
         assert_eq!(store.load_session(child).await?.account_id, "TST-alpha");
         store.logout_all(fresh, &fresh_csrf).await?;
-        assert_eq!(store.load_session(child).await.err(), Some(StoreError::Revoked));
+        assert_eq!(
+            store.load_session(child).await.err(),
+            Some(StoreError::Revoked)
+        );
         assert_eq!(store.load_session(beta).await?.account_id, "TST-beta");
 
         eprintln!("CASE T03_REVOKE_FIRST");
         let (old, old_csrf) = login(&store, "revoke-first-parent", "TST-alpha", None).await?;
-        store.begin_login(key("revoke-first-tx"), state, Some(old)).await?;
+        store
+            .begin_login(key("revoke-first-tx"), state, Some(old))
+            .await?;
         let rotate = store.consume_login(key("revoke-first-tx"), state).await?;
         store.logout_all(old, &old_csrf).await?;
-        assert_eq!(store.replace_session(rotate, "TST-alpha", key("revoke-first-child"), csrf(b'e')).await.err(),
-            Some(StoreError::Revoked));
+        assert_eq!(
+            store
+                .replace_session(rotate, "TST-alpha", key("revoke-first-child"), csrf(b'e'))
+                .await
+                .err(),
+            Some(StoreError::Revoked)
+        );
 
         eprintln!("CASE T03_RACE");
         let (racing, racing_csrf) = login(&store, "concurrent-parent", "TST-alpha", None).await?;
-        store.begin_login(key("concurrent-tx"), state, Some(racing)).await?;
+        store
+            .begin_login(key("concurrent-tx"), state, Some(racing))
+            .await?;
         let rotate = store.consume_login(key("concurrent-tx"), state).await?;
         let concurrent_child = key("concurrent-child");
         let (revoked, rotated) = tokio::join!(
             store.logout_all(racing, &racing_csrf),
             other.replace_session(rotate, "TST-alpha", concurrent_child, csrf(b'f'))
         );
-        assert!(revoked.is_ok(), "negative actor revocation commits in either serialization");
+        assert!(
+            revoked.is_ok(),
+            "negative actor revocation commits in either serialization"
+        );
         assert!(rotated.is_ok() || rotated.err() == Some(StoreError::Revoked));
-        assert_eq!(store.load_session(concurrent_child).await.err(), Some(StoreError::Revoked));
+        assert_eq!(
+            store.load_session(concurrent_child).await.err(),
+            Some(StoreError::Revoked)
+        );
 
         eprintln!("CASE T03_FAMILY");
         // Single logout closes only the predecessor's family, not an independent alpha or beta session.
         let (family, family_csrf) = login(&store, "family-parent", "TST-alpha", None).await?;
         let (independent, _) = login(&store, "independent-alpha", "TST-alpha", None).await?;
-        store.begin_login(key("family-child-tx"), state, Some(family)).await?;
+        store
+            .begin_login(key("family-child-tx"), state, Some(family))
+            .await?;
         let rotate = store.consume_login(key("family-child-tx"), state).await?;
         let family_child = key("family-child");
-        store.replace_session(rotate, "TST-alpha", family_child, csrf(b'g')).await?;
+        store
+            .replace_session(rotate, "TST-alpha", family_child, csrf(b'g'))
+            .await?;
         store.logout(family, &family_csrf).await?;
-        assert_eq!(store.load_session(family_child).await.err(), Some(StoreError::Revoked));
-        assert_eq!(store.load_session(independent).await?.account_id, "TST-alpha");
+        assert_eq!(
+            store.load_session(family_child).await.err(),
+            Some(StoreError::Revoked)
+        );
+        assert_eq!(
+            store.load_session(independent).await?.account_id,
+            "TST-alpha"
+        );
         assert_eq!(store.load_session(beta).await?.account_id, "TST-beta");
 
         eprintln!("CASE T03_EXPIRY");
@@ -672,16 +972,32 @@ mod tests {
         raw.execute("UPDATE rio_synthetic.sessions SET created_ms=created_ms-31000,touched_ms=touched_ms-31000,\
             idle_expires_ms=idle_expires_ms-31000,absolute_expires_ms=absolute_expires_ms-31000 WHERE token_hash=$1",
             &[&idle.to_vec()]).await?;
-        assert_eq!(store.load_session(idle).await.err(), Some(StoreError::Revoked));
-        let removed: i64 = raw.query_one("SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1", &[&idle.to_vec()]).await?.try_get(0)?;
+        assert_eq!(
+            store.load_session(idle).await.err(),
+            Some(StoreError::Revoked)
+        );
+        let removed: i64 = raw
+            .query_one(
+                "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1",
+                &[&idle.to_vec()],
+            )
+            .await?
+            .try_get(0)?;
         assert_eq!(removed, 0, "observed expiry is durably removed");
         let (expired, _) = login(&store, "absolute-expiry", "TST-alpha", None).await?;
         raw.execute("UPDATE rio_synthetic.sessions SET created_ms=created_ms-61000,\
             absolute_expires_ms=absolute_expires_ms-61000,idle_expires_ms=absolute_expires_ms-61000 WHERE token_hash=$1",
             &[&expired.to_vec()]).await?;
-        assert_eq!(restarted.load_session(expired).await.err(), Some(StoreError::Revoked));
-        let (new_after_expiry, _) = login(&store, "fresh-after-expiry", "TST-alpha", Some(expired)).await?;
-        assert_eq!(store.load_session(new_after_expiry).await?.account_id, "TST-alpha");
+        assert_eq!(
+            restarted.load_session(expired).await.err(),
+            Some(StoreError::Revoked)
+        );
+        let (new_after_expiry, _) =
+            login(&store, "fresh-after-expiry", "TST-alpha", Some(expired)).await?;
+        assert_eq!(
+            store.load_session(new_after_expiry).await?.account_id,
+            "TST-alpha"
+        );
 
         eprintln!("CASE T03_SCHEMA");
         // No password, provider token, nonce or PKCE columns exist in the durable schema.
@@ -695,20 +1011,28 @@ mod tests {
              +(SELECT count(*) FROM rio_synthetic.provisional_id_bindings WHERE status<>'DISABLED_SYNTHETIC') \
              +(SELECT count(*) FROM rio_synthetic.outbox WHERE external_side_effect)", &[]).await?.try_get(0)?;
         assert_eq!(hidden, 0);
-        let immutable = raw.execute("UPDATE rio_synthetic.audit_events SET at_ms=at_ms+1", &[]).await;
+        let immutable = raw
+            .execute("UPDATE rio_synthetic.audit_events SET at_ms=at_ms+1", &[])
+            .await;
         assert!(immutable.is_err(), "attributable audit cannot be rewritten");
         eprintln!("CASE T03_CLOCK");
         // A backwards durable clock cannot freeze and prolong a retained cookie lease.
         raw.execute("UPDATE rio_synthetic.store_guard SET last_ms=floor(extract(epoch FROM clock_timestamp())*1000)::bigint+5000 WHERE id=1",
             &[]).await?;
-        assert_eq!(store.load_session(beta).await.err(), Some(StoreError::Unavailable));
+        assert_eq!(
+            store.load_session(beta).await.err(),
+            Some(StoreError::Unavailable)
+        );
         assert_eq!(other.health().await.err(), Some(StoreError::Unavailable));
         // This is private fixture repair only, followed by an explicit recovery fence.
         raw.execute("UPDATE rio_synthetic.store_guard SET last_ms=floor(extract(epoch FROM clock_timestamp())*1000)::bigint WHERE id=1",
             &[]).await?;
         let recovered = PgStore::connect_local(&url).await?;
         recovered.recover_after_restore().await?;
-        assert_eq!(recovered.load_session(beta).await.err(), Some(StoreError::Revoked));
+        assert_eq!(
+            recovered.load_session(beta).await.err(),
+            Some(StoreError::Revoked)
+        );
         task.abort();
         Ok(())
     }
@@ -721,24 +1045,40 @@ mod tests {
         let url = test_url("RIO_PG_TEST_URL")?;
         let store = PgStore::connect_local(&url).await?;
         store.recover_after_restore().await?;
-        for (marker, id) in [([0x91;32],"TST-alpha"),([0x92;32],"TST-beta"),([0x93;32],"TST-alpha")] {
-            let transaction = key(&format!("restore-tx:{}",marker[0]));
+        for (marker, id) in [
+            ([0x91; 32], "TST-alpha"),
+            ([0x92; 32], "TST-beta"),
+            ([0x93; 32], "TST-alpha"),
+        ] {
+            let transaction = key(&format!("restore-tx:{}", marker[0]));
             let state = key("restore-state");
             store.begin_login(transaction, state, None).await?;
             let permit = store.consume_login(transaction, state).await?;
-            store.replace_session(permit, id, marker, csrf(b'h')).await?;
+            store
+                .replace_session(permit, id, marker, csrf(b'h'))
+                .await?;
         }
-        store.logout([0x93;32], &csrf(b'h')).await?;
-        assert!(store.load_session([0x91;32]).await.is_ok());
-        assert!(store.load_session([0x92;32]).await.is_ok());
-        assert_eq!(store.load_session([0x93;32]).await.err(), Some(StoreError::Revoked));
+        store.logout([0x93; 32], &csrf(b'h')).await?;
+        assert!(store.load_session([0x91; 32]).await.is_ok());
+        assert!(store.load_session([0x92; 32]).await.is_ok());
+        assert_eq!(
+            store.load_session([0x93; 32]).await.err(),
+            Some(StoreError::Revoked)
+        );
         let (raw, task) = raw(&url).await?;
-        let live: i64 = raw.query_one(
-            "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash IN ($1,$2) \
+        let live: i64 = raw
+            .query_one(
+                "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash IN ($1,$2) \
              AND idle_expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint \
              AND absolute_expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint",
-            &[&vec![0x91u8;32],&vec![0x92u8;32]]).await?.try_get(0)?;
-        assert_eq!(live, 2, "backup input contains two fresh, currently valid marker sessions");
+                &[&vec![0x91u8; 32], &vec![0x92u8; 32]],
+            )
+            .await?
+            .try_get(0)?;
+        assert_eq!(
+            live, 2,
+            "backup input contains two fresh, currently valid marker sessions"
+        );
         task.abort();
         Ok(())
     }
@@ -750,31 +1090,67 @@ mod tests {
         eprintln!("CASE T03_RESTORE_BEFORE");
         let url = test_url("RIO_PG_RESTORE_TEST_URL")?;
         let (_, is_restore) = local_config(&url)?;
-        assert!(is_restore, "restore proof never targets the ordinary application database");
+        assert!(
+            is_restore,
+            "restore proof never targets the ordinary application database"
+        );
         let (raw, task) = raw(&url).await?;
         let before: i64 = raw.query_one(
             "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash IN ($1,$2) AND NOT rotated \
              AND idle_expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint \
              AND absolute_expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint",
             &[&vec![0x91u8;32],&vec![0x92u8;32]]).await?.try_get(0)?;
-        assert_eq!(before, 2, "actual restored clone contains two live sessions before fencing; expiry is not evidence");
-        let revoked: i64 = raw.query_one("SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1",
-            &[&vec![0x93u8;32]]).await?.try_get(0)?;
-        assert_eq!(revoked, 0, "the deliberately revoked marker was absent from the backup");
-        let generation: i64 = raw.query_one("SELECT recovery_generation FROM rio_synthetic.store_guard WHERE id=1",
-            &[]).await?.try_get(0)?;
+        assert_eq!(
+            before, 2,
+            "actual restored clone contains two live sessions before fencing; expiry is not evidence"
+        );
+        let revoked: i64 = raw
+            .query_one(
+                "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1",
+                &[&vec![0x93u8; 32]],
+            )
+            .await?
+            .try_get(0)?;
+        assert_eq!(
+            revoked, 0,
+            "the deliberately revoked marker was absent from the backup"
+        );
+        let generation: i64 = raw
+            .query_one(
+                "SELECT recovery_generation FROM rio_synthetic.store_guard WHERE id=1",
+                &[],
+            )
+            .await?
+            .try_get(0)?;
         eprintln!("CASE T03_RESTORE_FENCE");
         let restored = PgStore::connect_local(&url).await?;
         restored.health().await?;
-        for marker in [[0x91;32],[0x92;32],[0x93;32]] {
-            assert_eq!(restored.load_session(marker).await.err(), Some(StoreError::Revoked));
+        for marker in [[0x91; 32], [0x92; 32], [0x93; 32]] {
+            assert_eq!(
+                restored.load_session(marker).await.err(),
+                Some(StoreError::Revoked)
+            );
         }
-        let empty: i64 = raw.query_one("SELECT (SELECT count(*) FROM rio_synthetic.sessions)\
-            +(SELECT count(*) FROM rio_synthetic.auth_transactions)", &[]).await?.try_get(0)?;
+        let empty: i64 = raw
+            .query_one(
+                "SELECT (SELECT count(*) FROM rio_synthetic.sessions)\
+            +(SELECT count(*) FROM rio_synthetic.auth_transactions)",
+                &[],
+            )
+            .await?
+            .try_get(0)?;
         assert_eq!(empty, 0);
-        let fenced: i64 = raw.query_one("SELECT recovery_generation FROM rio_synthetic.store_guard WHERE id=1",
-            &[]).await?.try_get(0)?;
-        assert!(fenced > generation, "controlled recovery advanced its durable fence");
+        let fenced: i64 = raw
+            .query_one(
+                "SELECT recovery_generation FROM rio_synthetic.store_guard WHERE id=1",
+                &[],
+            )
+            .await?
+            .try_get(0)?;
+        assert!(
+            fenced > generation,
+            "controlled recovery advanced its durable fence"
+        );
         task.abort();
         Ok(())
     }
