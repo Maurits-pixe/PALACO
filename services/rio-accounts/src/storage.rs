@@ -220,7 +220,18 @@ async fn locked(tx: &Transaction<'_>) -> Result<i64, StoreError> {
         "DELETE FROM rio_synthetic.sessions s USING rio_synthetic.accounts a \
          WHERE s.account_id=a.account_id AND ((NOT s.rotated AND s.idle_expires_ms <= $1) OR s.absolute_expires_ms <= $1 \
          OR s.version<>a.version OR a.status<>'SYNTHETIC_ENABLED')", &[&now]).await?;
+    // Clock observations and expiry deletion survive logical rejection of business work.
+    tx.batch_execute("SAVEPOINT rio_business").await?;
     Ok(now)
+}
+async fn reject_business<T>(tx: Transaction<'_>, error: StoreError) -> Result<T, StoreError> {
+    if error == StoreError::Unavailable {
+        // Unknown database outcomes are never acknowledged or replaced by memory state.
+        return Err(error);
+    }
+    tx.batch_execute("ROLLBACK TO SAVEPOINT rio_business").await?;
+    tx.commit().await?;
+    Err(error)
 }
 async fn versions(tx: &Transaction<'_>) -> Result<[i64; 2], StoreError> {
     let row = tx.query_one(
@@ -401,7 +412,7 @@ impl PgStore {
             let tx = client.transaction().await?;
             let now = locked(&tx).await?;
             let count: i64 = tx.query_one("SELECT count(*) FROM rio_synthetic.auth_transactions", &[]).await?.try_get(0)?;
-            if count >= MAX_FLOWS { return Err(StoreError::Capacity); }
+            if count >= MAX_FLOWS { return reject_business(tx, StoreError::Capacity).await; }
             let epochs = versions(&tx).await?;
             let predecessor = match previous_session {
                 Some(key) => {
@@ -409,7 +420,7 @@ impl PgStore {
                     match current_session(&tx, &value).await {
                         Ok(_) => Some(value),
                         Err(StoreError::Revoked) => None,
-                        Err(error) => return Err(error),
+                        Err(error) => return reject_business(tx, error).await,
                     }
                 },
                 None => None,
@@ -488,17 +499,20 @@ impl PgStore {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
             let now = locked(&tx).await?;
-            if now >= permit.expires_ms { return Err(StoreError::Revoked); }
+            if now >= permit.expires_ms { return reject_business(tx, StoreError::Revoked).await; }
             let account = tx.query_one(
                 "SELECT owner_id,tenant_id,status,version FROM rio_synthetic.accounts WHERE account_id=$1",
                 &[&account_id]).await?;
             let version: i64 = account.try_get("version")?;
             if account.try_get::<_, String>("status")? != "SYNTHETIC_ENABLED" || version != permit.versions[index] {
-                return Err(StoreError::Revoked);
+                return reject_business(tx, StoreError::Revoked).await;
             }
             let mut family = token_hash.to_vec();
             if let Some(old) = permit.predecessor.as_ref() {
-                let previous = current_session(&tx, old).await?;
+                let previous = match current_session(&tx, old).await {
+                    Ok(session) => session,
+                    Err(error) => return reject_business(tx, error).await,
+                };
                 if previous.account_id == account_id {
                     family = tx.query_one("SELECT family_hash FROM rio_synthetic.sessions WHERE token_hash=$1",
                         &[old]).await?.try_get(0)?;
@@ -507,15 +521,20 @@ impl PgStore {
                 tx.execute("UPDATE rio_synthetic.sessions SET rotated=true WHERE token_hash=$1", &[old]).await?;
             }
             let count: i64 = tx.query_one("SELECT count(*) FROM rio_synthetic.sessions", &[]).await?.try_get(0)?;
-            if count >= MAX_SESSIONS { return Err(StoreError::Capacity); }
+            if count >= MAX_SESSIONS { return reject_business(tx, StoreError::Capacity).await; }
             let owner: String = account.try_get("owner_id")?;
             let tenant: String = account.try_get("tenant_id")?;
             let row = tx.query_one(
                 "INSERT INTO rio_synthetic.sessions(token_hash,account_id,owner_id,tenant_id,version,csrf,\
                  created_ms,touched_ms,idle_expires_ms,absolute_expires_ms,family_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10) RETURNING *",
                 &[&token_hash.to_vec(),&account_id,&owner,&tenant,&version,&csrf,&now,&(now+IDLE_MS),&(now+ABSOLUTE_MS),&family]).await?;
-            audit(&tx, Some(account_id), "SESSION_CREATED", now, true).await?;
-            let record = session_record(&row)?;
+            if let Err(error) = audit(&tx, Some(account_id), "SESSION_CREATED", now, true).await {
+                return reject_business(tx, error).await;
+            }
+            let record = match session_record(&row) {
+                Ok(record) => record,
+                Err(error) => return reject_business(tx, error).await,
+            };
             tx.commit().await?;
             Ok(record)
         }).await
@@ -534,12 +553,15 @@ impl PgStore {
                     tx.commit().await?;
                     return Err(StoreError::Revoked);
                 },
-                Err(error) => return Err(error),
+                Err(error) => return reject_business(tx, error).await,
             }
             let row = tx.query_one(
                 "UPDATE rio_synthetic.sessions SET touched_ms=$2::bigint,idle_expires_ms=LEAST($2::bigint+30000::bigint,absolute_expires_ms) \
                  WHERE token_hash=$1 RETURNING *", &[&key,&now]).await?;
-            let record = session_record(&row)?;
+            let record = match session_record(&row) {
+                Ok(record) => record,
+                Err(error) => return reject_business(tx, error).await,
+            };
             tx.commit().await?;
             Ok(record)
         }).await
@@ -566,8 +588,11 @@ impl PgStore {
             let tx = client.transaction().await?;
             let now = locked(&tx).await?;
             let key = token_hash.to_vec();
-            let (session, family) = negative_session(&tx, &key).await?;
-            if !csrf_matches(&session.csrf, supplied_csrf) { return Err(StoreError::Forbidden); }
+            let (session, family) = match negative_session(&tx, &key).await {
+                Ok(record) => record,
+                Err(error) => return reject_business(tx, error).await,
+            };
+            if !csrf_matches(&session.csrf, supplied_csrf) { return reject_business(tx, StoreError::Forbidden).await; }
             if all {
                 tx.execute("UPDATE rio_synthetic.accounts SET version=version+1 WHERE account_id=$1", &[&session.account_id]).await?;
                 tx.execute("DELETE FROM rio_synthetic.sessions WHERE account_id=$1", &[&session.account_id]).await?;
@@ -590,7 +615,10 @@ impl PgStore {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
             let now = locked(&tx).await?;
-            let session = current_session(&tx, &token_hash).await?;
+            let session = match current_session(&tx, &token_hash).await {
+                Ok(session) => session,
+                Err(error) => return reject_business(tx, error).await,
+            };
             let row = tx.query_one(
                 "SELECT revision,granted,expires_ms,version FROM rio_synthetic.consent_receipts \
                  WHERE account_id=$1 AND tenant_id=$2", &[&session.account_id,&session.tenant_id]).await?;
@@ -620,15 +648,23 @@ impl PgStore {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
             let now = locked(&tx).await?;
-            let session = current_session(&tx, &token_hash).await?;
-            if !csrf_matches(&session.csrf, supplied_csrf) { return Err(StoreError::Forbidden); }
+            let session = match current_session(&tx, &token_hash).await {
+                Ok(session) => session,
+                Err(error) => return reject_business(tx, error).await,
+            };
+            if !csrf_matches(&session.csrf, supplied_csrf) { return reject_business(tx, StoreError::Forbidden).await; }
             let expiry = granted.then_some(now+ABSOLUTE_MS);
             let row = tx.query_opt(
                 "UPDATE rio_synthetic.consent_receipts SET granted=$3,expires_ms=$4,version=$5,revision=revision+1 \
                  WHERE account_id=$1 AND tenant_id=$2 AND revision=$6 RETURNING revision",
-                &[&session.account_id,&session.tenant_id,&granted,&expiry,&session.version,&expected_revision]).await?
-                .ok_or(StoreError::Conflict)?;
-            audit(&tx, Some(session.account_id), if granted { "CONSENT_RECORDED" } else { "CONSENT_REVOKED" }, now, granted).await?;
+                &[&session.account_id,&session.tenant_id,&granted,&expiry,&session.version,&expected_revision]).await?;
+            let row = match row {
+                Some(row) => row,
+                None => return reject_business(tx, StoreError::Conflict).await,
+            };
+            if let Err(error) = audit(&tx, Some(session.account_id), if granted { "CONSENT_RECORDED" } else { "CONSENT_REVOKED" }, now, granted).await {
+                return reject_business(tx, error).await;
+            }
             let record = ConsentRecord { scope: CONSENT_SCOPE, revision: row.try_get("revision")?, granted, expires_ms: expiry };
             tx.commit().await?;
             Ok(record)
@@ -998,6 +1034,42 @@ mod tests {
             store.load_session(new_after_expiry).await?.account_id,
             "TST-alpha"
         );
+
+        // Logical rejection cannot undo a clock observation or expiry deletion.
+        for (label, deny_kind) in [
+            ("expired-logout", 0),
+            ("expired-consent-read", 1),
+            ("expired-consent-write", 2),
+        ] {
+            let (expired, anti_forgery) = login(&store, label, "TST-alpha", None).await?;
+            let observed_before: i64 = raw.query_one(
+                "SELECT last_ms FROM rio_synthetic.store_guard WHERE id=1", &[],
+            ).await?.try_get(0)?;
+            raw.execute(
+                "UPDATE rio_synthetic.sessions SET created_ms=created_ms-31000,touched_ms=touched_ms-31000,\
+                 idle_expires_ms=idle_expires_ms-31000,absolute_expires_ms=absolute_expires_ms-31000 WHERE token_hash=$1",
+                &[&expired.to_vec()],
+            ).await?;
+            let rejection = match deny_kind {
+                0 => store.logout(expired, &anti_forgery).await.err(),
+                1 => store.read_consent(expired).await.err(),
+                _ => store.set_consent(expired, &anti_forgery, CONSENT_SCOPE, true, 0).await.err(),
+            };
+            assert_eq!(rejection, Some(StoreError::Revoked));
+            let retained: i64 = raw.query_one(
+                "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1", &[&expired.to_vec()],
+            ).await?.try_get(0)?;
+            assert_eq!(retained, 0, "logical rejection durably removes the expired session");
+            let observed_after: i64 = raw.query_one(
+                "SELECT last_ms FROM rio_synthetic.store_guard WHERE id=1", &[],
+            ).await?.try_get(0)?;
+            assert!(observed_after >= observed_before, "rejection retains its observed durable clock");
+            // Even a privileged fixture clock rewind cannot restore a deleted bearer row.
+            raw.execute(
+                "UPDATE rio_synthetic.store_guard SET last_ms=$1 WHERE id=1", &[&observed_before],
+            ).await?;
+            assert_eq!(restarted.load_session(expired).await.err(), Some(StoreError::Revoked));
+        }
 
         eprintln!("CASE T03_SCHEMA");
         // No password, provider token, nonce or PKCE columns exist in the durable schema.
