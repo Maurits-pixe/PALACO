@@ -71,7 +71,7 @@
         if (phase === 'unavailable') elements.sessionState.textContent = 'Tijdelijk niet beschikbaar';
     }
 
-    function clearPersonal(nextPhase, message, focus = false) {
+    function clearPersonal(nextPhase, message, focus = false, forceFocus = false) {
         epoch += 1;
         receiptRead += 1;
         stopChecks();
@@ -88,21 +88,21 @@
         elements.choice.checked = false;
         elements.consentStatus.textContent = '';
         renderControls();
-        showFeedback(message, focus && protectedFocus);
+        showFeedback(message, focus && (protectedFocus || forceFocus === true));
     }
 
-    function unavailable(message = 'RIO is tijdelijk niet beschikbaar. Controleer je testsessie opnieuw.') {
-        clearPersonal('unavailable', message, true);
+    function unavailable(message = 'RIO is tijdelijk niet beschikbaar. Controleer je testsessie opnieuw.', forceFocus = false) {
+        clearPersonal('unavailable', message, true, forceFocus);
     }
 
-    function sessionExpired() {
-        clearPersonal('anonymous', 'De testsessie is verlopen of niet meer beschikbaar. Meld je opnieuw aan.', true);
+    function sessionExpired(forceFocus = false) {
+        clearPersonal('anonymous', 'De testsessie is verlopen of niet meer beschikbaar. Meld je opnieuw aan.', true, forceFocus);
     }
 
-    function responseFailure(response) {
-        if (response.status === 401) sessionExpired();
-        else if (response.status === 503) unavailable();
-        else unavailable('De testsessie kon niet veilig worden gecontroleerd. Probeer opnieuw.');
+    function responseFailure(response, forceFocus = false) {
+        if (response.status === 401) sessionExpired(forceFocus);
+        else if (response.status === 503) unavailable(undefined, forceFocus);
+        else unavailable('De testsessie kon niet veilig worden gecontroleerd. Probeer opnieuw.', forceFocus);
     }
 
     async function consumeJson(response) {
@@ -252,7 +252,7 @@
         }
     }
 
-    async function refreshConsent(message = '', focus = false) {
+    async function refreshConsent(message = '', focus = false, forceFocus = false) {
         if (phase !== 'authenticated' || busy || reading) return;
         const stamp = epoch;
         const round = ++receiptRead;
@@ -266,7 +266,7 @@
             const response = await request('/api/consent');
             if (stamp !== epoch || round !== receiptRead) return;
             if (!response.ok) {
-                responseFailure(response);
+                responseFailure(response, forceFocus);
                 return;
             }
             const value = validatedReceipt(await readJson(response));
@@ -275,22 +275,23 @@
             displayReceipt(value, response);
             if (message) showFeedback(message, focus);
         } catch {
-            if (stamp === epoch && round === receiptRead) unavailable();
+            if (stamp === epoch && round === receiptRead) unavailable(undefined, forceFocus);
         }
     }
 
-    async function loadAccount() {
+    async function loadAccount(forceFocus = false) {
         clearPersonal('checking', '');
         const stamp = epoch;
         try {
             const response = await request('/api/me');
             if (stamp !== epoch) return;
             if (response.status === 401) {
-                clearPersonal('anonymous', '');
+                if (forceFocus === true) sessionExpired(true);
+                else clearPersonal('anonymous', '');
                 return;
             }
             if (!response.ok) {
-                responseFailure(response);
+                responseFailure(response, forceFocus);
                 return;
             }
             const me = await readJson(response);
@@ -304,13 +305,13 @@
             armIdleDeadline();
             absoluteTimer = setTimeout(sessionExpired, 60000);
             scheduleCheck();
-            await refreshConsent();
+            await refreshConsent('', false, forceFocus);
         } catch {
-            if (stamp === epoch) unavailable();
+            if (stamp === epoch) unavailable(undefined, forceFocus);
         }
     }
 
-    async function changeConsent(granted) {
+    async function changeConsent(granted, forceFocus = false) {
         if (phase !== 'authenticated' || busy || reading || !receipt
             || (granted && !elements.choice.checked)) return;
         const stamp = epoch;
@@ -328,11 +329,11 @@
             if (stamp !== epoch) return;
             if (response.status === 409) {
                 busy = false;
-                await refreshConsent('De keuze is intussen gewijzigd. Bekijk de huidige keuze en kies opnieuw.', true);
+                await refreshConsent('De keuze is intussen gewijzigd. Bekijk de huidige keuze en kies opnieuw.', true, forceFocus);
                 return;
             }
             if (!response.ok) {
-                responseFailure(response);
+                responseFailure(response, forceFocus);
                 return;
             }
             const value = validatedReceipt(await readJson(response));
@@ -344,11 +345,11 @@
                 ? 'Je toestemming voor deze oefensessie is bevestigd. Persoonlijke toegang blijft gesloten.'
                 : 'Je toestemming is ingetrokken. Persoonlijke toegang blijft gesloten.', true);
         } catch {
-            if (stamp === epoch) unavailable('De uitkomst is nog niet bevestigd. Controleer je testsessie en de huidige toestemming opnieuw.');
+            if (stamp === epoch) unavailable('De uitkomst is nog niet bevestigd. Controleer je testsessie en de huidige toestemming opnieuw.', forceFocus);
         }
     }
 
-    async function logout(all) {
+    async function logout(all, forceFocus = false) {
         if (phase !== 'authenticated' || busy) return;
         const stamp = epoch;
         busy = true;
@@ -360,16 +361,16 @@
             });
             if (stamp !== epoch) return;
             if (!response.ok) {
-                responseFailure(response);
+                responseFailure(response, forceFocus);
                 return;
             }
             const value = await readJson(response);
             if (stamp !== epoch) return;
             if (value.loggedOut !== true || value.mode !== 'SYNTHETIC_ONLY'
                 || value.providerLogout !== 'NOT_REQUESTED') throw new Error('unconfirmed logout');
-            clearPersonal('anonymous', 'Lokale testsessie afgemeld. De identity-provider heeft een afzonderlijke sessie.', true);
+            clearPersonal('anonymous', 'Lokale testsessie afgemeld. De identity-provider heeft een afzonderlijke sessie.', true, forceFocus);
         } catch {
-            if (stamp === epoch) unavailable('Afmelden kon niet worden bevestigd. Controleer je testsessie opnieuw.');
+            if (stamp === epoch) unavailable('Afmelden kon niet worden bevestigd. Controleer je testsessie opnieuw.', forceFocus);
         }
     }
 
@@ -475,13 +476,13 @@
     elements.choice.addEventListener('change', renderControls);
     elements.consentForm.addEventListener('submit', (event) => {
         event.preventDefault();
-        void changeConsent(true);
+        void changeConsent(true, event.isTrusted);
     });
-    elements.consentRevoke.addEventListener('click', () => { void changeConsent(false); });
-    elements.consentRefresh.addEventListener('click', () => { void refreshConsent('De huidige keuze is opnieuw gecontroleerd.'); });
-    elements.logout.addEventListener('click', () => { void logout(false); });
-    elements.logoutAll.addEventListener('click', () => { void logout(true); });
-    elements.retry.addEventListener('click', () => { void loadAccount(); });
+    elements.consentRevoke.addEventListener('click', (event) => { void changeConsent(false, event.isTrusted); });
+    elements.consentRefresh.addEventListener('click', (event) => { void refreshConsent('De huidige keuze is opnieuw gecontroleerd.', false, event.isTrusted); });
+    elements.logout.addEventListener('click', (event) => { void logout(false, event.isTrusted); });
+    elements.logoutAll.addEventListener('click', (event) => { void logout(true, event.isTrusted); });
+    elements.retry.addEventListener('click', (event) => { void loadAccount(event.isTrusted); });
     window.addEventListener('pagehide', () => {
         clearPersonal('anonymous', '');
         clearDraft();
