@@ -88,7 +88,9 @@ async function cookieFor(context, page) {
   };
 }
 
-async function login(page, user, observation) {
+// The outage test intentionally calls login without a diagnostic collector.
+// Only durable prepare supplies an observation for a failed login.
+async function login(page, user, observation = { stage: 'initial' }) {
   observation.stage = 'opening-bff';
   await page.goto(BFF);
   observation.stage = 'landing';
