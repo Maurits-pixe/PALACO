@@ -1,0 +1,113 @@
+{
+  "schema": "rio-t04-human-evidence/v1",
+  "repo": "Maurits-pixe/PALACO",
+  "pr": 49,
+  "candidateHead": "ec751fc943cf5de3a42736958f8cee31a6a9d53d",
+  "baseSha": "deb9f80e8c40c03f08021b044a9c31a03c4935ec",
+  "scope": "SYNTHETIC_ONLY",
+  "account1": "HOLD",
+  "authority": "NONE",
+  "humanAcceptance": "HOLD",
+  "physicalAccess": "NOT_AUTHORIZED",
+  "cases": [
+    {
+      "id": "H04-A01",
+      "status": "BLOCKED",
+      "reason": "PHYSICAL_PATH_NOT_AUTHORIZED",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-A02",
+      "status": "BLOCKED",
+      "reason": "PHYSICAL_PATH_NOT_AUTHORIZED",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-A03",
+      "status": "BLOCKED",
+      "reason": "PHYSICAL_PATH_NOT_AUTHORIZED",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-A04",
+      "status": "BLOCKED",
+      "reason": "PHYSICAL_PATH_NOT_AUTHORIZED",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-A05",
+      "status": "BLOCKED",
+      "reason": "PHYSICAL_PATH_NOT_AUTHORIZED",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-A06",
+      "status": "NOT_RUN",
+      "reason": "NOT_YET_RUN",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-A07",
+      "status": "NOT_RUN",
+      "reason": "NOT_YET_RUN",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-SEC",
+      "status": "NOT_RUN",
+      "reason": "NEEDS_HUMAN_REVIEW",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-PRIV",
+      "status": "NOT_RUN",
+      "reason": "NEEDS_HUMAN_REVIEW",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-OPS",
+      "status": "NOT_RUN",
+      "reason": "NEEDS_HUMAN_REVIEW",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    },
+    {
+      "id": "H04-GOV",
+      "status": "NOT_RUN",
+      "reason": "NEEDS_HUMAN_REVIEW",
+      "reviewerRole": "UNASSIGNED",
+      "independenceAttested": false,
+      "evidenceIds": [],
+      "findingIds": []
+    }
+  ]
+}
