@@ -5,6 +5,7 @@ This directory contains PALACO normative standards across domains.
 ## Domains
 - **RIO**: cross-surface communication platform standards
 - **VisitCard**: introduction and discovery standards
+- **Authority**: constitutional authority-assignment specifications
 
 ## Quick Navigation
 - RIO index: `../index/INDEX-RIO.md`
@@ -27,6 +28,10 @@ This directory contains PALACO normative standards across domains.
 - `visitcard/consent/VISITCARD-CONSENT-001.md`
 - `visitcard/ux/VISITCARD-UX-001.md`
 - `visitcard/security/VISITCARD-SECURITY-001.md`
+
+## Authority Specifications
+- `authority/RFC-AAP-1-v0.9.0-RC1.md` — review candidate; canonical adoption
+  pending, implementation not claimed, and operational authority effects none.
 
 ## Governance Reminder
 Communication/discovery/identity do not by themselves grant authority.
