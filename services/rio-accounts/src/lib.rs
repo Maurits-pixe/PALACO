@@ -366,9 +366,25 @@ fn status() -> Value {
     json!({"mode":"SYNTHETIC_ONLY","account1":"HOLD","accountActive":false,
         "operativeAuthority":"NONE","canOpenContact":false,"storage":"EPHEMERAL_T02"})
 }
+fn expected_request_origin(request: &Request) -> bool {
+    let Ok(host) = unique_header(request.headers(), "host") else {
+        return false;
+    };
+    let authority = request.uri().authority().map(|value| value.as_str());
+    let uri_matches = matches!(
+        (request.uri().scheme_str(), authority),
+        (None, None) | (Some("https"), Some("localhost:8088"))
+    );
+    // HTTP/2 carries :authority in the URI. If Host is also present, both must match.
+    uri_matches
+        && (host.is_some()
+            || (request.version() == axum::http::Version::HTTP_2 && authority.is_some()))
+        && host.is_none_or(|value| value == "localhost:8088")
+}
+
 async fn boundary(request: Request, next: Next) -> Response {
     let headers = request.headers();
-    let accepted = unique_header(headers, "host").ok().flatten() == Some("localhost:8088")
+    let accepted = expected_request_origin(&request)
         && !headers.contains_key("forwarded")
         && !headers.contains_key("x-forwarded-host")
         && !headers.contains_key("x-forwarded-proto")
@@ -959,6 +975,80 @@ mod tests {
             )
             .await?;
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn http2_authority_and_host_require_the_exact_https_origin() -> TestResult {
+        let state = test_state()?;
+        for (uri, host, expected) in [
+            (
+                "https://localhost:8088/api/me",
+                None,
+                StatusCode::UNAUTHORIZED,
+            ),
+            ("https://localhost:8088/api/status", None, StatusCode::OK),
+            (
+                "https://localhost:8088/api/status",
+                Some("localhost:8088"),
+                StatusCode::OK,
+            ),
+            (
+                "https://attacker.example/api/status",
+                Some("localhost:8088"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "https://localhost:8088/api/status",
+                Some("attacker.example"),
+                StatusCode::BAD_REQUEST,
+            ),
+            ("/api/status", None, StatusCode::BAD_REQUEST),
+            (
+                "http://localhost:8088/api/status",
+                None,
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                "http://localhost:8088/api/status",
+                Some("localhost:8088"),
+                StatusCode::BAD_REQUEST,
+            ),
+            ("https://localhost/api/status", None, StatusCode::BAD_REQUEST),
+        ] {
+            let mut request = axum::http::Request::builder()
+                .version(axum::http::Version::HTTP_2)
+                .method(Method::GET)
+                .uri(uri);
+            if let Some(host) = host {
+                request = request.header("host", host);
+            }
+            let response = router(state.clone())
+                .oneshot(request.body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), expected, "{uri}");
+        }
+        let response = router(state.clone())
+            .oneshot(
+                axum::http::Request::builder()
+                    .version(axum::http::Version::HTTP_11)
+                    .uri("https://localhost:8088/api/status")
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let mut request = axum::http::Request::builder()
+            .version(axum::http::Version::HTTP_2)
+            .uri("https://localhost:8088/api/status")
+            .body(Body::empty())?;
+        request
+            .headers_mut()
+            .append("host", HeaderValue::from_static("localhost:8088"));
+        request
+            .headers_mut()
+            .append("host", HeaderValue::from_static("localhost:8088"));
+        let response = router(state).oneshot(request).await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         Ok(())
     }
 
