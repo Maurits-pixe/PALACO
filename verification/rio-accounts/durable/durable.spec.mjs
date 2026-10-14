@@ -17,6 +17,11 @@ const EXPECTED = {
   beta: { username: 'TST-beta', subject: '22222222-2222-4222-8222-222222222222' },
 };
 const ACCOUNT_NAMES = ['alpha', 'alphaPeer', 'beta'];
+const PROBE_MODE = process.env.RIO_OIDC_PROBE_MODE;
+if (PROBE_MODE !== undefined && PROBE_MODE !== '1') {
+  throw new Error('Unsupported synthetic OIDC probe mode');
+}
+const IS_OIDC_PROBE = PROBE_MODE === '1';
 let credentials;
 
 test.beforeAll(async () => {
@@ -266,6 +271,7 @@ async function closeContexts(contexts) {
 test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', async ({ browser }, testInfo) => {
   const contexts = {};
   const saved = {};
+  let locallyCreatedProbeState = false;
   const stopCollectors = [];
   const newObservation = actorCase => ({
     actorCase, stage: 'initial', meStatuses: [], consentStatuses: [],
@@ -295,6 +301,13 @@ test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', 
       expect(new Set(ACCOUNT_NAMES.map(name => saved[name].cookie.value)).size).toBe(3);
       expect(new Set(ACCOUNT_NAMES.map(name => saved[name].csrfToken)).size).toBe(3);
       await saveState(saved);
+      if (IS_OIDC_PROBE) {
+        // Ownership is established only after the exclusive write succeeds.
+        // A pre-existing snapshot must never be removed by a failed probe.
+        locallyCreatedProbeState = true;
+        const roundTrip = await loadState();
+        expect(JSON.stringify(roundTrip) === JSON.stringify(saved)).toBe(true);
+      }
     });
   } catch (error) {
     // Freeze each page's diagnostics before collecting the fixed UI category.
@@ -324,7 +337,14 @@ test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', 
     throw error;
   } finally {
     for (const stop of stopCollectors) stop();
-    await closeContexts(contexts);
+    try {
+      await closeContexts(contexts);
+    } finally {
+      if (locallyCreatedProbeState) {
+        await privateDirectory();
+        await unlink(STATE_URL);
+      }
+    }
   }
 });
 

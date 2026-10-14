@@ -95,6 +95,7 @@ jobs:
         working-directory: verification/rio-accounts
         env:
           RIO_DURABLE_BROWSER_PHASE: prepare
+          RIO_OIDC_PROBE_MODE: '1'
         run: |
           python -c "print('RIO_OIDC_PROBE_BEGIN case=RIO-DURABLE-01 repeats=8')"
           npx playwright test --config=playwright.durable.config.mjs --repeat-each=8 --retries=0 --workers=1 --max-failures=1
