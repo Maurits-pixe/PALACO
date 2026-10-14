@@ -26,7 +26,7 @@ test('classification is a limited symptom, never a diagnosis or release',()=>{
     assert.equal(actual.symptom,expected);
     assert.equal(actual.rootCause,'UNKNOWN');
     assert.equal(actual.decision,'HOLD');
-    assert.equal(actual.observed.accountStatus,difference.accountStatus??base.accountStatus);
+    assert.equal(actual.observed.accountStatus,Object.hasOwn(difference,'accountStatus')?difference.accountStatus:base.accountStatus);
     assert.equal(Object.hasOwn(actual,'authorized'),false);
     assert.equal(Object.hasOwn(actual,'accountActive'),false);
   }
