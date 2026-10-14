@@ -94,8 +94,8 @@ mod tests {
     use super::*;
     use crate::storage::{Key, PgStore, StoreError};
     use crate::{
-        AUTH_URL, CALLBACK, CLIENT_ID, GuardedHttp, ISSUER, JWKS_URL, ORIGIN, RuntimeEndpoints, Store,
-        TOKEN_URL,
+        AUTH_URL, CALLBACK, CLIENT_ID, GuardedHttp, ISSUER, JWKS_URL, ORIGIN, RuntimeEndpoints,
+        Store, TOKEN_URL,
     };
     use axum::{
         Router,

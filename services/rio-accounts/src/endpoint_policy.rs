@@ -81,13 +81,7 @@ fn request_matches(
 }
 
 impl EndpointSet {
-    fn metadata_matches(
-        &self,
-        issuer: &str,
-        auth: &str,
-        token: Option<&str>,
-        jwks: &str,
-    ) -> bool {
+    fn metadata_matches(&self, issuer: &str, auth: &str, token: Option<&str>, jwks: &str) -> bool {
         issuer == self.issuer
             && auth == self.auth_url
             && token == Some(self.token_url.as_str())
@@ -261,9 +255,7 @@ fn canonical_https_host(origin: &str) -> Result<String, StagingPlanError> {
     // Parsing performs no network I/O. Compare the original spelling to the
     // canonical host to reject parser normalization, including IPv4 aliases.
     let parsed = reqwest::Url::parse(origin).map_err(|_| StagingPlanError::InvalidOrigin)?;
-    let host = parsed
-        .host_str()
-        .ok_or(StagingPlanError::InvalidOrigin)?;
+    let host = parsed.host_str().ok_or(StagingPlanError::InvalidOrigin)?;
     if parsed.scheme() != "https"
         || !parsed.username().is_empty()
         || parsed.password().is_some()
@@ -280,15 +272,17 @@ fn canonical_https_host(origin: &str) -> Result<String, StagingPlanError> {
         return Err(StagingPlanError::InvalidOrigin);
     }
     let labels: Vec<&str> = host.split('.').collect();
-    if labels.last().is_none_or(|label| label.bytes().all(|byte| byte.is_ascii_digit()))
+    if labels
+        .last()
+        .is_none_or(|label| label.bytes().all(|byte| byte.is_ascii_digit()))
         || labels.iter().any(|label| {
             label.is_empty()
                 || label.len() > 63
                 || !label.as_bytes()[0].is_ascii_alphanumeric()
                 || !label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
-                || label
-                    .bytes()
-                    .any(|byte| !(byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'))
+                || label.bytes().any(|byte| {
+                    !(byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+                })
         })
     {
         return Err(StagingPlanError::InvalidOrigin);
@@ -431,14 +425,10 @@ mod tests {
     const BFF: &str = "https://rio.example.invalid";
     const IDP: &str = "https://identity.example.invalid";
     const ISSUER: &str = "https://identity.example.invalid/realms/rio-synthetic-staging";
-    const AUTH: &str =
-        "https://identity.example.invalid/realms/rio-synthetic-staging/protocol/openid-connect/auth";
-    const TOKEN: &str =
-        "https://identity.example.invalid/realms/rio-synthetic-staging/protocol/openid-connect/token";
-    const JWKS: &str =
-        "https://identity.example.invalid/realms/rio-synthetic-staging/protocol/openid-connect/certs";
-    const DISCOVERY: &str =
-        "https://identity.example.invalid/realms/rio-synthetic-staging/.well-known/openid-configuration";
+    const AUTH: &str = "https://identity.example.invalid/realms/rio-synthetic-staging/protocol/openid-connect/auth";
+    const TOKEN: &str = "https://identity.example.invalid/realms/rio-synthetic-staging/protocol/openid-connect/token";
+    const JWKS: &str = "https://identity.example.invalid/realms/rio-synthetic-staging/protocol/openid-connect/certs";
+    const DISCOVERY: &str = "https://identity.example.invalid/realms/rio-synthetic-staging/.well-known/openid-configuration";
     const CALLBACK: &str = "https://rio.example.invalid/auth/callback";
     const PRIVATE: &str = "PRIVATE_ENDPOINT_INPUT_CANARY";
 
@@ -484,10 +474,22 @@ mod tests {
             ("GET", DEV_AUTH_URL),
             ("get", DEV_JWKS_URL),
             ("GET", "https://attacker.example.invalid/certs"),
-            ("GET", "http://127.0.0.1:8089/realms/other/protocol/openid-connect/certs"),
-            ("GET", "http://localhost:8089/realms/rio-synthetic/protocol/openid-connect/certs"),
-            ("GET", "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/certs?x=1"),
-            ("GET", "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/certs#x"),
+            (
+                "GET",
+                "http://127.0.0.1:8089/realms/other/protocol/openid-connect/certs",
+            ),
+            (
+                "GET",
+                "http://localhost:8089/realms/rio-synthetic/protocol/openid-connect/certs",
+            ),
+            (
+                "GET",
+                "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/certs?x=1",
+            ),
+            (
+                "GET",
+                "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/certs#x",
+            ),
         ] {
             assert!(!runtime.allows_provider_request(method, uri));
         }
@@ -498,22 +500,38 @@ mod tests {
         let runtime = RuntimeEndpoints::loopback();
         assert!(runtime.request_matches(None, None, Some("localhost:8088"), false));
         assert!(runtime.request_matches(
-            Some("https"), Some("localhost:8088"), Some("localhost:8088"), false
+            Some("https"),
+            Some("localhost:8088"),
+            Some("localhost:8088"),
+            false
         ));
-        assert!(runtime.request_matches(
-            Some("https"), Some("localhost:8088"), None, true
-        ));
+        assert!(runtime.request_matches(Some("https"), Some("localhost:8088"), None, true));
         for (scheme, authority, host, http2) in [
             (None, None, None, false),
             (None, None, None, true),
             (Some("https"), Some("localhost:8088"), None, false),
-            (Some("http"), Some("localhost:8088"), Some("localhost:8088"), true),
+            (
+                Some("http"),
+                Some("localhost:8088"),
+                Some("localhost:8088"),
+                true,
+            ),
             (None, Some("localhost:8088"), Some("localhost:8088"), true),
             (Some("https"), None, Some("localhost:8088"), true),
             (None, None, Some("LOCALHOST:8088"), false),
             (None, None, Some("localhost:8088 "), false),
-            (Some("https"), Some("attacker.example.invalid"), Some("localhost:8088"), true),
-            (Some("https"), Some("localhost:8088"), Some("attacker.example.invalid"), true),
+            (
+                Some("https"),
+                Some("attacker.example.invalid"),
+                Some("localhost:8088"),
+                true,
+            ),
+            (
+                Some("https"),
+                Some("localhost:8088"),
+                Some("attacker.example.invalid"),
+                true,
+            ),
         ] {
             assert!(!runtime.request_matches(scheme, authority, host, http2));
         }
@@ -523,7 +541,10 @@ mod tests {
     fn provider_metadata_cannot_substitute_an_endpoint_or_omit_token() {
         let runtime = RuntimeEndpoints::loopback();
         assert!(runtime.metadata_matches(
-            DEV_ISSUER, DEV_AUTH_URL, Some(DEV_TOKEN_URL), DEV_JWKS_URL
+            DEV_ISSUER,
+            DEV_AUTH_URL,
+            Some(DEV_TOKEN_URL),
+            DEV_JWKS_URL
         ));
         for (issuer, auth, token, jwks) in [
             (ISSUER, DEV_AUTH_URL, Some(DEV_TOKEN_URL), DEV_JWKS_URL),
@@ -537,7 +558,8 @@ mod tests {
     }
 
     #[test]
-    fn planned_profile_derives_exact_paths_and_cannot_use_dev_endpoints() -> Result<(), StagingPlanError> {
+    fn planned_profile_derives_exact_paths_and_cannot_use_dev_endpoints()
+    -> Result<(), StagingPlanError> {
         let plan = StagingEndpointPlan::from_origins(BFF, IDP)?;
         assert!(plan.metadata_matches(ISSUER, AUTH, Some(TOKEN), JWKS));
         assert!(plan.allows_provider_request("GET", DISCOVERY));
@@ -547,7 +569,10 @@ mod tests {
         assert!(!plan.allows_provider_request("POST", DEV_TOKEN_URL));
         assert!(!plan.allows_provider_request("GET", AUTH));
         assert!(!plan.metadata_matches(
-            DEV_ISSUER, DEV_AUTH_URL, Some(DEV_TOKEN_URL), DEV_JWKS_URL
+            DEV_ISSUER,
+            DEV_AUTH_URL,
+            Some(DEV_TOKEN_URL),
+            DEV_JWKS_URL
         ));
         assert!(plan.request_matches(None, None, Some("rio.example.invalid"), false));
         assert!(plan.request_matches(Some("https"), Some("rio.example.invalid"), None, true));
@@ -563,19 +588,36 @@ mod tests {
     #[test]
     fn planned_origins_reject_normalization_controls_ports_ip_and_local_hosts() {
         for origin in [
-            "", "http://rio.example.invalid", "HTTPS://rio.example.invalid",
-            "https://RIO.example.invalid", "https://rio.example.invalid/",
-            "https://rio.example.invalid:443", "https://rio.example.invalid:8443",
-            "https://user@rio.example.invalid", "https://user:secret@rio.example.invalid",
-            "https://rio.example.invalid?x=1", "https://rio.example.invalid#fragment",
-            "https://rio.example.invalid/path/../", "https://rio.example.invalid.",
-            "https://rio%2eexample.invalid", "https://rio.example.invalid\\x",
-            " https://rio.example.invalid", "https://rio.example.invalid\n",
-            "https://127.0.0.1", "https://2130706433", "https://0x7f.0.0.0x1",
-            "https://[::1]", "https://localhost", "https://rio.localhost",
-            "https://rio.local", "https://*.example.invalid", "https://río.example.invalid",
-            "https://-rio.example.invalid", "https://rio-.example.invalid",
-            "https://rio..example.invalid", "https://rio.example.123",
+            "",
+            "http://rio.example.invalid",
+            "HTTPS://rio.example.invalid",
+            "https://RIO.example.invalid",
+            "https://rio.example.invalid/",
+            "https://rio.example.invalid:443",
+            "https://rio.example.invalid:8443",
+            "https://user@rio.example.invalid",
+            "https://user:secret@rio.example.invalid",
+            "https://rio.example.invalid?x=1",
+            "https://rio.example.invalid#fragment",
+            "https://rio.example.invalid/path/../",
+            "https://rio.example.invalid.",
+            "https://rio%2eexample.invalid",
+            "https://rio.example.invalid\\x",
+            " https://rio.example.invalid",
+            "https://rio.example.invalid\n",
+            "https://127.0.0.1",
+            "https://2130706433",
+            "https://0x7f.0.0.0x1",
+            "https://[::1]",
+            "https://localhost",
+            "https://rio.localhost",
+            "https://rio.local",
+            "https://*.example.invalid",
+            "https://río.example.invalid",
+            "https://-rio.example.invalid",
+            "https://rio-.example.invalid",
+            "https://rio..example.invalid",
+            "https://rio.example.123",
         ] {
             assert!(matches!(
                 StagingEndpointPlan::from_origins(origin, IDP),
@@ -590,7 +632,10 @@ mod tests {
         assert!(StagingEndpointPlan::from_origins(&oversized_label, IDP).is_err());
         let oversized_host = format!(
             "https://{}.{}.{}.{}.invalid",
-            "a".repeat(63), "b".repeat(63), "c".repeat(63), "d".repeat(63)
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(63)
         );
         assert!(StagingEndpointPlan::from_origins(&oversized_host, IDP).is_err());
     }
@@ -602,27 +647,39 @@ mod tests {
             Err(StagingPlanError::HostIsolation)
         ));
         for error in [
-            StagingPlanError::InvalidOrigin, StagingPlanError::HostIsolation,
-            StagingPlanError::InvalidDocument, StagingPlanError::EndpointBinding,
+            StagingPlanError::InvalidOrigin,
+            StagingPlanError::HostIsolation,
+            StagingPlanError::InvalidDocument,
+            StagingPlanError::EndpointBinding,
         ] {
             assert!(!error.to_string().contains(PRIVATE));
             assert!(!error.to_string().contains("https://"));
         }
-        assert_eq!(StagingPlanError::HostIsolation.to_string(), "COOKIE_HOST_ISOLATION");
+        assert_eq!(
+            StagingPlanError::HostIsolation.to_string(),
+            "COOKIE_HOST_ISOLATION"
+        );
     }
 
     #[test]
-    fn endpoint_document_checks_actual_bindings_not_only_field_presence() -> Result<(), StagingPlanError> {
+    fn endpoint_document_checks_actual_bindings_not_only_field_presence()
+    -> Result<(), StagingPlanError> {
         let raw = document().to_string();
         let plan = StagingEndpointPlan::from_endpoint_json(raw.as_bytes())?;
         assert!(plan.metadata_matches(ISSUER, AUTH, Some(TOKEN), JWKS));
         for field in [
-            "idpIssuer", "callbackUrl", "discoveryUrl",
-            "authorizationUrl", "tokenUrl", "jwksUrl",
+            "idpIssuer",
+            "callbackUrl",
+            "discoveryUrl",
+            "authorizationUrl",
+            "tokenUrl",
+            "jwksUrl",
         ] {
             let mut changed = document();
-            changed[field] = json!("https://attacker.example.invalid/" );
-            assert!(StagingEndpointPlan::from_endpoint_json(changed.to_string().as_bytes()).is_err());
+            changed[field] = json!("https://attacker.example.invalid/");
+            assert!(
+                StagingEndpointPlan::from_endpoint_json(changed.to_string().as_bytes()).is_err()
+            );
         }
         let mut callback = document();
         callback["callbackUrl"] = json!("https://identity.example.invalid/auth/callback");
@@ -636,8 +693,13 @@ mod tests {
     #[test]
     fn endpoint_document_rejects_missing_duplicate_unknown_and_coerced_fields() {
         for field in [
-            "bffOrigin", "idpIssuer", "callbackUrl", "discoveryUrl",
-            "authorizationUrl", "tokenUrl", "jwksUrl",
+            "bffOrigin",
+            "idpIssuer",
+            "callbackUrl",
+            "discoveryUrl",
+            "authorizationUrl",
+            "tokenUrl",
+            "jwksUrl",
         ] {
             let mut missing = document();
             if let Some(object) = missing.as_object_mut() {
@@ -672,7 +734,8 @@ mod tests {
     }
 
     #[test]
-    fn endpoint_document_is_bounded_utf8_json_without_raw_failure_diagnostics() -> Result<(), StagingPlanError> {
+    fn endpoint_document_is_bounded_utf8_json_without_raw_failure_diagnostics()
+    -> Result<(), StagingPlanError> {
         let raw = document().to_string();
         assert!(raw.len() < ENDPOINT_DOCUMENT_LIMIT);
         let exact_limit = format!("{raw}{}", " ".repeat(ENDPOINT_DOCUMENT_LIMIT - raw.len()));
@@ -682,7 +745,12 @@ mod tests {
             StagingEndpointPlan::from_endpoint_json(over_limit.as_bytes()),
             Err(StagingPlanError::InvalidDocument)
         ));
-        for raw in [b"".as_slice(), b"{".as_slice(), b"null".as_slice(), b"\xff".as_slice()] {
+        for raw in [
+            b"".as_slice(),
+            b"{".as_slice(),
+            b"null".as_slice(),
+            b"\xff".as_slice(),
+        ] {
             let error = StagingEndpointPlan::from_endpoint_json(raw).err();
             assert_eq!(error, Some(StagingPlanError::InvalidDocument));
         }
@@ -696,16 +764,20 @@ mod tests {
     }
 
     #[test]
-    fn plan_summary_never_includes_origins_or_grants_runtime_or_personal_access() -> Result<(), StagingPlanError> {
+    fn plan_summary_never_includes_origins_or_grants_runtime_or_personal_access()
+    -> Result<(), StagingPlanError> {
         let plan = StagingEndpointPlan::from_origins(BFF, IDP)?;
         let summary = plan.summary();
         assert_eq!(summary["mode"], "PLAN_ONLY");
-        assert_eq!(summary["boundary"], json!({
-            "launchSupported": false, "deployAllowed": false, "account1": "HOLD",
-            "humanAcceptance": "HOLD", "personalAccounts": false,
-            "publicRegistration": false, "contact": false,
-            "operativeAuthority": "NONE", "deployment": "HOLD"
-        }));
+        assert_eq!(
+            summary["boundary"],
+            json!({
+                "launchSupported": false, "deployAllowed": false, "account1": "HOLD",
+                "humanAcceptance": "HOLD", "personalAccounts": false,
+                "publicRegistration": false, "contact": false,
+                "operativeAuthority": "NONE", "deployment": "HOLD"
+            })
+        );
         if let Some(checks) = summary["checks"].as_object() {
             assert!(checks.values().all(|value| value == &json!(false)));
         } else {
