@@ -45,6 +45,9 @@ jobs:
         run: |
           python -m py_compile verification/rio-accounts/fixture.py verification/rio-accounts/ci-evidence.py
           python -m unittest discover -s verification/rio-accounts -p test_fixture.py
+          python -m py_compile verification/rio-accounts/postmerge_scope.py verification/rio-accounts/test_postmerge_scope.py
+          python -m unittest discover -s verification/rio-accounts -p test_postmerge_scope.py
+          python verification/rio-accounts/postmerge_scope.py
           node --check verification/rio-accounts/tests/accounts.spec.mjs
           node --check verification/rio-accounts/safe-reporter.mjs
           node --check verification/rio-accounts/test_safe_reporter.mjs
