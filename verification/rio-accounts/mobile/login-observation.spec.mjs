@@ -52,7 +52,10 @@ test('[RIO-MOBILE-06] Failed initial navigation stays closed until an explicit f
           actorCase: 'alpha', stage: 'opening-bff', pageKind: 'other',
           accountVisible: observed.accountVisible, loginButtonVisible: observed.loginButtonVisible,
           documentStatuses: [], meStatuses: [], consentStatuses: [],
+          providerSubmitStatuses: [], callbackStatuses: [],
+          providerSubmitRequests: 0, callbackRequests: 0,
           documentRequestFailed: true, meRequestFailed: false, consentRequestFailed: false,
+          providerSubmitRequestFailed: false, callbackRequestFailed: false,
           errorKind: 'connection-refused', feedbackBucket: 'unavailable',
         });
         // This expected observation has been checked. A later unexpected failure
