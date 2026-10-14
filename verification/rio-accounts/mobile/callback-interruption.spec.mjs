@@ -4,15 +4,17 @@ import {
 } from './helpers.mjs';
 import { safeMobileLoginObservation } from '../login-observation.mjs';
 
-// Reproduces a *controlled* navigation-transport failure at the OIDC callback.
-// It does not reproduce or explain the historical spontaneous ERR_NETWORK_CHANGED.
-test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or recover silently',
+// Reproduces a *controlled* transport failure on the provider credential POST,
+// before the browser can follow the OIDC redirect to BFF. Playwright routes
+// the original request, not each hop in a redirect chain.
+// It does not explain the historical spontaneous ERR_NETWORK_CHANGED.
+test('[RIO-MOBILE-07] Interrupted provider submission cannot grant a session or recover silently',
   async ({ browser }, testInfo) => {
     const credentials = await users();
     const context = await contextFor(browser, testInfo);
     try {
       const page = await context.newPage();
-      let intercepted = 0;
+      let interruptedSubmissions = 0;
       let callbackRequests = 0;
       let authStarts = 0;
       const startListener = request => {
@@ -25,18 +27,19 @@ test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or re
       const abortCallback = async route => {
         const request = route.request();
         const url = new URL(request.url());
-        if (request.method() === 'GET' && url.origin === BFF && url.pathname === '/auth/callback') {
-          intercepted += 1;
-          // Deliberate synthetic fault, before BFF can exchange the OIDC code.
-          // This keeps all provider secrets and the callback query out of logs.
+        if (request.method() === 'POST' && url.origin === 'http://127.0.0.1:8089' &&
+            url.pathname.startsWith('/realms/rio-synthetic/login-actions/authenticate')) {
+          interruptedSubmissions += 1;
+          // Deliberate synthetic fault on the *original* provider POST, before
+          // any OIDC redirect or BFF callback. Never inspect its request body.
           await route.abort('connectionreset');
         } else {
           await route.continue();
         }
       };
       page.on('request', startListener);
-      // Context interception includes cross-origin redirects that page-level
-      // route matching may miss in Chromium. Inspect only a fixed local pathname.
+      // Intercept only the original Keycloak credential POST. Redirected
+      // callbacks are not separately routable by Playwright (docs/network).
       await context.route('**/*', abortCallback);
       try {
         await test.step('mobile-callback-interruption', async () => {
@@ -48,8 +51,8 @@ test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or re
             failed = true;
           }
           expect(failed).toBe(true);
-          expect(intercepted).toBe(1);
-          expect(callbackRequests).toBe(1);
+          expect(interruptedSubmissions).toBe(1);
+          expect(callbackRequests).toBe(0);
           expect(authStarts).toBe(1);
           const observations = testInfo.annotations.filter(
             item => item.type === 'rio-mobile-login-observation');
