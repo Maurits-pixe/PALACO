@@ -228,15 +228,8 @@ mod tests {
             "TST-beta" => "22222222-2222-4222-8222-222222222222",
             _ => return Err(StoreError::Forbidden),
         };
-        db.replace_session_bound(
-            permit,
-            actor,
-            ISSUER,
-            subject,
-            hash(&token),
-            csrf.clone(),
-        )
-        .await?;
+        db.replace_session_bound(permit, actor, ISSUER, subject, hash(&token), csrf.clone())
+            .await?;
         Ok((token, csrf))
     }
 

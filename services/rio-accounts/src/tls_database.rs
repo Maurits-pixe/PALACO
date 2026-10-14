@@ -214,7 +214,9 @@ impl SyntheticTlsDbConfig {
                 .await
                 .map_err(|_| StoreError::Unavailable)?;
             let encrypted: bool = row.try_get("ssl").map_err(|_| StoreError::Unavailable)?;
-            let version: String = row.try_get("version").map_err(|_| StoreError::Unavailable)?;
+            let version: String = row
+                .try_get("version")
+                .map_err(|_| StoreError::Unavailable)?;
             if !encrypted
                 || !matches!(version.as_str(), "TLSv1.2" | "TLSv1.3")
                 || !healthy.load(Ordering::SeqCst)
@@ -265,10 +267,7 @@ mod tests {
             0x31,
             &sequence(&[&der(0x06, &[0x55, 0x04, 0x03]), &der(0x0c, b"parser test")]),
         )]);
-        let validity = sequence(&[
-            &der(0x17, b"250101000000Z"),
-            &der(0x17, b"490101000000Z"),
-        ]);
+        let validity = sequence(&[&der(0x17, b"250101000000Z"), &der(0x17, b"490101000000Z")]);
         let mut key = vec![0];
         key.extend_from_slice(&[1; 32]);
         let spki = sequence(&[&algorithm, &der(0x03, &key)]);
@@ -345,7 +344,12 @@ mod tests {
                 Err(StoreError::Invalid)
             ));
         }
-        for password in ["a".repeat(63), "a".repeat(129), "g".repeat(64), "é".repeat(64)] {
+        for password in [
+            "a".repeat(63),
+            "a".repeat(129),
+            "g".repeat(64),
+            "é".repeat(64),
+        ] {
             assert!(matches!(
                 SyntheticTlsDbConfig::new("db.example.invalid", &password, &ca),
                 Err(StoreError::Invalid)
@@ -370,8 +374,14 @@ mod tests {
         assert_eq!(config.postgres.get_user(), Some("rio_dev"));
         assert_eq!(config.postgres.get_dbname(), Some("rio_synthetic_tls"));
         assert_eq!(config.postgres.get_ssl_mode(), SslMode::Require);
-        assert_eq!(config.postgres.get_channel_binding(), ChannelBinding::Require);
-        assert_eq!(config.postgres.get_connect_timeout(), Some(&CONNECT_TIMEOUT));
+        assert_eq!(
+            config.postgres.get_channel_binding(),
+            ChannelBinding::Require
+        );
+        assert_eq!(
+            config.postgres.get_connect_timeout(),
+            Some(&CONNECT_TIMEOUT)
+        );
         assert!(config.postgres.get_options().is_none());
         assert!(config.postgres.get_application_name().is_none());
         assert_eq!(
@@ -415,7 +425,10 @@ mod tests {
                 assert_eq!(config.postgres.get_hostaddrs(), [local]);
                 assert_eq!(config.postgres.get_ports(), [port]);
                 assert_eq!(config.postgres.get_ssl_mode(), SslMode::Require);
-                assert_eq!(config.postgres.get_channel_binding(), ChannelBinding::Require);
+                assert_eq!(
+                    config.postgres.get_channel_binding(),
+                    ChannelBinding::Require
+                );
             }
         }
         for (addr, port) in [

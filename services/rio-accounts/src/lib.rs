@@ -668,15 +668,15 @@ async fn finish_callback(
     if let Some(db) = &state.db {
         let permit = permit.ok_or(ApiError(StatusCode::SERVICE_UNAVAILABLE))?;
         db.replace_session_bound(
-                permit,
-                account_id,
-                state.endpoints.issuer(),
-                claims.subject().as_str(),
-                hash(&session_token),
-                random_token(),
-            )
-            .await
-            .map_err(storage_error)?;
+            permit,
+            account_id,
+            state.endpoints.issuer(),
+            claims.subject().as_str(),
+            hash(&session_token),
+            random_token(),
+        )
+        .await
+        .map_err(storage_error)?;
     } else {
         #[cfg(test)]
         {
