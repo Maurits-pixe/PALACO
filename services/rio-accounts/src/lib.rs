@@ -5,6 +5,8 @@
 pub mod endpoint_policy;
 /// Durable synthetic storage; browser service admits only the primary loopback fixture.
 pub mod storage;
+/// Verified TLS transport for a separately configured synthetic database.
+pub mod tls_database;
 use axum::{
     Json, Router,
     body::Bytes,
@@ -665,7 +667,14 @@ async fn finish_callback(
     let session_token = random_token();
     if let Some(db) = &state.db {
         let permit = permit.ok_or(ApiError(StatusCode::SERVICE_UNAVAILABLE))?;
-        db.replace_session(permit, account_id, hash(&session_token), random_token())
+        db.replace_session_bound(
+                permit,
+                account_id,
+                state.endpoints.issuer(),
+                claims.subject().as_str(),
+                hash(&session_token),
+                random_token(),
+            )
             .await
             .map_err(storage_error)?;
     } else {

@@ -394,3 +394,29 @@ and [official image entrypoint](https://github.com/docker-library/postgres/blob/
 Native archive operations follow PostgreSQL's
 [pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html) and
 [pg_restore](https://www.postgresql.org/docs/18/app-pgrestore.html) references.
+
+## T05 synthetic database TLS proof
+
+The opt-in Linux-only TLS fixture is separate from the original dev database on
+8090. Run `python verification/rio-accounts/tls_fixture.py check` after the Rust
+dependencies are built. It creates its own disposable Docker Compose namespace,
+binds only loopback ports 8091 (TLS) and 8092 (plaintext control), generates short
+lived test CAs/certificates and private credentials, runs exactly
+`storage::tests::postgres_tls_store_contract`, then verifies its own containers,
+network, volumes and private files are removed. Existing fixture namespaces and
+files are not reused or deleted. Public output is fixed evidence metadata only;
+raw command/test output stays in its owned private directory and is deleted.
+
+The TLS connector requires an explicitly supplied DER CA, certificate/hostname
+verification, TLS and SCRAM channel binding. The proof checks the current
+connection in `pg_stat_ssl`, a wrong CA, wrong hostname, refusal of plaintext
+fallback, and plaintext denial on the TLS server. A separately authenticated
+plaintext control prevents a failed credential check from masquerading as a TLS
+negative case. Session issuance additionally checks the verified OIDC issuer and
+subject against the durable account binding inside the session transaction.
+
+This remains SYNTHETIC_ONLY. The normal CLI still selects the fixed local dev
+profile. No launcher loads staging configuration, no HTTPS staging issuer is
+seeded into the database, and no personal account, invitation, deployment or
+contact authority is enabled. See
+[T05 database TLS and binding contract](../../specs/rio-accounts/T05-DATABASE-TLS-AND-BINDING.md).
