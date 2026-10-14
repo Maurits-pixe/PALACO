@@ -1637,12 +1637,12 @@ mod tests {
             .ssl_mode(SslMode::Disable)
             .channel_binding(ChannelBinding::Disable)
             .connect_timeout(Duration::from_secs(8));
-        assert!(matches!(
+        assert!(
             timeout(Duration::from_secs(8), forbidden_plain.connect(NoTls))
                 .await
-                .map_err(|_| StoreError::Unavailable)?,
-            Err(_)
-        ));
+                .map_err(|_| StoreError::Unavailable)?
+                .is_err()
+        );
         eprintln!("CASE T05_TLS_PLAINTEXT_DENIED");
 
         let transaction = key("tls-alpha-transaction");
