@@ -576,7 +576,7 @@ def bff_binary() -> Path:
         raise RuntimeError("Build services/rio-accounts before starting the synthetic BFF.")
     return binary
 
-def process_identity(pid: int) -> dict | None:
+def process_identity(pid: int, expected_start_ticks: str | None = None) -> dict | None:
     if sys.platform != "linux":
         raise RuntimeError("Managed BFF restart requires Linux CI; use foreground run-bff elsewhere.")
     try:
@@ -584,13 +584,23 @@ def process_identity(pid: int) -> dict | None:
         fields = stat_text.rsplit(")", 1)[1].split()
         if fields[0] == "Z":
             return None
+        # /proc/<pid> can be reused by an unrelated process after BFF exit.
+        # Inspect the publicly readable generation FIRST, before touching
+        # ptrace-protected exe/environ of what may now be a foreign process.
+        start_ticks = fields[19]
+        if expected_start_ticks is not None and start_ticks != expected_start_ticks:
+            return {"startTicks": start_ticks, "binary": None, "environment": b""}
         return {
-            "startTicks": fields[19],
+            "startTicks": start_ticks,
             "binary": os.readlink(f"/proc/{pid}/exe"),
             "environment": Path(f"/proc/{pid}/environ").read_bytes(),
         }
     except FileNotFoundError:
         return None
+    except PermissionError:
+        # Do NOT treat unreadable ownership evidence as a dead or owned BFF.
+        # No signal or restart is safe while identity cannot be established.
+        raise RuntimeError("BFF process ownership inaccessible; refusing process control.") from None
 
 def owned_bff() -> tuple[int, dict] | None:
     path = runtime_path("bff-process.json")
@@ -600,7 +610,7 @@ def owned_bff() -> tuple[int, dict] | None:
     pid, token = metadata.get("pid"), metadata.get("processToken", "")
     if type(pid) is not int or pid <= 1 or not re.fullmatch(r"[0-9a-f]{64}", token):
         raise RuntimeError("Invalid BFF process ownership metadata.")
-    identity = process_identity(pid)
+    identity = process_identity(pid, metadata.get("startTicks"))
     if identity is None:
         path.unlink()
         return None
