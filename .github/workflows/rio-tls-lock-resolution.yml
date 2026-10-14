@@ -23,10 +23,13 @@ jobs:
           toolchain: 1.98.1
       - name: Resolve proposal from the retained existing lockfile
         run: |
-          cargo metadata --manifest-path services/rio-accounts/Cargo.toml --format-version 1 --no-deps > /dev/null
+          cargo metadata --manifest-path services/rio-accounts/Cargo.toml --format-version 1 > /dev/null
           python - <<'PY'
           from pathlib import Path
           data = Path("services/rio-accounts/Cargo.lock").read_text()
+          assert 'name = "tokio-postgres-rustls"' in data
+          assert 'name = "x509-cert"' in data
+          assert ' "tokio-postgres-rustls",' in data
           print("RIO_TLS_PUBLIC_LOCK_BEGIN")
           print(data, end="")
           print("RIO_TLS_PUBLIC_LOCK_END")
