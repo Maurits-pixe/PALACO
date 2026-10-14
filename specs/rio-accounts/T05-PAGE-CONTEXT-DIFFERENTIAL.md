@@ -23,6 +23,12 @@ New synthetic `RIO-MOBILE-10`, in `verification/rio-accounts/mobile/post-consent
 
 **Interpretation:** A deliberate page-network fault with a still-valid server session proves the diagnostic distinction `PAGE_FETCH_FAILED ≠ SERVER_SESSION_REVOKED`. It does **not** establish that the historical intermittent failure was a page-network problem. A naturally expired idle/absolute session must still deny access. No session extension or recovery authority is added.
 
+## Independent CI fixture ownership finding
+
+[Original RIO run #38596226693](https://github.com/Maurits-pixe/PALACO/actions/runs/38596226693), exact earlier head `575eb7bd`, **FAILED overall before this new mobile test** at synthetic BFF restart after committed revocation. The fixture tried reading protected `/proc/<pid>/environ` and received `Permission denied`. **It is unknown whether a PID was reused or the same process became inaccessible**. This failure does not contradict the separate TLS/Keycloak/session test passes, and it must not be relabeled a mobile or authorization result.
+
+[Issue #64](https://github.com/Maurits-pixe/PALACO/issues/64) tracks this separate fixture uncertainty. The follow-up on the same draft branch checks a known BFF start-tick generation before opening a potentially *foreign* `/proc/<pid>/exe` / `environ` and raises a sanitized fail-closed error if protected identity remains unreadable. No unsafe fallback: a matching binary path, start-tick generation, secret private process token and pidfd are **still required** before process control. Three independent fixture mock tests check the denied/safe paths. It is **not proven** that PID reuse caused the original error. The exact new head requires fresh complete CI including real restart/revoke tests.
+
 ## Acceptance and boundaries
 
 A full exact-head CI run must independently pass the targeted browser case on Android and desktop **and** all existing Keycloak/OIDC, PostgreSQL TLS/issuer-subject binding, consent, revocation, backup/restore, reflow and Studio tests. GO-13 is also mandatory. The new test is on a **separate stacked DRAFT** from parent PR #62 head `4843c7b912dcd7846617343391b3f04ae2a95f8b`.
