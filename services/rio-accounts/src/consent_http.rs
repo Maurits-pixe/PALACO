@@ -59,7 +59,7 @@ pub(crate) async fn write(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<Value>, ApiError> {
-    let csrf = mutation_headers(&headers)?;
+    let csrf = mutation_headers(&headers, &state.endpoints)?;
     if body.len() > 256 {
         return Err(ApiError(StatusCode::PAYLOAD_TOO_LARGE));
     }
@@ -94,7 +94,8 @@ mod tests {
     use super::*;
     use crate::storage::{Key, PgStore, StoreError};
     use crate::{
-        AUTH_URL, CALLBACK, CLIENT_ID, GuardedHttp, ISSUER, JWKS_URL, ORIGIN, Store, TOKEN_URL,
+        AUTH_URL, CALLBACK, CLIENT_ID, GuardedHttp, ISSUER, JWKS_URL, ORIGIN, RuntimeEndpoints, Store,
+        TOKEN_URL,
     };
     use axum::{
         Router,
@@ -115,6 +116,7 @@ mod tests {
     fn state(
         db: Option<Arc<PgStore>>,
     ) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
+        let endpoints = RuntimeEndpoints::loopback();
         let metadata: CoreProviderMetadata = serde_json::from_value(json!({
             "issuer": ISSUER,
             "authorization_endpoint": AUTH_URL,
@@ -134,12 +136,14 @@ mod tests {
         .set_redirect_uri(RedirectUrl::new(CALLBACK.to_owned())?);
         Ok(AppState {
             client,
-            http: GuardedHttp(
-                reqwest::Client::builder()
+            http: GuardedHttp {
+                client: reqwest::Client::builder()
                     .no_proxy()
                     .redirect(reqwest::redirect::Policy::none())
                     .build()?,
-            ),
+                endpoints: endpoints.clone(),
+            },
+            endpoints,
             store: Arc::new(Mutex::new(Store::default())),
             db,
             exchanges: Arc::new(Semaphore::new(8)),

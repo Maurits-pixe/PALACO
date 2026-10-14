@@ -1,6 +1,8 @@
 //! T03 loopback-only synthetic OIDC boundary with durable PostgreSQL sessions.
 //! Login nonce/PKCE stays in bounded memory; restart closes unfinished login flows.
 //! No production actor, enrollment, contact, identity issuance or external execution.
+/// Immutable endpoint adapter; staging plans have no runtime conversion.
+pub mod endpoint_policy;
 /// Durable synthetic storage; browser service admits only the primary loopback fixture.
 pub mod storage;
 use axum::{
@@ -13,6 +15,7 @@ use axum::{
     routing::{get, post},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use endpoint_policy::RuntimeEndpoints;
 use openidconnect::{
     AccessTokenHash, AsyncHttpClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret,
     CsrfToken, EndpointMaybeSet, EndpointNotSet, EndpointSet, HttpRequest, HttpResponse, IssuerUrl,
@@ -39,18 +42,14 @@ use storage::{PgStore, StoreError};
 mod consent_http;
 use tokio::sync::{Mutex, Semaphore};
 
-/// Fixed HTTPS BFF origin; the listener remains bound to IPv4 loopback.
-pub const ORIGIN: &str = "https://localhost:8088";
-/// Exact synthetic realm. Plain HTTP is allowed only for this fixed loopback IdP.
-pub const ISSUER: &str = "http://127.0.0.1:8089/realms/rio-synthetic";
-/// Confidential client registered only in the synthetic realm.
-pub const CLIENT_ID: &str = "rio-bff";
-const AUTH_URL: &str = "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/auth";
-const TOKEN_URL: &str = "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/token";
-const JWKS_URL: &str = "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/certs";
-const DISCOVERY_URL: &str =
-    "http://127.0.0.1:8089/realms/rio-synthetic/.well-known/openid-configuration";
-const CALLBACK: &str = "https://localhost:8088/auth/callback";
+pub use endpoint_policy::{
+    DEV_CLIENT_ID as CLIENT_ID, DEV_ISSUER as ISSUER, DEV_ORIGIN as ORIGIN,
+};
+#[cfg(test)]
+use endpoint_policy::{
+    DEV_AUTH_URL as AUTH_URL, DEV_CALLBACK as CALLBACK, DEV_DISCOVERY_URL as DISCOVERY_URL,
+    DEV_JWKS_URL as JWKS_URL, DEV_TOKEN_URL as TOKEN_URL,
+};
 const SESSION_COOKIE: &str = "__Host-rio_session";
 const FLOW_COOKIE: &str = "__Host-rio_transaction";
 const FLOW_TTL: Duration = Duration::from_secs(300);
@@ -120,16 +119,19 @@ impl DevConfig {
 
 /// The allowlist runs before discovery, JWKS or token network I/O. No proxy or redirects.
 #[derive(Clone)]
-struct GuardedHttp(reqwest::Client);
+struct GuardedHttp {
+    client: reqwest::Client,
+    endpoints: RuntimeEndpoints,
+}
 impl<'c> AsyncHttpClient<'c> for GuardedHttp {
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<HttpResponse, io::Error>> + Send + 'c>>;
     fn call(&'c self, request: HttpRequest) -> Self::Future {
         Box::pin(async move {
-            guard_provider_request(request.method(), &request.uri().to_string())?;
+            guard_provider_request(&self.endpoints, request.method(), &request.uri().to_string())?;
             let (parts, request_body) = request.into_parts();
             let mut response = self
-                .0
+                .client
                 .request(parts.method, parts.uri.to_string())
                 .headers(parts.headers)
                 .body(request_body)
@@ -163,13 +165,12 @@ impl<'c> AsyncHttpClient<'c> for GuardedHttp {
         })
     }
 }
-fn guard_provider_request(method: &Method, uri: &str) -> Result<(), io::Error> {
-    let allowed = match *method {
-        Method::GET => uri == DISCOVERY_URL || uri == JWKS_URL,
-        Method::POST => uri == TOKEN_URL,
-        _ => false,
-    };
-    if allowed {
+fn guard_provider_request(
+    endpoints: &RuntimeEndpoints,
+    method: &Method,
+    uri: &str,
+) -> Result<(), io::Error> {
+    if endpoints.allows_provider_request(method.as_str(), uri) {
         Ok(())
     } else {
         Err(io::Error::other("identity endpoint rejected"))
@@ -237,6 +238,7 @@ impl Store {
 #[derive(Clone)]
 pub struct AppState {
     client: OidcClient,
+    endpoints: RuntimeEndpoints,
     http: GuardedHttp,
     store: Arc<Mutex<Store>>,
     db: Option<Arc<PgStore>>,
@@ -262,6 +264,8 @@ impl AppState {
     }
     /// Discover only the fixed synthetic IdP through the bounded, allowlisted transport.
     pub async fn discover(config: &DevConfig) -> Result<Self, io::Error> {
+        // The only runtime constructor remains fixed to the loopback profile.
+        let endpoints = RuntimeEndpoints::loopback();
         if config.database_url.contains("rio_synthetic_restore") {
             return Err(io::Error::other(
                 "restored database cannot serve browser sessions",
@@ -272,44 +276,48 @@ impl AppState {
                 .await
                 .map_err(|_| io::Error::other("synthetic database unavailable"))?,
         );
-        let http = GuardedHttp(
-            reqwest::Client::builder()
+        let http = GuardedHttp {
+            client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
                 .no_proxy()
                 .timeout(Duration::from_secs(8))
                 .build()
                 .map_err(|_| io::Error::other("identity client unavailable"))?,
-        );
+            endpoints: endpoints.clone(),
+        };
         let issuer =
-            IssuerUrl::new(ISSUER.to_owned()).map_err(|_| io::Error::other("issuer invalid"))?;
+            IssuerUrl::new(endpoints.issuer().to_owned())
+                .map_err(|_| io::Error::other("issuer invalid"))?;
         let metadata = CoreProviderMetadata::discover_async(issuer, &http)
             .await
             .map_err(|_| io::Error::other("identity discovery rejected"))?;
-        if metadata.issuer().as_str() != ISSUER
-            || metadata.authorization_endpoint().as_str() != AUTH_URL
-            || metadata.token_endpoint().map(|u| u.as_str()) != Some(TOKEN_URL)
-            || metadata.jwks_uri().as_str() != JWKS_URL
-        {
+        if !endpoints.metadata_matches(
+            metadata.issuer().as_str(),
+            metadata.authorization_endpoint().as_str(),
+            metadata.token_endpoint().map(|u| u.as_str()),
+            metadata.jwks_uri().as_str(),
+        ) {
             return Err(io::Error::other("identity metadata rejected"));
         }
         let client = CoreClient::from_provider_metadata(
             metadata,
-            ClientId::new(CLIENT_ID.to_owned()),
+            ClientId::new(endpoints.client_id().to_owned()),
             Some(ClientSecret::new(config.client_secret.clone())),
         )
         .set_auth_uri(
-            AuthUrl::new(AUTH_URL.to_owned()).map_err(|_| io::Error::other("auth URL invalid"))?,
+            AuthUrl::new(endpoints.auth_url().to_owned()).map_err(|_| io::Error::other("auth URL invalid"))?,
         )
         .set_token_uri(
-            TokenUrl::new(TOKEN_URL.to_owned())
+            TokenUrl::new(endpoints.token_url().to_owned())
                 .map_err(|_| io::Error::other("token URL invalid"))?,
         )
         .set_redirect_uri(
-            RedirectUrl::new(CALLBACK.to_owned())
+            RedirectUrl::new(endpoints.callback().to_owned())
                 .map_err(|_| io::Error::other("callback invalid"))?,
         );
         Ok(Self {
             client,
+            endpoints,
             http,
             store: Arc::new(Mutex::new(Store::default())),
             db: Some(db),
@@ -413,7 +421,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(logout))
         .route("/auth/logout-all", post(logout_all))
         .layer(DefaultBodyLimit::max(256))
-        .layer(middleware::from_fn(boundary))
+        .layer(middleware::from_fn_with_state(state.endpoints.clone(), boundary))
         .with_state(state)
 }
 fn status() -> Value {
@@ -440,25 +448,25 @@ fn storage_error(error: StoreError) -> ApiError {
         StoreError::Forbidden => StatusCode::FORBIDDEN,
     })
 }
-fn expected_request_origin(request: &Request) -> bool {
+fn expected_request_origin(endpoints: &RuntimeEndpoints, request: &Request) -> bool {
     let Ok(host) = unique_header(request.headers(), "host") else {
         return false;
     };
-    let authority = request.uri().authority().map(|value| value.as_str());
-    let uri_matches = matches!(
-        (request.uri().scheme_str(), authority),
-        (None, None) | (Some("https"), Some("localhost:8088"))
-    );
-    // HTTP/2 carries :authority in the URI. If Host is also present, both must match.
-    uri_matches
-        && (host.is_some()
-            || (request.version() == axum::http::Version::HTTP_2 && authority.is_some()))
-        && host.is_none_or(|value| value == "localhost:8088")
+    endpoints.request_matches(
+        request.uri().scheme_str(),
+        request.uri().authority().map(|value| value.as_str()),
+        host,
+        request.version() == axum::http::Version::HTTP_2,
+    )
 }
 
-async fn boundary(request: Request, next: Next) -> Response {
+async fn boundary(
+    State(endpoints): State<RuntimeEndpoints>,
+    request: Request,
+    next: Next,
+) -> Response {
     let headers = request.headers();
-    let accepted = expected_request_origin(&request)
+    let accepted = expected_request_origin(&endpoints, &request)
         && !headers.contains_key("forwarded")
         && !headers.contains_key("x-forwarded-host")
         && !headers.contains_key("x-forwarded-proto")
@@ -602,7 +610,10 @@ async fn finish_callback(
     };
     let flow = flow_result?;
     let params = parsed.map_err(|_| ApiError(StatusCode::BAD_REQUEST))?;
-    if params.error.is_some() || params.iss.as_deref().is_some_and(|iss| iss != ISSUER) {
+    if params.error.is_some() || params
+            .iss
+            .as_deref()
+            .is_some_and(|iss| iss != state.endpoints.issuer()) {
         return Err(ApiError(StatusCode::BAD_REQUEST));
     }
     let code = params
@@ -626,7 +637,7 @@ async fn finish_callback(
         .client
         .id_token_verifier()
         .set_allowed_algs([CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256]);
-    let account_id = verify_identity(token, &verifier, &flow.nonce)?;
+    let account_id = verify_identity(token, &verifier, &flow.nonce, &state.endpoints)?;
     let claims = token
         .claims(&verifier, &flow.nonce)
         .map_err(|_| ApiError(StatusCode::BAD_REQUEST))?;
@@ -683,16 +694,17 @@ fn verify_identity(
     token: &CoreIdToken,
     verifier: &CoreIdTokenVerifier<'_>,
     nonce: &Nonce,
+    endpoints: &RuntimeEndpoints,
 ) -> Result<&'static str, ApiError> {
     let claims = token
         .claims(verifier, nonce)
         .map_err(|_| ApiError(StatusCode::BAD_REQUEST))?;
     // The library deliberately does not validate azp. This client requires exact audience/azp.
     if claims.audiences().len() != 1
-        || claims.audiences()[0].as_str() != CLIENT_ID
+        || claims.audiences()[0].as_str() != endpoints.client_id()
         || claims
             .authorized_party()
-            .is_some_and(|azp| azp.as_str() != CLIENT_ID)
+            .is_some_and(|azp| azp.as_str() != endpoints.client_id())
     {
         return Err(ApiError(StatusCode::BAD_REQUEST));
     }
@@ -725,8 +737,11 @@ async fn me(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Va
         "accountActive":false,"mode":"SYNTHETIC_ONLY","operativeAuthority":"NONE",
         "canOpenContact":false,"account1":"HOLD"})))
 }
-fn mutation_headers(headers: &HeaderMap) -> Result<&str, ApiError> {
-    if unique_header(headers, "origin")? != Some(ORIGIN)
+fn mutation_headers<'h>(
+    headers: &'h HeaderMap,
+    endpoints: &RuntimeEndpoints,
+) -> Result<&'h str, ApiError> {
+    if unique_header(headers, "origin")? != Some(endpoints.origin())
         || unique_header(headers, "content-type")? != Some("application/json")
     {
         return Err(ApiError(StatusCode::FORBIDDEN));
@@ -739,7 +754,7 @@ async fn end_session(
     body: &Bytes,
     all: bool,
 ) -> Result<Response, ApiError> {
-    let csrf = mutation_headers(headers)?;
+    let csrf = mutation_headers(headers, &state.endpoints)?;
     let value: Value =
         serde_json::from_slice(body).map_err(|_| ApiError(StatusCode::BAD_REQUEST))?;
     if value.as_object().is_none_or(|o| !o.is_empty()) {
@@ -810,27 +825,39 @@ mod tests {
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     fn test_state() -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
+        test_state_with_endpoints(RuntimeEndpoints::loopback())
+    }
+
+    fn test_state_with_endpoints(
+        endpoints: RuntimeEndpoints,
+    ) -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
         let metadata: CoreProviderMetadata = serde_json::from_value(json!({
-            "issuer":ISSUER,"authorization_endpoint":AUTH_URL,"token_endpoint":TOKEN_URL,
-            "jwks_uri":JWKS_URL,"response_types_supported":["code"],"subject_types_supported":["public"],
-            "id_token_signing_alg_values_supported":["RS256"]
+            "issuer": endpoints.issuer(),
+            "authorization_endpoint": endpoints.auth_url(),
+            "token_endpoint": endpoints.token_url(),
+            "jwks_uri": endpoints.jwks_url(),
+            "response_types_supported": ["code"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
         }))?;
         let client = CoreClient::from_provider_metadata(
             metadata,
-            ClientId::new(CLIENT_ID.to_owned()),
+            ClientId::new(endpoints.client_id().to_owned()),
             Some(ClientSecret::new("a".repeat(64))),
         )
-        .set_auth_uri(AuthUrl::new(AUTH_URL.to_owned())?)
-        .set_token_uri(TokenUrl::new(TOKEN_URL.to_owned())?)
-        .set_redirect_uri(RedirectUrl::new(CALLBACK.to_owned())?);
+        .set_auth_uri(AuthUrl::new(endpoints.auth_url().to_owned())?)
+        .set_token_uri(TokenUrl::new(endpoints.token_url().to_owned())?)
+        .set_redirect_uri(RedirectUrl::new(endpoints.callback().to_owned())?);
         Ok(AppState {
             client,
-            http: GuardedHttp(
-                reqwest::Client::builder()
+            http: GuardedHttp {
+                client: reqwest::Client::builder()
                     .no_proxy()
                     .redirect(reqwest::redirect::Policy::none())
                     .build()?,
-            ),
+                endpoints: endpoints.clone(),
+            },
+            endpoints,
             store: Arc::new(Mutex::new(Store::default())),
             db: None,
             exchanges: Arc::new(Semaphore::new(8)),
@@ -864,9 +891,9 @@ mod tests {
 
     #[test]
     fn provider_network_allowlist_is_exact_before_io() {
-        assert!(guard_provider_request(&Method::GET, DISCOVERY_URL).is_ok());
-        assert!(guard_provider_request(&Method::GET, JWKS_URL).is_ok());
-        assert!(guard_provider_request(&Method::POST, TOKEN_URL).is_ok());
+        assert!(guard_provider_request(&RuntimeEndpoints::loopback(), &Method::GET, DISCOVERY_URL).is_ok());
+        assert!(guard_provider_request(&RuntimeEndpoints::loopback(), &Method::GET, JWKS_URL).is_ok());
+        assert!(guard_provider_request(&RuntimeEndpoints::loopback(), &Method::POST, TOKEN_URL).is_ok());
         for uri in [
             "https://attacker.example/jwks",
             "http://localhost:8089/realms/rio-synthetic/protocol/openid-connect/certs",
@@ -876,10 +903,10 @@ mod tests {
             "http://127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/userinfo",
             "http://user@127.0.0.1:8089/realms/rio-synthetic/protocol/openid-connect/certs",
         ] {
-            assert!(guard_provider_request(&Method::GET, uri).is_err(), "{uri}");
+            assert!(guard_provider_request(&RuntimeEndpoints::loopback(), &Method::GET, uri).is_err(), "{uri}");
         }
-        assert!(guard_provider_request(&Method::GET, TOKEN_URL).is_err());
-        assert!(guard_provider_request(&Method::POST, JWKS_URL).is_err());
+        assert!(guard_provider_request(&RuntimeEndpoints::loopback(), &Method::GET, TOKEN_URL).is_err());
+        assert!(guard_provider_request(&RuntimeEndpoints::loopback(), &Method::POST, JWKS_URL).is_err());
     }
 
     #[test]
@@ -972,15 +999,15 @@ mod tests {
     fn mutation_requires_exact_origin_content_type_and_unique_csrf() -> TestResult {
         let token = random_token();
         let mut h = headers(&token, "csrf")?;
-        assert_eq!(mutation_headers(&h).ok(), Some("csrf"));
+        assert_eq!(mutation_headers(&h, &RuntimeEndpoints::loopback()).ok(), Some("csrf"));
         h.insert("origin", HeaderValue::from_static("https://localhost:8089"));
-        assert!(mutation_headers(&h).is_err());
+        assert!(mutation_headers(&h, &RuntimeEndpoints::loopback()).is_err());
         h.insert("origin", HeaderValue::from_static(ORIGIN));
         h.remove("x-csrf-token");
-        assert!(mutation_headers(&h).is_err());
+        assert!(mutation_headers(&h, &RuntimeEndpoints::loopback()).is_err());
         h.insert("x-csrf-token", HeaderValue::from_static("one"));
         h.append("x-csrf-token", HeaderValue::from_static("two"));
-        assert!(mutation_headers(&h).is_err());
+        assert!(mutation_headers(&h, &RuntimeEndpoints::loopback()).is_err());
         Ok(())
     }
 
@@ -1336,7 +1363,7 @@ mod tests {
             "aud":CLIENT_ID,"azp":CLIENT_ID,"nonce":"expected-nonce","iat":now,"exp":now+300});
         let token = signed_token(&key, &base, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256)?;
         assert_eq!(
-            verify_identity(&token, &verifier, &nonce).ok(),
+            verify_identity(&token, &verifier, &nonce, &RuntimeEndpoints::loopback()).ok(),
             Some("TST-alpha")
         );
         for (field, value) in [
@@ -1352,12 +1379,12 @@ mod tests {
             claims[field] = value;
             let token = signed_token(&key, &claims, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256)?;
             assert!(
-                verify_identity(&token, &verifier, &nonce).is_err(),
+                verify_identity(&token, &verifier, &nonce, &RuntimeEndpoints::loopback()).is_err(),
                 "{field}"
             );
         }
         let token = signed_token(&key, &base, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha512)?;
-        assert!(verify_identity(&token, &verifier, &nonce).is_err());
+        assert!(verify_identity(&token, &verifier, &nonce, &RuntimeEndpoints::loopback()).is_err());
         let mut serialized: String = serde_json::from_value(serde_json::to_value(signed_token(
             &key,
             &base,
@@ -1374,7 +1401,7 @@ mod tests {
         };
         serialized.replace_range(index..index + 1, changed);
         let altered: CoreIdToken = serde_json::from_value(json!(serialized))?;
-        assert!(verify_identity(&altered, &verifier, &nonce).is_err());
+        assert!(verify_identity(&altered, &verifier, &nonce, &RuntimeEndpoints::loopback()).is_err());
         Ok(())
     }
 
@@ -1473,6 +1500,420 @@ mod tests {
                     .get("cache-control")
                     .and_then(|value| value.to_str().ok()),
                 Some("no-store")
+            );
+        }
+        Ok(())
+    }
+
+    type EndpointTestResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+    fn offline_staging_endpoints() -> EndpointTestResult<RuntimeEndpoints> {
+        let plan = crate::endpoint_policy::StagingEndpointPlan::from_origins(
+            "https://bff.example.invalid",
+            "https://idp.example.invalid",
+        )
+        .map_err(|_| io::Error::other("offline staging test plan rejected"))?;
+        Ok(plan.test_endpoints())
+    }
+
+    #[test]
+    fn both_endpoint_profiles_guard_provider_urls_and_methods_exactly() -> TestResult {
+        let loopback = test_state()?.endpoints;
+        let staging = offline_staging_endpoints()?;
+        for (endpoints, other) in [(&loopback, &staging), (&staging, &loopback)] {
+            assert!(
+                guard_provider_request(endpoints, &Method::GET, endpoints.discovery_url()).is_ok()
+            );
+            assert!(guard_provider_request(endpoints, &Method::GET, endpoints.jwks_url()).is_ok());
+            assert!(
+                guard_provider_request(endpoints, &Method::POST, endpoints.token_url()).is_ok()
+            );
+            for (method, uri) in [
+                (Method::GET, endpoints.token_url()),
+                (Method::HEAD, endpoints.discovery_url()),
+                (Method::POST, endpoints.jwks_url()),
+                (Method::GET, endpoints.auth_url()),
+                (Method::GET, other.discovery_url()),
+                (Method::POST, other.token_url()),
+            ] {
+                assert!(guard_provider_request(endpoints, &method, uri).is_err());
+            }
+            let hinted = format!("{}?next=https://other.example.invalid", endpoints.jwks_url());
+            assert!(guard_provider_request(endpoints, &Method::GET, &hinted).is_err());
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn guarded_http_rejects_cross_profile_requests_before_transport() -> TestResult {
+        let state = test_state_with_endpoints(offline_staging_endpoints()?)?;
+        for (method, uri) in [
+            (Method::GET, DISCOVERY_URL),
+            (Method::POST, TOKEN_URL),
+            (Method::GET, state.endpoints.token_url()),
+            (Method::GET, "https://other.example.invalid/forbidden"),
+        ] {
+            let request: HttpRequest = axum::http::Request::builder()
+                .method(method)
+                .uri(uri)
+                .body(Vec::new())?;
+            let error = state
+                .http
+                .call(request)
+                .await
+                .err()
+                .ok_or_else(|| io::Error::other("provider guard unexpectedly accepted request"))?;
+            assert_eq!(error.to_string(), "identity endpoint rejected");
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn offline_staging_router_uses_its_exact_host_and_http2_authority() -> TestResult {
+        let state = test_state_with_endpoints(offline_staging_endpoints()?)?;
+        for (version, uri, host, expected) in [
+            (
+                axum::http::Version::HTTP_11,
+                "/api/status",
+                Some("bff.example.invalid"),
+                StatusCode::OK,
+            ),
+            (
+                axum::http::Version::HTTP_11,
+                "/api/status",
+                None,
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_11,
+                "/api/status",
+                Some("localhost:8088"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "https://bff.example.invalid/api/status",
+                None,
+                StatusCode::OK,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "https://bff.example.invalid/api/status",
+                Some("bff.example.invalid"),
+                StatusCode::OK,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "https://localhost:8088/api/status",
+                Some("bff.example.invalid"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "http://bff.example.invalid/api/status",
+                Some("bff.example.invalid"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "https://bff.example.invalid/api/status",
+                Some("localhost:8088"),
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "https://bff.example.invalid:443/api/status",
+                None,
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_2,
+                "/api/status",
+                None,
+                StatusCode::BAD_REQUEST,
+            ),
+            (
+                axum::http::Version::HTTP_11,
+                "https://bff.example.invalid/api/status",
+                None,
+                StatusCode::BAD_REQUEST,
+            ),
+        ] {
+            let mut request = axum::http::Request::builder()
+                .version(version)
+                .uri(uri);
+            if let Some(host) = host {
+                request = request.header("host", host);
+            }
+            let response = router(state.clone())
+                .oneshot(request.body(Body::empty())?)
+                .await?;
+            assert_eq!(response.status(), expected);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("cache-control")
+                    .and_then(|value| value.to_str().ok()),
+                Some("no-store")
+            );
+        }
+        let mut duplicate = axum::http::Request::builder()
+            .version(axum::http::Version::HTTP_2)
+            .uri("https://bff.example.invalid/api/status")
+            .body(Body::empty())?;
+        duplicate
+            .headers_mut()
+            .append("host", HeaderValue::from_static("bff.example.invalid"));
+        duplicate
+            .headers_mut()
+            .append("host", HeaderValue::from_static("bff.example.invalid"));
+        let response = router(state.clone()).oneshot(duplicate).await?;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(state.store.lock().await.sessions.is_empty());
+        assert!(state.store.lock().await.flows.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn offline_staging_router_never_trusts_proxy_or_bearer_headers() -> TestResult {
+        let state = test_state_with_endpoints(offline_staging_endpoints()?)?;
+        for (name, value) in [
+            ("forwarded", "host=other.example.invalid;proto=https"),
+            ("x-forwarded-host", "other.example.invalid"),
+            ("x-forwarded-proto", "https"),
+            ("x-forwarded-for", "192.0.2.1"),
+            ("authorization", "Bearer SYNTHETIC_REJECTED_INPUT"),
+        ] {
+            let response = router(state.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri("/auth/start")
+                        .header("host", "bff.example.invalid")
+                        .header(name, value)
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+        assert!(state.store.lock().await.sessions.is_empty());
+        assert!(state.store.lock().await.flows.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn offline_staging_authorization_uses_selected_client_callback_and_pkce() -> TestResult {
+        let state = test_state_with_endpoints(offline_staging_endpoints()?)?;
+        let response = router(state.clone())
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/auth/start")
+                    .header("host", "bff.example.invalid")
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert!(response.status().is_redirection());
+        let location = response
+            .headers()
+            .get("location")
+            .ok_or_else(|| io::Error::other("missing offline staging redirect"))?
+            .to_str()?;
+        let url = reqwest::Url::parse(location)?;
+        assert_eq!(url.origin().ascii_serialization(), "https://idp.example.invalid");
+        assert_eq!(
+            url.path(),
+            "/realms/rio-synthetic-staging/protocol/openid-connect/auth"
+        );
+        let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
+        assert_eq!(query.get("response_type").map(String::as_str), Some("code"));
+        assert_eq!(
+            query.get("redirect_uri").map(String::as_str),
+            Some("https://bff.example.invalid/auth/callback")
+        );
+        assert_eq!(
+            query.get("client_id").map(String::as_str),
+            Some("rio-bff-staging")
+        );
+        assert_eq!(query.get("scope").map(String::as_str), Some("openid"));
+        assert_eq!(
+            query.get("code_challenge_method").map(String::as_str),
+            Some("S256")
+        );
+        assert!(query.get("code_challenge").is_some_and(|value| {
+            value.len() == 43
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        }));
+        assert!(query.get("state").is_some_and(|value| value.len() >= 32));
+        assert!(query.get("nonce").is_some_and(|value| value.len() >= 32));
+        let flow_cookie = response
+            .headers()
+            .get("set-cookie")
+            .ok_or_else(|| io::Error::other("missing offline staging transaction cookie"))?
+            .to_str()?;
+        assert!(flow_cookie.starts_with(FLOW_COOKIE));
+        for flag in ["Secure", "HttpOnly", "SameSite=Lax", "Path=/"] {
+            assert!(flow_cookie.contains(flag));
+        }
+        assert!(!flow_cookie.contains("Domain="));
+        assert_eq!(state.store.lock().await.flows.len(), 1);
+        assert!(state.store.lock().await.sessions.is_empty());
+
+        let response = router(state)
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/api/status")
+                    .header("host", "bff.example.invalid")
+                    .body(Body::empty())?,
+            )
+            .await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body: Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+        assert_eq!(body["mode"], "SYNTHETIC_ONLY");
+        assert_eq!(body["account1"], "HOLD");
+        assert_eq!(body["accountActive"], false);
+        assert_eq!(body["canOpenContact"], false);
+        assert_eq!(body["operativeAuthority"], "NONE");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn offline_staging_mutations_use_selected_origin_without_memory_consent() -> TestResult {
+        let state = test_state_with_endpoints(offline_staging_endpoints()?)?;
+        let consent_body = json!({
+            "scope":"RIO_SYNTHETIC_SESSION_TEST_V1","granted":false,"revision":0
+        })
+        .to_string();
+        let dummy_cookie = format!("{SESSION_COOKIE}={}", "Z".repeat(43));
+        for (path, origin, body, expected) in [
+            (
+                "/auth/logout",
+                "https://bff.example.invalid",
+                "{}",
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                "/auth/logout",
+                ORIGIN,
+                "{}",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                "/auth/logout-all",
+                "https://bff.example.invalid",
+                "{}",
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                "/auth/logout-all",
+                ORIGIN,
+                "{}",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                "/api/consent",
+                "https://bff.example.invalid",
+                consent_body.as_str(),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ),
+            (
+                "/api/consent",
+                ORIGIN,
+                consent_body.as_str(),
+                StatusCode::FORBIDDEN,
+            ),
+        ] {
+            let response = router(state.clone())
+                .oneshot(
+                    axum::http::Request::builder()
+                        .method(Method::POST)
+                        .uri(path)
+                        .header("host", "bff.example.invalid")
+                        .header("origin", origin)
+                        .header("content-type", "application/json")
+                        .header("x-csrf-token", "synthetic-csrf")
+                        .header("cookie", dummy_cookie.as_str())
+                        .body(Body::from(body.to_owned()))?,
+                )
+                .await?;
+            assert_eq!(response.status(), expected);
+        }
+        for name in ["origin", "content-type", "x-csrf-token"] {
+            let mut request = axum::http::Request::builder()
+                .method(Method::POST)
+                .uri("/api/consent")
+                .header("host", "bff.example.invalid")
+                .header("origin", "https://bff.example.invalid")
+                .header("content-type", "application/json")
+                .header("x-csrf-token", "synthetic-csrf")
+                .header("cookie", dummy_cookie.as_str())
+                .body(Body::from(consent_body.clone()))?;
+            let duplicate = request
+                .headers()
+                .get(name)
+                .ok_or_else(|| io::Error::other("missing test mutation header"))?
+                .clone();
+            request.headers_mut().append(name, duplicate);
+            let response = router(state.clone()).oneshot(request).await?;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        }
+        assert!(state.store.lock().await.sessions.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn signed_tokens_cannot_cross_endpoint_profile_issuer_or_client_bindings() -> TestResult {
+        let loopback = test_state()?.endpoints;
+        let staging = offline_staging_endpoints()?;
+        let private = RsaPrivateKey::new(&mut OsRng, 2048)?;
+        let pem = private.to_pkcs1_pem(LineEnding::LF)?;
+        let key =
+            CoreRsaPrivateSigningKey::from_pem(&pem, Some(JsonWebKeyId::new("test".to_owned())))
+                .map_err(io::Error::other)?;
+        let nonce = Nonce::new("endpoint-test-nonce".to_owned());
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+        for (endpoints, other) in [(&loopback, &staging), (&staging, &loopback)] {
+            let verifier = CoreIdTokenVerifier::new_public_client(
+                ClientId::new(endpoints.client_id().to_owned()),
+                IssuerUrl::new(endpoints.issuer().to_owned())?,
+                JsonWebKeySet::new(vec![key.as_verification_key()]),
+            )
+            .set_allowed_algs([CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256]);
+            let base = json!({
+                "iss":endpoints.issuer(),
+                "sub":"11111111-1111-4111-8111-111111111111",
+                "aud":endpoints.client_id(),
+                "azp":endpoints.client_id(),
+                "nonce":"endpoint-test-nonce","iat":now,"exp":now+300
+            });
+            let token = signed_token(&key, &base, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256)?;
+            assert_eq!(
+                verify_identity(&token, &verifier, &nonce, endpoints).ok(),
+                Some("TST-alpha")
+            );
+            for (field, replacement) in [
+                ("iss", json!(other.issuer())),
+                ("aud", json!(other.client_id())),
+                ("aud", json!([endpoints.client_id(), other.client_id()])),
+                ("azp", json!(other.client_id())),
+            ] {
+                let mut claims = base.clone();
+                claims[field] = replacement;
+                let token =
+                    signed_token(&key, &claims, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256)?;
+                assert!(verify_identity(&token, &verifier, &nonce, endpoints).is_err());
+            }
+            // An absent azp remains valid for the pre-existing single-audience contract.
+            let mut without_azp = base;
+            without_azp
+                .as_object_mut()
+                .ok_or_else(|| io::Error::other("invalid test claims"))?
+                .remove("azp");
+            let token =
+                signed_token(&key, &without_azp, CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256)?;
+            assert_eq!(
+                verify_identity(&token, &verifier, &nonce, endpoints).ok(),
+                Some("TST-alpha")
             );
         }
         Ok(())

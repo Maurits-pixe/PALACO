@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main]
+    branches: [main, 'feature/rio-accounts-synthetic-dev']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
