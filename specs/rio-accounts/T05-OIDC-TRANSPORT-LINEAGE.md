@@ -25,6 +25,18 @@ Retain previous document, own-account and consent fixed-status fields, login pha
 
 These breadcrumbs can distinguish, in a future naturally failing attempt, whether the provider submission or callback **started**, was acknowledged at HTTP level or failed at transport. They cannot by themselves locate TCP/TLS/Chromium's underlying root cause, prove a login was successful, or establish authorization.
 
+## First natural failure on this candidate and evidence refinement
+
+The first full RIO run on original candidate head `60105c07`, [workflow #38585882163](https://github.com/Maurits-pixe/PALACO/actions/runs/38585882163), **FAILED** in existing Android-emulated `RIO-MOBILE-02`. The new diagnostic recorded a provider credential POST HTTP 302, BFF callback HTTP 303, account UI not visible, BFF home page, `meStatuses=[401]`, and an account GET transport-failure flag. That **does not establish when the 401 happened**: `/api/me` may initially return 401 before login, and the original status list was not ordered relative to callback.
+
+The follow-up on this same isolated draft adds strictly bounded **post-callback request lineage**, avoiding chronological guesswork:
+- `postCallbackMeRequests` and `postCallbackMeStatuses` count only `/api/me` GETs *started after* the browser observed an HTTP 3xx BFF callback response. A private WeakSet ties each response/failure to its actual request.
+- `postCallbackMeRequestFailed` is a Boolean for that same specifically tracked subset.
+- `sessionCookiePresentAtFailure` is nullable Boolean, derived from a private cookie-jar read at failure time. No cookie value, attributes, session ID or real identity is saved.
+- Unit tests cover one initial anonymous 401 preceding callback and a later failed account read, including rejection of private URL/cookie canaries. The synthetic callback-fault browser test requires zero post-callback account requests and no cookie.
+
+The original FAIL remains FAIL and cannot retrospectively be enriched. This instrumentation may help distinguish a future session-cookie issuance problem, a client read race, or a real endpoint rejection; **none of these is currently proven**. The standalone browser interaction may still exhibit intermittent unrelated login failures on the next CI head. No extra retry, softer assertion or reclassification of historical evidence is permitted.
+
 ## Negative and positive tests
 
 Node regression tests reject arbitrary raw callback URLs, OIDC codes, credentials, bodies, unknown fields, forged method/host/path, oversized annotations, malformed request counters and HTTP statuses. The controlled `RIO-MOBILE-07` case additionally requires `providerSubmitRequests=1`, `providerSubmitRequestFailed=true`, `callbackRequests=0`, and no callback status after deliberate original-Keycloak-POST interruption. `RIO-MOBILE-06` requires zero provider/callback work on an initial refused BFF navigation. Full exact-head CI must also run real Keycloak, PostgreSQL TLS, session rotation, restart/revoke, backup/restore and all Android/desktop browser tests.
