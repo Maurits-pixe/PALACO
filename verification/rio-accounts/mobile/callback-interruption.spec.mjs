@@ -68,6 +68,10 @@ test('[RIO-MOBILE-07] Interrupted provider submission cannot grant a session or 
           expect(observed?.callbackRequests).toBe(0);
           expect(observed?.callbackStatuses).toEqual([]);
           expect(observed?.callbackRequestFailed).toBe(false);
+          expect(observed?.postCallbackMeRequests).toBe(0);
+          expect(observed?.postCallbackMeStatuses).toEqual([]);
+          expect(observed?.postCallbackMeRequestFailed).toBe(false);
+          expect(observed?.sessionCookiePresentAtFailure).toBe(false);
           expect(observed?.accountVisible).not.toBe(true);
           // Context-bound read instead of page.evaluate on an error document.
           // A callback not delivered to BFF cannot mint a session.
