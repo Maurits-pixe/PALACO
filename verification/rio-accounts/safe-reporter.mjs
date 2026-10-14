@@ -19,6 +19,8 @@ const CASES = new Map([
   ['RIO-MOBILE-05', 'Database uncertainty closes the UI until explicit recovery'],
   ['RIO-MOBILE-06', 'A refused initial navigation stays closed until explicit login recovery'],
   ['RIO-MOBILE-07', 'An interrupted provider callback cannot mint a session without explicit recovery'],
+  ['RIO-MOBILE-08', 'A post-consent HTTP denial cannot become a successful account read'],
+  ['RIO-MOBILE-09', 'A post-consent transport reset cannot become a successful account read'],
 ]);
 const PHASES = new Set([
   'initial-access', 'authorization-contract', 'real-idp-login',
@@ -33,6 +35,7 @@ const PHASES = new Set([
   'mobile-consent-cas', 'mobile-expiry-closure', 'mobile-database-closure', 'mobile-explicit-recovery',
   'mobile-navigation-failure', 'mobile-explicit-login-recovery', 'mobile-login-route',
   'mobile-callback-interruption', 'mobile-callback-explicit-recovery',
+  'post-consent-http-denial', 'post-consent-transport-denial',
 ]);
 
 const MOBILE_SURFACES = new Set(['android-emulation', 'desktop-keyboard']);
@@ -142,7 +145,7 @@ function safeMobileErrorLocations(result) {
     for (const frame of error.stack.split('\n').slice(0, 200)) {
       if (!/^\s*at\s/.test(frame)) continue;
       const match = frame.replaceAll('\\', '/').match(
-        /\/verification\/rio-accounts\/mobile\/(interaction\.spec\.mjs|consent\.spec\.mjs|callback-interruption\.spec\.mjs|helpers\.mjs):(\d+):(\d+)\)?\s*$/
+        /\/verification\/rio-accounts\/mobile\/(interaction\.spec\.mjs|consent\.spec\.mjs|callback-interruption\.spec\.mjs|post-consent-fault\.spec\.mjs|helpers\.mjs):(\d+):(\d+)\)?\s*$/
       );
       if (!match) continue;
       const line = Number(match[2]);
@@ -181,7 +184,7 @@ export default class SafeReporter {
   onError() { this.suiteErrors += 1; }
 
   onTestEnd(test, result) {
-    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-7])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
+    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-9])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
     const phases = [];
     const failedLines = new Set();
     const walk = steps => {
