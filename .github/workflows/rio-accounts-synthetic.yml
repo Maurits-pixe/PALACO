@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
@@ -62,6 +62,9 @@ jobs:
           node --check verification/rio-accounts/post-consent-observation.mjs
           node --check verification/rio-accounts/test_post_consent_observation.mjs
           node --test verification/rio-accounts/test_post_consent_observation.mjs
+          node --check verification/rio-accounts/post-consent-triage.mjs
+          node --check verification/rio-accounts/test_post_consent_triage.mjs
+          node --test verification/rio-accounts/test_post_consent_triage.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/post-consent-fault.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
