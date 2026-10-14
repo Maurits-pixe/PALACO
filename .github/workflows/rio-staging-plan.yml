@@ -1,0 +1,57 @@
+name: RIO account staging plan preflight
+
+on:
+  push:
+    branches: ['codex/rio-staging-plan-preflight']
+    paths: ['verification/rio-staging-plan/**', 'specs/rio-staging-plan/**', '.github/workflows/rio-staging-plan.yml']
+  pull_request:
+    branches: [main]
+    paths: ['verification/rio-staging-plan/**', 'specs/rio-staging-plan/**', '.github/workflows/rio-staging-plan.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rio-staging-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact proposal source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify offline checker and adversarial configuration cases
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python --version
+          python -m py_compile verification/rio-staging-plan/staging_preflight.py verification/rio-staging-plan/test_staging_preflight.py
+          python -m unittest discover -s verification/rio-staging-plan -p test_staging_preflight.py -v
+      - name: Verify committed template remains incomplete and closed
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import json
+          from pathlib import Path
+          path = Path("verification/rio-staging-plan")
+          spec = importlib.util.spec_from_file_location("staging_preflight", path / "staging_preflight.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          result = module.read_plan(str(path / "t05-staging-plan-template.json"))
+          assert result["result"] == "INCOMPLETE"
+          assert len(result["missing"]) == 9
+          assert result["errors"] == []
+          assert result["boundary"]["deployment"] == "HOLD"
+          assert result["boundary"]["launchSupported"] is False
+          assert result["boundary"]["deployAllowed"] is False
+          assert result["boundary"]["personalAccounts"] is False
+          assert not any(result["checks"].values())
+          print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+          PY
