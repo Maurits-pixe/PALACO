@@ -38,6 +38,7 @@ const PHASES = new Set([
   'mobile-callback-interruption', 'mobile-callback-explicit-recovery',
   'post-consent-http-denial', 'post-consent-transport-denial',
   'post-consent-page-channel-failure', 'post-consent-context-channel-unchanged',
+  'post-consent-revocation-denies-both-channels',
 ]);
 
 const MOBILE_SURFACES = new Set(['android-emulation', 'desktop-keyboard']);
