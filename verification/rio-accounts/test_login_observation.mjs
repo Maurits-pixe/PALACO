@@ -78,7 +78,7 @@ test('accepts only the enumerated stage, actor, page, feedback and error kinds w
     ]],
     ['pageKind', ['unavailable', 'bff-home', 'provider', 'other']],
     ['errorKind', [
-      'aborted', 'connection-refused', 'connection-reset', 'empty-response',
+      'aborted', 'connection-refused', 'connection-reset', 'connection-closed', 'empty-response',
       'http2-protocol', 'tls-certificate', 'network-changed', 'timeout',
       'target-closed', 'other',
     ]],
@@ -135,6 +135,7 @@ test('local browser errors become fixed diagnostic kinds without exposing append
     ['ERR_ABORTED', 'aborted'],
     ['ERR_CONNECTION_REFUSED', 'connection-refused'],
     ['ERR_CONNECTION_RESET', 'connection-reset'],
+    ['ERR_CONNECTION_CLOSED', 'connection-closed'],
     ['ERR_EMPTY_RESPONSE', 'empty-response'],
     ['ERR_HTTP2_PROTOCOL_ERROR', 'http2-protocol'],
     ['ERR_CERT_AUTHORITY_INVALID', 'tls-certificate'],
