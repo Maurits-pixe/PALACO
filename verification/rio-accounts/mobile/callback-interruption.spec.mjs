@@ -13,18 +13,19 @@ test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or re
     try {
       const page = await context.newPage();
       let intercepted = 0;
+      let callbackRequests = 0;
       let authStarts = 0;
       const startListener = request => {
         try {
           const url = new URL(request.url());
           if (url.origin === BFF && url.pathname === '/auth/start') authStarts += 1;
+          if (url.origin === BFF && url.pathname === '/auth/callback') callbackRequests += 1;
         } catch {}
       };
       const abortCallback = async route => {
         const request = route.request();
         const url = new URL(request.url());
-        if (request.method() === 'GET' && request.isNavigationRequest()
-          && url.origin === BFF && url.pathname === '/auth/callback') {
+        if (request.method() === 'GET' && url.origin === BFF && url.pathname === '/auth/callback') {
           intercepted += 1;
           // Deliberate synthetic fault, before BFF can exchange the OIDC code.
           // This keeps all provider secrets and the callback query out of logs.
@@ -34,7 +35,9 @@ test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or re
         }
       };
       page.on('request', startListener);
-      await page.route('**/auth/callback**', abortCallback);
+      // Context interception includes cross-origin redirects that page-level
+      // route matching may miss in Chromium. Inspect only a fixed local pathname.
+      await context.route('**/*', abortCallback);
       try {
         await test.step('mobile-callback-interruption', async () => {
           let failed = false;
@@ -46,6 +49,7 @@ test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or re
           }
           expect(failed).toBe(true);
           expect(intercepted).toBe(1);
+          expect(callbackRequests).toBe(1);
           expect(authStarts).toBe(1);
           const observations = testInfo.annotations.filter(
             item => item.type === 'rio-mobile-login-observation');
@@ -73,7 +77,7 @@ test('[RIO-MOBILE-07] Interrupted provider callback cannot grant a session or re
           }
         });
       } finally {
-        await page.unroute('**/auth/callback**', abortCallback);
+        await context.unroute('**/*', abortCallback);
         page.off('request', startListener);
       }
       await test.step('mobile-callback-explicit-recovery', async () => {
