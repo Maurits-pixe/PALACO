@@ -87,4 +87,44 @@ test('[RIO-MOBILE-10] Failed page fetch does not silently revoke or reauthorize 
       // be treated as restored UI/account authorization.
       await expect(page.locator('#account-id')).toHaveText('TST-alpha');
     });
+
+    await test.step('post-consent-revocation-denies-both-channels',async()=>{
+      // Saving the stale bearer is strictly in-memory for a synthetic negative
+      // test. Never report, print, persist or attach the cookie itself.
+      const context=page.context();
+      const saved=(await context.cookies(BFF)).find(cookie=>cookie.name==='__Host-rio_session');
+      expect(Boolean(saved)).toBe(true);
+      const [logoutResponse]=await Promise.all([
+        page.waitForResponse(response=>response.url()===BFF+'/auth/logout-all' &&
+          response.request().method()==='POST',{timeout:10000}),
+        page.locator('#logout-all').click({timeout:10000}),
+      ]);
+      expect(logoutResponse.status()).toBe(200);
+      await expect(page.locator('#feedback')).toHaveText(
+        'Lokale testsessie afgemeld. De identity-provider heeft een afzonderlijke sessie.'
+      );
+      await expect(page.locator('#start-login')).toBeVisible();
+      expect((await context.cookies(BFF)).some(cookie=>
+        cookie.name==='__Host-rio_session')).toBe(false);
+      // Cookie deletion alone is not a server-side revocation test.
+      await context.addCookies([{...saved,expires:-1}]);
+      expect((await context.cookies(BFF)).some(cookie=>
+        cookie.name==='__Host-rio_session')).toBe(true);
+      const pageRead=await me(page);
+      expect(pageRead.status).toBe(401);
+      expect(pageRead.data).toBe(null);
+      const contextRead=await context.request.get(BFF+'/api/me',{
+        timeout:8000,maxRedirects:0,failOnStatusCode:false,
+      });
+      try {
+        expect(contextRead.status()).toBe(401);
+      } finally {
+        await contextRead.dispose();
+      }
+      expect(pageReads).toBe(1); // The synthetic fault still fired once.
+      await expect(page.locator('#start-login')).toBeVisible();
+      await expect(page.locator('#account-id')).toBeEmpty();
+      // Explicitly clear the replayed stale bearer before test cleanup.
+      await context.clearCookies({name:'__Host-rio_session'});
+    });
   });
