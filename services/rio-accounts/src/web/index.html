@@ -37,14 +37,24 @@
     </section>
 
     <p id="feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
-    <div class="retry-row"><button id="retry-session" class="button button-primary" type="button" hidden>Opnieuw controleren</button></div>
+    <div class="retry-row"><button id="retry-session" class="button button-primary" type="button" aria-describedby="login-stage-detail" hidden>Opnieuw controleren</button></div>
+
+    <section class="route-guidance" aria-labelledby="login-route-title">
+      <h2 id="login-route-title">Zo werkt de proef</h2>
+      <ol id="login-route" class="route-steps" role="list">
+        <li><a class="route-step" href="#account-area"><span class="route-number" aria-hidden="true">1</span><span><strong>Aanmelden</strong><span class="route-copy">Begin met een testgebruiker.</span></span></a></li>
+        <li><a class="route-step" href="#account-area"><span class="route-number" aria-hidden="true">2</span><span><strong>Eigen testsessie</strong><span class="route-copy">Bekijk je eigen proefaccount.</span></span></a></li>
+        <li><a class="route-step" href="#consent-area"><span class="route-number" aria-hidden="true">3</span><span><strong>Jouw keuze</strong><span class="route-copy">Kies of je toestemming geeft.</span></span></a></li>
+      </ol>
+    </section>
 
     <div class="account-grid">
       <section id="account-area" class="card account-card" aria-labelledby="account-title">
         <div class="card-heading"><span class="step-mark" aria-hidden="true">01</span><p class="eyebrow">Jouw beginpunt</p></div>
         <h2 id="account-title">Je proefaccount</h2>
+        <p id="login-stage-detail" class="login-stage-detail">Even wachten. Je testsessie wordt gecontroleerd.</p>
         <p id="login-info">Meld je aan met een synthetische testgebruiker. Je ziet alleen je eigen proefaccount.</p>
-        <a id="start-login" href="/auth/start" class="button button-primary">Aanmelden met synthetische testgebruiker</a>
+        <a id="start-login" href="/auth/start" class="button button-primary" aria-describedby="login-stage-detail">Aanmelden met synthetische testgebruiker</a>
         <section id="account" class="account-details" aria-label="Aangemelde testsessie" hidden>
           <p class="small-label">Je bent aangemeld als</p>
           <p id="account-id" class="account-name"></p>

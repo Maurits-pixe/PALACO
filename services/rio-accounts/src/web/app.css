@@ -47,6 +47,19 @@ h1 { margin: 0; font-size: clamp(2.35rem, 6vw, 4.5rem); line-height: 1.05; lette
 .feedback:not(:empty) { border-left: 4px solid var(--navy); padding: .65rem .9rem; background: var(--paper); border-radius: 0 .65rem .65rem 0; }
 .retry-row { margin-block: .75rem 1.25rem; }
 .retry-row:has(> [hidden]) { margin: 0; }
+.route-guidance { margin-block: 1.25rem 1.5rem; }
+.route-guidance h2 { font-size: 1.15rem; margin-bottom: .7rem; }
+.route-steps { display: grid; gap: .6rem; padding: 0; margin: 0; list-style: none; }
+.route-steps li { min-width: 0; }
+.route-step { display: flex; gap: .75rem; align-items: flex-start; min-height: 48px; padding: .8rem; border: 1.5px solid var(--line); border-radius: .85rem; background: var(--paper); text-decoration: none; }
+.route-step:hover { border-color: var(--navy); }
+.route-step > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.route-step strong { display: block; font-size: .95rem; }
+.route-number { flex: 0 0 2rem; width: 2rem; height: 2rem; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid var(--navy); border-radius: 50%; background: var(--yellow); font-size: .8rem; font-weight: 800; }
+.route-steps li:nth-child(2) .route-number { background: var(--teal); }
+.route-steps li:nth-child(3) .route-number { background: var(--coral); }
+.route-copy { display: block; color: var(--muted); font-size: .85rem; }
+.login-stage-detail { padding: .65rem .8rem; border-left: 3px solid var(--navy); background: var(--cream); border-radius: 0 .6rem .6rem 0; font-weight: 650; overflow-wrap: anywhere; }
 .account-grid { display: grid; gap: 1.1rem; margin-top: 1rem; align-items: start; }
 .card { border: 2px solid var(--navy); border-radius: 1.5rem; background: var(--paper); padding: 1.35rem; min-width: 0; }
 .card-heading { display: flex; align-items: center; gap: .75rem; margin-bottom: .8rem; }
@@ -93,6 +106,7 @@ h2 { margin: 0 0 .7rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.
 @media (min-width: 48rem) {
   .page { padding-top: 3.1rem; }
   .hero { grid-template-columns: minmax(0, 1.35fr) minmax(0, .8fr); gap: 3rem; }
+  .route-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .card { padding: 1.7rem; }
   .studio-intro { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: 2rem; }

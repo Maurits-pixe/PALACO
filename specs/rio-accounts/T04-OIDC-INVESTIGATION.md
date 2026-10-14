@@ -17,3 +17,43 @@ The probe retains the 30-second idle and 60-second absolute session limits, fixe
 Only an allowed synthetic actor/stage/page category, known account/consent endpoint statuses, request-failure booleans and a fixed feedback category may enter sanitized failure evidence. URLs, headers, bodies, credential values, raw DOM text and raw errors remain private.
 
 Eight successful repetitions are eight observations in this fixture. They are not a statistical reliability claim, an independent acceptance, a physical-phone test or a cause-specific repair. The original issue remains open until failure evidence supports a concrete diagnosis and an appropriate regression check. Human acceptance, ACCOUNT-1, T05–T08, merge and production retain their separate HOLD gates.
+
+## Mobile navigation and VORM9EVIN9 continuation
+
+The later PR-head observation at Android RIO-MOBILE-02's initial page.goto occurred
+within about 1.1 seconds, before an OIDC action. The root route serves embedded
+HTML directly and does not load an account from storage. This is distinct from
+the original missing account after callback; neither historical cause is proven.
+
+Mobile login now observes each page independently with a fixed stage, bounded
+main-document / own-account / consent HTTP statuses, request-failure booleans,
+a fixed browser error category and visibility/feedback categories. The collector
+records only a failed login, stops its listeners in finally, and rethrows the
+original error. It never publishes URLs, credentials, headers, request/response
+bodies, raw error text or arbitrary DOM values.
+
+A controlled browser regression refuses exactly the initial main navigation.
+It requires one failed attempt, no OIDC/account traffic, no session cookie,
+a connection-refused observation and no automatic retry. After removing this
+controlled refusal, an explicit fresh login must still pass the real Keycloak,
+PKCE, own-account, consent and closed-authority checks.
+
+After the original durable phases, CI repeats the Android RIO-MOBILE-02 case
+exactly eight times with fresh test contexts, one worker, zero retries and the
+existing timeouts. Its first failure stops the probe and fails CI. The ordinary
+mobile suite and actual database backup/restore remain separate required checks.
+Repetition may expose a fault category; passing repetitions do not prove the
+historical cause is fixed.
+
+VORM9EVIN9 presentation follows the existing RIO identity and the
+[source persona](https://github.com/Maurits-pixe/PALACO-Citadel/blob/6774682f0c34c3bc45e02768980347b7117b3d3d/.github/agents/palaco-vorm9evin9.agent.md):
+a semantic three-step route, generous touch targets, narrow-screen reflow,
+keyboard access and plain phase guidance. These links scroll within the page;
+they do not log in, grant consent, create accounts or confer authority. The
+existing live feedback region remains the single announcement surface.
+
+No identity-service, Rust authorization/storage rule, token/cookie/session
+lifetime, TLS exception, callback assertion or retry policy is relaxed.
+Personal accounts, staging, contact, production and independent human acceptance
+remain HOLD. The source investigation stays open until observed evidence
+supports a cause-specific correction.

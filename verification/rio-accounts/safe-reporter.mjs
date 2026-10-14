@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { safeMobileLoginObservation } from './login-observation.mjs';
 
 const CASES = new Map([
   ['RIO-E2E-01', 'Two real users have separate sessions and account data'],
@@ -15,6 +16,7 @@ const CASES = new Map([
   ['RIO-MOBILE-03', 'Own consent uses session CSRF and a fresh choice after CAS conflict'],
   ['RIO-MOBILE-04', 'Real expiry closes consent while preserving the local draft'],
   ['RIO-MOBILE-05', 'Database uncertainty closes the UI until explicit recovery'],
+  ['RIO-MOBILE-06', 'A refused initial navigation stays closed until explicit login recovery'],
 ]);
 const PHASES = new Set([
   'initial-access', 'authorization-contract', 'real-idp-login',
@@ -27,6 +29,7 @@ const PHASES = new Set([
   'mobile-native-semantics', 'mobile-reflow', 'mobile-studio-setup', 'mobile-local-download',
   'mobile-import-rejection', 'mobile-studio-isolation', 'mobile-consent-isolation',
   'mobile-consent-cas', 'mobile-expiry-closure', 'mobile-database-closure', 'mobile-explicit-recovery',
+  'mobile-navigation-failure', 'mobile-explicit-login-recovery', 'mobile-login-route',
 ]);
 
 const MOBILE_SURFACES = new Set(['android-emulation', 'desktop-keyboard']);
@@ -175,7 +178,7 @@ export default class SafeReporter {
   onError() { this.suiteErrors += 1; }
 
   onTestEnd(test, result) {
-    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-5])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
+    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-6])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
     const phases = [];
     const failedLines = new Set();
     const walk = steps => {
@@ -200,6 +203,8 @@ export default class SafeReporter {
       durationMs: Math.round(result.duration),
       ...(this.mobileVerification ? { surface } : {}),
       ...(errorLocations.length ? { errorLocations } : {}),
+      ...(id.startsWith('RIO-MOBILE-') && result.status !== 'passed'
+        ? { loginObservation: safeMobileLoginObservation(test.annotations) } : {}),
       ...(id === 'RIO-MOBILE-02' && result.status !== 'passed'
         ? { setupObservation: safeStudioSetup(test.annotations) } : {}),
       phases,

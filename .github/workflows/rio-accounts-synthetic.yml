@@ -53,6 +53,9 @@ jobs:
           node --check verification/rio-accounts/durable/durable.spec.mjs
           node --check services/rio-accounts/src/web/app.js
           node --check verification/rio-accounts/mobile/playwright.config.mjs
+          node --check verification/rio-accounts/login-observation.mjs
+          node --test verification/rio-accounts/test_login_observation.mjs
+          node --check verification/rio-accounts/mobile/login-observation.spec.mjs
           node --check verification/rio-accounts/mobile/helpers.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
@@ -119,6 +122,12 @@ jobs:
         env:
           RIO_DURABLE_BROWSER_PHASE: verify
         run: npx playwright test --config=playwright.durable.config.mjs
+      - name: Probe bounded mobile login and draft readiness
+        working-directory: verification/rio-accounts
+        run: |
+          python -c "print('RIO_MOBILE_LOGIN_PROBE_BEGIN case=RIO-MOBILE-02 repeats=8 surface=android-emulation')"
+          npx playwright test --config=mobile/playwright.config.mjs --project=android-emulation --grep='RIO-MOBILE-02' --repeat-each=8 --retries=0 --workers=1 --max-failures=1
+          python -c "print('RIO_MOBILE_LOGIN_PROBE_END case=RIO-MOBILE-02 repeats=8 surface=android-emulation')"
       - name: Mobile account and local Studio browser verification
         working-directory: verification/rio-accounts
         run: npx playwright test --config=mobile/playwright.config.mjs
