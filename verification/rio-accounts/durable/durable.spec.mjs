@@ -121,6 +121,46 @@ async function login(page, user, observation = { stage: 'initial' }) {
   observation.stage = 'ready';
 }
 
+// Diagnostic listeners capture a separate object for each page. Older pages may
+// keep checking /api/me while a later actor logs in: do not mix their evidence.
+function observeOwnEndpoints(page, observation) {
+  const endpoint = value => {
+    try {
+      const url = new URL(value);
+      if (url.origin !== BFF || url.search !== '' || url.hash !== '') return null;
+      return url.pathname === '/api/me' ? 'me' : url.pathname === '/api/consent' ? 'consent' : null;
+    } catch { return null; }
+  };
+  const onResponse = response => {
+    const kind = endpoint(response.url());
+    const status = response.status();
+    if (!kind || !Number.isInteger(status) || status < 100 || status > 599) return;
+    const statuses = observation[kind + 'Statuses'];
+    if (statuses.length < 8) statuses.push(status);
+  };
+  const onRequestFailed = request => {
+    const kind = endpoint(request.url());
+    if (kind) observation[kind + 'RequestFailed'] = true;
+  };
+  page.on('response', onResponse);
+  page.on('requestfailed', onRequestFailed);
+  return () => {
+    page.off('response', onResponse);
+    page.off('requestfailed', onRequestFailed);
+  };
+}
+
+async function prepareFeedbackBucket(page) {
+  const feedback = await page.locator('#feedback').textContent({ timeout: 1000 }).catch(() => null);
+  return feedback === null ? 'unavailable' :
+    feedback === '' ? 'empty' :
+    feedback === 'Je toestemming voor deze oefensessie is bevestigd. Persoonlijke toegang blijft gesloten.' ? 'confirmed' :
+    feedback === 'RIO is tijdelijk niet beschikbaar. Controleer je testsessie opnieuw.' ? 'service_unavailable' :
+    feedback === 'De testsessie is verlopen of niet meer beschikbaar. Meld je opnieuw aan.' ? 'expired' :
+    feedback === 'De testsessie is gewijzigd. Controleer je eigen account opnieuw.' ? 'changed' :
+    feedback === 'De testsessie kon niet veilig worden gecontroleerd. Probeer opnieuw.' ? 'invalid_response' : 'other';
+}
+
 async function mutation(page, path, csrfToken) {
   return page.evaluate(async ({ path, csrfToken }) => {
     const response = await fetch(path, {
@@ -226,15 +266,21 @@ async function closeContexts(contexts) {
 test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', async ({ browser }, testInfo) => {
   const contexts = {};
   const saved = {};
-  const observation = { actorCase: 'alpha', stage: 'initial' };
+  const stopCollectors = [];
+  const newObservation = actorCase => ({
+    actorCase, stage: 'initial', meStatuses: [], consentStatuses: [],
+    meRequestFailed: false, consentRequestFailed: false,
+  });
+  let observation = newObservation('alpha');
   try {
     await test.step('durable-real-login', async () => {
       for (const name of ACCOUNT_NAMES) {
-        observation.actorCase = name;
+        observation = newObservation(name);
         observation.stage = 'creating-context';
         const context = await contextFor(browser);
         const page = await context.newPage();
-        contexts[name] = { context, page };
+        contexts[name] = { context, page, observation };
+        stopCollectors.push(observeOwnEndpoints(page, observation));
         await login(page, credentials[name === 'beta' ? 'beta' : 'alpha'], observation);
       }
     });
@@ -242,6 +288,7 @@ test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', 
       // Read all three again just before the restart to refresh their fixed idle budget.
       for (const name of ACCOUNT_NAMES) {
         const { context, page } = contexts[name];
+        observation = contexts[name].observation;
         const account = await ownAccount(page, EXPECTED[name === 'beta' ? 'beta' : 'alpha'].username);
         saved[name] = { cookie: await cookieFor(context, page), csrfToken: account.csrfToken };
       }
@@ -250,12 +297,15 @@ test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', 
       await saveState(saved);
     });
   } catch (error) {
-    // Emit only enumerated synthetic case/stage and booleans. Never record URLs,
+    // Freeze each page's diagnostics before collecting the fixed UI category.
+    for (const stop of stopCollectors) stop();
+    // Emit only fixed enums, bounded HTTP statuses and booleans. Never record URLs,
     // credentials, cookies, provider error text, DOM contents or raw exceptions.
     const page = contexts[observation.actorCase]?.page;
     let pageKind = 'unavailable';
     let loginButtonVisible = null;
     let accountVisible = null;
+    let feedbackBucket = 'unavailable';
     if (page) {
       try {
         const url = new URL(page.url());
@@ -265,13 +315,15 @@ test('[RIO-DURABLE-01] Save actual OIDC sessions privately before BFF restart', 
       } catch { pageKind = 'unavailable'; }
       loginButtonVisible = await page.locator('#start-login').isVisible().catch(() => null);
       accountVisible = await page.locator('#account-id').isVisible().catch(() => null);
+      feedbackBucket = await prepareFeedbackBucket(page);
     }
     testInfo.annotations.push({
       type: 'rio-durable-login-observation',
-      description: JSON.stringify({ ...observation, pageKind, loginButtonVisible, accountVisible }),
+      description: JSON.stringify({ ...observation, pageKind, loginButtonVisible, accountVisible, feedbackBucket }),
     });
     throw error;
   } finally {
+    for (const stop of stopCollectors) stop();
     await closeContexts(contexts);
   }
 });

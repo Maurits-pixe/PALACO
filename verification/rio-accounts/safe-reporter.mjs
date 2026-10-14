@@ -90,7 +90,7 @@ const DURABLE_LOGIN_STAGES = new Set([
 ]);
 const DURABLE_PAGE_KINDS = new Set(['unavailable', 'bff-home', 'provider', 'other']);
 
-// Annotations are NOT trusted. Copy only fixed enums and booleans to CI output.
+// Annotations are NOT trusted. Copy only fixed enums, bounded statuses and booleans to CI output.
 // Never render a raw exception/URL, Keycloak message, account name or bearer.
 export function safeDurableLoginObservation(annotations) {
   if (!Array.isArray(annotations)) return undefined;
@@ -101,18 +101,29 @@ export function safeDurableLoginObservation(annotations) {
   try { source = JSON.parse(items[0].description); } catch { return undefined; }
   if (!source || typeof source !== 'object' || Array.isArray(source) ||
       Object.keys(source).sort().join('|') !==
-        'accountVisible|actorCase|loginButtonVisible|pageKind|stage' ||
+        'accountVisible|actorCase|consentRequestFailed|consentStatuses|feedbackBucket|loginButtonVisible|meRequestFailed|meStatuses|pageKind|stage' ||
       !['alpha', 'alphaPeer', 'beta'].includes(source.actorCase) ||
       !DURABLE_LOGIN_STAGES.has(source.stage) ||
       !DURABLE_PAGE_KINDS.has(source.pageKind) ||
       !(source.loginButtonVisible === null || typeof source.loginButtonVisible === 'boolean') ||
-      !(source.accountVisible === null || typeof source.accountVisible === 'boolean')) return undefined;
+      !(source.accountVisible === null || typeof source.accountVisible === 'boolean') ||
+      typeof source.meRequestFailed !== 'boolean' || typeof source.consentRequestFailed !== 'boolean' ||
+      !SETUP_FEEDBACK.has(source.feedbackBucket)) return undefined;
+  for (const key of ['meStatuses', 'consentStatuses']) {
+    if (!Array.isArray(source[key]) || source[key].length > 8 ||
+        source[key].some(value => !Number.isInteger(value) || value < 100 || value > 599)) return undefined;
+  }
   return {
     actorCase: source.actorCase,
     stage: source.stage,
     pageKind: source.pageKind,
     loginButtonVisible: source.loginButtonVisible,
     accountVisible: source.accountVisible,
+    meStatuses: [...source.meStatuses],
+    consentStatuses: [...source.consentStatuses],
+    meRequestFailed: source.meRequestFailed,
+    consentRequestFailed: source.consentRequestFailed,
+    feedbackBucket: source.feedbackBucket,
   };
 }
 

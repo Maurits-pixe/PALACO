@@ -91,6 +91,14 @@ jobs:
         env:
           RIO_DURABLE_BROWSER_PHASE: outage
         run: npx playwright test --config=playwright.durable.config.mjs
+      - name: Probe intermittent OIDC readiness after controlled recovery
+        working-directory: verification/rio-accounts
+        env:
+          RIO_DURABLE_BROWSER_PHASE: prepare
+        run: |
+          python -c "print('RIO_OIDC_PROBE_BEGIN case=RIO-DURABLE-01 repeats=8')"
+          npx playwright test --config=playwright.durable.config.mjs --repeat-each=8 --retries=0 --workers=1 --max-failures=1
+          python -c "print('RIO_OIDC_PROBE_END case=RIO-DURABLE-01 repeats=8')"
       - name: Prepare independent sessions for restart
         working-directory: verification/rio-accounts
         env:
