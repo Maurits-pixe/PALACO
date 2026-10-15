@@ -392,6 +392,27 @@ test('request start phase survives late failures and helper timeout independentl
   assert.deepEqual(result.callbackStatuses,[303]);
 });
 
+test('an anonymous 401 and its abort remain separate from the interrupted provider request', async () => {
+  const page=observedPage(),observation=observeMobileLogin(page,'alpha');
+  const initial=requestWithFailure('https://localhost:8088/api/me','net::ERR_ABORTED');
+  page.emit('request',initial);
+  page.emit('response',{request:()=>initial,status:()=>401});
+  page.emit('requestfailed',initial);
+  const provider=requestWithFailure('http://127.0.0.1:8089/realms/rio-synthetic/login-actions/authenticate?code='+PRIVATE,
+    'net::ERR_CONNECTION_RESET','POST');
+  page.emit('request',provider);page.emit('requestfailed',provider);
+  const result=await failureSnapshot(observation,{name:'Error',message:'net::ERR_CONNECTION_RESET '+PRIVATE});
+  assert.deepEqual(result.meStatuses,[401]);
+  assert.equal(result.meRequestFailed,true);
+  assert.equal(result.providerSubmitRequests,1);
+  assert.equal(result.providerSubmitRequestFailed,true);
+  assert.equal(result.callbackRequests,0);
+  assert.equal(result.sessionCookiePresentAtFailure,false);
+  assert.deepEqual(result.requestFailures,[failureRecord('me','aborted',false),
+    failureRecord('providerSubmit','connection-reset',false)]);
+  assert.equal(result.requestFailuresOverflow,false);
+});
+
 test('missing request start remains unknown and cached endpoint cannot change at failure', async () => {
   const page=observedPage(),observation=observeMobileLogin(page,'beta');
   const callback=requestWithFailure('https://localhost:8088/auth/callback?code='+PRIVATE);
