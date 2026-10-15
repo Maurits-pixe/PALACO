@@ -12,6 +12,37 @@ Thank you for your interest in contributing to PALACO! This document outlines th
 
 For Vercel preview deployment setup and URLs for PALACO's web apps, see [Web preview deployments](docs/operations/Preview-Deployments.md).
 
+## Trusted plugin lifecycle MVP
+
+`palaco_runtime::plugin` supports trusted, statically linked, in-process plugins
+with synchronous `initialize`, `start`, `readiness`, and retry-safe `stop` callbacks.
+Build `PluginRegistration` values with validated `PluginId`s, evidence references,
+contract version `CONTRACT_VERSION`, and required dependency IDs, then call
+`PluginManager::new(registrations)`. The whole graph is validated before callbacks;
+startup is deterministic/topological and shutdown is reverse-topological.
+
+Implement a host `PluginAuthorizer` (or closure) that evaluates the **current**
+`RuntimePlan` for the supplied descriptor and action. Call
+`manager.start_all(&mut authorizer)`; each initialization/startup separately
+requires a validating **Execute** plan. Hold/Deny never execute. No initial plan is
+cached as authority. IDs and evidence are metadata, not authentication or grants.
+`initialize`/`start` also support explicit one-plugin sequencing; dependencies
+must actually be Running before a dependent starts.
+
+Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
+Readiness is a startup snapshot, not continuous monitoring. `start_all` rolls back
+callback failures; individual calls leave partial resources for `stop_all`.
+Authorization rejection invokes no callbacks and leaves already-acquired resources
+untouched: explicitly call `manager.stop_all()`, which needs no authorization and
+remains available after revocation. Retry failed cleanup explicitly; dependents
+must finish cleanup before dependencies are stopped. Keep the manager alive until
+cleanup succeeds. No unload API or automatic initialization/start retry is provided.
+
+This is **not a sandbox or production authentication system**: no hard timeout,
+cancellation, hot reload, async workers, or event engine. Unwinding callback and
+authorizer panics are caught, but `panic=abort`, hangs, and unmanaged plugin-created
+tasks are not isolated. Plugins must clean up their own resources safely.
+
 ---
 
 ## Code of Conduct
