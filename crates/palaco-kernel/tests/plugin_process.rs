@@ -210,7 +210,7 @@ fn scoped_process_start_spawns_only_required_children_and_rolls_back_only_new_ch
 }
 
 #[test]
-fn startup_and_shutdown_previews_never_spawn_or_call_a_running_process() -> TestResult {
+fn inventory_and_previews_never_spawn_or_call_a_running_process() -> TestResult {
     let descriptor = descriptor()?;
     let id = descriptor.id.clone();
     let pid = Rc::new(Cell::new(None));
@@ -231,6 +231,19 @@ fn startup_and_shutdown_previews_never_spawn_or_call_a_running_process() -> Test
         let before_calls = calls.get();
         let before_status = manager.status(&id).cloned();
         for _ in 0..3 {
+            let inventory = manager.inventory();
+            assert_eq!(manager.inventory(), inventory);
+            assert_eq!(inventory.entries().len(), 1);
+            assert_eq!(inventory.entries()[0].id, id);
+            assert_eq!(
+                inventory.entries()[0].snapshot.state,
+                if running {
+                    PluginState::Running
+                } else {
+                    PluginState::Registered
+                }
+            );
+            assert_eq!(inventory.entries()[0].snapshot.cleanup_pending, running);
             let startup = manager.plan_startup(&id)?;
             assert!(startup.can_start());
             assert_eq!(startup.steps().len(), 1);
@@ -277,7 +290,8 @@ fn startup_and_shutdown_previews_never_spawn_or_call_a_running_process() -> Test
 }
 
 #[test]
-fn startup_preview_accepts_unspawnable_configuration_without_executing_it() -> TestResult {
+fn inventory_and_startup_preview_accept_unspawnable_configuration_without_executing_it()
+-> TestResult {
     // A path below the fixture executable cannot be an executable itself.
     let executable = PathBuf::from(env!("CARGO_BIN_EXE_plugin-process-fixture")).join("missing");
     assert!(executable.is_absolute() && !executable.exists());
@@ -297,6 +311,12 @@ fn startup_preview_accepts_unspawnable_configuration_without_executing_it() -> T
             pid: pid.clone(),
         }),
     }])?;
+    let initial = manager.inventory();
+    assert_eq!(manager.inventory(), initial);
+    assert_eq!(initial.entries()[0].snapshot.state, PluginState::Registered);
+    let rendered = format!("{initial:?}");
+    assert!(!rendered.contains("plugin-process-fixture"));
+    assert!(!rendered.contains("child-evidence"));
     assert!(manager.plan_startup(&id)?.can_start());
     assert_eq!(
         manager.plan_startup(&PluginId::new("missing")?),
@@ -397,6 +417,22 @@ fn process_shutdown_reports_cleanup_retry_and_scoped_child_retention() -> TestRe
         }
         assert_reaped(pids[0]);
         assert_eq!(manager.status(independent), independent_before.as_ref());
+        let inventory = manager.inventory();
+        assert_eq!(manager.inventory(), inventory);
+        assert_eq!(inventory.entries().len(), 3);
+        for entry in inventory.entries() {
+            assert_eq!(entry.snapshot.cleanup_pending, &entry.id == independent);
+            assert_eq!(
+                entry.snapshot.state,
+                if &entry.id == independent {
+                    PluginState::Running
+                } else if &entry.id == worker && mode != "healthy" {
+                    PluginState::Failed
+                } else {
+                    PluginState::Stopped
+                }
+            );
+        }
         assert_eq!(
             manager.check_health(independent, &mut allow)?,
             PluginHealth::Ready
@@ -412,6 +448,13 @@ fn process_shutdown_reports_cleanup_retry_and_scoped_child_retention() -> TestRe
             1
         );
         assert_reaped(pids[2]);
+        assert!(
+            manager
+                .inventory()
+                .entries()
+                .iter()
+                .all(|entry| !entry.snapshot.cleanup_pending)
+        );
     }
     Ok(())
 }

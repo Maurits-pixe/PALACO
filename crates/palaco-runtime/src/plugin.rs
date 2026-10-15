@@ -208,6 +208,66 @@ impl From<&PluginStatus> for PluginSnapshot {
     }
 }
 
+/// Owned, redacted current observation of one node, including inactive nodes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FleetEntry {
+    pub id: PluginId,
+    pub snapshot: PluginSnapshot,
+    /// Direct dependency IDs in lexicographic order, not a transitive closure.
+    pub dependencies: Vec<PluginId>,
+    /// Direct dependent IDs in lexicographic order, regardless of lifecycle state.
+    pub dependents: Vec<PluginId>,
+}
+
+/// Manager-local event counters, observed without draining or resetting them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EventBufferSnapshot {
+    capacity: usize,
+    queued: usize,
+    last_sequence: u64,
+    lost_events: u64,
+}
+
+impl EventBufferSnapshot {
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    pub fn queued(&self) -> usize {
+        self.queued
+    }
+
+    /// Last emitted sequence, including dropped/drained events; zero before any.
+    /// Manager-local only: not globally unique, authenticated, or an audit record.
+    pub fn last_sequence(&self) -> u64 {
+        self.last_sequence
+    }
+
+    /// Cumulative overflow loss, including every emission at zero capacity.
+    pub fn lost_events(&self) -> u64 {
+        self.lost_events
+    }
+}
+
+/// Immutable owned fleet observation; may become stale immediately.
+/// Retained health is not a fresh probe, continuous readiness, or authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FleetInventory {
+    entries: Vec<FleetEntry>,
+    event_buffer: EventBufferSnapshot,
+}
+
+impl FleetInventory {
+    /// Entire fleet in deterministic topological order, in any lifecycle state.
+    pub fn entries(&self) -> &[FleetEntry] {
+        &self.entries
+    }
+
+    pub fn event_buffer(&self) -> &EventBufferSnapshot {
+        &self.event_buffer
+    }
+}
+
 /// Local startup preflight eligibility, not simulated dependency readiness or
 /// a guarantee that initialization, startup, or readiness callbacks will succeed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -545,6 +605,45 @@ impl PluginManager {
 
     pub fn status(&self, id: &PluginId) -> Option<&PluginStatus> {
         self.entries.get(id).map(|e| &e.status)
+    }
+
+    /// Reads the entire current fleet without lifecycle preflight, authorization,
+    /// callbacks, probes, process I/O/spawning, events, or counter/status changes.
+    /// Copies bounded IDs and redacted status only, never evidence, errors, panic
+    /// payloads, configuration, executable arguments, or process identifiers.
+    /// Direct graph relations include inactive nodes; no transitive health,
+    /// registry/PCR integration, authority, or authenticated auditing is implied.
+    pub fn inventory(&self) -> FleetInventory {
+        let entries = self
+            .order
+            .iter()
+            .map(|id| {
+                let entry = &self.entries[id];
+                let mut dependencies = entry.registration.descriptor.dependencies.clone();
+                dependencies.sort();
+                let dependents = self
+                    .entries
+                    .iter()
+                    .filter(|(_, entry)| entry.registration.descriptor.dependencies.contains(id))
+                    .map(|(id, _)| id.clone())
+                    .collect();
+                FleetEntry {
+                    id: id.clone(),
+                    snapshot: PluginSnapshot::from(&entry.status),
+                    dependencies,
+                    dependents,
+                }
+            })
+            .collect();
+        FleetInventory {
+            entries,
+            event_buffer: EventBufferSnapshot {
+                capacity: self.event_capacity,
+                queued: self.events.len(),
+                last_sequence: self.sequence,
+                lost_events: self.lost_events,
+            },
+        }
     }
 
     /// Previews every selected node in reverse-topological execution candidate
@@ -1274,6 +1373,177 @@ mod tests {
                 evidence: EvidenceRef::new("test-evidence").expect("valid evidence"),
             },
             plugin: Box::new(NoCallbacks),
+        }
+    }
+
+    #[test]
+    fn inventory_diamond_is_deterministic_and_relations_are_only_direct() {
+        let mut expected = None;
+        for rotation in 0..4 {
+            for reverse in [false, true] {
+                let mut registrations = vec![
+                    registration("a", &[]),
+                    registration("b", &["a"]),
+                    registration("c", &["a"]),
+                    registration("root", if reverse { &["c", "b"] } else { &["b", "c"] }),
+                ];
+                registrations.rotate_left(rotation);
+                if reverse {
+                    registrations.reverse();
+                }
+                let manager = PluginManager::new(registrations).expect("diamond");
+                let inventory = manager.inventory();
+                let relations: Vec<_> = inventory
+                    .entries()
+                    .iter()
+                    .map(|entry| {
+                        (
+                            entry.id.as_str(),
+                            entry
+                                .dependencies
+                                .iter()
+                                .map(PluginId::as_str)
+                                .collect::<Vec<_>>(),
+                            entry
+                                .dependents
+                                .iter()
+                                .map(PluginId::as_str)
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect();
+                assert_eq!(
+                    relations,
+                    [
+                        ("a", vec![], vec!["b", "c"]),
+                        ("b", vec!["a"], vec!["root"]),
+                        ("c", vec!["a"], vec!["root"]),
+                        ("root", vec!["b", "c"], vec![]),
+                    ]
+                );
+                assert!(inventory.entries().iter().all(|entry| {
+                    entry.snapshot.state == PluginState::Registered
+                        && !entry.snapshot.cleanup_pending
+                }));
+                if let Some(expected) = &expected {
+                    assert_eq!(&inventory, expected);
+                } else {
+                    expected = Some(inventory);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn inventory_accepts_every_state_and_redacts_retained_failures() {
+        let mut manager = PluginManager::new(vec![registration("a", &[])]).expect("manager");
+        let id = PluginId::new("a").expect("ID");
+        let initial = manager.inventory();
+        for state in [
+            PluginState::Registered,
+            PluginState::Initialized,
+            PluginState::Starting,
+            PluginState::Running,
+            PluginState::Paused,
+            PluginState::Stopped,
+            PluginState::Failed,
+        ] {
+            for pending in [false, true] {
+                let status = &mut manager.entries.get_mut(&id).expect("entry").status;
+                status.state = state;
+                status.cleanup_pending = pending;
+                status.failure = Some(PluginFailure {
+                    action: PluginAction::Readiness,
+                    message: "arbitrary-private-panic-payload".into(),
+                    panicked: true,
+                });
+                status.cleanup_error = Some(PluginFailure {
+                    action: PluginAction::Stop,
+                    message: "arbitrary-private-error".into(),
+                    panicked: false,
+                });
+                let snapshot = PluginSnapshot::from(&*status);
+                let inventory = manager.inventory();
+                assert_eq!(inventory.entries().len(), 1);
+                assert_eq!(inventory.entries()[0].snapshot, snapshot);
+                let rendered = format!("{inventory:?}");
+                for excluded in ["arbitrary-private", "test-evidence"] {
+                    assert!(!rendered.contains(excluded));
+                }
+            }
+        }
+        assert_eq!(initial.entries()[0].snapshot.state, PluginState::Registered);
+        assert!(!initial.entries()[0].snapshot.failed);
+    }
+
+    #[test]
+    fn inventory_preserves_queue_counters_status_and_sequence_even_after_drain() {
+        for capacity in [0, 1, 8] {
+            for empty in [false, true] {
+                let mut manager = PluginManager::with_event_capacity(
+                    if empty {
+                        vec![]
+                    } else {
+                        vec![registration("a", &[]), registration("b", &[])]
+                    },
+                    capacity,
+                )
+                .expect("manager");
+                let emitted = if empty { 0 } else { 2 };
+                for drained in [false, true] {
+                    if drained {
+                        manager.drain_events().for_each(drop);
+                    }
+                    let events = manager.events.clone();
+                    let statuses: Vec<_> = manager
+                        .entries
+                        .values()
+                        .map(|entry| entry.status.clone())
+                        .collect();
+                    let first = manager.inventory();
+                    let counters = first.event_buffer();
+                    assert_eq!(counters.capacity(), capacity);
+                    assert_eq!(
+                        counters.queued(),
+                        if drained { 0 } else { capacity.min(emitted) }
+                    );
+                    assert_eq!(counters.last_sequence(), emitted as u64);
+                    assert_eq!(
+                        counters.lost_events(),
+                        emitted.saturating_sub(capacity) as u64
+                    );
+                    for _ in 0..3 {
+                        assert_eq!(manager.inventory(), first);
+                    }
+                    assert_eq!(manager.events, events);
+                    assert_eq!(manager.sequence, counters.last_sequence());
+                    assert_eq!(manager.lost_events, counters.lost_events());
+                    assert_eq!(
+                        manager
+                            .entries
+                            .values()
+                            .map(|entry| entry.status.clone())
+                            .collect::<Vec<_>>(),
+                        statuses
+                    );
+                }
+                if !empty {
+                    let mut deny =
+                        |_: &PluginDescriptor, _: PluginAction| Err("private denial".into());
+                    assert!(
+                        manager
+                            .initialize(&PluginId::new("a").expect("ID"), &mut deny)
+                            .is_err()
+                    );
+                    let inventory = manager.inventory();
+                    assert_eq!(inventory.event_buffer().last_sequence(), 3);
+                    assert_eq!(inventory.event_buffer().queued(), capacity.min(1));
+                    assert_eq!(
+                        inventory.event_buffer().lost_events(),
+                        2_usize.saturating_sub(capacity) as u64 + u64::from(capacity == 0)
+                    );
+                }
+            }
         }
     }
 

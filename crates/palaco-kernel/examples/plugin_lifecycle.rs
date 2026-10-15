@@ -69,6 +69,31 @@ fn registration(
     })
 }
 
+fn print_inventory(manager: &PluginManager) {
+    let inventory = manager.inventory();
+    for entry in inventory.entries() {
+        println!(
+            "inventory {}: {:?}, retained health {:?}, pending {}, failed {}, cleanup failed {}, dependencies {}, dependents {}",
+            entry.id.as_str(),
+            entry.snapshot.state,
+            entry.snapshot.health,
+            entry.snapshot.cleanup_pending,
+            entry.snapshot.failed,
+            entry.snapshot.cleanup_failed,
+            entry.dependencies.len(),
+            entry.dependents.len(),
+        );
+    }
+    let buffer = inventory.event_buffer();
+    println!(
+        "inventory events: capacity {}, queued {}, last local sequence {}, lost {}",
+        buffer.capacity(),
+        buffer.queued(),
+        buffer.last_sequence(),
+        buffer.lost_events(),
+    );
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut manager = PluginManager::new(vec![
         registration("worker", vec![PluginId::new("service")?])?,
@@ -78,6 +103,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let service = PluginId::new("service")?;
     let worker = PluginId::new("worker")?;
     let independent = PluginId::new("independent")?;
+    print_inventory(&manager);
     let mut scoped_complete = true;
     let lifecycle = manager
         .plan_startup(&worker)
@@ -152,9 +178,11 @@ fn main() -> Result<(), Box<dyn Error>> {
             println!("independent retained after scoped shutdown: {health:?}");
             Ok(())
         });
+    print_inventory(&manager);
     // Never short-circuit cleanup on an operational failure. A real host must
     // retain the manager and explicitly retry if cleanup itself fails.
     let cleanup = manager.stop_all();
+    print_inventory(&manager);
     for event in manager.drain_events() {
         println!(
             "{} {} {:?}: {:?}",

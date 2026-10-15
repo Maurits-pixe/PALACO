@@ -144,6 +144,25 @@ authorization rejection, a Running/Paused mix can continue with another batch.
 Starting (including rejected resume-readiness authorization) or Failed requires
 explicit `stop`/`stop_all`, not a business retry; cleanup still bypasses revoked authority.
 
+`inventory(&self) -> FleetInventory` is an owned, immutable, redacted snapshot of
+the **entire fleet in any lifecycle state**, including Registered, Initialized,
+Starting, Running, Paused, Stopped, and Failed before or after cleanup. No health
+preflight applies. `entries()` follows deterministic topological order; each
+`FleetEntry` contains its bounded ID, retained `PluginSnapshot`, and sorted unique
+**direct** dependency/dependent IDs, including inactive nodes, not transitive closures.
+`event_buffer()` exposes `capacity()`, `queued()`, `last_sequence()` (zero before
+any emission), and cumulative `lost_events()`. Dropped/drained events still count
+toward the last sequence; draining does not reset loss. Empty inventories are valid.
+
+Reading inventory does not authorize, invoke callbacks, perform fresh probes,
+spawn processes or perform process I/O, record/drain events, or change status or
+counters. Repeated reads agree unless the manager changes; owned snapshots may
+become stale. Retained health grants no status or authority and is not continuous
+readiness. There is no fleet-ready aggregate, registry/PCR integration, or export.
+Snapshots exclude evidence, raw callback/authorizer errors, panic payloads,
+configuration, executable arguments, and PIDs. Event sequences are manager-local,
+not globally unique or authenticated auditing.
+
 Run the three-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
 It starts worker and its service dependency in one scope, then the independent
@@ -151,7 +170,9 @@ plugin in another, explicitly probes health, pauses, resumes, probes again, sele
 service and its worker via an explicit cascade, proves the independent plugin remains
 ready, prints a scoped shutdown preview then executes fresh scoped cleanup and checks
 report completeness, unconditionally attempts fleet cleanup even on errors, and drains
-redacted event outcomes. Its synthetic authorizer is **not production authentication**.
+redacted event outcomes. It prints inventory before startup, after operations,
+and after final cleanup without fresh probes. Its synthetic authorizer is
+**not production authentication**.
 
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
 Readiness is an explicit startup/resume/probe snapshot, not continuous monitoring. `start_all` rolls back

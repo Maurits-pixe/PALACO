@@ -136,6 +136,83 @@ fn allow(_: &PluginDescriptor, _: PluginAction) -> Result<RuntimePlan, String> {
 }
 
 #[test]
+fn inventory_tracks_retained_health_and_cleanup_without_observation_side_effects() -> TestResult {
+    for failure in [PluginOutcome::Error, PluginOutcome::Panicked] {
+        let log = Log::default();
+        let health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let cleanup = Rc::new(RefCell::new(PluginOutcome::Error));
+        let mut manager = PluginManager::new(vec![
+            registration(
+                "a",
+                &[],
+                &log,
+                Behavior {
+                    health: Some(health.clone()),
+                    cleanup: Some(cleanup.clone()),
+                    ..Behavior::default()
+                },
+            )?,
+            registration("inactive", &["a"], &log, Behavior::default())?,
+        ])?;
+        let id = PluginId::new("a")?;
+        let observe = |manager: &PluginManager| {
+            let before_log = log.borrow().clone();
+            let before_status = manager.status(&id).cloned();
+            let inventory = manager.inventory();
+            assert_eq!(manager.inventory(), inventory);
+            assert_eq!(*log.borrow(), before_log);
+            assert_eq!(manager.status(&id), before_status.as_ref());
+            assert_eq!(inventory.entries().len(), 2);
+            assert_eq!(
+                inventory.entries()[1].snapshot.state,
+                PluginState::Registered
+            );
+            assert_eq!(
+                inventory.entries()[0].snapshot,
+                PluginSnapshot::from(manager.status(&id).expect("status"))
+            );
+            let rendered = format!("{inventory:?}");
+            for excluded in [
+                "private-health-secret",
+                "private-cleanup-secret",
+                "plugin-evidence",
+            ] {
+                assert!(!rendered.contains(excluded));
+            }
+            inventory.entries()[0].snapshot
+        };
+        assert_eq!(observe(&manager).state, PluginState::Registered);
+        manager.initialize(&id, &mut allow)?;
+        assert_eq!(observe(&manager).state, PluginState::Initialized);
+        manager.start(&id, &mut allow)?;
+        assert_eq!(observe(&manager).health, PluginHealth::Ready);
+        *health.borrow_mut() = PluginOutcome::NotReady;
+        manager.check_health(&id, &mut allow)?;
+        assert_eq!(observe(&manager).health, PluginHealth::NotReady);
+        *health.borrow_mut() = PluginOutcome::Success;
+        manager.check_health(&id, &mut allow)?;
+        assert_eq!(observe(&manager).health, PluginHealth::Ready);
+        manager.pause(&id, &mut allow)?;
+        assert_eq!(observe(&manager).state, PluginState::Paused);
+        manager.resume(&id, &mut allow)?;
+        *health.borrow_mut() = failure;
+        assert!(manager.check_health(&id, &mut allow).is_err());
+        let failed = observe(&manager);
+        assert_eq!(failed.state, PluginState::Failed);
+        assert_eq!(failed.health, PluginHealth::Unhealthy);
+        assert!(failed.failed && failed.cleanup_pending && !failed.cleanup_failed);
+        assert!(manager.stop(&id).is_err());
+        assert!(observe(&manager).cleanup_failed);
+        *cleanup.borrow_mut() = PluginOutcome::Success;
+        manager.stop_all()?;
+        let cleaned = observe(&manager);
+        assert_eq!(cleaned.state, PluginState::Failed);
+        assert!(cleaned.failed && !cleaned.cleanup_pending && !cleaned.cleanup_failed);
+    }
+    Ok(())
+}
+
+#[test]
 fn scoped_start_chain_and_diamond_are_deterministic_and_idempotent() -> TestResult {
     for diamond in [false, true] {
         for reverse in [false, true] {
