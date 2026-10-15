@@ -357,6 +357,75 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
     assert_live_input(&clone.client).await?;
     eprintln!("CASE T05_TLS_RESTORE_MISSING_BINDING_REJECTED");
 
+    // A schema-valid maximum generation fails at the final counter update, after
+    // recovery has attempted epoch changes, session/flow deletion and consent reset.
+    // Only this owned clone is faulted, and no row values enter diagnostics.
+    assert_eq!(
+        bounded(clone.client.execute(
+            "UPDATE rio_synthetic.store_guard SET recovery_generation=$1 \
+             WHERE id=1 AND recovery_generation=$2",
+            &[&i64::MAX, &generation],
+        ))
+        .await?,
+        1
+    );
+    let faulted = snapshot(&clone.client).await?;
+    // Prove the injected state passes the exact bootstrap validation used by
+    // the constructor; an early validation refusal cannot satisfy this case.
+    let validated = PgStore::from_tls_connection(restore_config.connect().await?);
+    validated.initialize_or_validate(true).await?;
+    drop(validated);
+    assert!(
+        snapshot(&clone.client).await? == faulted,
+        "validation accepts the injected counter without mutation"
+    );
+    assert_live_input(&clone.client).await?;
+    let rejected = crate::AppState::discover_tls_synthetic_restore(
+        "SYNTHETIC_ONLY",
+        &client_secret,
+        &restore_config,
+    )
+    .await
+    .err()
+    .ok_or(StoreError::Invalid)?;
+    assert_eq!(
+        rejected.to_string(),
+        "synthetic TLS restore database unavailable",
+        "a late recovery SQL failure cannot return service state"
+    );
+    // Waiting for this row lock in an implicit transaction proves the failed
+    // recovery transaction has ended. Query completion also releases our lock.
+    let barrier = bounded(clone.client.query_one(
+        "SELECT recovery_generation FROM rio_synthetic.store_guard WHERE id=1 FOR UPDATE",
+        &[],
+    ))
+    .await?;
+    assert_eq!(barrier.try_get::<_, i64>(0)?, i64::MAX);
+    assert!(
+        snapshot(&clone.client).await? == faulted,
+        "late failure rolls back every recovery change across all ten tables"
+    );
+    assert_live_input(&clone.client).await?;
+    assert!(
+        snapshot(&source.client).await? == source_before,
+        "failed clone recovery never mutates the primary database"
+    );
+    assert_eq!(
+        bounded(clone.client.execute(
+            "UPDATE rio_synthetic.store_guard SET recovery_generation=$1 \
+             WHERE id=1 AND recovery_generation=$2",
+            &[&generation, &i64::MAX],
+        ))
+        .await?,
+        1
+    );
+    assert!(
+        snapshot(&clone.client).await? == clone_before,
+        "fixture restores only the exact original recovery counter"
+    );
+    assert_live_input(&clone.client).await?;
+    eprintln!("CASE T05_TLS_RESTORE_LATE_FAILURE_ROLLED_BACK");
+
     let state = crate::AppState::discover_tls_synthetic_restore(
         "SYNTHETIC_ONLY",
         &client_secret,
