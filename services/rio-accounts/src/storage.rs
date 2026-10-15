@@ -300,8 +300,115 @@ async fn audit(
     Ok(())
 }
 
+/// Validate the closed bootstrap without advancing time, expiring rows or reseeding.
+/// This is not a full catalog-integrity audit against a privileged database operator.
+async fn validate_bootstrap(tx: &Transaction<'_>) -> Result<(), StoreError> {
+    let tables: &[&str] = &[
+        "store_guard",
+        "accounts",
+        "auth_bindings",
+        "auth_transactions",
+        "sessions",
+        "enrollment_requests",
+        "provisional_id_bindings",
+        "consent_receipts",
+        "audit_events",
+        "outbox",
+    ];
+    let count: i64 = tx
+        .query_one(
+            "SELECT count(*) FROM pg_catalog.pg_class c \
+             JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace \
+             WHERE n.nspname='rio_synthetic' AND c.relname::text=ANY($1::text[]) \
+             AND c.relkind='r' AND c.relpersistence='p'",
+            &[&tables],
+        )
+        .await?
+        .try_get(0)?;
+    if count != tables.len() as i64 {
+        return Err(StoreError::Unavailable);
+    }
+    // Runtime transactions lock this guard first. Do not use locked(), which mutates state.
+    let guards = tx
+        .query(
+            "SELECT id,schema_version,last_ms,recovery_generation,audit_full,audit_suppressed,\
+             mode,account_active FROM rio_synthetic.store_guard ORDER BY id LIMIT 2 FOR UPDATE",
+            &[],
+        )
+        .await?;
+    if guards.len() != 1 {
+        return Err(StoreError::Unavailable);
+    }
+    let guard = &guards[0];
+    let _: bool = guard.try_get("audit_full")?;
+    if guard.try_get::<_, i16>("id")? != 1
+        || guard.try_get::<_, i32>("schema_version")? != 1
+        || guard.try_get::<_, i64>("last_ms")? < 0
+        || guard.try_get::<_, i64>("recovery_generation")? < 0
+        || guard.try_get::<_, i64>("audit_suppressed")? < 0
+        || guard.try_get::<_, String>("mode")? != "SYNTHETIC_ONLY"
+        || guard.try_get::<_, bool>("account_active")?
+    {
+        return Err(StoreError::Unavailable);
+    }
+    let accounts = tx
+        .query(
+            "SELECT account_id,owner_id,tenant_id,status,version \
+             FROM rio_synthetic.accounts ORDER BY account_id LIMIT 3 FOR SHARE",
+            &[],
+        )
+        .await?;
+    let bindings = tx
+        .query(
+            "SELECT account_id,issuer,subject FROM rio_synthetic.auth_bindings \
+             ORDER BY account_id LIMIT 3 FOR SHARE",
+            &[],
+        )
+        .await?;
+    let expected = [
+        (
+            "TST-alpha",
+            "owner-TST-alpha",
+            "tenant-TST-alpha",
+            "11111111-1111-4111-8111-111111111111",
+        ),
+        (
+            "TST-beta",
+            "owner-TST-beta",
+            "tenant-TST-beta",
+            "22222222-2222-4222-8222-222222222222",
+        ),
+    ];
+    if accounts.len() != expected.len() || bindings.len() != expected.len() {
+        return Err(StoreError::Unavailable);
+    }
+    for ((account, binding), (id, owner, tenant, subject)) in
+        accounts.iter().zip(&bindings).zip(expected)
+    {
+        if account.try_get::<_, String>("account_id")? != id
+            || account.try_get::<_, String>("owner_id")? != owner
+            || account.try_get::<_, String>("tenant_id")? != tenant
+            || !matches!(
+                account.try_get::<_, String>("status")?.as_str(),
+                "SYNTHETIC_ENABLED" | "SYNTHETIC_DISABLED"
+            )
+            || account.try_get::<_, i64>("version")? < 0
+            || binding.try_get::<_, String>("account_id")? != id
+            || binding.try_get::<_, String>("issuer")? != crate::ISSUER
+            || binding.try_get::<_, String>("subject")? != subject
+        {
+            return Err(StoreError::Unavailable);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "storage_bootstrap_tests.rs"]
+mod bootstrap_tests;
+
 impl PgStore {
-    /// Connect only to the fixed loopback development PostgreSQL service and migrate atomically.
+    /// Connect only to fixed loopback PostgreSQL; initialize or validate atomically.
     /// The isolated restore database is fenced before this method returns.
     pub async fn connect_local(url: &str) -> Result<Self, StoreError> {
         let (config, restore) = local_config(url)?;
@@ -322,7 +429,7 @@ impl PgStore {
                 connection: task.abort_handle(),
             }),
         };
-        store.migrate().await?;
+        store.initialize_or_validate().await?;
         if restore {
             store.recover_after_restore().await?;
         }
@@ -342,7 +449,7 @@ impl PgStore {
                 connection: connection.connection,
             }),
         };
-        store.migrate().await?;
+        store.initialize_or_validate().await?;
         Ok(store)
     }
 
@@ -365,14 +472,25 @@ impl PgStore {
         result
     }
 
-    async fn migrate(&self) -> Result<(), StoreError> {
+    async fn initialize_or_validate(&self) -> Result<(), StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
             tx.execute("SELECT pg_advisory_xact_lock(918873280)", &[])
                 .await?;
-            tx.batch_execute(include_str!("../migrations/0001_synthetic_accounts.sql"))
-                .await?;
+            let exists: bool = tx
+                .query_one(
+                    "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname='rio_synthetic')",
+                    &[],
+                )
+                .await?
+                .try_get(0)?;
+            // An existing namespace is never treated as permission to repair identity data.
+            if !exists {
+                tx.batch_execute(include_str!("../migrations/0001_synthetic_accounts.sql"))
+                    .await?;
+            }
+            validate_bootstrap(&tx).await?;
             tx.commit().await?;
             Ok(())
         })
