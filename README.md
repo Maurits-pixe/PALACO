@@ -80,10 +80,11 @@ authorization rejection, a Running/Paused mix can continue with another batch.
 Starting (including rejected resume-readiness authorization) or Failed requires
 explicit `stop`/`stop_all`, not a business retry; cleanup still bypasses revoked authority.
 
-Run the two-plugin trusted lifecycle demonstration with
+Run the three-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
 It starts, explicitly probes health, pauses, resumes, probes again, selectively stops
-the worker, unconditionally attempts fleet cleanup even on errors, and drains
+service and its worker via an explicit cascade, proves the independent plugin remains
+ready, unconditionally attempts fleet cleanup even on errors, and drains
 redacted event outcomes. Its synthetic authorizer is **not production authentication**.
 
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
@@ -103,6 +104,19 @@ Running (Ready or NotReady), Paused, and failed-but-not-cleaned dependents; dire
 guards preserve transitive dependency safety. Stop leaves first failure metadata
 intact; explicit retry updates the latest cleanup error, and successful cleanup
 clears that error and pending flag without recovering Failed lifecycle state.
+`stop_with_dependents(&id)` explicitly opts into scoped shutdown: exactly the root
+and **all transitive dependents** in the immutable descriptor graph, not the root's
+prerequisites, other shared dependencies, or unrelated branches. Unlike `stop`, it
+cascades; unlike `stop_all`, it does not clean the whole fleet. Closure traversal
+includes Registered and already-cleaned intermediary nodes. Unknown roots reject
+before callbacks, events, or state changes. No authorizer is consulted, even after
+revocation. Eligible pending cleanup runs in deterministic reverse topological
+order; nodes without pending cleanup and blocked dependencies are silently skipped.
+After callback errors or unwinding panics, independent eligible branches inside the
+closure still clean up; the first callback error is returned, never a blocking error.
+Partial progress remains visible, and dependencies of failed cleanup are retained.
+Explicitly retry the same scoped call to finish cleanup; already-cleaned nodes are
+idempotent no-ops without events or status changes. This is not restart or business retry.
 `stop_all()` attempts eligible cleanup in reverse topological order, skipping
 blocked dependencies while continuing independent cleanup and returning the first
 callback error (not a dependency-blocking error).

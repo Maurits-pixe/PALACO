@@ -240,7 +240,7 @@ pub const DEFAULT_EVENT_CAPACITY: usize = 256;
 
 /// Exclusive synchronous lifecycle ownership. There is deliberately no unload
 /// operation or public state setter, and no automatic initialization/start retry.
-/// Registration is immutable after construction; `stop` and `stop_all` retain
+/// Registration is immutable after construction; all cleanup operations retain
 /// dependencies while a dependent has pending cleanup.
 pub struct PluginManager {
     entries: BTreeMap<PluginId, Entry>,
@@ -568,6 +568,45 @@ impl PluginManager {
             return Err(PluginError::DependencyInUse(dependent.clone()));
         }
         self.invoke(id, PluginAction::Stop)
+    }
+
+    /// Explicitly cleans up the root and all transitive dependents in the immutable
+    /// descriptor graph, never its dependencies or unrelated plugins. Traversal
+    /// includes never-initialized and already-cleaned intermediary nodes.
+    /// Unknown roots fail without side effects. No authorization is required,
+    /// even after revocation. Eligible cleanup runs in reverse topological order;
+    /// blocked dependencies and nodes without pending cleanup are silently skipped.
+    /// Independent branches continue after errors/panics; the first callback error
+    /// is returned. Failed cleanup retains dependencies until explicit retry.
+    pub fn stop_with_dependents(&mut self, id: &PluginId) -> Result<(), PluginError> {
+        if !self.entries.contains_key(id) {
+            return Err(PluginError::UnknownPlugin(id.clone()));
+        }
+        let mut closure = BTreeSet::from([id.clone()]);
+        for candidate in &self.order {
+            if self.entries[candidate]
+                .registration
+                .descriptor
+                .dependencies
+                .iter()
+                .any(|dependency| closure.contains(dependency))
+            {
+                closure.insert(candidate.clone());
+            }
+        }
+        let mut first_error = None;
+        for id in self.order.clone().into_iter().rev() {
+            if !closure.contains(&id)
+                || !self.entries[&id].status.cleanup_pending
+                || self.cleanup_blocker(&id).is_some()
+            {
+                continue;
+            }
+            if let Err(error) = self.invoke(&id, PluginAction::Stop) {
+                first_error.get_or_insert(error);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
     }
 
     fn cleanup_blocker(&self, id: &PluginId) -> Option<&PluginId> {

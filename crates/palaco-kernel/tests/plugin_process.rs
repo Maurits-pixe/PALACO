@@ -99,6 +99,90 @@ fn assert_reaped(pid: u32) {
 }
 
 #[test]
+fn scoped_process_shutdown_reaps_descendants_and_retains_unrelated_child() -> TestResult {
+    for mode in ["healthy", "stop-error", "stop-hang", "probe-error"] {
+        let ids = ["service", "worker", "leaf", "independent"]
+            .map(|name| PluginId::new(name).expect("valid ID"));
+        let [service, worker, leaf, independent] = &ids;
+        let pids = [(); 4].map(|()| Rc::new(Cell::new(None)));
+        let mut registrations = Vec::new();
+        for (index, (id, dependencies, mode)) in [
+            (service, vec![], "healthy"),
+            (worker, vec![service.clone()], "healthy"),
+            (leaf, vec![worker.clone()], mode),
+            (independent, vec![], "healthy"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            registrations.push(PluginRegistration {
+                descriptor: PluginDescriptor {
+                    id: id.clone(),
+                    dependencies,
+                    ..descriptor()?
+                },
+                plugin: Box::new(TrackedProcess {
+                    plugin: process(mode)?,
+                    pid: pids[index].clone(),
+                }),
+            });
+        }
+        let mut manager = PluginManager::new(registrations)?;
+        manager.start_all(&mut allow)?;
+        let pids = pids.map(|pid| pid.get().expect("spawned child"));
+        let retained =
+            [service, worker, independent].map(|id| manager.status(id).expect("status").clone());
+        if mode == "probe-error" {
+            assert!(matches!(
+                manager.check_health(leaf, &mut allow),
+                Err(PluginError::Callback(..))
+            ));
+            assert_reaped(pids[2]);
+        }
+        manager.drain_events().for_each(drop);
+        let began = Instant::now();
+        let result = manager.stop_with_dependents(service);
+        assert!(began.elapsed() < Duration::from_secs(3), "{mode}");
+        assert_reaped(pids[2]);
+        if matches!(mode, "stop-error" | "stop-hang") {
+            assert!(matches!(result, Err(PluginError::Callback(id, _)) if &id == leaf));
+            assert_eq!(manager.drain_events().count(), 1);
+            for (id, status) in [service, worker, independent].into_iter().zip(&retained) {
+                assert_eq!(manager.status(id), Some(status));
+                assert_eq!(manager.check_health(id, &mut allow)?, PluginHealth::Ready);
+            }
+            manager.drain_events().for_each(drop);
+            manager.stop_with_dependents(service)?;
+        } else {
+            result?;
+        }
+        assert_reaped(pids[0]);
+        assert_reaped(pids[1]);
+        assert_eq!(manager.status(independent), Some(&retained[2]));
+        assert_eq!(
+            manager.check_health(independent, &mut allow)?,
+            PluginHealth::Ready
+        );
+        assert!(
+            ids[..3]
+                .iter()
+                .all(|id| !manager.status(id).expect("status").cleanup_pending)
+        );
+        manager.drain_events().for_each(drop);
+        let before = ids.each_ref().map(|id| manager.status(id).cloned());
+        manager.stop_with_dependents(service)?;
+        assert_eq!(ids.each_ref().map(|id| manager.status(id).cloned()), before);
+        assert_eq!(manager.drain_events().count(), 0);
+        manager.stop_all()?;
+        assert_reaped(pids[3]);
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(&events[0].id, independent);
+    }
+    Ok(())
+}
+
+#[test]
 fn selective_process_stop_reaps_only_target_and_retains_dependency_until_cleanup() -> TestResult {
     for mode in ["healthy", "stop-error", "stop-hang", "probe-error"] {
         let service = PluginId::new("service")?;

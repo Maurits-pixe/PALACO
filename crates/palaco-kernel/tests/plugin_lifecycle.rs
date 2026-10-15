@@ -135,6 +135,252 @@ fn allow(_: &PluginDescriptor, _: PluginAction) -> Result<RuntimePlan, String> {
 }
 
 #[test]
+fn scoped_stop_closure_is_deterministic_and_excludes_prerequisites_and_other_branches() -> TestResult
+{
+    for diamond in [false, true] {
+        for permutation in [
+            [0, 1, 2, 3, 4, 5, 6],
+            [6, 5, 4, 3, 2, 1, 0],
+            [3, 0, 6, 2, 5, 1, 4],
+        ] {
+            let log = Log::default();
+            let graph: [(&str, &[&str]); 7] = [
+                ("prerequisite", &[]),
+                ("root", &["prerequisite"]),
+                ("b", &["root"]),
+                ("c", if diamond { &["root"] } else { &["b"] }),
+                ("d", &["b", "c", "shared"]),
+                ("shared", &[]),
+                ("unrelated", &["prerequisite", "shared"]),
+            ];
+            let mut manager = PluginManager::new(
+                permutation
+                    .into_iter()
+                    .map(|index| {
+                        let (id, dependencies) = graph[index];
+                        registration(id, dependencies, &log, Behavior::default())
+                    })
+                    .collect::<Result<_, _>>()?,
+            )?;
+            manager.start_all(&mut allow)?;
+            let retained = ["prerequisite", "shared", "unrelated"]
+                .map(|name| PluginId::new(name).expect("valid ID"));
+            let before = retained.each_ref().map(|id| manager.status(id).cloned());
+            manager.drain_events().for_each(drop);
+            log.borrow_mut().clear();
+            let root = PluginId::new("root")?;
+            let missing = PluginId::new("missing")?;
+            let statuses = manager
+                .order()
+                .iter()
+                .map(|id| manager.status(id).cloned())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                manager.stop_with_dependents(&missing),
+                Err(PluginError::UnknownPlugin(missing))
+            );
+            assert_eq!(
+                manager
+                    .order()
+                    .iter()
+                    .map(|id| manager.status(id).cloned())
+                    .collect::<Vec<_>>(),
+                statuses
+            );
+            assert!(log.borrow().is_empty());
+            assert_eq!(manager.drain_events().count(), 0);
+            // Revoked operational authority cannot prevent cleanup or be consulted by it.
+            let mut revoked = |_: &PluginDescriptor, _: PluginAction| plan(AuthorityState::Revoked);
+            assert!(matches!(
+                manager.check_health(&root, &mut revoked),
+                Err(PluginError::Authorization(..))
+            ));
+            manager.drain_events().for_each(drop);
+            manager.stop_with_dependents(&root)?;
+            assert_eq!(*log.borrow(), ["d:Stop", "c:Stop", "b:Stop", "root:Stop"]);
+            let events = manager.drain_events().collect::<Vec<_>>();
+            assert_eq!(
+                events
+                    .iter()
+                    .map(|event| event.id.as_str())
+                    .collect::<Vec<_>>(),
+                ["d", "c", "b", "root"]
+            );
+            assert!(events.iter().all(|event| event.kind
+                == PluginEventKind::Callback(PluginAction::Stop)
+                && event.outcome == PluginOutcome::Success));
+            assert!(
+                events
+                    .windows(2)
+                    .all(|pair| pair[0].sequence + 1 == pair[1].sequence)
+            );
+            for (id, status) in retained.iter().zip(&before) {
+                assert_eq!(manager.status(id), status.as_ref());
+                assert_eq!(
+                    manager.status(id).expect("status").state,
+                    PluginState::Running
+                );
+            }
+            let cleaned = manager
+                .order()
+                .iter()
+                .map(|id| manager.status(id).cloned())
+                .collect::<Vec<_>>();
+            manager.stop_with_dependents(&root)?;
+            assert_eq!(
+                manager
+                    .order()
+                    .iter()
+                    .map(|id| manager.status(id).cloned())
+                    .collect::<Vec<_>>(),
+                cleaned
+            );
+            assert_eq!(manager.drain_events().count(), 0);
+            assert_eq!(log.borrow().len(), 4);
+            manager.stop_all()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn scoped_stop_traverses_registered_and_already_cleaned_intermediaries() -> TestResult {
+    for cleaned in [false, true] {
+        let log = Log::default();
+        let a = PluginId::new("a")?;
+        let b = PluginId::new("b")?;
+        let c = PluginId::new("c")?;
+        let mut manager = PluginManager::new(vec![
+            registration("c", &["b"], &log, Behavior::default())?,
+            registration("b", &["a"], &log, Behavior::default())?,
+            registration("a", &[], &log, Behavior::default())?,
+        ])?;
+        // Individual initialization does not require initialized dependencies.
+        if cleaned {
+            manager.initialize(&b, &mut allow)?;
+            manager.stop(&b)?;
+        }
+        let intermediary = manager.status(&b).cloned();
+        let root = manager.status(&a).cloned();
+        manager.initialize(&c, &mut allow)?;
+        log.borrow_mut().clear();
+        manager.drain_events().for_each(drop);
+        manager.stop_with_dependents(&a)?;
+        assert_eq!(*log.borrow(), ["c:Stop"]);
+        assert_eq!(manager.status(&a), root.as_ref());
+        assert_eq!(manager.status(&b), intermediary.as_ref());
+        assert_eq!(manager.drain_events().count(), 1);
+        let statuses = [&a, &b, &c].map(|id| manager.status(id).cloned());
+        manager.stop_with_dependents(&a)?;
+        assert_eq!([&a, &b, &c].map(|id| manager.status(id).cloned()), statuses);
+        assert_eq!(manager.drain_events().count(), 0);
+        assert_eq!(log.borrow().len(), 1);
+    }
+    Ok(())
+}
+
+#[test]
+fn scoped_stop_continues_independent_branches_and_retries_failed_cleanup() -> TestResult {
+    for panicked in [false, true] {
+        let log = Log::default();
+        let cleanup = Rc::new(RefCell::new(if panicked {
+            PluginOutcome::Panicked
+        } else {
+            PluginOutcome::Error
+        }));
+        let mut manager = PluginManager::new(vec![
+            registration("a", &[], &log, Behavior::default())?,
+            registration("b", &["a"], &log, Behavior::default())?,
+            registration("b-independent", &["a"], &log, Behavior::default())?,
+            registration(
+                "c",
+                &["b"],
+                &log,
+                Behavior {
+                    cleanup: Some(cleanup.clone()),
+                    ..Behavior::default()
+                },
+            )?,
+            registration("d", &["a"], &log, Behavior::default())?,
+            registration(
+                "e",
+                &["d"],
+                &log,
+                Behavior {
+                    cleanup_failures: 1,
+                    ..Behavior::default()
+                },
+            )?,
+            registration("f", &["a"], &log, Behavior::default())?,
+        ])?;
+        manager.start_all(&mut allow)?;
+        let a = PluginId::new("a")?;
+        let retained = ["a", "b", "d"].map(|name| PluginId::new(name).expect("ID"));
+        let before = retained.each_ref().map(|id| manager.status(id).cloned());
+        manager.drain_events().for_each(drop);
+        log.borrow_mut().clear();
+        let Err(PluginError::Callback(id, failure)) = manager.stop_with_dependents(&a) else {
+            panic!("first reverse-topological callback error expected");
+        };
+        assert_eq!(id.as_str(), "e");
+        assert!(!failure.panicked);
+        assert_eq!(
+            *log.borrow(),
+            ["f:Stop", "e:Stop", "c:Stop", "b-independent:Stop"]
+        );
+        for (id, status) in retained.iter().zip(&before) {
+            assert_eq!(manager.status(id), status.as_ref());
+        }
+        let c = PluginId::new("c")?;
+        let e = PluginId::new("e")?;
+        let first = [&c, &e].map(|id| manager.status(id).expect("status").failure.clone());
+        assert_eq!(first[0].as_ref().expect("failure").panicked, panicked);
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 4);
+        assert_eq!(
+            events[2].outcome,
+            if panicked {
+                PluginOutcome::Panicked
+            } else {
+                PluginOutcome::Error
+            }
+        );
+        *cleanup.borrow_mut() = PluginOutcome::Success;
+        log.borrow_mut().clear();
+        manager.stop_with_dependents(&a)?;
+        assert_eq!(
+            *log.borrow(),
+            ["e:Stop", "d:Stop", "c:Stop", "b:Stop", "a:Stop"]
+        );
+        for (id, failure) in [&c, &e].into_iter().zip(first) {
+            let status = manager.status(id).expect("status");
+            assert_eq!(status.failure, failure);
+            assert_eq!(status.state, PluginState::Failed);
+            assert!(!status.cleanup_pending);
+            assert!(status.cleanup_error.is_none());
+        }
+        assert_eq!(manager.drain_events().count(), 5);
+        let before = manager
+            .order()
+            .iter()
+            .map(|id| manager.status(id).cloned())
+            .collect::<Vec<_>>();
+        manager.stop_with_dependents(&a)?;
+        assert_eq!(
+            manager
+                .order()
+                .iter()
+                .map(|id| manager.status(id).cloned())
+                .collect::<Vec<_>>(),
+            before
+        );
+        assert_eq!(manager.drain_events().count(), 0);
+        assert_eq!(log.borrow().len(), 5);
+    }
+    Ok(())
+}
+
+#[test]
 fn selective_stop_unknown_and_registered_are_silent_and_registered_does_not_block() -> TestResult {
     let log = Log::default();
     let a = PluginId::new("a")?;
@@ -268,8 +514,7 @@ fn selective_stop_guards_every_pending_dependent_state_without_side_effects() ->
         );
         assert!(log.borrow().is_empty());
         assert_eq!(manager.drain_events().count(), 0);
-        manager.stop(&b)?;
-        manager.stop(&a)?;
+        manager.stop_with_dependents(&a)?;
         assert_eq!(*log.borrow(), ["b:Stop", "a:Stop"]);
         let events = manager.drain_events().collect::<Vec<_>>();
         assert_eq!(events.len(), 2);

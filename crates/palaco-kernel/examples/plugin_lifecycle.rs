@@ -73,8 +73,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut manager = PluginManager::new(vec![
         registration("worker", vec![PluginId::new("service")?])?,
         registration("service", vec![])?,
+        registration("independent", vec![])?,
     ])?;
-    let worker = PluginId::new("worker")?;
+    let service = PluginId::new("service")?;
+    let independent = PluginId::new("independent")?;
     let lifecycle = manager
         .start_all(&mut synthetic_authorizer)
         // A host chooses when to probe; these are direct, non-transitive snapshots.
@@ -88,11 +90,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         .and_then(|()| manager.resume_all(&mut synthetic_authorizer))
         .and_then(|()| {
             manager
-                .check_health(&PluginId::new("service")?, &mut synthetic_authorizer)
+                .check_health(&service, &mut synthetic_authorizer)
                 .map(|_| ())
         })
-        // Selective cleanup never cascades; dependents must stop first.
-        .and_then(|()| manager.stop(&worker));
+        // Explicit opt-in cascade stops worker before service, not the whole fleet.
+        // In contrast, stop(&service) alone would reject while worker owns resources.
+        .and_then(|()| manager.stop_with_dependents(&service))
+        .and_then(|()| {
+            let health = manager.check_health(&independent, &mut synthetic_authorizer)?;
+            println!("independent retained after scoped shutdown: {health:?}");
+            Ok(())
+        });
     // Never short-circuit cleanup on an operational failure. A real host must
     // retain the manager and explicitly retry if cleanup itself fails.
     let cleanup = manager.stop_all();
