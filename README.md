@@ -2198,6 +2198,26 @@ existing single-snapshot behavior remains unchanged. This comparison checks only
 the supplied pair; it does not authenticate a baseline, establish an immutable
 history, verify intermediate events or authorize transitions.
 
+Read-only trace queries return the transitive upstream or downstream object IDs:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --trace REQ-00001 --direction upstream
+```
+
+`--trace` first validates the entire closed snapshot, then emits only a JSON object
+containing `object_id`, `direction`, `graph`, sorted unique `reachable_ids` and a
+scope disclaimer. The default direction is upstream; downstream traverses the
+same graph in reverse. The starting ID is excluded, and no reachable nodes yields
+an empty array. Unknown IDs and invalid registries fail nonzero without results.
+Only `traceability.upstream` is traversed: dependency fields, embedded relationship
+edges and other references are not merged into the trace graph. Results describe
+reachability in the supplied snapshot, not verified completeness or authority.
+Queries do not modify records or write files. `--trace` requires `--registry`;
+`--direction` requires `--trace`; trace and previous-registry comparison modes
+cannot be combined.
+
 This MVP does not enforce upstream completeness, root reachability,
 authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending

@@ -17,6 +17,7 @@ Checks, in one run:
      lifecycle dates and approval state.
   8. Optional previous-registry comparison: retained identities, adjacent forward
      lifecycle transitions and monotonic audit timestamps.
+  9. Read-only upstream/downstream trace queries on validated closed snapshots.
 
 Any failure exits non-zero.
 """
@@ -789,6 +790,107 @@ def validate_registry_transition(previous, current, validator=None):
     )
 
 
+def trace_palaco_registry(instance, object_id, direction="upstream", validator=None):
+    """Return reachable IDs in the upstream graph, not authority or completeness."""
+    require(direction in ("upstream", "downstream"), f"invalid trace direction: {direction}")
+    validate_palaco_registry(instance, validator)
+    graph = {
+        record["metadata"]["id"]: set(record["traceability"]["upstream"])
+        for record in instance["objects"]
+    }
+    require(object_id in graph, f"unknown trace object ID: {object_id}")
+    if direction == "downstream":
+        reverse = {source: set() for source in graph}
+        for source, targets in graph.items():
+            for target in targets:
+                reverse[target].add(source)
+        graph = reverse
+    visited = {object_id}
+    pending = [object_id]
+    while pending:
+        for target in graph[pending.pop()]:
+            if target not in visited:
+                visited.add(target)
+                pending.append(target)
+    return {
+        "object_id": object_id,
+        "direction": direction,
+        "graph": "traceability.upstream",
+        "reachable_ids": sorted(visited - {object_id}),
+        "scope": "supplied snapshot only; not a completeness or authority decision",
+    }
+
+
+def check_palaco_traces():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    original = copy.deepcopy(fixture)
+    cases = (
+        ("REQ-00001", "upstream", ["CAP-00001", "FE-00001"]),
+        ("FE-00001", "downstream", ["CAP-00001", "REQ-00001"]),
+        ("CAP-00001", "upstream", ["FE-00001"]),
+        ("CAP-00001", "downstream", ["REQ-00001"]),
+        ("FE-00001", "upstream", []),
+        ("REQ-00001", "downstream", []),
+    )
+    for object_id, direction, expected in cases:
+        result = trace_palaco_registry(fixture, object_id, direction, validator)
+        require(result["reachable_ids"] == expected, f"unexpected trace result: {result}")
+        require(result["object_id"] == object_id and result["direction"] == direction
+                and result["graph"] == "traceability.upstream", "missing trace metadata")
+    require(fixture == original, "trace query mutated its input")
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    diamond = {"registry_version": "0.1.0", "objects": []}
+    for index, targets in ((1, [2, 3]), (2, [4]), (3, [4]), (4, []), (5, [])):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["traceability"]["upstream"] = [f"FE-{target:05d}" for target in targets]
+        diamond["objects"].append(record)
+    for direction, start, expected in (
+        ("upstream", "FE-00001", ["FE-00002", "FE-00003", "FE-00004"]),
+        ("downstream", "FE-00004", ["FE-00001", "FE-00002", "FE-00003"]),
+        ("upstream", "FE-00005", []),
+    ):
+        result = trace_palaco_registry(diamond, start, direction, validator)
+        require(result["reachable_ids"] == expected, f"diamond trace mismatch: {result}")
+        reordered = copy.deepcopy(diamond)
+        reordered["objects"].reverse()
+        for record in reordered["objects"]:
+            record["traceability"]["upstream"].reverse()
+        require(trace_palaco_registry(reordered, start, direction, validator) == result,
+                "trace output depends on record/reference order")
+    separate = copy.deepcopy(diamond)
+    separate["objects"][4]["dependencies"] = ["FE-00001"]
+    separate["objects"][4]["compliance"] = ["FE-00002"]
+    separate["objects"][4]["traceability"]["relationships"] = [
+        {"source": "FE-00005", "relation": "DEPENDS_ON", "target": "FE-00001"}
+    ]
+    require(trace_palaco_registry(separate, "FE-00005", validator=validator)["reachable_ids"] == [],
+            "trace incorrectly merges non-upstream references")
+
+    negatives = []
+    negatives.append((fixture, "FE-99999", "upstream", "unknown trace object ID"))
+    negatives.append((fixture, "FE-00001", "sideways", "invalid trace direction"))
+    dangling = copy.deepcopy(fixture)
+    dangling["objects"][2]["capability_ref"] = "CAP-99999"
+    negatives.append((dangling, "FE-00001", "upstream", "unresolved capability_ref"))
+    cyclic = copy.deepcopy(diamond)
+    cyclic["objects"][3]["traceability"]["upstream"] = ["FE-00001"]
+    negatives.append((cyclic, "FE-00005", "upstream", "upstream cycle"))
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    negatives.append((duplicate, "FE-00001", "upstream", "duplicate object ID"))
+    negatives.append(({}, "FE-00001", "upstream", "registry structure"))
+    for instance, object_id, direction, expected in negatives:
+        try:
+            trace_palaco_registry(instance, object_id, direction, validator)
+        except ConformanceError as error:
+            require(expected in str(error), f"unexpected trace diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid trace query accepted: {expected}")
+    return "registry traces: 10 positive queries, deterministic/non-mutating output + 6 rejections"
+
+
 def check_palaco_registry():
     validator = palaco_validators()["PCR-000.schema.json"]
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
@@ -1290,6 +1392,7 @@ CHECKS = (
     ("PALACO registry cycle conformance", check_palaco_cycles),
     ("PALACO registry lifecycle conformance", check_palaco_lifecycle),
     ("PALACO registry transition conformance", check_palaco_transitions),
+    ("PALACO registry trace conformance", check_palaco_traces),
 )
 
 
@@ -1298,13 +1401,27 @@ def main():
     parser.add_argument("--registry", type=Path, help="Validate one closed PCR-000 registry snapshot")
     parser.add_argument("--previous-registry", type=Path,
                         help="Compare --registry against the preceding closed snapshot")
+    parser.add_argument("--trace", metavar="OBJECT_ID",
+                        help="Return reachable IDs from traceability.upstream as JSON")
+    parser.add_argument("--direction", choices=("upstream", "downstream"),
+                        help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
     if args.previous_registry is not None and args.registry is None:
         parser.error("--previous-registry requires --registry")
+    if args.trace is not None and args.registry is None:
+        parser.error("--trace requires --registry")
+    if args.direction is not None and args.trace is None:
+        parser.error("--direction requires --trace")
+    if args.trace is not None and args.previous_registry is not None:
+        parser.error("--trace cannot be combined with --previous-registry")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.previous_registry is None:
+            if args.trace is not None:
+                result = trace_palaco_registry(current, args.trace, args.direction or "upstream")
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.previous_registry is None:
                 summary = validate_palaco_registry(current)
             else:
                 summary = validate_registry_transition(read_json(args.previous_registry), current)
