@@ -1,8 +1,8 @@
 # PALACO Prototype Release Review
 
-**Status:** NOT REVIEWED — HUMAN REVIEW REQUIRED  
-**Baseline:** `b39c5d1` — prototype guardrails and synthetic-data banners  
-**Scope:** Controlled prototype use only  
+**Status:** NOT REVIEWED — HUMAN REVIEW REQUIRED
+**Baseline:** `b39c5d1` — prototype guardrails and synthetic-data banners
+**Scope:** Controlled prototype use only
 **Release decision:** NOT GRANTED
 
 ## Purpose and boundary
