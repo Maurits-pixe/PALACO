@@ -43,6 +43,8 @@ use std::{
 use storage::{PgStore, StoreError};
 mod consent_http;
 #[cfg(test)]
+mod tls_oidc_tests;
+#[cfg(test)]
 mod tls_service_tests;
 use tokio::sync::{Mutex, Semaphore};
 
