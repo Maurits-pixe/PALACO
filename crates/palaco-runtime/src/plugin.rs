@@ -438,6 +438,51 @@ impl PluginManager {
         self.invoke(id, PluginAction::Readiness)
     }
 
+    /// Pauses Running plugins in reverse DAG order, skipping Paused plugins.
+    /// Preflights the entire fleet before authorization or callbacks: only
+    /// Running/Paused states are accepted (an empty fleet succeeds). The first
+    /// invalid state in DAG order is returned without events or side effects.
+    /// Stops on the first error without rollback, retry, or automatic cleanup;
+    /// partial progress and per-plugin failure/cleanup tracking are retained.
+    pub fn pause_all(&mut self, authorizer: &mut impl PluginAuthorizer) -> Result<(), PluginError> {
+        self.require_running_or_paused()?;
+        for id in self.order.clone().into_iter().rev() {
+            if self.entries[&id].status.state == PluginState::Running {
+                self.pause(&id, authorizer)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Resumes Paused plugins in DAG order, skipping Running plugins.
+    /// Uses the same fleet preflight and partial-progress semantics as
+    /// [`Self::pause_all`]. Resume and readiness each require fresh authority.
+    /// Pure authorization rejection permits retry while all states remain
+    /// Running/Paused; Starting or Failed requires explicit `stop_all` cleanup,
+    /// not a business-operation retry.
+    pub fn resume_all(
+        &mut self,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<(), PluginError> {
+        self.require_running_or_paused()?;
+        for id in self.order.clone() {
+            if self.entries[&id].status.state == PluginState::Paused {
+                self.resume(&id, authorizer)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn require_running_or_paused(&self) -> Result<(), PluginError> {
+        for id in &self.order {
+            let state = self.entries[id].status.state;
+            if !matches!(state, PluginState::Running | PluginState::Paused) {
+                return Err(PluginError::InvalidTransition(id.clone(), state));
+            }
+        }
+        Ok(())
+    }
+
     /// Starts a fresh manager in DAG order. Callback failures roll back acquired
     /// resources in reverse DAG order. Authorization denial leaves prior work
     /// untouched (and performs no callbacks); the host may explicitly stop it.

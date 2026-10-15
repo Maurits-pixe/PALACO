@@ -121,24 +121,41 @@ fn healthy_process_has_full_lifecycle_cleared_env_and_reaped_shutdown() -> TestR
 fn subprocess_manager_pause_resume_and_redacted_lifecycle_events() -> TestResult {
     let descriptor = descriptor()?;
     let id = descriptor.id.clone();
-    let mut manager = PluginManager::new(vec![PluginRegistration {
-        descriptor,
-        plugin: Box::new(process("healthy")?),
-    }])?;
+    let dependent = PluginId::new("worker")?;
+    let mut manager = PluginManager::new(vec![
+        PluginRegistration {
+            descriptor: PluginDescriptor {
+                id: dependent.clone(),
+                dependencies: vec![id.clone()],
+                ..descriptor.clone()
+            },
+            plugin: Box::new(process("healthy")?),
+        },
+        PluginRegistration {
+            descriptor,
+            plugin: Box::new(process("healthy")?),
+        },
+    ])?;
     manager.start_all(&mut allow)?;
-    manager.pause(&id, &mut allow)?;
+    manager.pause_all(&mut allow)?;
     assert_eq!(
         manager.status(&id).expect("status").state,
         PluginState::Paused
     );
-    manager.resume(&id, &mut allow)?;
+    manager.pause_all(&mut allow)?;
+    manager.resume_all(&mut allow)?;
     assert_eq!(
         manager.status(&id).expect("status").health,
         PluginHealth::Ready
     );
+    assert_eq!(
+        manager.status(&dependent).expect("status").state,
+        PluginState::Running
+    );
+    manager.resume_all(&mut allow)?;
     manager.stop_all()?;
     let events = manager.drain_events().collect::<Vec<_>>();
-    assert_eq!(events.len(), 8);
+    assert_eq!(events.len(), 16);
     assert!(
         events
             .iter()
@@ -147,6 +164,25 @@ fn subprocess_manager_pause_resume_and_redacted_lifecycle_events() -> TestResult
     assert_eq!(
         events.last().expect("stop event").kind,
         PluginEventKind::Callback(PluginAction::Stop)
+    );
+    let operational = events
+        .iter()
+        .filter(|event| {
+            matches!(
+                event.kind,
+                PluginEventKind::Callback(PluginAction::Pause | PluginAction::Resume)
+            )
+        })
+        .map(|event| (event.id.as_str(), event.kind))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        operational,
+        [
+            ("worker", PluginEventKind::Callback(PluginAction::Pause)),
+            ("child", PluginEventKind::Callback(PluginAction::Pause)),
+            ("child", PluginEventKind::Callback(PluginAction::Resume)),
+            ("worker", PluginEventKind::Callback(PluginAction::Resume)),
+        ]
     );
     Ok(())
 }
@@ -242,10 +278,10 @@ fn readiness_and_pause_resume_process_errors_require_manager_cleanup() -> TestRe
         } else {
             manager.start_all(&mut allow)?;
             if mode == "pause-error" {
-                assert!(manager.pause(&id, &mut allow).is_err());
+                assert!(manager.pause_all(&mut allow).is_err());
             } else {
-                manager.pause(&id, &mut allow)?;
-                assert!(manager.resume(&id, &mut allow).is_err());
+                manager.pause_all(&mut allow)?;
+                assert!(manager.resume_all(&mut allow).is_err());
             }
         }
         let status = manager.status(&id).expect("status");

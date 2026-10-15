@@ -42,6 +42,25 @@ is revoked, active work remains tracked in Starting for dependency safety.
 Use `stop_all` after such revocation. Failed/panicking pause/resume leaves Failed
 with cleanup pending; health is Unknown while paused and Ready after readiness.
 
+`pause_all(&mut authorizer)` pauses in reverse topological order;
+`resume_all(&mut authorizer)` resumes in topological order, including separately
+authorized readiness. Both preflight the **entire fleet** before any authorization
+or callback: only Running/Paused states are accepted, with the first invalid
+transition reported in deterministic topological order. An empty fleet succeeds.
+Already Paused/Running plugins respectively are skipped without authorization,
+callbacks, or events, so repeated batches are idempotent. Valid mixed fleets are
+supported, preserving the single-plugin dependency checks and event ordering.
+Batches stop at the first error without rollback, retry, or automatic stop:
+all partial progress and cleanup obligations remain visible. After a pure
+authorization rejection, a Running/Paused mix can continue with another batch.
+Starting (including rejected resume-readiness authorization) or Failed requires
+explicit `stop_all`, not a business retry; cleanup still bypasses revoked authority.
+
+Run the two-plugin trusted lifecycle demonstration with
+`cargo run -p palaco-kernel --example plugin_lifecycle`.
+It starts, pauses, resumes, attempts shutdown even on lifecycle errors, and drains
+redacted event outcomes. Its synthetic authorizer is **not production authentication**.
+
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
 Readiness is a startup/resume snapshot, not continuous monitoring. `start_all` rolls back
 callback failures; individual calls leave partial resources for `stop_all`.
