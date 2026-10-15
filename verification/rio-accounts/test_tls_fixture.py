@@ -39,6 +39,8 @@ def fake_commands(
     down_code: int = 0, tamper_marker: bool = False,
     service_code: int | None = None, service_selected: bool | None = None,
     service_case: str | None = None,
+    oidc_code: int | None = None, oidc_selected: bool | None = None,
+    oidc_case: str | None = None,
 ):
     def execute(arguments, **options):
         record.setdefault("commands", []).append(list(arguments))
@@ -63,6 +65,10 @@ def fake_commands(
             selected = service_selected if is_service and service_selected is not None else selected_case
             case = service_case if is_service and service_case is not None else selected_test
             code = service_code if is_service and service_code is not None else cargo_code
+            if selected_test == fixture.TESTS[2][0]:
+                selected = oidc_selected if oidc_selected is not None else selected_case
+                case = oidc_case if oidc_case is not None else selected_test
+                code = oidc_code if oidc_code is not None else cargo_code
             if selected:
                 output.write(("test " + case + " ... ok\n").encode())
                 output.write(b"test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;\n")
@@ -75,6 +81,20 @@ def fake_commands(
             return SimpleNamespace(returncode=down_code)
         return SimpleNamespace(returncode=0)
     return execute
+
+
+@contextmanager
+def mock_commands(execute):
+    # The orchestration contract fakes Cargo at its new lifecycle boundary.
+    # Separate tests exercise that boundary with Popen/waitid/group-signal mocks.
+    with (
+        mock.patch.object(fixture.subprocess, "run", side_effect=execute) as process,
+        mock.patch.object(
+            fixture, "_run_owned_rust_process",
+            side_effect=lambda arguments, **options: execute(arguments, **options).returncode,
+        ),
+    ):
+        yield process
 
 
 def run_main() -> tuple[int, str, dict]:
@@ -91,7 +111,10 @@ def run_main() -> tuple[int, str, dict]:
     return code, text, json.loads(summary)
 
 
-@unittest.skipUnless(os.name == "posix" and hasattr(os, "O_NOFOLLOW"), "The fixture targets Linux CI.")
+@unittest.skipUnless(
+    sys.platform.startswith("linux") and hasattr(os, "O_NOFOLLOW"),
+    "The fixture targets Linux CI.",
+)
 class TlsFixtureTests(unittest.TestCase):
     def assert_closed(self, result):
         self.assertEqual(result["scope"], "LOCAL_SYNTHETIC_TLS_TEST")
@@ -111,7 +134,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_success_has_private_environment_exact_test_and_owned_cleanup(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record)):
+            with mock_commands(fake_commands(record)):
                 code, output, result = run_main()
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "PASS")
@@ -122,7 +145,7 @@ class TlsFixtureTests(unittest.TestCase):
                 {"name": test, "passed": True} for test, _log in fixture.TESTS
             ])
             self.assertEqual(record["rustTests"], [test for test, _log in fixture.TESTS])
-            self.assertEqual(len(set(record["rustTestLogs"])), 2)
+            self.assertEqual(len(set(record["rustTestLogs"])), 3)
             for test, _log in fixture.TESTS:
                 self.assertIn("RIO_TLS_RUST_TEST " + test + " PASS", output)
             self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
@@ -146,7 +169,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_failed_rust_test_never_echoes_private_logs_and_still_cleans(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, cargo_code=1)):
+            with mock_commands(fake_commands(record, cargo_code=1)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["status"], "FAIL")
@@ -160,7 +183,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_zero_selected_rust_cases_cannot_be_reported_as_tls_proof(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, selected_case=False)):
+            with mock_commands(fake_commands(record, selected_case=False)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "RUST_TEST_FAILED")
@@ -172,7 +195,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_second_rust_failure_cannot_reuse_first_pass_and_still_cleans(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, service_code=1)):
+            with mock_commands(fake_commands(record, service_code=1)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["status"], "FAIL")
@@ -182,6 +205,7 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertEqual(result["rustTests"], [
                 {"name": fixture.TESTS[0][0], "passed": True},
                 {"name": fixture.TESTS[1][0], "passed": False},
+                {"name": fixture.TESTS[2][0], "passed": False},
             ])
             self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.TESTS[1][0] + " PASS", output)
             self.assertFalse(fixture.RUNTIME.exists())
@@ -192,7 +216,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_zero_selected_second_rust_case_cannot_reuse_first_pass(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, service_selected=False)):
+            with mock_commands(fake_commands(record, service_selected=False)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "RUST_TEST_FAILED")
@@ -207,7 +231,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_second_log_with_only_first_case_pass_cannot_prove_service_test(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, service_case=fixture.TEST)):
+            with mock_commands(fake_commands(record, service_case=fixture.TEST)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "RUST_TEST_FAILED")
@@ -231,7 +255,7 @@ class TlsFixtureTests(unittest.TestCase):
                         "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;\n"
                     ).encode())
                 return completed
-            with mock.patch.object(fixture.subprocess, "run", side_effect=stale_service_log):
+            with mock_commands(stale_service_log):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "RUST_TEST_FAILED")
@@ -243,10 +267,55 @@ class TlsFixtureTests(unittest.TestCase):
             self.assert_private_output(output, record, root)
             self.assert_closed(result)
 
+    def test_third_case_requires_its_own_selected_success_and_cleans_on_failure(self):
+        for overrides in (
+            {"oidc_code": 1}, {"oidc_selected": False},
+            {"oidc_case": fixture.TESTS[0][0]}, {"oidc_case": fixture.TESTS[1][0]},
+        ):
+            with self.subTest(overrides=overrides), local_root() as root:
+                record = {}
+                with mock_commands(fake_commands(record, **overrides)):
+                    code, output, result = run_main()
+                self.assertEqual(code, 1)
+                self.assertEqual(result["error"], "RUST_TEST_FAILED")
+                self.assertTrue(result["rustTestPassed"])
+                self.assertFalse(result["rustTestsPassed"])
+                self.assertEqual([case["passed"] for case in result["rustTests"]], [True, True, False])
+                self.assertEqual(record["rustTests"], [test for test, _log in fixture.TESTS])
+                self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.TESTS[2][0] + " PASS", output)
+                self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
+                self.assertFalse(fixture.RUNTIME.exists())
+                self.assert_private_output(output, record, root)
+                self.assert_closed(result)
+
+    def test_preexisting_third_log_or_browser_summary_cannot_be_reused(self):
+        for stale_name in (fixture.TESTS[2][1], "oidc-summary.json"):
+            with self.subTest(stale_name=stale_name), local_root() as root:
+                record = {}
+                execute = fake_commands(record)
+                def stale_third_proof(arguments, **options):
+                    completed = execute(arguments, **options)
+                    if arguments[0] == "cargo" and arguments[arguments.index("--locked") + 1] == fixture.TESTS[1][0]:
+                        (fixture.RUNTIME / stale_name).write_bytes((
+                            "test " + fixture.TESTS[2][0] + " ... ok\n"
+                            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;\n"
+                        ).encode())
+                    return completed
+                with mock_commands(stale_third_proof):
+                    code, output, result = run_main()
+                self.assertEqual(code, 1)
+                self.assertEqual(result["error"], "RUST_TEST_FAILED")
+                self.assertFalse(result["rustTestsPassed"])
+                self.assertEqual([case["passed"] for case in result["rustTests"]], [True, True, False])
+                self.assertEqual(record["rustTests"], [test for test, _log in fixture.TESTS[:2]])
+                self.assertFalse(fixture.RUNTIME.exists())
+                self.assert_private_output(output, record, root)
+                self.assert_closed(result)
+
     def test_namespace_cleanup_failure_prevents_overall_pass_but_removes_private_files(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, down_code=1)):
+            with mock_commands(fake_commands(record, down_code=1)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertTrue(result["rustTestPassed"])
@@ -262,7 +331,7 @@ class TlsFixtureTests(unittest.TestCase):
             fixture.RUNTIME.mkdir()
             unrelated = fixture.RUNTIME / "user-owned.txt"
             unrelated.write_text(CANARY)
-            with mock.patch.object(fixture.subprocess, "run", side_effect=AssertionError("no process allowed")) as process:
+            with mock_commands(AssertionError("no process allowed")) as process:
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertFalse(result["createdOwnedFixture"])
@@ -279,7 +348,7 @@ class TlsFixtureTests(unittest.TestCase):
             unrelated = target / "user-owned.txt"
             unrelated.write_text(CANARY)
             fixture.RUNTIME.symlink_to(target, target_is_directory=True)
-            with mock.patch.object(fixture.subprocess, "run", side_effect=AssertionError("no process allowed")) as process:
+            with mock_commands(AssertionError("no process allowed")) as process:
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertFalse(result["createdOwnedFixture"])
@@ -292,7 +361,7 @@ class TlsFixtureTests(unittest.TestCase):
     def test_changed_ownership_marker_blocks_namespace_commands_and_file_deletion(self):
         with local_root() as root:
             record = {}
-            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, tamper_marker=True)):
+            with mock_commands(fake_commands(record, tamper_marker=True)):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "CLEANUP_FAILED")
@@ -310,7 +379,7 @@ class TlsFixtureTests(unittest.TestCase):
                 if arguments[0] == "cargo":
                     raise KeyboardInterrupt(CANARY)
                 return execute(arguments, **options)
-            with mock.patch.object(fixture.subprocess, "run", side_effect=cancel_test):
+            with mock_commands(cancel_test):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "CANCELLED")
@@ -330,7 +399,7 @@ class TlsFixtureTests(unittest.TestCase):
             }
             with (
                 mock.patch.dict(os.environ, remote),
-                mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record)),
+                mock_commands(fake_commands(record)),
             ):
                 code, output, result = run_main()
             self.assertEqual(code, 0)
@@ -351,7 +420,7 @@ class TlsFixtureTests(unittest.TestCase):
                 if arguments[0] == "docker" and "volume" in arguments:
                     options["stdout"].write(b"SYNTHETIC_OWNED_VOLUME_REMAINS\n")
                 return completed
-            with mock.patch.object(fixture.subprocess, "run", side_effect=leftover):
+            with mock_commands(leftover):
                 code, output, result = run_main()
             self.assertEqual(code, 1)
             self.assertEqual(result["error"], "CLEANUP_FAILED")
@@ -359,6 +428,100 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertNotIn("SYNTHETIC_OWNED_VOLUME_REMAINS", output)
             self.assert_private_output(output, record, root)
             self.assert_closed(result)
+
+
+class OwnedRustProcessTests(unittest.TestCase):
+    def setUp(self):
+        self.child = mock.Mock(pid=43123)
+        self.child.wait.return_value = 0
+        self.process = self.patch(fixture.subprocess, "Popen", return_value=self.child)
+        self.waitid = self.patch(
+            fixture.os, "waitid", create=True,
+            return_value=SimpleNamespace(si_pid=self.child.pid),
+        )
+        self.patch(fixture.os, "getpgid", create=True, return_value=self.child.pid)
+        self.patch(fixture.os, "getsid", create=True, return_value=self.child.pid)
+        self.killpg = self.patch(fixture.os, "killpg", create=True)
+        for name, value in (("P_PID", 1), ("WEXITED", 4), ("WNOHANG", 1), ("WNOWAIT", 0x1000000)):
+            self.patch(fixture.os, name, value, create=True)
+        for name, value in (("SIG_BLOCK", 0), ("SIG_SETMASK", 2), ("SIGKILL", 9)):
+            self.patch(fixture.signal, name, value, create=True)
+        self.sigmask = self.patch(fixture.signal, "pthread_sigmask", create=True, return_value=set())
+        self.sleep = self.patch(fixture.time, "sleep")
+        self.clock = self.patch(fixture.time, "monotonic", return_value=0)
+
+    def patch(self, target, name, *arguments, **options):
+        patcher = mock.patch.object(target, name, *arguments, **options)
+        result = patcher.start()
+        self.addCleanup(patcher.stop)
+        return result
+
+    def run_process(self):
+        return fixture._run_owned_rust_process(
+            ["cargo", "test"], cwd=Path("."), env={}, stdout=io.BytesIO(),
+            stderr=subprocess.STDOUT, timeout=1,
+        )
+
+    def assert_group_closed_before_reap(self):
+        self.assertEqual(self.killpg.call_args_list, [
+            mock.call(self.child.pid, signal.SIGTERM), mock.call(self.child.pid, fixture.signal.SIGKILL),
+        ])
+        self.sleep.assert_called_once_with(fixture.RUST_PROCESS_GRACE)
+        self.child.wait.assert_called_once_with(timeout=fixture.RUST_PROCESS_REAP_TIMEOUT)
+        self.sigmask.assert_any_call(fixture.signal.SIG_SETMASK, set())
+
+    def test_success_retains_child_identity_until_both_group_signals_then_reaps(self):
+        def signal_group(_pid, _signum):
+            self.child.wait.assert_not_called()
+        self.killpg.side_effect = signal_group
+        self.assertEqual(self.run_process(), 0)
+        self.assert_group_closed_before_reap()
+        self.assertTrue(self.process.call_args.kwargs["start_new_session"])
+        self.assertEqual(self.process.call_args.kwargs["stdin"], subprocess.DEVNULL)
+        self.assertEqual(self.waitid.call_count, 3)
+        for call in self.waitid.call_args_list:
+            self.assertEqual(call, mock.call(
+                fixture.os.P_PID, self.child.pid,
+                fixture.os.WEXITED | fixture.os.WNOHANG | fixture.os.WNOWAIT,
+            ))
+
+    def test_timeout_gives_term_grace_kill_and_reap_before_exception(self):
+        self.waitid.return_value = None
+        self.clock.side_effect = [0, 2]
+        with self.assertRaises(subprocess.TimeoutExpired):
+            self.run_process()
+        self.assert_group_closed_before_reap()
+
+    def test_cancellation_gives_term_grace_kill_and_reap_without_printing_payload(self):
+        self.waitid.side_effect = [KeyboardInterrupt(CANARY), None, None]
+        output = io.StringIO()
+        with mock.patch("sys.stdout", output), mock.patch("sys.stderr", output):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_process()
+        self.assert_group_closed_before_reap()
+        self.assertEqual(output.getvalue(), "")
+
+    def test_changed_group_never_signals_an_unowned_group_and_fails_closed(self):
+        self.patch(fixture.os, "getpgid", create=True, return_value=self.child.pid + 1)
+        with self.assertRaisesRegex(fixture.FixtureFailure, "^CLEANUP_FAILED$"):
+            self.run_process()
+        self.killpg.assert_not_called()
+        self.child.kill.assert_called_once_with()
+        self.child.wait.assert_called_once_with(timeout=fixture.RUST_PROCESS_REAP_TIMEOUT)
+
+    def test_lost_child_relationship_never_signals_a_potentially_reused_pid(self):
+        self.waitid.side_effect = ChildProcessError(CANARY)
+        with self.assertRaisesRegex(fixture.FixtureFailure, "^CLEANUP_FAILED$"):
+            self.run_process()
+        self.killpg.assert_not_called()
+        self.child.kill.assert_not_called()
+        self.child.wait.assert_called_once_with(timeout=fixture.RUST_PROCESS_REAP_TIMEOUT)
+
+    def test_reap_failure_is_a_fixed_cleanup_failure(self):
+        self.child.wait.side_effect = subprocess.TimeoutExpired(CANARY, 5)
+        with self.assertRaisesRegex(fixture.FixtureFailure, "^CLEANUP_FAILED$"):
+            self.run_process()
+        self.assert_group_closed_before_reap()
 
 
 if __name__ == "__main__":

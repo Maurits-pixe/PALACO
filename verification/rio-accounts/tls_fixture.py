@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Owned Linux-CI TLS storage/router proof; requires the local synthetic IdP fixture.
+"""Owned Linux-CI TLS storage/router/OIDC proofs with the local synthetic IdP.
 
-Never launches the browser service, changes its runtime profile, or enrolls accounts.
+The test-only listener never changes the application launcher or enrolls accounts.
 """
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ TEST = "storage::tests::postgres_tls_store_contract"
 TESTS = (
     (TEST, "test.log"),
     ("tls_service_tests::postgres_tls_service_contract", "service-test.log"),
+    ("tls_oidc_tests::postgres_tls_oidc_contract", "oidc-test.log"),
 )
 LIMIT = 1_048_576
 PROJECT = re.compile(r"rio-accounts-tls-[0-9a-f]{16}")
@@ -34,8 +35,10 @@ FILES = (
     "ca.key", "ca.pem", "ca.der", "other-ca.key", "other-ca.pem", "other-ca.der",
     "server.key", "server.csr", "server.pem", "server-extensions.cnf",
     "openssl.cnf", "pg_hba.conf", "plain-pg_hba.conf", "commands.log", "test.log",
-    "service-test.log", "inventory.log",
+    "service-test.log", "oidc-test.log", "oidc-summary.json", "inventory.log",
 )
+RUST_PROCESS_GRACE = 3
+RUST_PROCESS_REAP_TIMEOUT = 5
 TLS_ENV = ("RIO_PG_TLS_PASSWORD", "RIO_PG_TLS_CA_DER", "RIO_PG_TLS_OTHER_CA_DER")
 FAILURES = frozenset({
     "PREPARATION_FAILED", "START_FAILED", "READINESS_FAILED",
@@ -155,6 +158,76 @@ def _environment() -> dict[str, str]:
     return values
 
 
+def _rust_child_exited(process: subprocess.Popen) -> bool:
+    # WNOWAIT keeps even an exited group leader reserved until group cleanup.
+    # poll()/wait() here would allow its PID/group id to be reused before signaling.
+    result = os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
+    if result is not None and result.si_pid != process.pid:
+        raise FixtureFailure("CLEANUP_FAILED")
+    return result is not None
+
+
+def _signal_owned_rust_group(process: subprocess.Popen, signum: int) -> bool:
+    # Recheck the unreaped child relationship before every process-group signal.
+    _rust_child_exited(process)
+    if process.pid <= 1 or os.getpgid(process.pid) != process.pid or os.getsid(process.pid) != process.pid:
+        raise FixtureFailure("CLEANUP_FAILED")
+    try:
+        os.killpg(process.pid, signum)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _close_owned_rust_process(process: subprocess.Popen) -> int:
+    # Defer repeated cancellation while bounded cleanup gives Node its opportunity
+    # to close Chromium. Detached browser processes are not a process-group proof.
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, {signal.SIGINT, signal.SIGTERM})
+    failed = False
+    try:
+        try:
+            if _signal_owned_rust_group(process, signal.SIGTERM):
+                time.sleep(RUST_PROCESS_GRACE)
+                _signal_owned_rust_group(process, signal.SIGKILL)
+        except (Exception, KeyboardInterrupt):
+            failed = True
+            # No group signal after ownership failure. Kill only an unreaped
+            # direct child whose relationship can still be verified.
+            try:
+                _rust_child_exited(process)
+                process.kill()
+            except (Exception, KeyboardInterrupt):
+                pass
+        try:
+            returncode = process.wait(timeout=RUST_PROCESS_REAP_TIMEOUT)
+        except (Exception, KeyboardInterrupt):
+            raise FixtureFailure("CLEANUP_FAILED") from None
+        if failed:
+            raise FixtureFailure("CLEANUP_FAILED")
+        return returncode
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+
+
+def _run_owned_rust_process(
+    arguments: list[str], *, cwd: Path, env: dict[str, str], stdout,
+    stderr: int, timeout: int,
+) -> int:
+    process = subprocess.Popen(
+        arguments, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+        stdout=stdout, stderr=stderr, start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + timeout
+        while not _rust_child_exited(process):
+            if time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(arguments, timeout)
+            time.sleep(0.05)
+    finally:
+        returncode = _close_owned_rust_process(process)
+    return returncode
+
+
 def _run_private(
     owner: Owner, arguments: list[str], *, log: str = "commands.log",
     timeout: int = 30, environment: dict[str, str] | None = None,
@@ -164,13 +237,17 @@ def _run_private(
     with os.fdopen(descriptor, "ab") as output:
         if os.fstat(output.fileno()).st_size > LIMIT:
             raise FixtureFailure("UNEXPECTED_FAILURE")
-        completed = subprocess.run(
-            arguments, cwd=REPO, env=environment if environment is not None else _environment(),
-            stdout=output, stderr=subprocess.STDOUT, check=False, timeout=timeout,
-        )
+        options = {
+            "cwd": REPO, "env": environment if environment is not None else _environment(),
+            "stdout": output, "stderr": subprocess.STDOUT, "timeout": timeout,
+        }
+        if arguments[0] == "cargo":
+            returncode = _run_owned_rust_process(arguments, **options)
+        else:
+            returncode = subprocess.run(arguments, check=False, **options).returncode
         if os.fstat(output.fileno()).st_size > LIMIT:
             raise FixtureFailure("UNEXPECTED_FAILURE")
-    return completed.returncode
+    return returncode
 
 
 def _compose(owner: Owner, *arguments: str) -> list[str]:
@@ -272,6 +349,8 @@ def _wait_ready(owner: Owner) -> None:
 def _run_rust_test(owner: Owner, test: str, log: str) -> None:
     if (test, log) not in TESTS or _read_owned(owner, log):
         raise FixtureFailure("RUST_TEST_FAILED")
+    if test == TESTS[2][0] and _read_owned(owner, "oidc-summary.json"):
+        raise FixtureFailure("RUST_TEST_FAILED")
     environment = _environment()
     password = _read_owned(owner, "password", 128).decode("ascii").strip()
     if not re.fullmatch(r"[0-9a-f]{64}", password):
@@ -354,7 +433,11 @@ def check() -> dict:
     private_files_removed = True
     try:
         # POSIX ownership is enforceable here. This fixture makes no Windows ACL claim.
-        if os.name != "posix" or not hasattr(os, "O_NOFOLLOW"):
+        if (
+            not sys.platform.startswith("linux")
+            or not all(hasattr(os, name) for name in ("O_NOFOLLOW", "waitid", "WNOWAIT"))
+            or not hasattr(signal, "pthread_sigmask")
+        ):
             raise FixtureFailure("PREPARATION_FAILED")
         RUNTIME.mkdir(mode=0o700)
         owner = Owner(

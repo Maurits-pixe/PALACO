@@ -31,6 +31,7 @@ x509-cert = { version = "=0.2.5", default-features = false }
 tokio = { version = "=1.48.0", features = ["macros", "rt-multi-thread", "sync", "signal"] }
 
 [dev-dependencies]
+tokio = { version = "=1.48.0", features = ["process"] }
 rsa = { version = "=0.9.8", features = ["pem"] }
 tower = { version = "=0.5.2", features = ["util"] }
 

@@ -399,12 +399,14 @@ Native archive operations follow PostgreSQL's
 
 The opt-in Linux-only TLS fixture is separate from the original dev database on
 8090. Run `python verification/rio-accounts/tls_fixture.py check` after the Rust
-dependencies are built and `fixture.py up` has made the standard synthetic
-loopback Keycloak discovery endpoint ready. It creates its own disposable Docker Compose namespace,
+dependencies/browser runtime are installed and `fixture.py up` has made the
+standard synthetic loopback Keycloak ready. Port 8088 must be unused until this
+proof finishes. It creates its own disposable Docker Compose namespace,
 binds only loopback ports 8091 (TLS) and 8092 (plaintext control), generates short
 lived test CAs/certificates and private credentials, runs exactly
 `storage::tests::postgres_tls_store_contract` followed by
-`tls_service_tests::postgres_tls_service_contract` with separate private logs,
+`tls_service_tests::postgres_tls_service_contract` and
+`tls_oidc_tests::postgres_tls_oidc_contract` with separate private logs,
 then verifies its own containers,
 network, volumes and private files are removed. Existing fixture namespaces and
 files are not reused or deleted. Public output is fixed evidence metadata only;
@@ -424,13 +426,26 @@ It exercises login-fence refusal and the HTTP session/consent/logout boundary
 against real TLS storage, then verifies persistent actor-scoped denial through
 a new application state and TLS connection. Sessions are seeded through the
 server binding API; this is not a successful OIDC token-exchange or browser-TLS
-proof. The standard real OIDC browser suite remains separate and required.
+proof.
 
-Evidence schema `RIO_TLS_FIXTURE_EVIDENCE_V2` reports both exact test names and
-results; aggregate PASS requires both and verified cleanup. Legacy `rustTest`
+The third proof starts a test-only HTTPS listener on 127.0.0.1:8088, backed by
+that real TLS store, and runs the unchanged five OIDC browser cases against real
+Keycloak. It uses actual authorization-code/PKCE callbacks and issued cookies,
+with no seeded sessions. The reporter requires five unique successful cases and
+writes only fixed IDs/statuses into the precreated owned private summary. The
+listener is stopped and its port must be rebindable before the proof succeeds.
+The loopback self-signed certificate exception remains test-only; this is not
+public certificate trust or staging acceptance. The standard development-profile
+OIDC/browser suite still runs separately after the TLS proofs.
+
+Evidence schema `RIO_TLS_FIXTURE_EVIDENCE_V2` reports all three exact test names and
+results; aggregate PASS requires all three and verified cleanup. Legacy `rustTest`
 and `rustTestPassed` refer only to the first storage case. A first-case PASS can
-never substitute for the service case. Fourteen mocked fixture tests guard this
-selection, private-log isolation, false PASS rejection and lifecycle.
+never substitute for either other case. Twenty-two fixture tests guard selection,
+private-log isolation, false PASS rejection, owned process groups and lifecycle.
+Cargo leaders remain unreaped while their owned groups receive bounded TERM/KILL
+cleanup. This does not by itself prove detached Chromium group cleanup; the
+browser runner is given its normal graceful-close path and a bounded global limit.
 
 This remains SYNTHETIC_ONLY. The normal CLI still selects the fixed local dev
 profile. No launcher loads staging configuration, no HTTPS staging issuer is
@@ -439,3 +454,5 @@ contact authority is enabled. See
 [T05 database TLS and binding contract](../../specs/rio-accounts/T05-DATABASE-TLS-AND-BINDING.md).
 The explicit library constructor and its limits are documented in
 [T05 TLS service contract](../../specs/rio-accounts/T05-TLS-SERVICE.md).
+The complete browser/TLS test boundary is documented in
+[T05 real OIDC over TLS storage](../../specs/rio-accounts/T05-TLS-REAL-OIDC.md).
