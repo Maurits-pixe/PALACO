@@ -28,19 +28,43 @@ readiness, pause, and resume) separately requires a validating **Execute** plan.
 Hold/Deny never execute. No initial plan is
 cached as authority. IDs and evidence are metadata, not authentication or grants.
 `initialize`/`start` also support explicit one-plugin sequencing; dependencies
-must actually be Running before a dependent starts.
+must actually be Running **and Ready** before a dependent starts.
 
 `pause(id, authorizer)` quiesces business work but retains resources; existing
 implementors default to an unsupported error, not fake success. Pausing is
 cooperative, not OS suspension/SIGSTOP. Pause dependents
 before dependencies; Running/Starting dependents and Failed dependents awaiting
 cleanup block dependency pause. Paused dependents permit dependency pause but still
-block shutdown until cleaned up. `resume(id, authorizer)` requires Running
+block shutdown until cleaned up. `resume(id, authorizer)` requires Running and Ready
 dependencies and a new readiness check: resume dependencies first. Successful
 start/resume enters Starting until readiness succeeds; if readiness authorization
 is revoked, active work remains tracked in Starting for dependency safety.
 Use `stop_all` after such revocation. Failed/panicking pause/resume leaves Failed
 with cleanup pending; health is Unknown while paused and Ready after readiness.
+
+`check_health(id, &mut authorizer)` explicitly reuses `readiness` for a Running
+plugin, with fresh current Execute validation before every callback. True returns
+`Ready`; false returns `Ok(NotReady)`, retaining Running and pending cleanup without
+failure or automatic pause/restart/stop. A later explicit probe can recover Ready.
+Errors/unwinding panics instead leave terminal Failed/Unhealthy with lifecycle failure
+metadata and cleanup pending; broken process sessions cannot recover or respawn.
+Startup/resume readiness false remains a terminal failure. Authorization rejection
+preserves prior health and status and emits only the redacted rejection event;
+unknown/non-Running probes do not authorize, invoke callbacks, change state, or emit events.
+Scheduling is host-owned: there are no background loops, timers, or in-process health
+timeouts. Each health result is a direct snapshot, **not transitive dependency health
+or authority**; probing one plugin does not probe or mutate dependents.
+Running-but-NotReady dependencies block dependent start/resume before authorization
+with `DependencyNotReady`; non-Running dependencies retain `DependencyNotRunning`.
+Already-running dependents are not automatically stopped or marked unhealthy.
+NotReady plugins can still pause and shut down, subject to existing dependency guards.
+
+`check_health_all(&mut authorizer)` preflights the entire fleet for Running/Paused
+states, then probes Running plugins in topological order and skips Paused without
+authorization or events. Empty fleets succeed. It returns ordered `(PluginId,
+PluginHealth)` snapshots, continuing past NotReady. The first callback/authorization
+error aborts without rollback; earlier health updates and events remain visible.
+Invalid-state preflight rejects before any authorization, callback, or event.
 
 `pause_all(&mut authorizer)` pauses in reverse topological order;
 `resume_all(&mut authorizer)` resumes in topological order, including separately
@@ -58,11 +82,12 @@ explicit `stop_all`, not a business retry; cleanup still bypasses revoked author
 
 Run the two-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
-It starts, pauses, resumes, attempts shutdown even on lifecycle errors, and drains
+It starts, explicitly probes health, pauses, resumes, probes again, attempts shutdown
+even on lifecycle errors, and drains
 redacted event outcomes. Its synthetic authorizer is **not production authentication**.
 
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
-Readiness is a startup/resume snapshot, not continuous monitoring. `start_all` rolls back
+Readiness is an explicit startup/resume/probe snapshot, not continuous monitoring. `start_all` rolls back
 callback failures; individual calls leave partial resources for `stop_all`.
 Authorization rejection invokes no callbacks and leaves already-acquired resources
 untouched: explicitly call `manager.stop_all()`, which needs no authorization and

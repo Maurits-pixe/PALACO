@@ -10,6 +10,7 @@ fn main() -> io::Result<()> {
     };
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
+    let mut readiness_count = 0;
     for line in stdin.lock().lines() {
         let line = line?;
         let Some((sequence, command)) = line.split_once(' ') else {
@@ -59,6 +60,12 @@ fn main() -> io::Result<()> {
                 _ => {}
             }
         }
+        if command == "READY" {
+            readiness_count += 1;
+            if readiness_count > 1 && mode == "probe-hang" {
+                std::thread::sleep(Duration::from_secs(30));
+            }
+        }
         if mode == "stderr" {
             io::stderr().write_all(&vec![b'x'; 128 * 1024])?;
         }
@@ -68,6 +75,8 @@ fn main() -> io::Result<()> {
             match mode.as_str() {
                 "not-ready" => "NOT_READY",
                 "readiness-error" => "ERROR",
+                "health-cycle" if readiness_count == 2 => "NOT_READY",
+                "probe-error" if readiness_count > 1 => "ERROR",
                 _ => "READY",
             }
         } else if (mode == "pause-error" && command == "PAUSE")
@@ -83,6 +92,9 @@ fn main() -> io::Result<()> {
         }
         stdout.flush()?;
         if mode == "exit-after-init" && command == "INIT" {
+            return Ok(());
+        }
+        if mode == "exit-after-ready" && command == "READY" {
             return Ok(());
         }
         if command == "STOP" {

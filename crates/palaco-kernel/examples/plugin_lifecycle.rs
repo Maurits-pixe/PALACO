@@ -76,8 +76,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     ])?;
     let lifecycle = manager
         .start_all(&mut synthetic_authorizer)
+        // A host chooses when to probe; these are direct, non-transitive snapshots.
+        .and_then(|()| {
+            for (id, health) in manager.check_health_all(&mut synthetic_authorizer)? {
+                println!("{} health: {health:?}", id.as_str());
+            }
+            Ok(())
+        })
         .and_then(|()| manager.pause_all(&mut synthetic_authorizer))
-        .and_then(|()| manager.resume_all(&mut synthetic_authorizer));
+        .and_then(|()| manager.resume_all(&mut synthetic_authorizer))
+        .and_then(|()| {
+            manager
+                .check_health(&PluginId::new("service")?, &mut synthetic_authorizer)
+                .map(|_| ())
+        });
     // Never short-circuit cleanup on an operational failure. A real host must
     // retain the manager and explicitly retry if cleanup itself fails.
     let cleanup = manager.stop_all();

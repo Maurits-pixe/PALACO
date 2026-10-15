@@ -129,6 +129,7 @@ pub enum PluginError {
     UnknownPlugin(PluginId),
     InvalidTransition(PluginId, PluginState),
     DependencyNotRunning(PluginId),
+    DependencyNotReady(PluginId),
     DependencyInUse(PluginId),
     Authorization(PluginId, String),
     Callback(PluginId, PluginFailure),
@@ -378,7 +379,8 @@ impl PluginManager {
     }
 
     /// Startup includes a separately authorized synchronous readiness check.
-    /// Running means that check succeeded, not continuous health.
+    /// Direct dependencies must be Running and Ready. Running means startup
+    /// readiness succeeded; later probes may report NotReady, not continuous health.
     /// Callback failure leaves cleanup pending until `stop_all` is called.
     pub fn start(
         &mut self,
@@ -386,11 +388,7 @@ impl PluginManager {
         authorizer: &mut impl PluginAuthorizer,
     ) -> Result<(), PluginError> {
         self.require_state(id, PluginState::Initialized)?;
-        for dependency in &self.entries[id].registration.descriptor.dependencies {
-            if self.entries[dependency].status.state != PluginState::Running {
-                return Err(PluginError::DependencyNotRunning(dependency.clone()));
-            }
-        }
+        self.require_dependencies_ready(id)?;
         self.authorize(id, PluginAction::Start, authorizer)?;
         self.invoke(id, PluginAction::Start)?;
         self.authorize(id, PluginAction::Readiness, authorizer)?;
@@ -420,18 +418,15 @@ impl PluginManager {
         self.invoke(id, PluginAction::Pause)
     }
 
-    /// Resume dependencies first. Both resume and readiness need fresh authority.
+    /// Resume dependencies first: each must be Running and Ready.
+    /// Both resume and readiness need fresh authority.
     pub fn resume(
         &mut self,
         id: &PluginId,
         authorizer: &mut impl PluginAuthorizer,
     ) -> Result<(), PluginError> {
         self.require_state(id, PluginState::Paused)?;
-        for dependency in &self.entries[id].registration.descriptor.dependencies {
-            if self.entries[dependency].status.state != PluginState::Running {
-                return Err(PluginError::DependencyNotRunning(dependency.clone()));
-            }
-        }
+        self.require_dependencies_ready(id)?;
         self.authorize(id, PluginAction::Resume, authorizer)?;
         self.invoke(id, PluginAction::Resume)?;
         self.authorize(id, PluginAction::Readiness, authorizer)?;
@@ -468,6 +463,54 @@ impl PluginManager {
         for id in self.order.clone() {
             if self.entries[&id].status.state == PluginState::Paused {
                 self.resume(&id, authorizer)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Host-scheduled direct readiness snapshot, not transitive health or authority.
+    /// False retains Running and cleanup obligations; errors/panics are terminal.
+    /// In-process callbacks have no timeout. Scheduling belongs to the host.
+    pub fn check_health(
+        &mut self,
+        id: &PluginId,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<PluginHealth, PluginError> {
+        self.require_state(id, PluginState::Running)?;
+        self.authorize(id, PluginAction::Readiness, authorizer)?;
+        self.invoke(id, PluginAction::Readiness)?;
+        Ok(self.entries[id].status.health)
+    }
+
+    /// Preflights Running/Paused like [`Self::pause_all`], then probes Running
+    /// plugins in DAG order, skipping Paused. NotReady does not abort the batch.
+    /// The first error stops probing; prior snapshots/events remain available.
+    pub fn check_health_all(
+        &mut self,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<Vec<(PluginId, PluginHealth)>, PluginError> {
+        self.require_running_or_paused()?;
+        let mut health = Vec::new();
+        for id in self.order.clone() {
+            if self.entries[&id].status.state == PluginState::Running {
+                let snapshot = self.check_health(&id, authorizer)?;
+                health.push((id, snapshot));
+            }
+        }
+        Ok(health)
+    }
+
+    fn require_dependencies_ready(&self, id: &PluginId) -> Result<(), PluginError> {
+        let dependencies = &self.entries[id].registration.descriptor.dependencies;
+        // Preserve existing non-Running dependency errors before checking health.
+        for dependency in dependencies {
+            if self.entries[dependency].status.state != PluginState::Running {
+                return Err(PluginError::DependencyNotRunning(dependency.clone()));
+            }
+        }
+        for dependency in dependencies {
+            if self.entries[dependency].status.health != PluginHealth::Ready {
+                return Err(PluginError::DependencyNotReady(dependency.clone()));
             }
         }
         Ok(())
@@ -615,6 +658,20 @@ impl PluginManager {
                     PluginEventKind::Callback(action),
                     previous,
                     PluginOutcome::Success,
+                );
+                return Ok(());
+            }
+            // Only an ongoing probe may report false without failing lifecycle.
+            // Startup/resume readiness still fails closed from Starting.
+            Ok(Ok(false))
+                if action == PluginAction::Readiness && previous.state == PluginState::Running =>
+            {
+                entry.status.health = PluginHealth::NotReady;
+                self.record(
+                    id,
+                    PluginEventKind::Callback(action),
+                    previous,
+                    PluginOutcome::NotReady,
                 );
                 return Ok(());
             }

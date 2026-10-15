@@ -1,8 +1,10 @@
 #![cfg(feature = "plugin-process-tests")]
 
 use std::{
+    cell::Cell,
     error::Error,
     path::PathBuf,
+    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -13,14 +15,40 @@ use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
     plugin::{
-        CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginEventKind,
-        PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration, PluginState,
+        CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginError,
+        PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration,
+        PluginState,
         process::{ProcessPlugin, ProcessPluginConfig},
     },
 };
 
 type TestResult = Result<(), Box<dyn Error>>;
 const TIMEOUT: Duration = Duration::from_millis(500);
+
+struct TrackedProcess {
+    plugin: ProcessPlugin,
+    pid: Rc<Cell<Option<u32>>>,
+}
+
+impl Plugin for TrackedProcess {
+    fn initialize(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.plugin.initialize(context)?;
+        self.pid.set(self.plugin.child_id());
+        Ok(())
+    }
+
+    fn start(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.plugin.start(context)
+    }
+
+    fn readiness(&mut self, context: &PluginContext<'_>) -> Result<bool, String> {
+        self.plugin.readiness(context)
+    }
+
+    fn stop(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.plugin.stop(context)
+    }
+}
 
 fn process(mode: &str) -> Result<ProcessPlugin, String> {
     ProcessPlugin::new(ProcessPluginConfig {
@@ -68,6 +96,121 @@ fn assert_reaped(pid: u32) {
     );
     #[cfg(not(target_os = "linux"))]
     let _ = pid;
+}
+
+#[test]
+fn ongoing_process_health_can_report_not_ready_and_recover_on_fresh_ready_commands() -> TestResult {
+    for mode in ["healthy", "health-cycle"] {
+        let descriptor = descriptor()?;
+        let id = descriptor.id.clone();
+        let mut manager = PluginManager::new(vec![PluginRegistration {
+            descriptor,
+            plugin: Box::new(process(mode)?),
+        }])?;
+        manager.start_all(&mut allow)?;
+        manager.drain_events().for_each(drop);
+        let before = manager.status(&id).expect("status").clone();
+        let mut deny = |_: &PluginDescriptor, _: PluginAction| Err("private-secret-details".into());
+        assert!(matches!(
+            manager.check_health(&id, &mut deny),
+            Err(PluginError::Authorization(..))
+        ));
+        assert_eq!(manager.status(&id), Some(&before));
+        let first = if mode == "health-cycle" {
+            PluginHealth::NotReady
+        } else {
+            PluginHealth::Ready
+        };
+        assert_eq!(manager.check_health(&id, &mut allow)?, first);
+        assert_eq!(
+            manager.status(&id).expect("status").state,
+            PluginState::Running
+        );
+        assert!(manager.status(&id).expect("status").cleanup_pending);
+        assert!(manager.status(&id).expect("status").failure.is_none());
+        assert_eq!(
+            manager.check_health_all(&mut allow)?,
+            [(id.clone(), PluginHealth::Ready)]
+        );
+        assert_eq!(manager.check_health(&id, &mut allow)?, PluginHealth::Ready);
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 4);
+        assert_eq!(events[0].outcome, PluginOutcome::Rejected);
+        assert_eq!(
+            events[1].outcome,
+            if mode == "health-cycle" {
+                PluginOutcome::NotReady
+            } else {
+                PluginOutcome::Success
+            }
+        );
+        assert_eq!(events[2].previous.health, first);
+        assert_eq!(events[2].current.health, PluginHealth::Ready);
+        assert!(!format!("{events:?}").contains("private-secret-details"));
+        manager.stop_all()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn ongoing_process_probe_error_dead_child_and_timeout_are_terminal_and_reaped() -> TestResult {
+    for mode in ["probe-error", "exit-after-ready", "probe-hang"] {
+        let descriptor = descriptor()?;
+        let id = descriptor.id.clone();
+        let pid = Rc::new(Cell::new(None));
+        let mut manager = PluginManager::new(vec![PluginRegistration {
+            descriptor,
+            plugin: Box::new(TrackedProcess {
+                plugin: process(mode)?,
+                pid: pid.clone(),
+            }),
+        }])?;
+        manager.start_all(&mut allow)?;
+        let pid = pid.get().expect("spawned child");
+        manager.drain_events().for_each(drop);
+        let began = Instant::now();
+        assert!(matches!(
+            manager.check_health(&id, &mut allow),
+            Err(PluginError::Callback(..))
+        ));
+        assert!(
+            began.elapsed() < Duration::from_secs(3),
+            "{mode} exceeded deadline"
+        );
+        assert_reaped(pid);
+        let status = manager.status(&id).expect("status").clone();
+        assert_eq!(status.state, PluginState::Failed);
+        assert_eq!(status.health, PluginHealth::Unhealthy);
+        assert!(status.cleanup_pending);
+        assert_eq!(
+            status.failure.as_ref().expect("failure").action,
+            PluginAction::Readiness
+        );
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].outcome, PluginOutcome::Error);
+        assert_eq!(events[0].current.state, PluginState::Failed);
+        assert!(!format!("{events:?}").contains("private-secret-details"));
+        let mut forbidden =
+            |_: &PluginDescriptor, _: PluginAction| -> Result<RuntimePlan, String> {
+                panic!("terminal sessions cannot recover");
+            };
+        assert_eq!(
+            manager.check_health(&id, &mut forbidden),
+            Err(PluginError::InvalidTransition(
+                id.clone(),
+                PluginState::Failed
+            ))
+        );
+        assert_eq!(manager.drain_events().count(), 0);
+        manager.stop_all()?;
+        assert_reaped(pid);
+        let cleaned = manager.status(&id).expect("status");
+        assert_eq!(cleaned.state, PluginState::Failed);
+        assert_eq!(cleaned.failure, status.failure);
+        assert!(!cleaned.cleanup_pending);
+    }
+    Ok(())
 }
 
 #[test]

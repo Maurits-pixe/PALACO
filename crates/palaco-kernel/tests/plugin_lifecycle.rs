@@ -23,6 +23,7 @@ struct Behavior {
     not_ready: bool,
     cleanup_failures: usize,
     resume_readiness: Option<PluginOutcome>,
+    health: Option<Rc<RefCell<PluginOutcome>>>,
 }
 
 struct Probe {
@@ -55,6 +56,14 @@ impl Plugin for Probe {
 
     fn readiness(&mut self, context: &PluginContext<'_>) -> Result<bool, String> {
         self.call(context, PluginAction::Readiness)?;
+        if let Some(health) = &self.behavior.health {
+            return match *health.borrow() {
+                PluginOutcome::NotReady => Ok(false),
+                PluginOutcome::Error => Err("private-health-secret".into()),
+                PluginOutcome::Panicked => panic!("private-health-secret"),
+                _ => Ok(true),
+            };
+        }
         Ok(!self.behavior.not_ready)
     }
 
@@ -115,6 +124,646 @@ fn plan(authority: AuthorityState) -> Result<RuntimePlan, String> {
 
 fn allow(_: &PluginDescriptor, _: PluginAction) -> Result<RuntimePlan, String> {
     plan(AuthorityState::Authorized)
+}
+
+#[test]
+fn explicit_health_snapshots_recover_without_lifecycle_or_cleanup_changes() -> TestResult {
+    let log = Log::default();
+    let health = Rc::new(RefCell::new(PluginOutcome::Success));
+    let mut manager = PluginManager::new(vec![registration(
+        "a",
+        &[],
+        &log,
+        Behavior {
+            health: Some(health.clone()),
+            ..Behavior::default()
+        },
+    )?])?;
+    let a = PluginId::new("a")?;
+    manager.start_all(&mut allow)?;
+    manager.drain_events().for_each(drop);
+    log.borrow_mut().clear();
+    let auth = RefCell::new(Vec::new());
+    let mut fresh = |descriptor: &PluginDescriptor, action: PluginAction| {
+        auth.borrow_mut().push((descriptor.id.clone(), action));
+        allow(descriptor, action)
+    };
+    for (outcome, expected) in [
+        (PluginOutcome::Success, PluginHealth::Ready),
+        (PluginOutcome::NotReady, PluginHealth::NotReady),
+        (PluginOutcome::Success, PluginHealth::Ready),
+    ] {
+        *health.borrow_mut() = outcome;
+        assert_eq!(manager.check_health(&a, &mut fresh)?, expected);
+        let status = manager.status(&a).expect("status");
+        assert_eq!(status.state, PluginState::Running);
+        assert_eq!(status.health, expected);
+        assert!(status.cleanup_pending);
+        assert!(status.failure.is_none());
+        assert!(status.cleanup_error.is_none());
+    }
+    assert_eq!(*auth.borrow(), vec![(a, PluginAction::Readiness); 3]);
+    assert_eq!(*log.borrow(), ["a:Readiness"; 3]);
+    let events = manager.drain_events().collect::<Vec<_>>();
+    assert_eq!(events.len(), 3);
+    for (event, (previous, current, outcome)) in events.iter().zip([
+        (
+            PluginHealth::Ready,
+            PluginHealth::Ready,
+            PluginOutcome::Success,
+        ),
+        (
+            PluginHealth::Ready,
+            PluginHealth::NotReady,
+            PluginOutcome::NotReady,
+        ),
+        (
+            PluginHealth::NotReady,
+            PluginHealth::Ready,
+            PluginOutcome::Success,
+        ),
+    ]) {
+        assert_eq!(
+            event.kind,
+            PluginEventKind::Callback(PluginAction::Readiness)
+        );
+        assert_eq!(event.previous.health, previous);
+        assert_eq!(event.current.health, current);
+        assert_eq!(event.outcome, outcome);
+        assert_eq!(event.current.state, PluginState::Running);
+        assert!(event.current.cleanup_pending);
+        assert!(!event.current.failed);
+    }
+    assert_eq!(events[0].sequence, 5);
+    assert_eq!(events[2].sequence, 7);
+    manager.stop_all()?;
+    Ok(())
+}
+
+#[test]
+fn health_authority_rejection_preserves_ready_and_not_ready_snapshots() -> TestResult {
+    let log = Log::default();
+    let health = Rc::new(RefCell::new(PluginOutcome::Success));
+    let a = PluginId::new("a")?;
+    let mut manager = PluginManager::new(vec![registration(
+        "a",
+        &[],
+        &log,
+        Behavior {
+            health: Some(health.clone()),
+            ..Behavior::default()
+        },
+    )?])?;
+    manager.start_all(&mut allow)?;
+    for outcome in [PluginOutcome::Success, PluginOutcome::NotReady] {
+        *health.borrow_mut() = outcome;
+        manager.check_health(&a, &mut allow)?;
+        manager.drain_events().for_each(drop);
+        for authority in [
+            AuthorityState::Revoked,
+            AuthorityState::Expired,
+            AuthorityState::InDoubt,
+        ] {
+            let before = manager.status(&a).expect("status").clone();
+            let calls = log.borrow().clone();
+            let mut deny = |_: &PluginDescriptor, action: PluginAction| {
+                assert_eq!(action, PluginAction::Readiness);
+                plan(authority)
+            };
+            assert!(matches!(
+                manager.check_health(&a, &mut deny),
+                Err(PluginError::Authorization(..))
+            ));
+            assert_eq!(manager.status(&a), Some(&before));
+            assert_eq!(*log.borrow(), calls);
+            let events = manager.drain_events().collect::<Vec<_>>();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].previous, events[0].current);
+            assert_eq!(
+                events[0].kind,
+                PluginEventKind::AuthorizationRejected(PluginAction::Readiness)
+            );
+            assert_eq!(events[0].outcome, PluginOutcome::Rejected);
+        }
+        let before = manager.status(&a).expect("status").clone();
+        let calls = log.borrow().clone();
+        let mut deny = |_: &PluginDescriptor, _: PluginAction| Err("private-auth-secret".into());
+        assert!(matches!(
+            manager.check_health(&a, &mut deny),
+            Err(PluginError::Authorization(..))
+        ));
+        assert_eq!(manager.status(&a), Some(&before));
+        assert_eq!(*log.borrow(), calls);
+        assert!(
+            !format!("{:?}", manager.drain_events().collect::<Vec<_>>())
+                .contains("private-auth-secret")
+        );
+    }
+    manager.stop_all()?;
+    Ok(())
+}
+
+#[test]
+fn health_failures_are_terminal_redacted_and_retain_cleanup_dependency_guards() -> TestResult {
+    for outcome in [PluginOutcome::Error, PluginOutcome::Panicked] {
+        let log = Log::default();
+        let health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let mut manager = PluginManager::new(vec![
+            registration("a", &[], &log, Behavior::default())?,
+            registration(
+                "b",
+                &["a"],
+                &log,
+                Behavior {
+                    health: Some(health.clone()),
+                    cleanup_failures: 1,
+                    ..Behavior::default()
+                },
+            )?,
+        ])?;
+        let a = PluginId::new("a")?;
+        let b = PluginId::new("b")?;
+        manager.start_all(&mut allow)?;
+        manager.drain_events().for_each(drop);
+        *health.borrow_mut() = outcome;
+        assert!(matches!(
+            manager.check_health(&b, &mut allow),
+            Err(PluginError::Callback(..))
+        ));
+        let status = manager.status(&b).expect("status").clone();
+        assert_eq!(status.state, PluginState::Failed);
+        assert_eq!(status.health, PluginHealth::Unhealthy);
+        assert!(status.cleanup_pending);
+        let failure = status.failure.as_ref().expect("failure");
+        assert_eq!(failure.action, PluginAction::Readiness);
+        assert_eq!(failure.panicked, outcome == PluginOutcome::Panicked);
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].outcome, outcome);
+        assert_eq!(events[0].previous.health, PluginHealth::Ready);
+        assert_eq!(events[0].current.health, PluginHealth::Unhealthy);
+        assert!(events[0].current.failed);
+        assert!(!format!("{events:?}").contains("private-health-secret"));
+        *health.borrow_mut() = PluginOutcome::Success;
+        let mut forbidden =
+            |_: &PluginDescriptor, _: PluginAction| -> Result<RuntimePlan, String> {
+                panic!("must not authorize");
+            };
+        assert_eq!(
+            manager.check_health(&b, &mut forbidden),
+            Err(PluginError::InvalidTransition(
+                b.clone(),
+                PluginState::Failed
+            ))
+        );
+        assert_eq!(
+            manager.pause(&a, &mut forbidden),
+            Err(PluginError::DependencyInUse(b.clone()))
+        );
+        assert_eq!(manager.drain_events().count(), 0);
+        assert!(manager.stop_all().is_err());
+        assert_eq!(
+            manager.status(&a).expect("status").state,
+            PluginState::Running
+        );
+        assert_eq!(manager.status(&b).expect("status").failure, status.failure);
+        manager.stop_all()?;
+        assert!(!manager.status(&b).expect("status").cleanup_pending);
+        assert_eq!(manager.status(&b).expect("status").failure, status.failure);
+        assert_eq!(
+            manager.status(&b).expect("status").state,
+            PluginState::Failed
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn health_requires_running_and_batch_preflights_every_state_before_side_effects() -> TestResult {
+    for state in [
+        PluginState::Registered,
+        PluginState::Initialized,
+        PluginState::Starting,
+        PluginState::Paused,
+        PluginState::Stopped,
+        PluginState::Failed,
+    ] {
+        let log = Log::default();
+        let mut manager = PluginManager::new(vec![
+            registration("a", &[], &log, Behavior::default())?,
+            registration(
+                "b",
+                &[],
+                &log,
+                Behavior {
+                    fail: (state == PluginState::Failed).then_some(PluginAction::Start),
+                    ..Behavior::default()
+                },
+            )?,
+        ])?;
+        let a = PluginId::new("a")?;
+        let b = PluginId::new("b")?;
+        manager.initialize(&a, &mut allow)?;
+        manager.start(&a, &mut allow)?;
+        if state != PluginState::Registered {
+            manager.initialize(&b, &mut allow)?;
+        }
+        if matches!(state, PluginState::Starting | PluginState::Failed) {
+            let mut deny_readiness = |descriptor: &PluginDescriptor, action: PluginAction| {
+                if action == PluginAction::Readiness {
+                    Err("revoked".into())
+                } else {
+                    allow(descriptor, action)
+                }
+            };
+            assert!(manager.start(&b, &mut deny_readiness).is_err());
+        }
+        if matches!(state, PluginState::Paused | PluginState::Stopped) {
+            manager.start(&b, &mut allow)?;
+            manager.pause(&b, &mut allow)?;
+            if state == PluginState::Stopped {
+                manager.stop_all()?;
+            }
+        }
+        let before = manager.status(&b).expect("status").clone();
+        let calls = log.borrow().clone();
+        manager.drain_events().for_each(drop);
+        let mut forbidden =
+            |_: &PluginDescriptor, _: PluginAction| -> Result<RuntimePlan, String> {
+                panic!("must preflight");
+            };
+        assert_eq!(
+            manager.check_health(&b, &mut forbidden),
+            Err(PluginError::InvalidTransition(b.clone(), state))
+        );
+        assert!(matches!(
+            manager.check_health(&PluginId::new("unknown")?, &mut forbidden),
+            Err(PluginError::UnknownPlugin(_))
+        ));
+        if state != PluginState::Paused {
+            let invalid = if state == PluginState::Stopped {
+                a
+            } else {
+                b.clone()
+            };
+            assert_eq!(
+                manager.check_health_all(&mut forbidden),
+                Err(PluginError::InvalidTransition(invalid, state))
+            );
+        }
+        assert_eq!(manager.status(&b), Some(&before));
+        assert_eq!(*log.borrow(), calls);
+        assert_eq!(manager.drain_events().count(), 0);
+        manager.stop_all()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn health_batch_is_topological_skips_paused_and_continues_past_not_ready() -> TestResult {
+    let mut forbidden = |_: &PluginDescriptor, _: PluginAction| -> Result<RuntimePlan, String> {
+        panic!("empty/paused fleet must not authorize");
+    };
+    let mut empty = PluginManager::new(vec![])?;
+    assert_eq!(empty.check_health_all(&mut forbidden)?, []);
+    assert_eq!(empty.drain_events().count(), 0);
+    let log = Log::default();
+    let health = Rc::new(RefCell::new(PluginOutcome::Success));
+    let mut manager = PluginManager::new(vec![
+        registration("a", &["z"], &log, Behavior::default())?,
+        registration("paused", &[], &log, Behavior::default())?,
+        registration(
+            "z",
+            &[],
+            &log,
+            Behavior {
+                health: Some(health.clone()),
+                ..Behavior::default()
+            },
+        )?,
+    ])?;
+    manager.start_all(&mut allow)?;
+    manager.pause(&PluginId::new("paused")?, &mut allow)?;
+    manager.drain_events().for_each(drop);
+    log.borrow_mut().clear();
+    *health.borrow_mut() = PluginOutcome::NotReady;
+    let calls = RefCell::new(Vec::new());
+    let mut auth = |descriptor: &PluginDescriptor, action: PluginAction| {
+        calls.borrow_mut().push((descriptor.id.clone(), action));
+        allow(descriptor, action)
+    };
+    let expected = vec![
+        (PluginId::new("z")?, PluginHealth::NotReady),
+        (PluginId::new("a")?, PluginHealth::Ready),
+    ];
+    assert_eq!(manager.check_health_all(&mut auth)?, expected);
+    assert_eq!(*log.borrow(), ["z:Readiness", "a:Readiness"]);
+    assert_eq!(
+        *calls.borrow(),
+        expected
+            .iter()
+            .map(|(id, _)| (id.clone(), PluginAction::Readiness))
+            .collect::<Vec<_>>()
+    );
+    let events = manager.drain_events().collect::<Vec<_>>();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].id, expected[0].0);
+    assert_eq!(events[1].id, expected[1].0);
+    assert_eq!(events[0].outcome, PluginOutcome::NotReady);
+    assert_eq!(
+        manager.status(&PluginId::new("a")?).expect("status").state,
+        PluginState::Running
+    );
+    manager.pause_all(&mut allow)?;
+    manager.drain_events().for_each(drop);
+    assert_eq!(manager.check_health_all(&mut forbidden)?, []);
+    assert_eq!(manager.drain_events().count(), 0);
+    manager.stop_all()?;
+    Ok(())
+}
+
+#[test]
+fn health_batch_stops_on_error_or_rejection_preserving_progress() -> TestResult {
+    for rejected in [true, false] {
+        let log = Log::default();
+        let a_health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let b_health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let mut manager = PluginManager::new(vec![
+            registration("c", &["b"], &log, Behavior::default())?,
+            registration(
+                "b",
+                &["a"],
+                &log,
+                Behavior {
+                    health: Some(b_health.clone()),
+                    ..Behavior::default()
+                },
+            )?,
+            registration(
+                "a",
+                &[],
+                &log,
+                Behavior {
+                    health: Some(a_health.clone()),
+                    ..Behavior::default()
+                },
+            )?,
+        ])?;
+        manager.start_all(&mut allow)?;
+        manager.drain_events().for_each(drop);
+        log.borrow_mut().clear();
+        *a_health.borrow_mut() = PluginOutcome::NotReady;
+        *b_health.borrow_mut() = PluginOutcome::Error;
+        let calls = RefCell::new(Vec::new());
+        let mut auth = |descriptor: &PluginDescriptor, action: PluginAction| {
+            calls.borrow_mut().push(descriptor.id.as_str().to_owned());
+            if rejected && descriptor.id.as_str() == "b" {
+                Err("private-auth-secret".into())
+            } else {
+                allow(descriptor, action)
+            }
+        };
+        let result = manager.check_health_all(&mut auth);
+        assert!(if rejected {
+            matches!(result, Err(PluginError::Authorization(..)))
+        } else {
+            matches!(result, Err(PluginError::Callback(..)))
+        });
+        assert_eq!(*calls.borrow(), ["a", "b"]);
+        assert_eq!(
+            *log.borrow(),
+            if rejected {
+                vec!["a:Readiness"]
+            } else {
+                vec!["a:Readiness", "b:Readiness"]
+            }
+        );
+        assert_eq!(
+            manager.status(&PluginId::new("a")?).expect("status").health,
+            PluginHealth::NotReady
+        );
+        assert_eq!(
+            manager.status(&PluginId::new("b")?).expect("status").state,
+            if rejected {
+                PluginState::Running
+            } else {
+                PluginState::Failed
+            }
+        );
+        assert_eq!(
+            manager.status(&PluginId::new("c")?).expect("status").health,
+            PluginHealth::Ready
+        );
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].outcome, PluginOutcome::NotReady);
+        assert_eq!(
+            events[1].outcome,
+            if rejected {
+                PluginOutcome::Rejected
+            } else {
+                PluginOutcome::Error
+            }
+        );
+        assert!(!format!("{events:?}").contains("private-"));
+        if rejected {
+            *b_health.borrow_mut() = PluginOutcome::Success;
+            assert_eq!(manager.check_health_all(&mut allow)?.len(), 3);
+        }
+        manager.stop_all()?;
+    }
+    Ok(())
+}
+
+#[test]
+fn dependency_health_blocks_start_resume_before_authority_but_not_existing_work() -> TestResult {
+    let log = Log::default();
+    let health = Rc::new(RefCell::new(PluginOutcome::Success));
+    let mut manager = PluginManager::new(vec![
+        registration(
+            "a",
+            &[],
+            &log,
+            Behavior {
+                health: Some(health.clone()),
+                ..Behavior::default()
+            },
+        )?,
+        registration("b", &["a"], &log, Behavior::default())?,
+    ])?;
+    let a = PluginId::new("a")?;
+    let b = PluginId::new("b")?;
+    manager.initialize(&a, &mut allow)?;
+    manager.start(&a, &mut allow)?;
+    manager.initialize(&b, &mut allow)?;
+    let mut forbidden = |_: &PluginDescriptor, _: PluginAction| -> Result<RuntimePlan, String> {
+        panic!("dependency check precedes authorization");
+    };
+    for resume in [false, true] {
+        *health.borrow_mut() = PluginOutcome::NotReady;
+        assert_eq!(
+            manager.check_health(&a, &mut allow)?,
+            PluginHealth::NotReady
+        );
+        let before = manager.status(&b).expect("status").clone();
+        let calls = log.borrow().clone();
+        manager.drain_events().for_each(drop);
+        let result = if resume {
+            manager.resume(&b, &mut forbidden)
+        } else {
+            manager.start(&b, &mut forbidden)
+        };
+        assert_eq!(result, Err(PluginError::DependencyNotReady(a.clone())));
+        assert_eq!(manager.status(&b), Some(&before));
+        assert_eq!(*log.borrow(), calls);
+        assert_eq!(manager.drain_events().count(), 0);
+        *health.borrow_mut() = PluginOutcome::Success;
+        assert_eq!(manager.check_health(&a, &mut allow)?, PluginHealth::Ready);
+        if resume {
+            manager.resume(&b, &mut allow)?;
+        } else {
+            manager.start(&b, &mut allow)?;
+        }
+        *health.borrow_mut() = PluginOutcome::NotReady;
+        manager.check_health(&a, &mut allow)?;
+        assert_eq!(
+            manager.status(&b).expect("status").state,
+            PluginState::Running
+        );
+        assert_eq!(
+            manager.status(&b).expect("status").health,
+            PluginHealth::Ready
+        );
+        manager.pause(&b, &mut allow)?;
+    }
+    // A terminal health failure preserves the established not-Running error.
+    *health.borrow_mut() = PluginOutcome::Error;
+    assert!(manager.check_health(&a, &mut allow).is_err());
+    manager.drain_events().for_each(drop);
+    assert_eq!(
+        manager.resume(&b, &mut forbidden),
+        Err(PluginError::DependencyNotRunning(a))
+    );
+    assert_eq!(manager.drain_events().count(), 0);
+    manager.stop_all()?;
+    Ok(())
+}
+
+#[test]
+fn non_running_dependency_errors_keep_precedence_over_new_health_checks() -> TestResult {
+    let log = Log::default();
+    let health = Rc::new(RefCell::new(PluginOutcome::Success));
+    let mut manager = PluginManager::new(vec![
+        registration(
+            "a",
+            &[],
+            &log,
+            Behavior {
+                health: Some(health.clone()),
+                ..Behavior::default()
+            },
+        )?,
+        registration("z", &[], &log, Behavior::default())?,
+        registration("b", &["a", "z"], &log, Behavior::default())?,
+    ])?;
+    let a = PluginId::new("a")?;
+    let b = PluginId::new("b")?;
+    let z = PluginId::new("z")?;
+    for id in [&a, &z] {
+        manager.initialize(id, &mut allow)?;
+        manager.start(id, &mut allow)?;
+    }
+    manager.initialize(&b, &mut allow)?;
+    let mut forbidden = |_: &PluginDescriptor, _: PluginAction| -> Result<RuntimePlan, String> {
+        panic!("dependency rejection must not authorize");
+    };
+    for resume in [false, true] {
+        *health.borrow_mut() = PluginOutcome::NotReady;
+        manager.check_health(&a, &mut allow)?;
+        manager.pause(&z, &mut allow)?;
+        manager.drain_events().for_each(drop);
+        let calls = log.borrow().clone();
+        let result = if resume {
+            manager.resume(&b, &mut forbidden)
+        } else {
+            manager.start(&b, &mut forbidden)
+        };
+        assert_eq!(result, Err(PluginError::DependencyNotRunning(z.clone())));
+        assert_eq!(*log.borrow(), calls);
+        assert_eq!(manager.drain_events().count(), 0);
+        manager.resume(&z, &mut allow)?;
+        *health.borrow_mut() = PluginOutcome::Success;
+        manager.check_health(&a, &mut allow)?;
+        if resume {
+            manager.resume(&b, &mut allow)?;
+        } else {
+            manager.start(&b, &mut allow)?;
+        }
+        manager.pause(&b, &mut allow)?;
+    }
+    manager.stop_all()?;
+    Ok(())
+}
+
+#[test]
+fn not_ready_plugins_can_pause_and_shutdown_and_health_events_remain_bounded() -> TestResult {
+    for capacity in [0, 2] {
+        for pause in [false, true] {
+            let log = Log::default();
+            let health = Rc::new(RefCell::new(PluginOutcome::Success));
+            let a = PluginId::new("a")?;
+            let mut manager = PluginManager::with_event_capacity(
+                vec![registration(
+                    "a",
+                    &[],
+                    &log,
+                    Behavior {
+                        health: Some(health.clone()),
+                        ..Behavior::default()
+                    },
+                )?],
+                capacity,
+            )?;
+            manager.start_all(&mut allow)?;
+            assert_eq!(manager.lost_events(), 4 - capacity as u64);
+            manager.drain_events().for_each(drop);
+            for outcome in [
+                PluginOutcome::Success,
+                PluginOutcome::NotReady,
+                PluginOutcome::Success,
+                PluginOutcome::NotReady,
+            ] {
+                *health.borrow_mut() = outcome;
+                manager.check_health(&a, &mut allow)?;
+            }
+            let lost = 8 - 2 * capacity as u64;
+            assert_eq!(manager.lost_events(), lost);
+            let events = manager.drain_events().collect::<Vec<_>>();
+            assert_eq!(events.len(), capacity);
+            if capacity != 0 {
+                assert_eq!(events[0].sequence, 7);
+                assert_eq!(events[1].sequence, 8);
+                assert_eq!(events[1].current.health, PluginHealth::NotReady);
+                assert_eq!(events[1].outcome, PluginOutcome::NotReady);
+            }
+            assert_eq!(manager.lost_events(), lost);
+            assert_eq!(manager.drain_events().count(), 0);
+            if pause {
+                manager.pause(&a, &mut allow)?;
+                assert_eq!(
+                    manager.status(&a).expect("status").state,
+                    PluginState::Paused
+                );
+            }
+            manager.stop_all()?;
+            assert_eq!(
+                manager.status(&a).expect("status").state,
+                PluginState::Stopped
+            );
+            assert!(!manager.status(&a).expect("status").cleanup_pending);
+        }
+    }
+    Ok(())
 }
 
 #[test]
