@@ -2281,6 +2281,29 @@ populated results; invalid registries fail nonzero without results. The query
 does not modify files. `--find-unverified-controls` requires `--registry` and
 cannot be combined with other query modes, `--direction` or `--previous-registry`.
 
+Read-only evidence audit-link diagnostics:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /tmp/closed-registry.json --find-unaudited-evidence
+```
+
+After full snapshot validation, the query returns JSON with `definition`, sorted
+`object_ids` and a scope disclaimer. An EVD is reported only when both its
+`audit.audit_refs` is empty **and** no AUD record lists its ID in `evidence`.
+Either direction establishes a recorded audit association; reciprocal links are
+not required. An optional AUDITED_BY edge must still agree with `audit.audit_refs`
+under existing registry consistency rules. Evidence referenced by a non-AUD
+record, generic dependencies and upstream links do not establish an audit
+association. Invalid or dangling references fail validation before results.
+
+The name describes missing links, not whether an audit was actually performed:
+associations do not prove audit completion, evidence authenticity, freshness or
+compliance. Findings are diagnostic and do not change canonical status. Successful
+queries exit 0 with an empty or populated array; invalid input exits nonzero.
+The query is read-only, requires `--registry`, and cannot be combined with other
+query modes, `--direction` or `--previous-registry`.
+
 This MVP does not enforce upstream completeness, root reachability,
 authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending

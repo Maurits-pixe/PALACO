@@ -21,6 +21,7 @@ Checks, in one run:
  10. Read-only object-type queries using the PMS-001 object family vocabulary.
  11. Read-only lineage orphan diagnostics for isolated upstream-graph nodes.
  12. Read-only control/VER verification-status diagnostics on validated snapshots.
+ 13. Read-only evidence audit-link diagnostics on validated snapshots.
 
 Any failure exits non-zero.
 """
@@ -878,6 +879,108 @@ def find_unverified_controls(instance, validator=None):
     }
 
 
+def find_unaudited_evidence(instance, validator=None):
+    """Find absent audit links, without claiming an audit has been performed."""
+    validate_palaco_registry(instance, validator)
+    packaged = {
+        evidence_id for record in instance["objects"] if record["object_type"] == "AUD"
+        for evidence_id in record["evidence"]
+    }
+    return {
+        "definition": "EVD has neither audit.audit_refs nor membership in an AUD evidence package",
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["object_type"] == "EVD" and not record["audit"]["audit_refs"]
+            and record["metadata"]["id"] not in packaged
+        ),
+        "scope": "supplied link metadata only; diagnostic, not proof of audit, evidence authenticity or compliance",
+    }
+
+
+def check_unaudited_evidence():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for family, index in (("EVD", 1), ("EVD", 2), ("AUD", 1), ("FE", 1)):
+        record = copy.deepcopy(template)
+        record["object_type"] = family
+        record["metadata"]["id"] = f"{family}-{index:05d}"
+        if family == "AUD":
+            record["evidence"] = ["EVD-00002"]
+        fixture["objects"].append(record)
+    positive_count = 0
+
+    def check(instance, expected):
+        nonlocal positive_count
+        original = copy.deepcopy(instance)
+        result = find_unaudited_evidence(instance, validator)
+        require(result == {
+            "definition": "EVD has neither audit.audit_refs nor membership in an AUD evidence package",
+            "object_ids": expected,
+            "scope": "supplied link metadata only; diagnostic, not proof of audit, evidence authenticity or compliance",
+        }, f"unexpected evidence audit-link result: {result}")
+        require(instance == original, "evidence query mutated input")
+        reordered = copy.deepcopy(instance)
+        reordered["objects"].reverse()
+        require(find_unaudited_evidence(reordered, validator) == result,
+                "evidence query depends on record order")
+        positive_count += 1
+
+    for direct in (False, True):
+        for packaged in (False, True):
+            instance = copy.deepcopy(fixture)
+            if direct:
+                instance["objects"][0]["audit"]["audit_refs"] = ["AUD-00001"]
+            if packaged:
+                instance["objects"][2]["evidence"].append("EVD-00001")
+            check(instance, [] if direct or packaged else ["EVD-00001"])
+    both = copy.deepcopy(fixture)
+    both["objects"][0]["audit"]["audit_refs"] = ["AUD-00001"]
+    both["objects"][0]["traceability"]["relationships"] = [
+        {"source": "EVD-00001", "relation": "AUDITED_BY", "target": "AUD-00001"}
+    ]
+    both["objects"][2]["evidence"].append("EVD-00001")
+    check(both, [])
+    all_unlinked = copy.deepcopy(fixture)
+    del all_unlinked["objects"][2]
+    check(all_unlinked, ["EVD-00001", "EVD-00002"])
+    unrelated = copy.deepcopy(fixture)
+    unrelated["objects"][3]["evidence"] = ["EVD-00001"]
+    unrelated["objects"][0]["dependencies"] = ["AUD-00001"]
+    unrelated["objects"][0]["traceability"]["upstream"] = ["AUD-00001"]
+    unrelated["objects"][0]["traceability"]["relationships"] = [
+        {"source": "EVD-00001", "relation": "DEPENDS_ON", "target": "AUD-00001"}
+    ]
+    check(unrelated, ["EVD-00001"])
+    check(read_json(PALACO_FIXTURE_DIR / "registry.fixture.json"), [])
+    negatives = [({}, "registry structure")]
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][0]["audit"]["audit_refs"] = ["AUD-99999"]
+    negatives.append((invalid, "unresolved audit.audit_refs"))
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][2]["evidence"] = ["EVD-99999"]
+    negatives.append((invalid, "unresolved evidence"))
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][0]["traceability"]["relationships"] = [
+        {"source": "EVD-00001", "relation": "AUDITED_BY", "target": "AUD-00001"}
+    ]
+    negatives.append((invalid, "AUDITED_BY conflicts with audit.audit_refs"))
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"].append(copy.deepcopy(invalid["objects"][0]))
+    negatives.append((invalid, "duplicate object ID"))
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][3]["lifecycle"]["status"] = "Active"
+    negatives.append((invalid, "requires approval.status Approved"))
+    for instance, expected in negatives:
+        try:
+            find_unaudited_evidence(instance, validator)
+        except ConformanceError as error:
+            require(expected in str(error), f"unexpected evidence diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid evidence query accepted: {expected}")
+    return f"evidence audit-link diagnostics: {positive_count} deterministic/non-mutating queries + {len(negatives)} rejections"
+
+
 def check_unverified_controls():
     validators = palaco_validators()
     validator = validators["PCR-000.schema.json"]
@@ -1677,6 +1780,7 @@ CHECKS = (
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
+    ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
 )
 
 
@@ -1693,6 +1797,8 @@ def main():
                         help="Return IDs isolated in traceability.upstream as JSON")
     parser.add_argument("--find-unverified-controls", action="store_true",
                         help="Return COM IDs whose own or referenced VER status is not Passed")
+    parser.add_argument("--find-unaudited-evidence", action="store_true",
+                        help="Return EVD IDs without audit references or AUD evidence-package membership")
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
@@ -1719,10 +1825,20 @@ def main():
             parser.error("--find-unverified-controls requires --registry")
         if args.trace is not None or args.find_type is not None or args.find_orphans or args.previous_registry is not None:
             parser.error("--find-unverified-controls cannot be combined with other query or comparison modes")
+    if args.find_unaudited_evidence:
+        if args.registry is None:
+            parser.error("--find-unaudited-evidence requires --registry")
+        if (args.trace is not None or args.find_type is not None or args.find_orphans
+                or args.find_unverified_controls or args.previous_registry is not None):
+            parser.error("--find-unaudited-evidence cannot be combined with other query or comparison modes")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_unverified_controls:
+            if args.find_unaudited_evidence:
+                result = find_unaudited_evidence(current)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_unverified_controls:
                 result = find_unverified_controls(current)
                 print(json.dumps(result, indent=2))
                 return 0
