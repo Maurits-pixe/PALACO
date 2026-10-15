@@ -55,4 +55,5 @@ For the prototype, use **independently deployable apps connected by ordinary HTT
 ## Related
 
 - [Web preview deployments](../operations/Preview-Deployments.md)
+- [PALACO Prototype Release Review](../operations/Prototype-Release-Review.md)
 - [ADR-0002: Communication Does Not Imply Authority](ADR-0002-communication-not-authority.md)
