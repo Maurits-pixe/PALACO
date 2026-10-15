@@ -24,6 +24,7 @@ struct Behavior {
     cleanup_failures: usize,
     resume_readiness: Option<PluginOutcome>,
     health: Option<Rc<RefCell<PluginOutcome>>>,
+    cleanup: Option<Rc<RefCell<PluginOutcome>>>,
 }
 
 struct Probe {
@@ -84,6 +85,13 @@ impl Plugin for Probe {
 
     fn stop(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
         self.call(context, PluginAction::Stop)?;
+        if let Some(cleanup) = &self.behavior.cleanup {
+            match *cleanup.borrow() {
+                PluginOutcome::Error => return Err("private-cleanup-secret".into()),
+                PluginOutcome::Panicked => panic!("private-cleanup-secret"),
+                _ => {}
+            }
+        }
         if self.behavior.cleanup_failures > 0 {
             self.behavior.cleanup_failures -= 1;
             return Err("retry cleanup".into());
@@ -124,6 +132,336 @@ fn plan(authority: AuthorityState) -> Result<RuntimePlan, String> {
 
 fn allow(_: &PluginDescriptor, _: PluginAction) -> Result<RuntimePlan, String> {
     plan(AuthorityState::Authorized)
+}
+
+#[test]
+fn selective_stop_unknown_and_registered_are_silent_and_registered_does_not_block() -> TestResult {
+    let log = Log::default();
+    let a = PluginId::new("a")?;
+    let b = PluginId::new("b")?;
+    let missing = PluginId::new("missing")?;
+    let mut manager = PluginManager::new(vec![
+        registration("a", &[], &log, Behavior::default())?,
+        registration("b", &["a"], &log, Behavior::default())?,
+    ])?;
+    let registered = manager.status(&b).expect("status").clone();
+    manager.drain_events().for_each(drop);
+    assert_eq!(
+        manager.stop(&missing),
+        Err(PluginError::UnknownPlugin(missing))
+    );
+    manager.stop(&b)?;
+    manager.stop(&b)?;
+    assert_eq!(manager.status(&b), Some(&registered));
+    assert!(log.borrow().is_empty());
+    assert_eq!(manager.drain_events().count(), 0);
+    manager.initialize(&a, &mut allow)?;
+    manager.drain_events().for_each(drop);
+    log.borrow_mut().clear();
+    manager.stop(&a)?;
+    let stopped = manager.status(&a).expect("status").clone();
+    assert_eq!(stopped.state, PluginState::Stopped);
+    assert_eq!(manager.status(&b), Some(&registered));
+    assert_eq!(*log.borrow(), ["a:Stop"]);
+    assert_eq!(manager.drain_events().count(), 1);
+    manager.stop(&a)?;
+    manager.stop(&b)?;
+    manager.stop_all()?;
+    assert_eq!(manager.status(&a), Some(&stopped));
+    assert_eq!(manager.status(&b), Some(&registered));
+    assert_eq!(*log.borrow(), ["a:Stop"]);
+    assert_eq!(manager.drain_events().count(), 0);
+    Ok(())
+}
+
+#[test]
+fn selective_stop_guards_every_pending_dependent_state_without_side_effects() -> TestResult {
+    for phase in [
+        "initialized",
+        "starting",
+        "ready",
+        "not-ready",
+        "paused",
+        "health-failed",
+        "cleanup-failed",
+    ] {
+        let log = Log::default();
+        let health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let a = PluginId::new("a")?;
+        let b = PluginId::new("b")?;
+        let mut manager = PluginManager::new(vec![
+            registration("a", &[], &log, Behavior::default())?,
+            registration(
+                "b",
+                &["a"],
+                &log,
+                Behavior {
+                    health: Some(health.clone()),
+                    cleanup_failures: usize::from(phase == "cleanup-failed"),
+                    ..Behavior::default()
+                },
+            )?,
+        ])?;
+        manager.initialize(&a, &mut allow)?;
+        manager.start(&a, &mut allow)?;
+        manager.initialize(&b, &mut allow)?;
+        let expected = match phase {
+            "initialized" => PluginState::Initialized,
+            "starting" => {
+                let mut deny_readiness = |descriptor: &PluginDescriptor, action: PluginAction| {
+                    if action == PluginAction::Readiness {
+                        plan(AuthorityState::Revoked)
+                    } else {
+                        allow(descriptor, action)
+                    }
+                };
+                assert!(matches!(
+                    manager.start(&b, &mut deny_readiness),
+                    Err(PluginError::Authorization(..))
+                ));
+                PluginState::Starting
+            }
+            _ => {
+                manager.start(&b, &mut allow)?;
+                match phase {
+                    "paused" => {
+                        manager.pause(&b, &mut allow)?;
+                        PluginState::Paused
+                    }
+                    "not-ready" => {
+                        *health.borrow_mut() = PluginOutcome::NotReady;
+                        assert_eq!(
+                            manager.check_health(&b, &mut allow)?,
+                            PluginHealth::NotReady
+                        );
+                        PluginState::Running
+                    }
+                    "health-failed" => {
+                        *health.borrow_mut() = PluginOutcome::Error;
+                        assert!(matches!(
+                            manager.check_health(&b, &mut allow),
+                            Err(PluginError::Callback(..))
+                        ));
+                        PluginState::Failed
+                    }
+                    "cleanup-failed" => {
+                        assert!(matches!(manager.stop(&b), Err(PluginError::Callback(..))));
+                        PluginState::Failed
+                    }
+                    _ => PluginState::Running,
+                }
+            }
+        };
+        assert_eq!(manager.status(&b).expect("status").state, expected);
+        assert!(manager.status(&b).expect("status").cleanup_pending);
+        let before = [manager.status(&a).cloned(), manager.status(&b).cloned()];
+        manager.drain_events().for_each(drop);
+        log.borrow_mut().clear();
+        assert_eq!(
+            manager.stop(&a),
+            Err(PluginError::DependencyInUse(b.clone())),
+            "{phase}"
+        );
+        assert_eq!(
+            [manager.status(&a).cloned(), manager.status(&b).cloned()],
+            before
+        );
+        assert!(log.borrow().is_empty());
+        assert_eq!(manager.drain_events().count(), 0);
+        manager.stop(&b)?;
+        manager.stop(&a)?;
+        assert_eq!(*log.borrow(), ["b:Stop", "a:Stop"]);
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].id, b);
+        assert_eq!(events[1].id, a);
+        assert!(events.iter().all(|event| {
+            event.kind == PluginEventKind::Callback(PluginAction::Stop)
+                && event.outcome == PluginOutcome::Success
+        }));
+    }
+    Ok(())
+}
+
+#[test]
+fn selective_stop_preserves_diamond_and_transitive_safety_without_cascade() -> TestResult {
+    let log = Log::default();
+    let a = PluginId::new("a")?;
+    let b = PluginId::new("b")?;
+    let c = PluginId::new("c")?;
+    let d = PluginId::new("d")?;
+    let z = PluginId::new("z")?;
+    let mut manager = PluginManager::new(vec![
+        registration("z", &[], &log, Behavior::default())?,
+        registration("d", &["c", "b"], &log, Behavior::default())?,
+        registration("c", &["a"], &log, Behavior::default())?,
+        registration("b", &["a"], &log, Behavior::default())?,
+        registration("a", &[], &log, Behavior::default())?,
+    ])?;
+    manager.start_all(&mut allow)?;
+    manager.drain_events().for_each(drop);
+    log.borrow_mut().clear();
+    for (target, blocker) in [(&a, &b), (&b, &d), (&c, &d)] {
+        assert_eq!(
+            manager.stop(target),
+            Err(PluginError::DependencyInUse(blocker.clone()))
+        );
+    }
+    assert!(log.borrow().is_empty());
+    assert_eq!(manager.drain_events().count(), 0);
+    let untouched = [&a, &b, &c, &z].map(|id| manager.status(id).expect("status").clone());
+    manager.stop(&d)?;
+    for (id, status) in [&a, &b, &c, &z].into_iter().zip(&untouched) {
+        assert_eq!(manager.status(id), Some(status));
+    }
+    manager.stop(&b)?;
+    assert_eq!(
+        manager.stop(&a),
+        Err(PluginError::DependencyInUse(c.clone()))
+    );
+    manager.stop(&c)?;
+    manager.stop(&a)?;
+    assert_eq!(*log.borrow(), ["d:Stop", "b:Stop", "c:Stop", "a:Stop"]);
+    let events = manager.drain_events().collect::<Vec<_>>();
+    assert_eq!(
+        events.iter().map(|event| &event.id).collect::<Vec<_>>(),
+        [&d, &b, &c, &a]
+    );
+    assert!(
+        events
+            .windows(2)
+            .all(|pair| pair[0].sequence + 1 == pair[1].sequence)
+    );
+    for id in [&a, &b, &c, &d] {
+        manager.stop(id)?;
+    }
+    assert_eq!(manager.drain_events().count(), 0);
+    assert_eq!(*log.borrow(), ["d:Stop", "b:Stop", "c:Stop", "a:Stop"]);
+    assert_eq!(manager.status(&z), Some(&untouched[3]));
+    manager.stop_all()?;
+    assert_eq!(manager.drain_events().count(), 1);
+    assert_eq!(log.borrow().last().expect("stop"), "z:Stop");
+    Ok(())
+}
+
+#[test]
+fn selective_stop_retries_errors_and_panics_preserving_first_failure_and_latest_cleanup()
+-> TestResult {
+    for health_failed in [false, true] {
+        let log = Log::default();
+        let cleanup = Rc::new(RefCell::new(PluginOutcome::Success));
+        let health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let a = PluginId::new("a")?;
+        let mut manager = PluginManager::new(vec![registration(
+            "a",
+            &[],
+            &log,
+            Behavior {
+                health: Some(health.clone()),
+                cleanup: Some(cleanup.clone()),
+                ..Behavior::default()
+            },
+        )?])?;
+        manager.start_all(&mut allow)?;
+        if health_failed {
+            *health.borrow_mut() = PluginOutcome::Error;
+            assert!(manager.check_health(&a, &mut allow).is_err());
+        }
+        let mut first = manager.status(&a).expect("status").failure.clone();
+        manager.drain_events().for_each(drop);
+        log.borrow_mut().clear();
+        for outcome in [
+            PluginOutcome::Error,
+            PluginOutcome::Panicked,
+            PluginOutcome::Error,
+        ] {
+            *cleanup.borrow_mut() = outcome;
+            let previous = manager.status(&a).expect("status").clone();
+            let Err(PluginError::Callback(id, failure)) = manager.stop(&a) else {
+                panic!("cleanup must fail");
+            };
+            assert_eq!(id, a);
+            assert_eq!(failure.action, PluginAction::Stop);
+            assert_eq!(failure.panicked, outcome == PluginOutcome::Panicked);
+            first.get_or_insert_with(|| failure.clone());
+            let status = manager.status(&a).expect("status").clone();
+            assert_eq!(status.state, PluginState::Failed);
+            assert!(status.cleanup_pending);
+            assert_eq!(status.failure, first);
+            assert_eq!(status.cleanup_error, Some(failure));
+            let events = manager.drain_events().collect::<Vec<_>>();
+            assert_eq!(events.len(), 1);
+            assert_eq!(
+                events[0].kind,
+                PluginEventKind::Callback(PluginAction::Stop)
+            );
+            assert_eq!(events[0].outcome, outcome);
+            assert_eq!(events[0].previous, (&previous).into());
+            assert_eq!(events[0].current, (&status).into());
+            assert!(!format!("{events:?}").contains("private-cleanup-secret"));
+        }
+        *cleanup.borrow_mut() = PluginOutcome::Success;
+        manager.stop(&a)?;
+        let cleaned = manager.status(&a).expect("status").clone();
+        assert_eq!(cleaned.state, PluginState::Failed);
+        assert_eq!(cleaned.health, PluginHealth::Unhealthy);
+        assert_eq!(cleaned.failure, first);
+        assert!(!cleaned.cleanup_pending);
+        assert!(cleaned.cleanup_error.is_none());
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].outcome, PluginOutcome::Success);
+        assert!(events[0].previous.cleanup_failed);
+        assert!(!events[0].current.cleanup_failed);
+        assert!(!events[0].current.cleanup_pending);
+        assert_eq!(*log.borrow(), ["a:Stop"; 4]);
+        manager.stop(&a)?;
+        manager.stop_all()?;
+        assert_eq!(manager.status(&a), Some(&cleaned));
+        assert_eq!(manager.drain_events().count(), 0);
+        assert_eq!(*log.borrow(), ["a:Stop"; 4]);
+    }
+    Ok(())
+}
+
+#[test]
+fn selective_stop_after_revocation_never_requests_new_host_authority() -> TestResult {
+    let log = Log::default();
+    let a = PluginId::new("a")?;
+    let mut manager = PluginManager::new(vec![registration("a", &[], &log, Behavior::default())?])?;
+    let mut authorized = true;
+    let mut auth_calls = 0;
+    let mut authorizer = |_: &PluginDescriptor, _: PluginAction| {
+        auth_calls += 1;
+        plan(if authorized {
+            AuthorityState::Authorized
+        } else {
+            AuthorityState::Revoked
+        })
+    };
+    manager.start_all(&mut authorizer)?;
+    assert_eq!(auth_calls, 3);
+    authorized = false;
+    let mut revoked = |_: &PluginDescriptor, _: PluginAction| {
+        auth_calls += 1;
+        assert!(!authorized);
+        plan(AuthorityState::Revoked)
+    };
+    assert!(matches!(
+        manager.check_health(&a, &mut revoked),
+        Err(PluginError::Authorization(..))
+    ));
+    manager.drain_events().for_each(drop);
+    log.borrow_mut().clear();
+    manager.stop(&a)?;
+    assert_eq!(auth_calls, 4);
+    assert_eq!(*log.borrow(), ["a:Stop"]);
+    assert_eq!(
+        manager.status(&a).expect("status").state,
+        PluginState::Stopped
+    );
+    assert_eq!(manager.drain_events().count(), 1);
+    Ok(())
 }
 
 #[test]

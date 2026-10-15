@@ -74,6 +74,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         registration("worker", vec![PluginId::new("service")?])?,
         registration("service", vec![])?,
     ])?;
+    let worker = PluginId::new("worker")?;
     let lifecycle = manager
         .start_all(&mut synthetic_authorizer)
         // A host chooses when to probe; these are direct, non-transitive snapshots.
@@ -89,7 +90,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             manager
                 .check_health(&PluginId::new("service")?, &mut synthetic_authorizer)
                 .map(|_| ())
-        });
+        })
+        // Selective cleanup never cascades; dependents must stop first.
+        .and_then(|()| manager.stop(&worker));
     // Never short-circuit cleanup on an operational failure. A real host must
     // retain the manager and explicitly retry if cleanup itself fails.
     let cleanup = manager.stop_all();

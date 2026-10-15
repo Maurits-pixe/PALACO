@@ -99,6 +99,126 @@ fn assert_reaped(pid: u32) {
 }
 
 #[test]
+fn selective_process_stop_reaps_only_target_and_retains_dependency_until_cleanup() -> TestResult {
+    for mode in ["healthy", "stop-error", "stop-hang", "probe-error"] {
+        let service = PluginId::new("service")?;
+        let worker = PluginId::new("worker")?;
+        let independent = PluginId::new("independent")?;
+        let pids = [(); 3].map(|()| Rc::new(Cell::new(None)));
+        let mut registrations = Vec::new();
+        for (index, (id, dependencies, mode)) in [
+            (&service, vec![], "healthy"),
+            (&worker, vec![service.clone()], mode),
+            (&independent, vec![], "healthy"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            registrations.push(PluginRegistration {
+                descriptor: PluginDescriptor {
+                    id: id.clone(),
+                    dependencies,
+                    ..descriptor()?
+                },
+                plugin: Box::new(TrackedProcess {
+                    plugin: process(mode)?,
+                    pid: pids[index].clone(),
+                }),
+            });
+        }
+        let mut manager = PluginManager::new(registrations)?;
+        manager.start_all(&mut allow)?;
+        let [service_pid, worker_pid, independent_pid] =
+            pids.map(|pid| pid.get().expect("spawned child"));
+        let untouched =
+            [&service, &independent].map(|id| manager.status(id).expect("status").clone());
+        if mode == "probe-error" {
+            assert!(matches!(
+                manager.check_health(&worker, &mut allow),
+                Err(PluginError::Callback(..))
+            ));
+            assert_reaped(worker_pid);
+        }
+        let failure = manager.status(&worker).expect("status").failure.clone();
+        manager.drain_events().for_each(drop);
+        let before = manager.status(&service).expect("status").clone();
+        assert_eq!(
+            manager.stop(&service),
+            Err(PluginError::DependencyInUse(worker.clone()))
+        );
+        assert_eq!(manager.status(&service), Some(&before));
+        assert_eq!(manager.drain_events().count(), 0);
+        let began = Instant::now();
+        let stopped = manager.stop(&worker);
+        assert!(began.elapsed() < Duration::from_secs(3), "{mode}");
+        assert_reaped(worker_pid);
+        if matches!(mode, "stop-error" | "stop-hang") {
+            assert!(matches!(stopped, Err(PluginError::Callback(..))));
+            let failed = manager.status(&worker).expect("status").clone();
+            assert!(failed.cleanup_pending);
+            assert!(failed.cleanup_error.is_some());
+            let events = manager.drain_events().collect::<Vec<_>>();
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0].id, worker);
+            assert_eq!(events[0].outcome, PluginOutcome::Error);
+            // Even a reaped process retains dependency ownership until explicit retry.
+            assert_eq!(
+                manager.stop(&service),
+                Err(PluginError::DependencyInUse(worker.clone()))
+            );
+            assert_eq!(manager.status(&worker), Some(&failed));
+            assert_eq!(manager.drain_events().count(), 0);
+            manager.stop(&worker)?;
+            assert_eq!(
+                manager.status(&worker).expect("status").failure,
+                failed.failure
+            );
+        } else {
+            stopped?;
+            assert_eq!(manager.status(&worker).expect("status").failure, failure);
+        }
+        let cleaned = manager.status(&worker).expect("status").clone();
+        assert!(!cleaned.cleanup_pending);
+        assert!(cleaned.cleanup_error.is_none());
+        assert_eq!(
+            cleaned.state,
+            if mode == "healthy" {
+                PluginState::Stopped
+            } else {
+                PluginState::Failed
+            }
+        );
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, worker);
+        assert_eq!(
+            events[0].kind,
+            PluginEventKind::Callback(PluginAction::Stop)
+        );
+        assert_eq!(events[0].outcome, PluginOutcome::Success);
+        manager.stop(&worker)?;
+        assert_eq!(manager.status(&worker), Some(&cleaned));
+        assert_eq!(manager.drain_events().count(), 0);
+        for (id, status) in [&service, &independent].into_iter().zip(&untouched) {
+            assert_eq!(manager.status(id), Some(status));
+            // A fresh protocol round trip also proves these children remain live.
+            assert_eq!(manager.check_health(id, &mut allow)?, PluginHealth::Ready);
+        }
+        manager.drain_events().for_each(drop);
+        manager.stop(&service)?;
+        assert_reaped(service_pid);
+        assert_eq!(manager.status(&independent), Some(&untouched[1]));
+        assert_eq!(manager.drain_events().count(), 1);
+        manager.stop_all()?;
+        assert_reaped(independent_pid);
+        let events = manager.drain_events().collect::<Vec<_>>();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].id, independent);
+    }
+    Ok(())
+}
+
+#[test]
 fn ongoing_process_health_can_report_not_ready_and_recover_on_fresh_ready_commands() -> TestResult {
     for mode in ["healthy", "health-cycle"] {
         let descriptor = descriptor()?;

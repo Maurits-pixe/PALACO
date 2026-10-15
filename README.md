@@ -39,7 +39,7 @@ block shutdown until cleaned up. `resume(id, authorizer)` requires Running and R
 dependencies and a new readiness check: resume dependencies first. Successful
 start/resume enters Starting until readiness succeeds; if readiness authorization
 is revoked, active work remains tracked in Starting for dependency safety.
-Use `stop_all` after such revocation. Failed/panicking pause/resume leaves Failed
+Use `stop` or `stop_all` after such revocation. Failed/panicking pause/resume leaves Failed
 with cleanup pending; health is Unknown while paused and Ready after readiness.
 
 `check_health(id, &mut authorizer)` explicitly reuses `readiness` for a Running
@@ -78,21 +78,36 @@ Batches stop at the first error without rollback, retry, or automatic stop:
 all partial progress and cleanup obligations remain visible. After a pure
 authorization rejection, a Running/Paused mix can continue with another batch.
 Starting (including rejected resume-readiness authorization) or Failed requires
-explicit `stop_all`, not a business retry; cleanup still bypasses revoked authority.
+explicit `stop`/`stop_all`, not a business retry; cleanup still bypasses revoked authority.
 
 Run the two-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
-It starts, explicitly probes health, pauses, resumes, probes again, attempts shutdown
-even on lifecycle errors, and drains
+It starts, explicitly probes health, pauses, resumes, probes again, selectively stops
+the worker, unconditionally attempts fleet cleanup even on errors, and drains
 redacted event outcomes. Its synthetic authorizer is **not production authentication**.
 
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
 Readiness is an explicit startup/resume/probe snapshot, not continuous monitoring. `start_all` rolls back
-callback failures; individual calls leave partial resources for `stop_all`.
+callback failures; individual calls leave partial resources for `stop`/`stop_all`.
 Authorization rejection invokes no callbacks and leaves already-acquired resources
-untouched: explicitly call `manager.stop_all()`, which needs no authorization and
-remains available after revocation. Retry failed cleanup explicitly; dependents
-must finish cleanup before dependencies are stopped. Keep the manager alive until
+untouched: explicitly call `manager.stop(&id)` or `manager.stop_all()`, neither of which
+needs authorization; both remain available after revocation or health failure.
+`stop(&id)` cleans up only that plugin, with no automatic cascade. Unknown IDs return
+`UnknownPlugin` without callbacks or events. With no pending cleanup, it is an
+idempotent no-op without callbacks, events, or status changes: never-initialized
+Registered plugins remain Registered, Stopped plugins remain Stopped, and cleaned
+Failed plugins remain Failed. A direct dependent with pending cleanup blocks the
+target with `DependencyInUse` naming the lexicographically first dependent, before
+any callback, event, or status change. This includes Initialized, Starting,
+Running (Ready or NotReady), Paused, and failed-but-not-cleaned dependents; direct
+guards preserve transitive dependency safety. Stop leaves first failure metadata
+intact; explicit retry updates the latest cleanup error, and successful cleanup
+clears that error and pending flag without recovering Failed lifecycle state.
+`stop_all()` attempts eligible cleanup in reverse topological order, skipping
+blocked dependencies while continuing independent cleanup and returning the first
+callback error (not a dependency-blocking error).
+Retry failed cleanup explicitly; dependents must finish cleanup before dependencies
+are stopped. Keep the manager alive until
 cleanup succeeds. No unload API or automatic initialization/start retry is provided.
 
 ### Bounded lifecycle observations

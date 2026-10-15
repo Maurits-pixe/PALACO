@@ -1,6 +1,8 @@
 //! Synchronous trusted plugins with host authorization and bounded pull events.
 //! In-process callbacks have no timeout or sandbox. See [`process`] for optional
 //! child-process crash isolation (also not an OS sandbox).
+//! Selective and fleet cleanup bypass authorization and retain dependencies until
+//! their dependents finish cleanup.
 
 pub mod process;
 
@@ -238,8 +240,8 @@ pub const DEFAULT_EVENT_CAPACITY: usize = 256;
 
 /// Exclusive synchronous lifecycle ownership. There is deliberately no unload
 /// operation or public state setter, and no automatic initialization/start retry.
-/// Registration is immutable after construction; shutdown is only via
-/// `stop_all`, so a live dependent cannot be bypassed by stopping its dependency.
+/// Registration is immutable after construction; `stop` and `stop_all` retain
+/// dependencies while a dependent has pending cleanup.
 pub struct PluginManager {
     entries: BTreeMap<PluginId, Entry>,
     order: Vec<PluginId>,
@@ -367,7 +369,7 @@ impl PluginManager {
     }
 
     /// Initializes once. A callback failure marks the plugin Failed and leaves
-    /// cleanup pending; call `stop_all` to release partially acquired resources.
+    /// cleanup pending; call `stop` or `stop_all` to release acquired resources.
     pub fn initialize(
         &mut self,
         id: &PluginId,
@@ -381,7 +383,7 @@ impl PluginManager {
     /// Startup includes a separately authorized synchronous readiness check.
     /// Direct dependencies must be Running and Ready. Running means startup
     /// readiness succeeded; later probes may report NotReady, not continuous health.
-    /// Callback failure leaves cleanup pending until `stop_all` is called.
+    /// Callback failure leaves cleanup pending until `stop` or `stop_all` is called.
     pub fn start(
         &mut self,
         id: &PluginId,
@@ -453,7 +455,7 @@ impl PluginManager {
     /// Uses the same fleet preflight and partial-progress semantics as
     /// [`Self::pause_all`]. Resume and readiness each require fresh authority.
     /// Pure authorization rejection permits retry while all states remain
-    /// Running/Paused; Starting or Failed requires explicit `stop_all` cleanup,
+    /// Running/Paused; Starting or Failed requires explicit `stop`/`stop_all` cleanup,
     /// not a business-operation retry.
     pub fn resume_all(
         &mut self,
@@ -547,17 +549,42 @@ impl PluginManager {
         Ok(())
     }
 
+    /// Cleans up one plugin without authorization, even after revocation.
+    /// Unknown IDs return `UnknownPlugin`; no pending cleanup is a no-op, including
+    /// never-initialized Registered plugins (which remain Registered).
+    /// A direct dependent with pending cleanup blocks before callbacks or events;
+    /// the lexicographically first dependent ID is returned in `DependencyInUse`.
+    /// There is no cascade. Cleanup failures remain pending for explicit retry;
+    /// successful retry clears the cleanup error but retains the first failure.
+    pub fn stop(&mut self, id: &PluginId) -> Result<(), PluginError> {
+        let entry = self
+            .entries
+            .get(id)
+            .ok_or_else(|| PluginError::UnknownPlugin(id.clone()))?;
+        if !entry.status.cleanup_pending {
+            return Ok(());
+        }
+        if let Some(dependent) = self.cleanup_blocker(id) {
+            return Err(PluginError::DependencyInUse(dependent.clone()));
+        }
+        self.invoke(id, PluginAction::Stop)
+    }
+
+    fn cleanup_blocker(&self, id: &PluginId) -> Option<&PluginId> {
+        self.entries.iter().find_map(|(dependent, entry)| {
+            (entry.status.cleanup_pending
+                && entry.registration.descriptor.dependencies.contains(id))
+            .then_some(dependent)
+        })
+    }
+
     /// Always available without authorization, even after revocation. Attempts
     /// every eligible cleanup; errors remain queryable per plugin. A dependency
     /// is retained while any dependent's cleanup is pending.
     pub fn stop_all(&mut self) -> Result<(), PluginError> {
         let mut first_error = None;
         for id in self.order.clone().into_iter().rev() {
-            let blocked = self.entries.values().any(|entry| {
-                entry.status.cleanup_pending
-                    && entry.registration.descriptor.dependencies.contains(&id)
-            });
-            if blocked || !self.entries[&id].status.cleanup_pending {
+            if self.cleanup_blocker(&id).is_some() || !self.entries[&id].status.cleanup_pending {
                 continue;
             }
             if let Err(error) = self.invoke(&id, PluginAction::Stop) {
