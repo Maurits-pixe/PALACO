@@ -2091,6 +2091,41 @@ MBvanGeen/palaco-foundation # PALACO
 
 
 ```
+### PALACO canonical registry schemas (MVP)
+
+The Draft 2020-12 [PMS-001 canonical metaschema](docs/schemas/palaco/PMS-001.schema.json)
+provides shared metadata, ownership, lifecycle, approval, classification,
+traceability, verification and audit blocks for all 30 PALACO object families.
+Repository, runtime, service-level and evidence blocks are reusable; ADR, SVC,
+COM and REQ have additional required fields. AUD requires evidence references.
+Identifiers use an object-type prefix and exactly five digits (`REQ-00001`);
+the prefix must match `object_type`.
+
+[PMS-002](docs/schemas/palaco/PMS-002.schema.json) defines directed, typed
+relationships. `IMPLEMENTS` accepts APP/SVC → REQ; `DEFINED_BY` accepts
+APP/SVC/ADR → ARC. Other relation endpoint types are declared in the schema,
+with `DEPENDS_ON` available between any canonical object families.
+[Synthetic example fixtures](docs/fixtures/palaco/) cover FE, ADR, SVC, COM and REQ.
+They intentionally reference illustrative IDs, not a complete registry.
+
+Run the existing conformance gate (also run by GO-13 CI):
+
+```sh
+python -m pip install "jsonschema[format]==4.23.0"
+python scripts/standards_conformance.py
+```
+
+The gate resolves both schemas locally, checks formats, and exercises positive
+and negative cases alongside the unchanged RIO/VisitCard checks. Other validators
+must register both schema `$id` values and enable format assertions.
+
+This MVP validates record structure, not registry-wide semantics. Reference
+existence, edge ownership, upstream completeness, date ordering, lifecycle
+transitions, consistency of duplicated references, approval authority and evidence
+authenticity remain registry responsibilities. Empty upstream lists are allowed
+for roots; draft records can have pending approval. Validation alone never grants
+authority or establishes PCC-001 `CANONICAL` status.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

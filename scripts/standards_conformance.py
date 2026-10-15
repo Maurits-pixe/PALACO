@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""GO-13: RIO + VisitCard standards conformance gate (fail-closed).
+"""GO-13: RIO + VisitCard + PALACO standards conformance gate (fail-closed).
 
 Checks, in one run:
   1. Parser regression tests (duplicate JSON keys, Status metadata parser).
   2. Status + Last Updated metadata on every docs/standards/{rio,visitcard}/**/*.md.
-  3. Non-empty, unique `$id` across docs/schemas/{rio,visitcard}/**/*.json.
+  3. Non-empty, unique `$id` across docs/schemas/{rio,visitcard,palaco}/**/*.json.
   4. RIO fixtures valid against RIO-SCHEMA-BUNDLE-001 (Draft 2020-12 +
      FormatChecker), plus negative tests per definition.
   5. VisitCard + BeaconPayload fixtures valid against the VisitCard bundle,
      plus negative tests for required fields and structural disclosure bounds.
+  6. PALACO canonical schemas and fixtures, with typed object/relationship
+     contracts and negative tests, resolving references locally only.
 
 Any failure exits non-zero.
 """
@@ -20,6 +22,7 @@ import sys
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
+from referencing import Registry, Resource
 
 ROOT = Path(__file__).resolve().parents[1]
 STANDARDS_DIRS = (
@@ -33,6 +36,8 @@ RIO_FIXTURE_DIR = ROOT / "docs/fixtures/rio"
 VISITCARD_SCHEMA_DIR = ROOT / "docs/schemas/visitcard"
 VISITCARD_BUNDLE = VISITCARD_SCHEMA_DIR / "VISITCARD-SCHEMA-BUNDLE-001.json"
 VISITCARD_FIXTURE_DIR = ROOT / "docs/fixtures/visitcard"
+PALACO_SCHEMA_DIR = ROOT / "docs/schemas/palaco"
+PALACO_FIXTURE_DIR = ROOT / "docs/fixtures/palaco"
 DIALECT = "https://json-schema.org/draft/2020-12/schema"
 
 FIXTURES = {
@@ -171,12 +176,12 @@ def check_metadata():
 
 
 # --------------------------------------------------------------------------
-# RIO + VisitCard schema $id uniqueness
+# RIO + VisitCard + PALACO schema $id uniqueness
 # --------------------------------------------------------------------------
 
 def check_schema_ids():
     files = []
-    for directory in (RIO_SCHEMA_DIR, VISITCARD_SCHEMA_DIR):
+    for directory in (RIO_SCHEMA_DIR, VISITCARD_SCHEMA_DIR, PALACO_SCHEMA_DIR):
         schema_files = sorted(directory.rglob("*.json"))
         require(schema_files, f"No JSON schemas found in {rel(directory)}")
         files.extend(schema_files)
@@ -196,7 +201,7 @@ def check_schema_ids():
             )
         seen[sid] = path
         print(f"  ok {rel(path)} ($id: {sid})")
-    return f"$id unique across {len(files)} RIO + VisitCard schema file(s)"
+    return f"$id unique across {len(files)} RIO + VisitCard + PALACO schema file(s)"
 
 
 # --------------------------------------------------------------------------
@@ -395,6 +400,196 @@ def check_visitcard_fixtures():
     )
 
 # --------------------------------------------------------------------------
+# PALACO canonical fixtures + structural boundary tests
+# --------------------------------------------------------------------------
+
+def check_palaco_fixtures():
+    schemas = {}
+    for filename in ("PMS-001.schema.json", "PMS-002.schema.json"):
+        schema = read_json(PALACO_SCHEMA_DIR / filename)
+        require(schema.get("$schema") == DIALECT, f"{filename}: unexpected dialect")
+        Draft202012Validator.check_schema(schema)
+        schemas[filename] = schema
+    registry = Registry().with_resources(
+        (schema["$id"], Resource.from_contents(schema)) for schema in schemas.values()
+    )
+    bundle = schemas["PMS-001.schema.json"]
+    validator = Draft202012Validator(bundle, registry=registry, format_checker=FormatChecker())
+    edge_validator = Draft202012Validator(
+        schemas["PMS-002.schema.json"], registry=registry, format_checker=FormatChecker()
+    )
+    instances = {}
+    negative_count = 0
+
+    def reject(instance, keyword, label, selected=validator):
+        nonlocal negative_count
+        expect_rejection(selected, instance, keyword, label)
+        negative_count += 1
+
+    for family in ("FE", "ADR", "SVC", "COM", "REQ"):
+        path = PALACO_FIXTURE_DIR / f"{family}-00001.fixture.json"
+        instance = read_json(path)
+        errors = list(validator.iter_errors(instance))
+        require(not errors, f"{rel(path)}: " + "; ".join(error.message for error in errors))
+        require(instance["object_type"] == family, f"{rel(path)}: wrong object_type")
+        instances[family] = instance
+        print(f"  ok {rel(path)} valid against PMS-001")
+
+        for field in bundle["required"]:
+            invalid = copy.deepcopy(instance)
+            del invalid[field]
+            reject(invalid, "required", f"{family}: missing {field}")
+        invalid = copy.deepcopy(instance)
+        invalid["_go13_extra"] = True
+        reject(invalid, "additionalProperties", f"{family}: extra property")
+
+    special_fields = {
+        "ADR": ("decision", "context", "consequences", "approved_by", "architecture_ref"),
+        "SVC": ("requirement_refs", "architecture_ref", "repository", "runtime",
+                "service_level", "dependencies", "observability"),
+        "COM": ("control_type", "risk", "evidence"),
+        "REQ": ("capability_ref", "acceptance_criteria"),
+    }
+    for family, fields in special_fields.items():
+        for field in fields:
+            invalid = copy.deepcopy(instances[family])
+            del invalid[field]
+            reject(invalid, "required", f"{family}: missing specialization {field}")
+
+    for block in ("metadata", "ownership", "lifecycle", "approval", "classification",
+                  "traceability", "verification", "audit", "repository", "runtime",
+                  "service_level", "observability"):
+        instance = instances["SVC"]
+        definition = bundle["properties"][block].get("$ref")
+        contract = bundle["$defs"][definition.rsplit("/", 1)[1]] if definition else bundle["properties"][block]
+        for field in contract["required"]:
+            invalid = copy.deepcopy(instance)
+            del invalid[block][field]
+            reject(invalid, "required", f"SVC: missing {block}.{field}")
+        invalid = copy.deepcopy(instance)
+        invalid[block]["_go13_extra"] = True
+        reject(invalid, "additionalProperties", f"SVC: extra {block} property")
+
+    families = (
+        "FE", "PDP", "PCS", "GOV", "CAP", "DOM", "OBJ", "POL", "RSK", "REQ",
+        "ARC", "ADR", "INT", "DAT", "APP", "SVC", "API", "MOD", "REP", "CFG",
+        "COM", "VER", "TST", "EVD", "AUD", "RUN", "MON", "EVT", "INC", "CHG",
+    )
+    require(set(bundle["properties"]["object_type"]["enum"]) == set(families),
+            "PMS-001: unexpected object family vocabulary")
+    for family in families:
+        instance = copy.deepcopy(instances.get(family, instances["FE"]))
+        instance["object_type"] = family
+        instance["metadata"]["id"] = f"{family}-00001"
+        if family == "AUD":
+            invalid = copy.deepcopy(instance)
+            reject(invalid, "required", "AUD: missing evidence")
+            instance["evidence"] = ["EVD-00001"]
+            invalid = copy.deepcopy(instance)
+            invalid["evidence"] = []
+            reject(invalid, "minItems", "AUD: empty evidence")
+        require(validator.is_valid(instance), f"PMS-001: valid {family} rejected")
+        instance["metadata"]["id"] = "SVC-00001" if family == "FE" else "FE-00001"
+        reject(instance, "oneOf", f"{family}: mismatched identifier prefix")
+
+    mutations = (
+        ("FE", ("object_type",), "UNKNOWN", "enum"),
+        ("FE", ("metadata", "id"), "FE-001", "pattern"),
+        ("FE", ("metadata", "id"), "FE-000001", "pattern"),
+        ("FE", ("metadata", "id"), "FE-00001\n", "pattern"),
+        ("FE", ("metadata", "id"), "XYZ-00001", "pattern"),
+        ("FE", ("metadata", "name"), "   ", "pattern"),
+        ("FE", ("metadata", "version"), "latest", "pattern"),
+        ("FE", ("ownership", "business"), "", "minLength"),
+        ("FE", ("lifecycle", "status"), "Unknown", "enum"),
+        ("FE", ("lifecycle", "created"), "2026-02-30", "format"),
+        ("FE", ("lifecycle", "next_review"), "tomorrow", "format"),
+        ("FE", ("approval", "status"), "Approved", "required"),
+        ("FE", ("classification", "confidentiality"), "Unknown", "enum"),
+        ("FE", ("traceability", "upstream"), ["CAP-00001", "CAP-00001"], "uniqueItems"),
+        ("FE", ("audit", "updated_at"), "not-a-timestamp", "format"),
+        ("FE", ("audit", "audit_refs"), ["REQ-00001"], "pattern"),
+        ("ADR", ("architecture_ref",), "REQ-00001", "pattern"),
+        ("ADR", ("approved_by",), "APP-00001", "pattern"),
+        ("SVC", ("requirement_refs",), [], "minItems"),
+        ("SVC", ("requirement_refs",), ["CAP-00001"], "pattern"),
+        ("SVC", ("repository", "repository_url"), "not-a-uri", "format"),
+        ("SVC", ("repository", "repository_ref"), "APP-00001", "pattern"),
+        ("SVC", ("runtime", "runtime_ref"), "APP-00001", "pattern"),
+        ("SVC", ("runtime", "environment"), "Unknown", "enum"),
+        ("SVC", ("service_level", "availability_target"), -1, "minimum"),
+        ("SVC", ("service_level", "availability_target"), 101, "maximum"),
+        ("SVC", ("service_level", "recovery_target"), "four hours", "pattern"),
+        ("SVC", ("observability", "logging"), "yes", "type"),
+        ("COM", ("risk",), "REQ-00001", "pattern"),
+        ("COM", ("verification", "verification_ref"), "TST-00001", "pattern"),
+        ("COM", ("evidence",), [], "minItems"),
+        ("COM", ("evidence",), ["VER-00001"], "pattern"),
+        ("REQ", ("capability_ref",), "OBJ-00001", "pattern"),
+        ("REQ", ("acceptance_criteria",), [], "minItems"),
+    )
+    for family, path, value, keyword in mutations:
+        invalid = copy.deepcopy(instances[family])
+        target = invalid
+        for field in path[:-1]:
+            target = target[field]
+        target[path[-1]] = value
+        reject(invalid, keyword, f"{family}: invalid {'.'.join(path)}")
+    invalid = copy.deepcopy(instances["COM"])
+    del invalid["verification"]["verification_ref"]
+    reject(invalid, "required", "COM: missing verification reference")
+
+    approved = copy.deepcopy(instances["FE"])
+    approved["approval"] = {
+        "status": "Approved",
+        "authority": "Example governance team",
+        "approval_ref": "example-approval-001",
+    }
+    require(validator.is_valid(approved), "PMS-001: complete approval rejected")
+    for field in ("authority", "approval_ref"):
+        invalid = copy.deepcopy(approved)
+        del invalid["approval"][field]
+        reject(invalid, "required", f"PMS-001: approved without {field}")
+
+    for state in bundle["$defs"]["Lifecycle"]["properties"]["status"]["enum"]:
+        instance = copy.deepcopy(instances["FE"])
+        instance["lifecycle"]["status"] = state
+        require(validator.is_valid(instance), f"PMS-001: declared lifecycle state {state} rejected")
+
+    edges = (
+        ("IMPLEMENTS", "APP", "REQ"), ("IMPLEMENTS", "SVC", "REQ"),
+        ("REALIZES", "SVC", "CAP"), ("SATISFIES", "REQ", "OBJ"),
+        ("CONSTRAINED_BY", "APP", "POL"), ("DEFINED_BY", "APP", "ARC"),
+        ("DEFINED_BY", "SVC", "ARC"), ("DEFINED_BY", "ADR", "ARC"),
+        ("APPROVED_BY", "ADR", "GOV"), ("VERIFIED_BY", "COM", "VER"),
+        ("PROVEN_BY", "VER", "EVD"), ("AUDITED_BY", "EVD", "AUD"),
+        ("DEPENDS_ON", "FE", "CHG"),
+    )
+    for relation, source, target in edges:
+        edge = {"source": f"{source}-00001", "relation": relation, "target": f"{target}-00001"}
+        require(edge_validator.is_valid(edge), f"PMS-002: valid {relation} rejected")
+        for field in ("source", "target"):
+            invalid = {**edge, field: "FE-00001" if relation != "DEPENDS_ON" else "UNKNOWN-00001"}
+            reject(invalid, "oneOf" if relation != "DEPENDS_ON" else "pattern",
+                   f"{relation}: invalid {field} type", edge_validator)
+        for field in ("source", "relation", "target"):
+            invalid = dict(edge)
+            del invalid[field]
+            reject(invalid, "required", f"{relation}: missing {field}", edge_validator)
+    edge = {"source": "APP-00001", "relation": "UNKNOWN", "target": "REQ-00001"}
+    reject(edge, "enum", "PMS-002: unknown relation", edge_validator)
+    edge["relation"] = "IMPLEMENTS"
+    edge["_go13_extra"] = True
+    reject(edge, "additionalProperties", "PMS-002: extra property", edge_validator)
+    invalid = copy.deepcopy(instances["FE"])
+    invalid["traceability"]["relationships"] = [
+        {"source": "APP-00001", "relation": "IMPLEMENTS", "target": "CAP-00001"}
+    ]
+    reject(invalid, "oneOf", "PMS-001: invalid embedded relationship")
+    return f"PALACO: 2 schemas, 5 fixtures, 30 object families + {negative_count} negative tests"
+
+
+# --------------------------------------------------------------------------
 # Parser regression tests
 # --------------------------------------------------------------------------
 
@@ -495,9 +690,10 @@ def run_regression_tests():
 CHECKS = (
     ("parser regression tests", run_regression_tests),
     ("standards metadata", check_metadata),
-    ("RIO + VisitCard schema $id uniqueness", check_schema_ids),
+    ("RIO + VisitCard + PALACO schema $id uniqueness", check_schema_ids),
     ("RIO schema/fixture conformance", check_rio_fixtures),
     ("VisitCard schema/fixture conformance", check_visitcard_fixtures),
+    ("PALACO schema/fixture conformance", check_palaco_fixtures),
 )
 
 
