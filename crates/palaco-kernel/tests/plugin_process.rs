@@ -17,7 +17,7 @@ use palaco_runtime::{
     plugin::{
         CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginError,
         PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration,
-        PluginState, ShutdownScope,
+        PluginState, ShutdownOutcome, ShutdownScope,
         process::{ProcessPlugin, ProcessPluginConfig},
     },
 };
@@ -152,6 +152,97 @@ fn shutdown_preview_never_spawns_or_calls_a_running_process() -> TestResult {
     manager.stop_all()?;
     assert_eq!(calls.get(), 4);
     assert_reaped(pid);
+    Ok(())
+}
+
+#[test]
+fn process_shutdown_reports_cleanup_retry_and_scoped_child_retention() -> TestResult {
+    for mode in ["healthy", "stop-error", "stop-hang"] {
+        let ids = ["service", "worker", "independent"].map(|name| PluginId::new(name).expect("ID"));
+        let [service, worker, independent] = &ids;
+        let pids = [(); 3].map(|()| Rc::new(Cell::new(None)));
+        let mut registrations = Vec::new();
+        for (index, (id, dependencies, mode)) in [
+            (service, vec![], "healthy"),
+            (worker, vec![service.clone()], mode),
+            (independent, vec![], "healthy"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            registrations.push(PluginRegistration {
+                descriptor: PluginDescriptor {
+                    id: id.clone(),
+                    dependencies,
+                    ..descriptor()?
+                },
+                plugin: Box::new(TrackedProcess {
+                    plugin: process(mode)?,
+                    pid: pids[index].clone(),
+                    calls: Rc::default(),
+                }),
+            });
+        }
+        let mut manager = PluginManager::new(registrations)?;
+        manager.start_all(&mut allow)?;
+        let pids = pids.map(|pid| pid.get().expect("spawned child"));
+        let independent_before = manager.status(independent).cloned();
+        manager.drain_events().for_each(drop);
+        let began = Instant::now();
+        let report = manager.execute_shutdown(ShutdownScope::WithDependents(service.clone()))?;
+        assert!(began.elapsed() < Duration::from_secs(3), "{mode}");
+        assert_eq!(
+            report.entries().iter().map(|e| &e.id).collect::<Vec<_>>(),
+            [worker, service]
+        );
+        assert_reaped(pids[1]);
+        if mode == "healthy" {
+            assert!(report.complete());
+            assert!(
+                report
+                    .entries()
+                    .iter()
+                    .all(|e| e.outcome == ShutdownOutcome::Stopped && e.blockers.is_empty())
+            );
+            assert_eq!(manager.drain_events().count(), 2);
+        } else {
+            assert!(!report.complete());
+            assert_eq!(report.entries()[0].outcome, ShutdownOutcome::Error);
+            assert_eq!(report.entries()[1].outcome, ShutdownOutcome::Blocked);
+            assert_eq!(report.entries()[1].blockers, std::slice::from_ref(worker));
+            assert_eq!(manager.drain_events().count(), 1);
+            let first = manager.status(worker).expect("status").failure.clone();
+            let retry = manager.execute_shutdown(ShutdownScope::WithDependents(service.clone()))?;
+            assert!(retry.complete());
+            assert!(
+                retry
+                    .entries()
+                    .iter()
+                    .all(|e| e.outcome == ShutdownOutcome::Stopped && e.blockers.is_empty())
+            );
+            let status = manager.status(worker).expect("status");
+            assert_eq!(status.failure, first);
+            assert_eq!(status.state, PluginState::Failed);
+            assert!(status.cleanup_error.is_none());
+        }
+        assert_reaped(pids[0]);
+        assert_eq!(manager.status(independent), independent_before.as_ref());
+        assert_eq!(
+            manager.check_health(independent, &mut allow)?,
+            PluginHealth::Ready
+        );
+        let final_report = manager.execute_shutdown(ShutdownScope::All)?;
+        assert!(final_report.complete());
+        assert_eq!(
+            final_report
+                .entries()
+                .iter()
+                .filter(|e| e.outcome == ShutdownOutcome::Stopped)
+                .count(),
+            1
+        );
+        assert_reaped(pids[2]);
+    }
     Ok(())
 }
 

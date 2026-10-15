@@ -9,7 +9,7 @@ use palaco_runtime::{
     plugin::{
         CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginError,
         PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration,
-        PluginSnapshot, PluginState, ShutdownScope,
+        PluginSnapshot, PluginState, ShutdownOutcome, ShutdownScope,
     },
 };
 
@@ -132,6 +132,358 @@ fn plan(authority: AuthorityState) -> Result<RuntimePlan, String> {
 
 fn allow(_: &PluginDescriptor, _: PluginAction) -> Result<RuntimePlan, String> {
     plan(AuthorityState::Authorized)
+}
+
+#[test]
+fn shutdown_reports_empty_unknown_noops_and_live_single_blockers() -> TestResult {
+    let mut empty = PluginManager::new(vec![])?;
+    let report = empty.execute_shutdown(ShutdownScope::All)?;
+    assert!(report.complete());
+    assert!(report.entries().is_empty());
+    let log = Log::default();
+    let mut manager = PluginManager::new(vec![
+        registration("a", &[], &log, Behavior::default())?,
+        registration("b", &["a"], &log, Behavior::default())?,
+        registration("c", &["a"], &log, Behavior::default())?,
+    ])?;
+    let a = PluginId::new("a")?;
+    let b = PluginId::new("b")?;
+    let c = PluginId::new("c")?;
+    manager.drain_events().for_each(drop);
+    let before = manager.status(&a).cloned();
+    for scope in [
+        ShutdownScope::Single(PluginId::new("missing")?),
+        ShutdownScope::WithDependents(PluginId::new("missing")?),
+    ] {
+        assert!(matches!(
+            manager.execute_shutdown(scope),
+            Err(PluginError::UnknownPlugin(_))
+        ));
+    }
+    assert_eq!(manager.status(&a), before.as_ref());
+    assert!(log.borrow().is_empty());
+    assert_eq!(manager.drain_events().count(), 0);
+    manager.initialize(&b, &mut allow)?;
+    // Registered a is a no-op even while a dependent owns resources.
+    let report = manager.execute_shutdown(ShutdownScope::Single(a.clone()))?;
+    assert!(report.complete());
+    assert_eq!(report.entries()[0].outcome, ShutdownOutcome::NoOp);
+    assert!(report.entries()[0].blockers.is_empty());
+    assert_eq!(manager.status(&a), before.as_ref());
+    manager.initialize(&a, &mut allow)?;
+    manager.initialize(&c, &mut allow)?;
+    manager.drain_events().for_each(drop);
+    log.borrow_mut().clear();
+    let before = manager.status(&a).cloned();
+    let loss = manager.lost_events();
+    let report = manager.execute_shutdown(ShutdownScope::Single(a.clone()))?;
+    assert!(!report.complete());
+    let entry = &report.entries()[0];
+    assert_eq!(entry.outcome, ShutdownOutcome::Blocked);
+    assert_eq!(entry.blockers, [b.clone(), c.clone()]);
+    assert_eq!(entry.previous, entry.current);
+    assert_eq!(
+        manager.stop(&a),
+        Err(PluginError::DependencyInUse(b.clone()))
+    );
+    assert_eq!(manager.status(&a), before.as_ref());
+    assert!(log.borrow().is_empty());
+    assert_eq!(manager.drain_events().count(), 0);
+    assert_eq!(manager.lost_events(), loss);
+    // Fresh execution observes the successful cleanup, not a cached preview.
+    let preview = manager.plan_shutdown(ShutdownScope::WithDependents(a.clone()))?;
+    assert_eq!(preview[2].blockers, [b, c]);
+    let report = manager.execute_shutdown(ShutdownScope::WithDependents(a))?;
+    assert!(report.complete());
+    assert_eq!(
+        report
+            .entries()
+            .iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>(),
+        ["c", "b", "a"]
+    );
+    assert!(
+        report
+            .entries()
+            .iter()
+            .all(|e| { e.outcome == ShutdownOutcome::Stopped && e.blockers.is_empty() })
+    );
+    assert_eq!(manager.drain_events().count(), 3);
+    let before = manager
+        .order()
+        .iter()
+        .map(|id| manager.status(id).cloned())
+        .collect::<Vec<_>>();
+    log.borrow_mut().clear();
+    let report = manager.execute_shutdown(ShutdownScope::All)?;
+    assert!(report.complete());
+    assert!(
+        report
+            .entries()
+            .iter()
+            .all(|e| e.outcome == ShutdownOutcome::NoOp && e.previous == e.current)
+    );
+    assert_eq!(
+        manager
+            .order()
+            .iter()
+            .map(|id| manager.status(id).cloned())
+            .collect::<Vec<_>>(),
+        before
+    );
+    assert!(log.borrow().is_empty());
+    assert_eq!(manager.drain_events().count(), 0);
+    Ok(())
+}
+
+#[test]
+fn shutdown_reports_partial_failure_retry_redaction_and_scoped_completeness() -> TestResult {
+    for all in [false, true] {
+        for capacity in [0, 1, 256] {
+            let log = Log::default();
+            let error = Rc::new(RefCell::new(PluginOutcome::Error));
+            let panic = Rc::new(RefCell::new(PluginOutcome::Panicked));
+            let mut manager = PluginManager::with_event_capacity(
+                vec![
+                    registration("a", &[], &log, Behavior::default())?,
+                    registration("b", &["a"], &log, Behavior::default())?,
+                    registration(
+                        "c",
+                        &["b"],
+                        &log,
+                        Behavior {
+                            cleanup: Some(error.clone()),
+                            ..Behavior::default()
+                        },
+                    )?,
+                    registration(
+                        "d",
+                        &["a"],
+                        &log,
+                        Behavior {
+                            cleanup: Some(panic.clone()),
+                            ..Behavior::default()
+                        },
+                    )?,
+                    registration("e", &["a"], &log, Behavior::default())?,
+                    registration("unrelated", &[], &log, Behavior::default())?,
+                ],
+                capacity,
+            )?;
+            manager.start_all(&mut allow)?;
+            let id = |name| PluginId::new(name).expect("ID");
+            let scope = if all {
+                ShutdownScope::All
+            } else {
+                ShutdownScope::WithDependents(id("a"))
+            };
+            manager.drain_events().for_each(drop);
+            log.borrow_mut().clear();
+            let loss = manager.lost_events();
+            let report = manager.execute_shutdown(scope.clone())?;
+            assert!(!report.complete());
+            let entries = report.entries();
+            assert_eq!(
+                entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+                if all {
+                    vec!["unrelated", "e", "d", "c", "b", "a"]
+                } else {
+                    vec!["e", "d", "c", "b", "a"]
+                }
+            );
+            let entries = &entries[usize::from(all)..];
+            assert_eq!(
+                entries.iter().map(|e| e.outcome).collect::<Vec<_>>(),
+                [
+                    ShutdownOutcome::Stopped,
+                    ShutdownOutcome::Panicked,
+                    ShutdownOutcome::Error,
+                    ShutdownOutcome::Blocked,
+                    ShutdownOutcome::Blocked,
+                ]
+            );
+            assert_eq!(entries[3].blockers, [id("c")]);
+            // e is already clean; only still-pending direct dependents block a.
+            assert_eq!(entries[4].blockers, [id("b"), id("d")]);
+            assert_eq!(
+                *log.borrow(),
+                if all {
+                    vec!["unrelated:Stop", "e:Stop", "d:Stop", "c:Stop"]
+                } else {
+                    vec!["e:Stop", "d:Stop", "c:Stop"]
+                }
+            );
+            let callback_count = 3 + usize::from(all);
+            assert_eq!(manager.drain_events().count(), capacity.min(callback_count));
+            assert_eq!(
+                manager.lost_events() - loss,
+                callback_count.saturating_sub(capacity) as u64
+            );
+            for secret in ["private-cleanup-secret", "plugin-evidence", "host-evidence"] {
+                assert!(!format!("{report:?}").contains(secret));
+            }
+            let failures =
+                ["c", "d"].map(|name| manager.status(&id(name)).expect("status").failure.clone());
+            assert_eq!(
+                failures[0].as_ref().expect("failure").message,
+                "private-cleanup-secret"
+            );
+            assert!(failures[1].as_ref().expect("failure").panicked);
+            *error.borrow_mut() = PluginOutcome::Success;
+            *panic.borrow_mut() = PluginOutcome::Success;
+            log.borrow_mut().clear();
+            let retry = manager.execute_shutdown(scope.clone())?;
+            assert!(retry.complete());
+            assert!(!report.complete()); // Owned observation does not change on retry.
+            assert_eq!(*log.borrow(), ["d:Stop", "c:Stop", "b:Stop", "a:Stop"]);
+            for (name, failure) in ["c", "d"].into_iter().zip(failures) {
+                let status = manager.status(&id(name)).expect("status");
+                assert_eq!(status.failure, failure);
+                assert_eq!(status.state, PluginState::Failed);
+                assert!(status.cleanup_error.is_none());
+                let entry = retry
+                    .entries()
+                    .iter()
+                    .find(|e| e.id == id(name))
+                    .expect("entry");
+                assert_eq!(entry.outcome, ShutdownOutcome::Stopped);
+                assert_eq!(entry.current.state, PluginState::Failed);
+                assert!(!entry.current.cleanup_pending);
+            }
+            assert_eq!(
+                manager.status(&id("unrelated")).expect("status").state,
+                if all {
+                    PluginState::Stopped
+                } else {
+                    PluginState::Running
+                }
+            );
+            manager.drain_events().for_each(drop);
+            let statuses = manager
+                .order()
+                .iter()
+                .map(|id| manager.status(id).cloned())
+                .collect::<Vec<_>>();
+            let loss = manager.lost_events();
+            let noop = manager.execute_shutdown(scope)?;
+            assert!(noop.complete());
+            assert!(
+                noop.entries()
+                    .iter()
+                    .all(|e| e.outcome == ShutdownOutcome::NoOp
+                        && e.previous == e.current
+                        && e.blockers.is_empty())
+            );
+            assert_eq!(
+                manager
+                    .order()
+                    .iter()
+                    .map(|id| manager.status(id).cloned())
+                    .collect::<Vec<_>>(),
+                statuses
+            );
+            assert_eq!(manager.drain_events().count(), 0);
+            assert_eq!(manager.lost_events(), loss);
+            manager.stop_all()?;
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn shutdown_report_scopes_traverse_inactive_intermediaries() -> TestResult {
+    for cleaned in [false, true] {
+        for all in [false, true] {
+            let log = Log::default();
+            let mut manager = PluginManager::new(vec![
+                registration("a", &[], &log, Behavior::default())?,
+                registration("b", &["a"], &log, Behavior::default())?,
+                registration("c", &["b"], &log, Behavior::default())?,
+                registration("unrelated", &[], &log, Behavior::default())?,
+            ])?;
+            let b = PluginId::new("b")?;
+            if cleaned {
+                manager.initialize(&b, &mut allow)?;
+                manager.stop(&b)?;
+            }
+            manager.initialize(&PluginId::new("c")?, &mut allow)?;
+            let before = manager.status(&b).cloned();
+            manager.drain_events().for_each(drop);
+            log.borrow_mut().clear();
+            let scope = if all {
+                ShutdownScope::All
+            } else {
+                ShutdownScope::WithDependents(PluginId::new("a")?)
+            };
+            let report = manager.execute_shutdown(scope)?;
+            assert!(report.complete());
+            let entries = &report.entries()[usize::from(all)..];
+            assert_eq!(
+                entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(),
+                ["c", "b", "a"]
+            );
+            assert_eq!(
+                entries.iter().map(|e| e.outcome).collect::<Vec<_>>(),
+                [
+                    ShutdownOutcome::Stopped,
+                    ShutdownOutcome::NoOp,
+                    ShutdownOutcome::NoOp
+                ]
+            );
+            assert!(entries.iter().all(|e| e.blockers.is_empty()));
+            assert_eq!(manager.status(&b), before.as_ref());
+            assert_eq!(*log.borrow(), ["c:Stop"]);
+            assert_eq!(manager.drain_events().count(), 1);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn shutdown_single_report_retains_original_failure_and_other_running_plugins() -> TestResult {
+    let log = Log::default();
+    let health = Rc::new(RefCell::new(PluginOutcome::Success));
+    let cleanup = Rc::new(RefCell::new(PluginOutcome::Error));
+    let mut manager = PluginManager::new(vec![
+        registration("prerequisite", &[], &log, Behavior::default())?,
+        registration("unrelated", &[], &log, Behavior::default())?,
+        registration(
+            "root",
+            &["prerequisite"],
+            &log,
+            Behavior {
+                health: Some(health.clone()),
+                cleanup: Some(cleanup.clone()),
+                ..Behavior::default()
+            },
+        )?,
+    ])?;
+    manager.start_all(&mut allow)?;
+    let root = PluginId::new("root")?;
+    *health.borrow_mut() = PluginOutcome::Error;
+    assert!(manager.check_health(&root, &mut allow).is_err());
+    let first = manager.status(&root).expect("status").failure.clone();
+    manager.drain_events().for_each(drop);
+    let report = manager.execute_shutdown(ShutdownScope::Single(root.clone()))?;
+    assert!(!report.complete());
+    assert_eq!(report.entries().len(), 1);
+    assert_eq!(report.entries()[0].outcome, ShutdownOutcome::Error);
+    assert_eq!(manager.status(&root).expect("status").failure, first);
+    *cleanup.borrow_mut() = PluginOutcome::Success;
+    let report = manager.execute_shutdown(ShutdownScope::Single(root.clone()))?;
+    assert!(report.complete());
+    assert_eq!(report.entries()[0].outcome, ShutdownOutcome::Stopped);
+    assert_eq!(report.entries()[0].current.state, PluginState::Failed);
+    assert_eq!(manager.status(&root).expect("status").failure, first);
+    for name in ["prerequisite", "unrelated"] {
+        assert_eq!(
+            manager.status(&PluginId::new(name)?).expect("status").state,
+            PluginState::Running
+        );
+    }
+    manager.stop_all()?;
+    Ok(())
 }
 
 #[test]

@@ -77,6 +77,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     ])?;
     let service = PluginId::new("service")?;
     let independent = PluginId::new("independent")?;
+    let mut scoped_complete = true;
     let lifecycle = manager
         .start_all(&mut synthetic_authorizer)
         // A host chooses when to probe; these are direct, non-transitive snapshots.
@@ -103,7 +104,22 @@ fn main() -> Result<(), Box<dyn Error>> {
                     step.blockers
                 );
             }
-            manager.stop_with_dependents(&service)
+            let report =
+                manager.execute_shutdown(ShutdownScope::WithDependents(service.clone()))?;
+            for entry in report.entries() {
+                println!(
+                    "executed shutdown {}: {:?}, live blockers {:?}",
+                    entry.id.as_str(),
+                    entry.outcome,
+                    entry.blockers
+                );
+            }
+            scoped_complete = report.complete();
+            println!("scoped cleanup complete: {scoped_complete} (not whole-fleet shutdown)");
+            if !scoped_complete {
+                eprintln!("scoped cleanup incomplete; retain ownership and explicitly retry");
+            }
+            Ok(())
         })
         .and_then(|()| {
             let health = manager.check_health(&independent, &mut synthetic_authorizer)?;
@@ -127,5 +143,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     lifecycle?;
     cleanup?;
+    if !scoped_complete {
+        return Err("scoped shutdown was incomplete; final fleet cleanup was attempted".into());
+    }
     Ok(())
 }

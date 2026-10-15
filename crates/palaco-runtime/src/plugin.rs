@@ -208,7 +208,7 @@ impl From<&PluginStatus> for PluginSnapshot {
     }
 }
 
-/// Graph selection for a read-only shutdown preview.
+/// Graph selection for shutdown preview or side-effecting execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShutdownScope {
     Single(PluginId),
@@ -227,6 +227,50 @@ pub struct ShutdownStep {
     /// even outside the scope. Not predicted blockers at execution time: an earlier
     /// step may successfully clean up a dependent and unblock this candidate.
     pub blockers: Vec<PluginId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShutdownOutcome {
+    /// No pending cleanup; no callback was attempted.
+    NoOp,
+    /// Cleanup succeeded, even if the lifecycle state remains Failed.
+    Stopped,
+    Blocked,
+    Error,
+    Panicked,
+}
+
+/// Owned, redacted observation of one execution turn, not an authenticated audit.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShutdownEntry {
+    pub id: PluginId,
+    pub previous: PluginSnapshot,
+    pub current: PluginSnapshot,
+    pub outcome: ShutdownOutcome,
+    /// Sorted direct blockers observed at this turn, after earlier cleanup.
+    /// Populated only for Blocked pending targets, never for no-ops.
+    pub blockers: Vec<PluginId>,
+}
+
+/// Immutable owned snapshot returned by side-effecting shutdown; may become stale.
+/// Contains no error text, panic payloads, evidence, configuration, or authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShutdownReport {
+    entries: Vec<ShutdownEntry>,
+    complete: bool,
+}
+
+impl ShutdownReport {
+    /// All selected nodes, including no-ops, in reverse topological order.
+    pub fn entries(&self) -> &[ShutdownEntry] {
+        &self.entries
+    }
+
+    /// True exactly when all selected nodes had no pending cleanup at return.
+    /// Registered no-ops count as complete; unrelated plugins may still be running.
+    pub fn complete(&self) -> bool {
+        self.complete
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -396,6 +440,66 @@ impl PluginManager {
     /// authorization, reservation, or guarantee of callback success. Normal stop
     /// methods re-evaluate live state; blockers are current, not simulated.
     pub fn plan_shutdown(&self, scope: ShutdownScope) -> Result<Vec<ShutdownStep>, PluginError> {
+        Ok(self
+            .shutdown_selection(scope)?
+            .into_iter()
+            .map(|id| ShutdownStep {
+                snapshot: PluginSnapshot::from(&self.entries[&id].status),
+                blockers: self.cleanup_blockers(&id).cloned().collect(),
+                id,
+            })
+            .collect())
+    }
+
+    /// **Executes cleanup callbacks**, not a dry run or cached-preview executor.
+    /// Recalculates live selection; unknown roots fail before any side effects.
+    /// No authorization is required, including after revocation. Each eligible
+    /// pending node is attempted once; errors/panics retain status and cleanup
+    /// obligations while independent nodes continue. Blocked Single returns an
+    /// Ok report, unlike `stop`'s DependencyInUse error. Inspect `complete()`, not
+    /// just Ok: callback failures and blockers are typed report outcomes.
+    /// Only actual callbacks emit existing lifecycle events; no-ops and blockers
+    /// emit nothing. Reports are independent of event queue overflow.
+    pub fn execute_shutdown(
+        &mut self,
+        scope: ShutdownScope,
+    ) -> Result<ShutdownReport, PluginError> {
+        let selected = self.shutdown_selection(scope)?;
+        let mut entries = Vec::with_capacity(selected.len());
+        for id in &selected {
+            let previous = PluginSnapshot::from(&self.entries[id].status);
+            let mut blockers = Vec::new();
+            let outcome = if !previous.cleanup_pending {
+                ShutdownOutcome::NoOp
+            } else {
+                blockers = self.cleanup_blockers(id).cloned().collect();
+                if !blockers.is_empty() {
+                    ShutdownOutcome::Blocked
+                } else {
+                    match self.invoke(id, PluginAction::Stop) {
+                        Ok(()) => ShutdownOutcome::Stopped,
+                        Err(PluginError::Callback(_, failure)) if failure.panicked => {
+                            ShutdownOutcome::Panicked
+                        }
+                        Err(_) => ShutdownOutcome::Error,
+                    }
+                }
+            };
+            entries.push(ShutdownEntry {
+                id: id.clone(),
+                previous,
+                current: PluginSnapshot::from(&self.entries[id].status),
+                outcome,
+                blockers,
+            });
+        }
+        let complete = selected
+            .iter()
+            .all(|id| !self.entries[id].status.cleanup_pending);
+        Ok(ShutdownReport { entries, complete })
+    }
+
+    fn shutdown_selection(&self, scope: ShutdownScope) -> Result<Vec<PluginId>, PluginError> {
         let selected = match scope {
             ShutdownScope::Single(id) => {
                 if !self.entries.contains_key(&id) {
@@ -411,11 +515,7 @@ impl PluginManager {
             .iter()
             .rev()
             .filter(|id| selected.contains(*id))
-            .map(|id| ShutdownStep {
-                id: id.clone(),
-                snapshot: PluginSnapshot::from(&self.entries[id].status),
-                blockers: self.cleanup_blockers(id).cloned().collect(),
-            })
+            .cloned()
             .collect())
     }
 
@@ -630,13 +730,9 @@ impl PluginManager {
     /// Independent branches continue after errors/panics; the first callback error
     /// is returned. Failed cleanup retains dependencies until explicit retry.
     pub fn stop_with_dependents(&mut self, id: &PluginId) -> Result<(), PluginError> {
-        let closure = self.dependent_closure(id)?;
         let mut first_error = None;
-        for id in self.order.clone().into_iter().rev() {
-            if !closure.contains(&id)
-                || !self.entries[&id].status.cleanup_pending
-                || self.cleanup_blocker(&id).is_some()
-            {
+        for id in self.shutdown_selection(ShutdownScope::WithDependents(id.clone()))? {
+            if !self.entries[&id].status.cleanup_pending || self.cleanup_blocker(&id).is_some() {
                 continue;
             }
             if let Err(error) = self.invoke(&id, PluginAction::Stop) {

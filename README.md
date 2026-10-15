@@ -84,7 +84,8 @@ Run the three-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
 It starts, explicitly probes health, pauses, resumes, probes again, selectively stops
 service and its worker via an explicit cascade, proves the independent plugin remains
-ready, prints a scoped shutdown preview, unconditionally attempts fleet cleanup even on errors, and drains
+ready, prints a scoped shutdown preview then executes fresh scoped cleanup and checks
+report completeness, unconditionally attempts fleet cleanup even on errors, and drains
 redacted event outcomes. Its synthetic authorizer is **not production authentication**.
 
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
@@ -140,6 +141,36 @@ process spawning, events, queue/sequence/loss changes, or status changes.
 It is not an executable token, authorization, reservation, or guarantee of callback
 success. This snapshot can become stale (TOCTOU); normal stop methods re-evaluate
 live state, and there is no cached-plan executor.
+
+`execute_shutdown(&mut self, ShutdownScope)` **executes cleanup callbacks: it is
+not a dry run**. It accepts a fresh scope, not a preview token, and recalculates the
+same selection against live status. Cleanup bypasses authorization even after
+revocation; neither previews nor reports confer authority. Unknown roots return
+`Err(UnknownPlugin)` before side effects. Otherwise `Ok(ShutdownReport)` does **not**
+mean cleanup succeeded: inspect `complete()` and the typed outcomes in `entries()`.
+Legacy `stop` still returns `DependencyInUse` for a blocked target; this API instead
+returns `Ok` with a `Blocked` entry.
+
+Every selected node appears in reverse topological order, with its ID, redacted
+previous/current snapshots, and `NoOp`, `Stopped`, `Blocked`, `Error`, or `Panicked`
+outcome. `Stopped` means cleanup succeeded, even when lifecycle remains Failed.
+`NoOp` means no callback was attempted (including Registered and already-cleaned
+nodes), with no status changes. Only blocked pending targets list blockers:
+sorted direct dependents observed **at that execution turn**, after prior cleanup,
+not the preview's earlier snapshot. No-ops have empty blockers.
+Eligible nodes are attempted once, without internal retry; errors/panics retain
+the existing first failure and latest cleanup error in status, block ancestors,
+and do not prevent independent eligible cleanup. Explicitly execute a fresh scope
+to retry cleanup; keep ownership until cleanup completes.
+
+`complete()` is true exactly when all **selected** nodes have no pending cleanup
+at return. Empty scopes and Registered no-ops are complete; unrelated plugins may
+still be running, and Failed lifecycle states may remain. The immutable owned
+report can become stale; it is not authorization or an authenticated audit record.
+It contains no raw errors, panic payloads, evidence, or configuration. Reports
+survive event queue overflow; actual callbacks emit only existing lifecycle events,
+while `NoOp` and `Blocked` emit none. In-process callbacks still have no timeout;
+this API adds neither sandboxing nor production security guarantees.
 
 ### Bounded lifecycle observations
 
