@@ -76,11 +76,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         registration("independent", vec![])?,
     ])?;
     let service = PluginId::new("service")?;
+    let worker = PluginId::new("worker")?;
     let independent = PluginId::new("independent")?;
     let mut scoped_complete = true;
     let lifecycle = manager
-        .start_all(&mut synthetic_authorizer)
+        .start_with_dependencies(&worker, &mut synthetic_authorizer)
         .map_err(Box::<dyn Error>::from)
+        .and_then(
+            |()| Ok(manager.start_with_dependencies(&independent, &mut synthetic_authorizer)?),
+        )
         // A host chooses when to probe; these are direct, non-transitive snapshots.
         .and_then(|()| {
             let report = manager.check_health_report(&mut synthetic_authorizer)?;

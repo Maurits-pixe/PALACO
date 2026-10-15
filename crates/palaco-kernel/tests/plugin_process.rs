@@ -104,6 +104,112 @@ fn assert_reaped(pid: u32) {
 }
 
 #[test]
+fn scoped_process_start_spawns_only_required_children_and_rolls_back_only_new_children()
+-> TestResult {
+    for mode in ["healthy", "start-error", "not-ready", "readiness-error"] {
+        let ids = ["existing", "held", "new", "root", "other"]
+            .map(|name| PluginId::new(name).expect("ID"));
+        let [existing, held, new, root, other] = &ids;
+        let pids = [(); 5].map(|()| Rc::new(Cell::new(None)));
+        let calls = [(); 5].map(|()| Rc::new(Cell::new(0)));
+        let mut registrations = Vec::new();
+        for (index, (id, dependencies, mode)) in [
+            (existing, vec![], "probe-hang"),
+            (held, vec![existing.clone()], "healthy"),
+            (new, vec![existing.clone()], "healthy"),
+            (root, vec![new.clone()], mode),
+            (other, vec![], "healthy"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            registrations.push(PluginRegistration {
+                descriptor: PluginDescriptor {
+                    id: id.clone(),
+                    dependencies,
+                    ..descriptor()?
+                },
+                plugin: Box::new(TrackedProcess {
+                    plugin: process(mode)?,
+                    pid: pids[index].clone(),
+                    calls: calls[index].clone(),
+                }),
+            });
+        }
+        registrations.reverse();
+        let mut manager = PluginManager::new(registrations)?;
+        assert!(pids.iter().all(|pid| pid.get().is_none()));
+        assert!(calls.iter().all(|count| count.get() == 0));
+        assert!(matches!(
+            manager.start_with_dependencies(&PluginId::new("missing")?, &mut allow),
+            Err(PluginError::UnknownPlugin(_))
+        ));
+        assert!(calls.iter().all(|count| count.get() == 0));
+        manager.start_with_dependencies(held, &mut allow)?;
+        let existing_before = manager.status(existing).cloned();
+        let held_before = manager.status(held).cloned();
+        assert!(pids[0].get().is_some() && pids[1].get().is_some());
+        assert!(pids[2..].iter().all(|pid| pid.get().is_none()));
+        manager.drain_events().for_each(drop);
+        let result = manager.start_with_dependencies(root, &mut allow);
+        assert_eq!(manager.status(existing), existing_before.as_ref());
+        assert_eq!(manager.status(held), held_before.as_ref());
+        assert_eq!(calls[0].get(), 3);
+        assert_eq!(calls[1].get(), 3);
+        assert_eq!(calls[4].get(), 0);
+        assert!(pids[4].get().is_none());
+        assert_eq!(
+            manager.status(other).expect("status").state,
+            PluginState::Registered
+        );
+        let events: Vec<_> = manager.drain_events().collect();
+        assert!(events.iter().all(|e| &e.id == new || &e.id == root));
+        if mode == "healthy" {
+            result?;
+            assert_eq!(calls[2].get(), 3);
+            assert_eq!(calls[3].get(), 3);
+            manager.start_with_dependencies(root, &mut |_: &PluginDescriptor, _| {
+                panic!("already running children must be skipped")
+            })?;
+            assert_eq!(calls[0].get(), 3);
+            assert_eq!(calls[2].get(), 3);
+            assert_eq!(calls[3].get(), 3);
+            assert_eq!(manager.drain_events().count(), 0);
+        } else {
+            let Err(PluginError::Callback(id, failure)) = result else {
+                panic!("expected scoped startup callback failure");
+            };
+            assert_eq!(&id, root);
+            assert_eq!(
+                failure.action,
+                if mode == "start-error" {
+                    PluginAction::Start
+                } else {
+                    PluginAction::Readiness
+                }
+            );
+            assert_reaped(pids[2].get().expect("new child spawned"));
+            assert_reaped(pids[3].get().expect("root child spawned"));
+            assert_eq!(calls[2].get(), 4);
+            assert!(!manager.status(root).expect("status").cleanup_pending);
+            assert!(!manager.status(new).expect("status").cleanup_pending);
+            #[cfg(target_os = "linux")]
+            for pid in &pids[..2] {
+                assert!(PathBuf::from(format!("/proc/{}", pid.get().expect("child PID"))).exists());
+            }
+        }
+        manager.stop_all()?;
+        for pid in &pids[..4] {
+            assert_reaped(pid.get().expect("selected child spawned"));
+        }
+        assert_eq!(calls[0].get(), 4);
+        assert_eq!(calls[1].get(), 4);
+        assert_eq!(calls[4].get(), 0);
+    }
+    Ok(())
+}
+
+#[test]
 fn shutdown_preview_never_spawns_or_calls_a_running_process() -> TestResult {
     let descriptor = descriptor()?;
     let id = descriptor.id.clone();

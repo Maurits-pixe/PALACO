@@ -30,6 +30,34 @@ cached as authority. IDs and evidence are metadata, not authentication or grants
 `initialize`/`start` also support explicit one-plugin sequencing; dependencies
 must actually be Running **and Ready** before a dependent starts.
 
+`start_with_dependencies(&id, &mut authorizer)` starts exactly the root and **all
+transitive required dependencies** in the immutable graph, never dependents or
+unrelated branches, in deterministic topological order. Unknown roots reject before
+side effects. The entire closure is preflighted before authorization, callbacks, or
+events: only Registered or already Running+Ready is accepted. Running without Ready
+returns `DependencyNotReady` naming that node (including the root); Initialized,
+Starting, Paused, Stopped, and Failed return `InvalidTransition`. Bad states outside
+the closure do not block startup. Running+Ready nodes are skipped without
+reauthorization, callbacks, or events; an all-running closure is an idempotent no-op.
+Skipping grants no new authority, and retained health snapshots are not new
+authentication or health probes. New initialize, start, and readiness callbacks
+each require fresh current authorization through the normal lifecycle methods.
+
+On callback error, unwinding panic, or startup readiness false, scoped startup
+attempts cleanup only for plugins whose initialize callback was entered during
+**this call**, including partially failed initialization. Preexisting Running
+plugins, unrelated nodes, and untouched Registered nodes are never rolled back.
+Cleanup runs once per eligible new node in reverse topological order, continuing
+independent branches after errors and retaining dependencies while cleanup is
+pending. The original startup error is returned; cleanup errors remain queryable
+in status for explicit cleanup retry. Pure authorization rejection (at initialize,
+start, or readiness) and other noncallback errors such as `DependencyNotReady`
+perform no automatic cleanup: partial Running/Initialized/Starting progress remains
+tracked for explicit `stop`, `stop_with_dependents`, or `stop_all`. The rejection
+itself invokes no callback; earlier work is untouched. Preflight prevents business
+retry from partial Initialized/Starting/Failed states. No implicit resume, restart,
+recovery, or extra health probing is provided. `start_all` is unchanged.
+
 `pause(id, authorizer)` quiesces business work but retains resources; existing
 implementors default to an unsupported error, not fake success. Pausing is
 cooperative, not OS suspension/SIGSTOP. Pause dependents
@@ -100,7 +128,8 @@ explicit `stop`/`stop_all`, not a business retry; cleanup still bypasses revoked
 
 Run the three-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
-It starts, explicitly probes health, pauses, resumes, probes again, selectively stops
+It starts worker and its service dependency in one scope, then the independent
+plugin in another, explicitly probes health, pauses, resumes, probes again, selectively stops
 service and its worker via an explicit cascade, proves the independent plugin remains
 ready, prints a scoped shutdown preview then executes fresh scoped cleanup and checks
 report completeness, unconditionally attempts fleet cleanup even on errors, and drains

@@ -799,6 +799,83 @@ impl PluginManager {
         Ok(())
     }
 
+    /// Starts exactly the root and its transitive required dependencies in DAG order.
+    /// Preflights the entire closure before side effects: only Registered or
+    /// Running+Ready is accepted. Running without Ready returns DependencyNotReady
+    /// (including the root); other states return InvalidTransition. Unknown roots
+    /// return UnknownPlugin. Unrelated states do not participate.
+    /// Running+Ready nodes are no-ops, without authorization, callbacks, or events;
+    /// their retained health snapshots are not new authentication or health probes.
+    /// Each new initialize/start/readiness callback requires fresh authorization.
+    /// Callback failures roll back only resources acquired during this call, in
+    /// reverse DAG order with normal dependency guards. Independent eligible
+    /// cleanup continues after failures; cleanup errors remain queryable while
+    /// the original startup error is returned. Authorization and other noncallback
+    /// errors leave partial progress untouched for explicit scoped/fleet cleanup.
+    /// No implicit resume, restart, recovery, or business retry is provided.
+    pub fn start_with_dependencies(
+        &mut self,
+        id: &PluginId,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<(), PluginError> {
+        if !self.entries.contains_key(id) {
+            return Err(PluginError::UnknownPlugin(id.clone()));
+        }
+        let mut selected = BTreeSet::from([id.clone()]);
+        for candidate in self.order.iter().rev() {
+            if selected.contains(candidate) {
+                selected.extend(
+                    self.entries[candidate]
+                        .registration
+                        .descriptor
+                        .dependencies
+                        .iter()
+                        .cloned(),
+                );
+            }
+        }
+        let order: Vec<_> = self
+            .order
+            .iter()
+            .filter(|id| selected.contains(*id))
+            .cloned()
+            .collect();
+        for id in &order {
+            let status = &self.entries[id].status;
+            match status.state {
+                PluginState::Registered => {}
+                PluginState::Running if status.health == PluginHealth::Ready => {}
+                PluginState::Running => return Err(PluginError::DependencyNotReady(id.clone())),
+                state => return Err(PluginError::InvalidTransition(id.clone(), state)),
+            }
+        }
+        let mut acquired = Vec::new();
+        for id in order {
+            if self.entries[&id].status.state == PluginState::Running {
+                continue;
+            }
+            let result = self.initialize(&id, authorizer);
+            // invoke marks ownership before entering even a failing initialize.
+            if self.entries[&id].status.cleanup_pending {
+                acquired.push(id.clone());
+            }
+            let result = result.and_then(|()| self.start(&id, authorizer));
+            if let Err(error) = result {
+                if matches!(error, PluginError::Callback(..)) {
+                    for acquired_id in acquired.iter().rev() {
+                        if self.entries[acquired_id].status.cleanup_pending
+                            && self.cleanup_blocker(acquired_id).is_none()
+                        {
+                            let _ = self.stop(acquired_id);
+                        }
+                    }
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
     /// Cleans up one plugin without authorization, even after revocation.
     /// Unknown IDs return `UnknownPlugin`; no pending cleanup is a no-op, including
     /// never-initialized Registered plugins (which remain Registered).

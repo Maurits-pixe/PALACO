@@ -79,7 +79,8 @@ fn main() -> io::Result<()> {
                 "probe-error" if readiness_count > 1 => "ERROR",
                 _ => "READY",
             }
-        } else if (mode == "pause-error" && command == "PAUSE")
+        } else if (mode == "start-error" && command == "START")
+            || (mode == "pause-error" && command == "PAUSE")
             || (mode == "resume-error" && command == "RESUME")
         {
             "ERROR"
