@@ -20,6 +20,7 @@ Checks, in one run:
   9. Read-only upstream/downstream trace queries on validated closed snapshots.
  10. Read-only object-type queries using the PMS-001 object family vocabulary.
  11. Read-only lineage orphan diagnostics for isolated upstream-graph nodes.
+ 12. Read-only control/VER verification-status diagnostics on validated snapshots.
 
 Any failure exits non-zero.
 """
@@ -860,6 +861,115 @@ def find_palaco_orphans(instance, validator=None):
     }
 
 
+def find_unverified_controls(instance, validator=None):
+    """Report non-passing status metadata, not actual verification or compliance."""
+    validate_palaco_registry(instance, validator)
+    objects = {record["metadata"]["id"]: record for record in instance["objects"]}
+    return {
+        "definition": "control or referenced VER verification.status is not Passed",
+        "object_ids": sorted(
+            object_id for object_id, record in objects.items()
+            if record["object_type"] == "COM" and (
+                record["verification"]["status"] != "Passed"
+                or objects[record["verification"]["verification_ref"]]["verification"]["status"] != "Passed"
+            )
+        ),
+        "scope": "supplied status metadata only; diagnostic, not proof of verification, compliance or authority",
+    }
+
+
+def check_unverified_controls():
+    validators = palaco_validators()
+    validator = validators["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    control = read_json(PALACO_FIXTURE_DIR / "COM-00001.fixture.json")
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture["objects"].append(control)
+    for family in ("RSK", "VER", "EVD"):
+        record = copy.deepcopy(template)
+        record["object_type"] = family
+        record["metadata"]["id"] = f"{family}-00001"
+        fixture["objects"].append(record)
+    verifier = next(record for record in fixture["objects"] if record["object_type"] == "VER")
+    statuses = ("Pending", "Passed", "Failed", "NotApplicable")
+    declared = validators["PMS-001.schema.json"].schema["$defs"]["Verification"]["properties"]["status"]["enum"]
+    require(set(statuses) == set(declared), "control diagnostics diverge from verification vocabulary")
+    positive_count = 0
+
+    def check(instance, expected):
+        nonlocal positive_count
+        original = copy.deepcopy(instance)
+        result = find_unverified_controls(instance, validator)
+        require(result == {
+            "definition": "control or referenced VER verification.status is not Passed",
+            "object_ids": expected,
+            "scope": "supplied status metadata only; diagnostic, not proof of verification, compliance or authority",
+        }, f"unexpected verification-status result: {result}")
+        require(instance == original, "control status query mutated its input")
+        reordered = copy.deepcopy(instance)
+        reordered["objects"].reverse()
+        require(find_unverified_controls(reordered, validator) == result,
+                "control status results depend on record order")
+        positive_count += 1
+
+    for control_status in statuses:
+        for verifier_status in statuses:
+            control["verification"]["status"] = control_status
+            verifier["verification"]["status"] = verifier_status
+            check(fixture, [] if control_status == verifier_status == "Passed" else ["COM-00001"])
+    check(read_json(PALACO_FIXTURE_DIR / "registry.fixture.json"), [])
+    multiple = copy.deepcopy(fixture)
+    extra = copy.deepcopy(control)
+    extra["metadata"]["id"] = "COM-00002"
+    extra["traceability"]["relationships"][0]["source"] = "COM-00002"
+    multiple["objects"].insert(0, extra)
+    check(multiple, ["COM-00001", "COM-00002"])
+    # A passing control with its own passing VER is not affected by another pending VER.
+    independent = copy.deepcopy(multiple)
+    other_verifier = copy.deepcopy(verifier)
+    other_verifier["metadata"]["id"] = "VER-00002"
+    other_verifier["verification"]["status"] = "Passed"
+    independent["objects"].append(other_verifier)
+    independent["objects"][0]["verification"].update(status="Passed", verification_ref="VER-00002")
+    independent["objects"][0]["traceability"]["relationships"][0]["target"] = "VER-00002"
+    check(independent, ["COM-00001"])
+    # The mandatory dedicated reference works without duplicating it as an edge.
+    no_edge = copy.deepcopy(independent)
+    no_edge["objects"][0]["traceability"]["relationships"] = []
+    check(no_edge, ["COM-00001"])
+
+    negatives = [({}, "registry structure")]
+    dangling = copy.deepcopy(fixture)
+    next(record for record in dangling["objects"] if record["object_type"] == "COM")["verification"]["verification_ref"] = "VER-99999"
+    negatives.append((dangling, "unresolved verification.verification_ref"))
+    missing = copy.deepcopy(fixture)
+    del next(record for record in missing["objects"] if record["object_type"] == "COM")["verification"]["verification_ref"]
+    negatives.append((missing, "registry structure"))
+    wrong_type = copy.deepcopy(fixture)
+    next(record for record in wrong_type["objects"] if record["object_type"] == "COM")["verification"]["verification_ref"] = "EVD-00001"
+    negatives.append((wrong_type, "registry structure"))
+    unrelated = copy.deepcopy(fixture)
+    unrelated["objects"][2]["capability_ref"] = "CAP-99999"
+    negatives.append((unrelated, "unresolved capability_ref"))
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    negatives.append((duplicate, "duplicate object ID"))
+    cyclic = copy.deepcopy(fixture)
+    cyclic["objects"][0]["traceability"]["upstream"] = ["REQ-00001"]
+    negatives.append((cyclic, "upstream cycle"))
+    lifecycle = copy.deepcopy(fixture)
+    lifecycle["objects"][0]["lifecycle"]["status"] = "Active"
+    negatives.append((lifecycle, "requires approval.status Approved"))
+    for instance, expected in negatives:
+        try:
+            find_unverified_controls(instance, validator)
+        except ConformanceError as error:
+            require(expected in str(error), f"unexpected control-status diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid control-status query accepted: {expected}")
+    return f"control status diagnostics: {positive_count} deterministic/non-mutating queries + {len(negatives)} rejections"
+
+
 def check_palaco_orphans():
     validator = palaco_validators()["PCR-000.schema.json"]
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
@@ -1566,6 +1676,7 @@ CHECKS = (
     ("PALACO registry trace conformance", check_palaco_traces),
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
+    ("PALACO control verification-status query conformance", check_unverified_controls),
 )
 
 
@@ -1580,6 +1691,8 @@ def main():
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--find-orphans", action="store_true",
                         help="Return IDs isolated in traceability.upstream as JSON")
+    parser.add_argument("--find-unverified-controls", action="store_true",
+                        help="Return COM IDs whose own or referenced VER status is not Passed")
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
@@ -1601,10 +1714,19 @@ def main():
             parser.error("--find-orphans requires --registry")
         if args.trace is not None or args.find_type is not None or args.previous_registry is not None:
             parser.error("--find-orphans cannot be combined with --trace, --find-type or --previous-registry")
+    if args.find_unverified_controls:
+        if args.registry is None:
+            parser.error("--find-unverified-controls requires --registry")
+        if args.trace is not None or args.find_type is not None or args.find_orphans or args.previous_registry is not None:
+            parser.error("--find-unverified-controls cannot be combined with other query or comparison modes")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_orphans:
+            if args.find_unverified_controls:
+                result = find_unverified_controls(current)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_orphans:
                 result = find_palaco_orphans(current)
                 print(json.dumps(result, indent=2))
                 return 0

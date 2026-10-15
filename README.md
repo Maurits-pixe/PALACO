@@ -2259,6 +2259,28 @@ without results. The query neither writes files nor changes canonical status or
 authority. `--find-orphans` requires `--registry` and cannot be combined with
 `--find-type`, `--trace`, `--direction` or `--previous-registry`.
 
+Read-only control verification-status diagnostics:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /tmp/closed-registry.json --find-unverified-controls
+```
+
+After validating the entire snapshot, this query emits JSON with `definition`,
+sorted `object_ids` and a scope disclaimer. A COM is reported when its own
+`verification.status` **or** the referenced VER record's `verification.status`
+is not `Passed`. Pending, Failed and NotApplicable are all reported; only two
+`Passed` statuses suppress the finding. Each control is evaluated against its
+own `verification.verification_ref`; an embedded VERIFIED_BY edge is not
+required. Missing or unresolved mandatory references are validation errors, not
+partial diagnostic findings. A snapshot without controls returns an empty array.
+
+Findings are status metadata, not authenticated proof of verification, current
+evidence, compliance or canonical status. Query success exits 0 for empty and
+populated results; invalid registries fail nonzero without results. The query
+does not modify files. `--find-unverified-controls` requires `--registry` and
+cannot be combined with other query modes, `--direction` or `--previous-registry`.
+
 This MVP does not enforce upstream completeness, root reachability,
 authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending
