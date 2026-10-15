@@ -2158,8 +2158,24 @@ Other references and relation types are not cycle-checked; reciprocal evidence
 and audit references remain valid. Standalone PMS-001/PMS-002 schema validation
 does not perform these graph checks.
 
+Closed snapshots also enforce lifecycle consistency:
+
+- `created` ≤ `next_review`; if `approved` is present, `created` ≤ `approved` ≤ `next_review`.
+- `audit.updated_at` must not precede creation or an approval date. Calendar dates
+  are interpreted at midnight UTC; audit timestamps are compared as instants,
+  respecting their timezone offsets.
+- `approval.status: Approved` requires `lifecycle.approved`.
+- Lifecycle states Approved, Active, Deprecated, Retired and Archived require
+  approved approval metadata (including the authority and reference required by PMS-001).
+
+Proposed, Draft and Review may have pending or rejected approval. A historical
+approval date may be retained during a new review. Same-day dates are valid;
+overdue reviews and future dates are not compared to the current clock. Audit
+updates after `next_review` remain valid. These snapshot rules do not validate
+transition history, prove an approval or change standalone PMS-001 acceptance.
+
 This MVP does not enforce upstream completeness, root reachability,
-date ordering, lifecycle transitions, approval authority or evidence authenticity.
+lifecycle transitions, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending
 approval. Validation alone never grants authority or establishes PCC-001
 `CANONICAL` status.

@@ -13,7 +13,8 @@ Checks, in one run:
      contracts and negative tests, resolving references locally only.
   7. PCR-000 closed registry snapshots: unique IDs, resolved object references,
      owned relationships, consistency with dedicated reference fields, and
-     acyclic dependency and upstream graphs (checked separately).
+     acyclic dependency and upstream graphs (checked separately), and consistent
+     lifecycle dates and approval state.
 
 Any failure exits non-zero.
 """
@@ -23,6 +24,7 @@ import copy
 import json
 import re
 import sys
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 from jsonschema import Draft202012Validator, FormatChecker
@@ -658,6 +660,35 @@ def require_acyclic(graph, label):
                 stack.append(iter(sorted(graph[target])))
 
 
+def validate_registry_lifecycle(record):
+    """Check a snapshot, not transition history or approval authority."""
+    object_id = record["metadata"]["id"]
+    lifecycle = record["lifecycle"]
+    created = date.fromisoformat(lifecycle["created"])
+    next_review = date.fromisoformat(lifecycle["next_review"])
+    # Lifecycle dates are calendar dates in UTC for comparison with audit instants.
+    updated = datetime.fromisoformat(record["audit"]["updated_at"].upper().replace("Z", "+00:00"))
+    require(created <= next_review,
+            f"{object_id}: lifecycle.next_review precedes lifecycle.created")
+    require(updated >= datetime.combine(created, time.min, timezone.utc),
+            f"{object_id}: audit.updated_at precedes lifecycle.created (UTC)")
+    approved = lifecycle.get("approved")
+    if approved is not None:
+        approved_date = date.fromisoformat(approved)
+        require(created <= approved_date,
+                f"{object_id}: lifecycle.approved precedes lifecycle.created")
+        require(approved_date <= next_review,
+                f"{object_id}: lifecycle.next_review precedes lifecycle.approved")
+        require(updated >= datetime.combine(approved_date, time.min, timezone.utc),
+                f"{object_id}: audit.updated_at precedes lifecycle.approved (UTC)")
+    if record["approval"]["status"] == "Approved":
+        require(approved is not None,
+                f"{object_id}: approved approval requires lifecycle.approved")
+    if lifecycle["status"] in ("Approved", "Active", "Deprecated", "Retired", "Archived"):
+        require(record["approval"]["status"] == "Approved",
+                f"{object_id}: lifecycle status {lifecycle['status']} requires approval.status Approved")
+
+
 def validate_palaco_registry(instance, validator=None):
     """Validate a closed snapshot without fetching resources or granting authority."""
     if validator is None:
@@ -678,6 +709,7 @@ def validate_palaco_registry(instance, validator=None):
         require(target != owner, f"{owner}: self reference in {field}")
 
     for object_id, record in objects.items():
+        validate_registry_lifecycle(record)
         for path in OBJECT_REFERENCE_FIELDS:
             value = reference_value(record, path)
             if value is not None:
@@ -811,6 +843,7 @@ def check_palaco_registry():
     opaque["objects"][0]["approval"] = {
         "status": "Approved", "authority": "GOV-99999", "approval_ref": "AUD-99999"
     }
+    opaque["objects"][0]["lifecycle"]["approved"] = "2026-10-15"
     validate_palaco_registry(opaque, validator)
 
     edge_cases = (
@@ -842,6 +875,85 @@ def check_palaco_registry():
         record["traceability"]["relationships"][0]["target"] = other["metadata"]["id"]
         reject(instance, f"{relation} conflicts with {field}", f"contradictory {relation}")
     return f"PCR-000: closed fixture, complete 15-object snapshot + {negative_count} negative tests"
+
+
+def check_palaco_lifecycle():
+    validators = palaco_validators()
+    validator = validators["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    approved = copy.deepcopy(template)
+    approved["lifecycle"]["approved"] = "2026-10-16"
+    approved["audit"]["updated_at"] = "2026-10-16T00:00:00Z"
+    approved["approval"] = {
+        "status": "Approved", "authority": "Example governance team",
+        "approval_ref": "example-approval-001",
+    }
+    positives = []
+    for status in ("Proposed", "Draft", "Review"):
+        for approval_status in ("Pending", "Rejected"):
+            record = copy.deepcopy(template)
+            record["lifecycle"]["status"] = status
+            record["approval"]["status"] = approval_status
+            positives.append(record)
+    for status in ("Proposed", "Draft", "Review", "Approved", "Active", "Deprecated", "Retired", "Archived"):
+        record = copy.deepcopy(approved)
+        record["lifecycle"]["status"] = status
+        positives.append(record)
+    for timestamp in ("2026-10-15T23:00:00-01:00", "2026-10-16T01:00:00+01:00",
+                      "2026-10-16t00:00:00z"):
+        record = copy.deepcopy(approved)
+        record["audit"]["updated_at"] = timestamp
+        positives.append(record)
+    same_day = copy.deepcopy(approved)
+    same_day["lifecycle"].update(created="2026-10-16", next_review="2026-10-16")
+    positives.append(same_day)
+    historical = copy.deepcopy(template)
+    historical["lifecycle"].update(created="2020-01-01", next_review="2020-02-01")
+    historical["audit"]["updated_at"] = "2020-03-01T00:00:00Z"
+    positives.append(historical)
+    # A previous approval date may be retained during a new pending review.
+    previous = copy.deepcopy(approved)
+    previous["lifecycle"]["status"] = "Review"
+    previous["approval"] = {"status": "Pending"}
+    positives.append(previous)
+    for record in positives:
+        validate_palaco_registry({"registry_version": "0.1.0", "objects": [record]}, validator)
+
+    negatives = []
+    for base, path, value, diagnostic in (
+        (template, ("lifecycle", "next_review"), "2026-10-14", "next_review precedes lifecycle.created"),
+        (approved, ("lifecycle", "approved"), "2026-10-14", "approved precedes lifecycle.created"),
+        (approved, ("lifecycle", "next_review"), "2026-10-15", "next_review precedes lifecycle.approved"),
+        (template, ("audit", "updated_at"), "2026-10-14T23:59:59Z", "updated_at precedes lifecycle.created"),
+        (template, ("audit", "updated_at"), "2026-10-15T00:30:00+01:00", "updated_at precedes lifecycle.created"),
+        (approved, ("audit", "updated_at"), "2026-10-16T00:30:00+01:00", "updated_at precedes lifecycle.approved"),
+    ):
+        record = copy.deepcopy(base)
+        record[path[0]][path[1]] = value
+        negatives.append((record, diagnostic))
+    missing_date = copy.deepcopy(approved)
+    del missing_date["lifecycle"]["approved"]
+    negatives.append((missing_date, "approved approval requires lifecycle.approved"))
+    for status in ("Approved", "Active", "Deprecated", "Retired", "Archived"):
+        for approval_status in ("Pending", "Rejected"):
+            record = copy.deepcopy(template)
+            record["lifecycle"]["status"] = status
+            record["approval"]["status"] = approval_status
+            negatives.append((record, f"lifecycle status {status} requires approval.status Approved"))
+    for record, diagnostic in negatives:
+        instance = {"registry_version": "0.1.0", "objects": [record]}
+        require(validator.is_valid(instance), "lifecycle negative must be structurally valid")
+        # These additional rules must not silently tighten standalone record validation.
+        require(validators["PMS-001.schema.json"].is_valid(record),
+                "standalone PMS-001 unexpectedly rejects lifecycle snapshot")
+        try:
+            validate_palaco_registry(instance, validator)
+        except ConformanceError as error:
+            require(f"FE-00001: " in str(error) and diagnostic in str(error),
+                    f"unexpected lifecycle diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid lifecycle snapshot accepted: {diagnostic}")
+    return f"registry lifecycle: {len(positives)} accepted + {len(negatives)} rejected snapshots"
 
 
 def check_palaco_cycles():
@@ -1046,6 +1158,7 @@ CHECKS = (
     ("PALACO schema/fixture conformance", check_palaco_fixtures),
     ("PALACO closed registry conformance", check_palaco_registry),
     ("PALACO registry cycle conformance", check_palaco_cycles),
+    ("PALACO registry lifecycle conformance", check_palaco_lifecycle),
 )
 
 
