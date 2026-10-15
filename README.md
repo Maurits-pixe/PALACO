@@ -66,6 +66,24 @@ PluginHealth)` snapshots, continuing past NotReady. The first callback/authoriza
 error aborts without rollback; earlier health updates and events remain visible.
 Invalid-state preflight rejects before any authorization, callback, or event.
 
+`check_health_report(&mut authorizer)` performs **side-effecting readiness probes**
+with the same entire-fleet preflight and fail-fast probing policy. Only preflight
+returns `Err`; `Ok(report)` does **not** mean health success. The owned report
+includes every fleet node in topological order, with ID, redacted previous/current
+snapshots, and typed `Ready`, `NotReady`, `Rejected`, `Error`, `Panicked`,
+`SkippedPaused`, or `NotAttempted` outcome. After the first probe failure/rejection,
+later Running nodes are `NotAttempted`, even if their old snapshot says Ready;
+later Paused nodes remain `SkippedPaused`. NotReady continues probing.
+`complete()` means every eligible Running node was successfully probed (NotReady
+counts; Paused is skipped by policy). `all_ready()` requires every fleet entry
+to be freshly Ready, so any Paused node makes it false. Empty fleets satisfy both
+vacuously. Inspect both flags and entries; untouched snapshots are not fresh
+readiness. Reports may become stale and are neither persistent audits nor
+authorization. They retain partial results independently of event queue loss,
+without extra events for reporting/skipping. Hosts schedule probes and decide
+what to do with incomplete/not-ready results; no restart, retry, stop, or
+transitive-health inference is automatic.
+
 `pause_all(&mut authorizer)` pauses in reverse topological order;
 `resume_all(&mut authorizer)` resumes in topological order, including separately
 authorized readiness. Both preflight the **entire fleet** before any authorization

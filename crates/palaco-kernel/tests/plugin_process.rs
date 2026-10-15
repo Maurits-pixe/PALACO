@@ -15,9 +15,9 @@ use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
     plugin::{
-        CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginError,
-        PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration,
-        PluginState, ShutdownOutcome, ShutdownScope,
+        CONTRACT_VERSION, HealthOutcome, Plugin, PluginAction, PluginContext, PluginDescriptor,
+        PluginError, PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome,
+        PluginRegistration, PluginState, ShutdownOutcome, ShutdownScope,
         process::{ProcessPlugin, ProcessPluginConfig},
     },
 };
@@ -448,6 +448,93 @@ fn selective_process_stop_reaps_only_target_and_retains_dependency_until_cleanup
         let events = manager.drain_events().collect::<Vec<_>>();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].id, independent);
+    }
+    Ok(())
+}
+
+#[test]
+fn fleet_health_reports_probe_processes_without_automatically_stopping_other_children() -> TestResult
+{
+    for mode in ["health-cycle", "probe-error", "probe-hang"] {
+        let mut registrations = Vec::new();
+        let mut tracked = Vec::new();
+        for (name, fixture) in [("a", "healthy"), ("b", mode), ("c", "healthy")] {
+            let mut descriptor = descriptor()?;
+            descriptor.id = PluginId::new(name)?;
+            let pid = Rc::new(Cell::new(None));
+            let calls = Rc::new(Cell::new(0));
+            registrations.push(PluginRegistration {
+                descriptor,
+                plugin: Box::new(TrackedProcess {
+                    plugin: process(fixture)?,
+                    pid: pid.clone(),
+                    calls: calls.clone(),
+                }),
+            });
+            tracked.push((PluginId::new(name)?, pid, calls));
+        }
+        let mut manager = PluginManager::new(registrations)?;
+        manager.start_all(&mut allow)?;
+        let report = manager.check_health_report(&mut allow)?;
+        let recoverable = mode == "health-cycle";
+        assert_eq!(report.complete(), recoverable);
+        assert!(!report.all_ready());
+        assert_eq!(
+            report
+                .entries()
+                .iter()
+                .map(|e| e.outcome)
+                .collect::<Vec<_>>(),
+            [
+                HealthOutcome::Ready,
+                if recoverable {
+                    HealthOutcome::NotReady
+                } else {
+                    HealthOutcome::Error
+                },
+                if recoverable {
+                    HealthOutcome::Ready
+                } else {
+                    HealthOutcome::NotAttempted
+                }
+            ]
+        );
+        assert_eq!(tracked[0].2.get(), 4);
+        assert_eq!(tracked[1].2.get(), 4);
+        assert_eq!(tracked[2].2.get(), if recoverable { 4 } else { 3 });
+        for index in [0, 2] {
+            let status = manager.status(&tracked[index].0).expect("status");
+            assert_eq!(status.state, PluginState::Running);
+            assert!(status.cleanup_pending);
+            // A fresh successful command proves the report did not stop this child.
+            assert_eq!(
+                manager.check_health(&tracked[index].0, &mut allow)?,
+                PluginHealth::Ready
+            );
+        }
+        if recoverable {
+            let recovery = manager.check_health_report(&mut allow)?;
+            assert!(recovery.complete() && recovery.all_ready());
+            assert_eq!(report.entries()[1].current.health, PluginHealth::NotReady);
+        } else {
+            assert_reaped(tracked[1].1.get().expect("spawned child"));
+            assert_eq!(report.entries()[1].current.state, PluginState::Failed);
+            assert_eq!(report.entries()[2].previous, report.entries()[2].current);
+        }
+        let failure = manager
+            .status(&tracked[1].0)
+            .expect("status")
+            .failure
+            .clone();
+        manager.stop_all()?;
+        for (id, pid, _) in &tracked {
+            assert_reaped(pid.get().expect("spawned child"));
+            assert!(!manager.status(id).expect("status").cleanup_pending);
+        }
+        assert_eq!(
+            manager.status(&tracked[1].0).expect("status").failure,
+            failure
+        );
     }
     Ok(())
 }

@@ -80,19 +80,30 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut scoped_complete = true;
     let lifecycle = manager
         .start_all(&mut synthetic_authorizer)
+        .map_err(Box::<dyn Error>::from)
         // A host chooses when to probe; these are direct, non-transitive snapshots.
         .and_then(|()| {
-            for (id, health) in manager.check_health_all(&mut synthetic_authorizer)? {
-                println!("{} health: {health:?}", id.as_str());
+            let report = manager.check_health_report(&mut synthetic_authorizer)?;
+            for entry in report.entries() {
+                println!("{} health: {:?}", entry.id.as_str(), entry.outcome);
+            }
+            println!(
+                "health probes complete: {}, all ready: {}",
+                report.complete(),
+                report.all_ready()
+            );
+            if !report.complete() || !report.all_ready() {
+                return Err("health probes incomplete or fleet not fully ready".into());
             }
             Ok(())
         })
-        .and_then(|()| manager.pause_all(&mut synthetic_authorizer))
-        .and_then(|()| manager.resume_all(&mut synthetic_authorizer))
+        .and_then(|()| Ok(manager.pause_all(&mut synthetic_authorizer)?))
+        .and_then(|()| Ok(manager.resume_all(&mut synthetic_authorizer)?))
         .and_then(|()| {
             manager
                 .check_health(&service, &mut synthetic_authorizer)
                 .map(|_| ())
+                .map_err(Box::<dyn Error>::from)
         })
         // Explicit opt-in cascade stops worker before service, not the whole fleet.
         // In contrast, stop(&service) alone would reject while worker owns resources.

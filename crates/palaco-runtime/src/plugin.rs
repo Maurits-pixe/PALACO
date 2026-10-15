@@ -208,6 +208,61 @@ impl From<&PluginStatus> for PluginSnapshot {
     }
 }
 
+/// Fresh probe outcome, independent of any readiness retained in the snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HealthOutcome {
+    Ready,
+    NotReady,
+    Rejected,
+    Error,
+    Panicked,
+    SkippedPaused,
+    /// A preceding probe failed or was rejected; no authorization was requested.
+    NotAttempted,
+}
+
+/// Owned, redacted observation of one fleet node, without evidence or error text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HealthEntry {
+    pub id: PluginId,
+    pub previous: PluginSnapshot,
+    pub current: PluginSnapshot,
+    pub outcome: HealthOutcome,
+}
+
+/// Immutable result of side-effecting readiness probes, not authority or an audit.
+/// Snapshots may become stale; entries are retained independently of event loss.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HealthReport {
+    entries: Vec<HealthEntry>,
+}
+
+impl HealthReport {
+    /// Every fleet node in deterministic topological order, including skipped nodes.
+    pub fn entries(&self) -> &[HealthEntry] {
+        &self.entries
+    }
+
+    /// All Running nodes were successfully probed; Paused nodes are skipped by policy.
+    /// NotReady is complete. Empty and entirely Paused fleets are complete.
+    pub fn complete(&self) -> bool {
+        self.entries.iter().all(|entry| {
+            matches!(
+                entry.outcome,
+                HealthOutcome::Ready | HealthOutcome::NotReady | HealthOutcome::SkippedPaused
+            )
+        })
+    }
+
+    /// Every fleet entry was freshly Ready. Paused nodes make this false;
+    /// an empty fleet is vacuously all ready. Never inferred from stored health.
+    pub fn all_ready(&self) -> bool {
+        self.entries
+            .iter()
+            .all(|entry| entry.outcome == HealthOutcome::Ready)
+    }
+}
+
 /// Graph selection for shutdown preview or side-effecting execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShutdownScope {
@@ -651,6 +706,50 @@ impl PluginManager {
             }
         }
         Ok(health)
+    }
+
+    /// Side-effecting, host-scheduled fleet readiness probes with partial results.
+    /// Preflights all states before any side effects. Only preflight returns Err;
+    /// Ok does not imply health success: inspect complete, all_ready, and entries.
+    /// Probing stops at the first rejection/error/panic, but every node is reported.
+    /// No retries, automatic cleanup, transitive inference, or extra events.
+    pub fn check_health_report(
+        &mut self,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<HealthReport, PluginError> {
+        self.require_running_or_paused()?;
+        let mut entries = Vec::with_capacity(self.order.len());
+        let mut halted = false;
+        for id in self.order.clone() {
+            let previous = PluginSnapshot::from(&self.entries[&id].status);
+            let outcome = if previous.state == PluginState::Paused {
+                HealthOutcome::SkippedPaused
+            } else if halted {
+                HealthOutcome::NotAttempted
+            } else {
+                match self.check_health(&id, authorizer) {
+                    Ok(PluginHealth::Ready) => HealthOutcome::Ready,
+                    Ok(_) => HealthOutcome::NotReady,
+                    Err(error) => {
+                        halted = true;
+                        match error {
+                            PluginError::Authorization(..) => HealthOutcome::Rejected,
+                            PluginError::Callback(_, failure) if failure.panicked => {
+                                HealthOutcome::Panicked
+                            }
+                            _ => HealthOutcome::Error,
+                        }
+                    }
+                }
+            };
+            entries.push(HealthEntry {
+                current: PluginSnapshot::from(&self.entries[&id].status),
+                id,
+                previous,
+                outcome,
+            });
+        }
+        Ok(HealthReport { entries })
     }
 
     fn require_dependencies_ready(&self, id: &PluginId) -> Result<(), PluginError> {
