@@ -129,6 +129,7 @@ jobs:
       - name: Restart after committed revocation
         run: python verification/rio-accounts/fixture.py restart-bff
       - name: Verify revocation survives another restart
+        id: durable_verify
         working-directory: verification/rio-accounts
         env:
           RIO_DURABLE_BROWSER_PHASE: verify
@@ -143,6 +144,9 @@ jobs:
         working-directory: verification/rio-accounts
         run: npx playwright test --config=mobile/playwright.config.mjs
       - name: Execute isolated database backup and restoration
+        # A later mobile failure must retain its FAIL while this independent
+        # proof runs only after verified revocation, never on cancellation.
+        if: ${{ !cancelled() && steps.durable_verify.outcome == 'success' }}
         run: |
           python verification/rio-accounts/fixture.py stop-bff
           python verification/rio-accounts/fixture.py prepare-restore-proof

@@ -378,6 +378,30 @@ class FixtureSecurityTests(unittest.TestCase):
     def database_password(self):
         return fixture.urlsplit(fixture.read_bff_environment()["RIO_DEV_DATABASE_URL"]).password
 
+    def test_restore_preparation_refuses_live_or_uncertain_bff_before_database_changes(self):
+        with patch.object(fixture, "run_database_test") as prepare:
+            with patch.object(fixture, "owned_bff", return_value=(321, {"startTicks": "19"})):
+                with self.assertRaisesRegex(RuntimeError, "Stop the owned BFF"):
+                    fixture.prepare_restore_proof()
+            for reason in ("ownership inaccessible", "ownership mismatch"):
+                with patch.object(fixture, "owned_bff", side_effect=RuntimeError(reason)):
+                    with self.assertRaisesRegex(RuntimeError, reason):
+                        fixture.prepare_restore_proof()
+            prepare.assert_not_called()
+
+    def test_restore_preparation_requires_stopped_bff_and_propagates_proof_failure(self):
+        with patch.object(fixture, "owned_bff", return_value=None):
+            with patch.object(fixture, "run_database_test") as prepare:
+                fixture.prepare_restore_proof()
+                prepare.assert_called_once_with("postgres_prepare_restore_proof")
+            output = io.StringIO()
+            with patch.object(fixture, "run_database_test", side_effect=RuntimeError("proof failed")) as prepare:
+                with redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, "proof failed"):
+                        fixture.prepare_restore_proof()
+                prepare.assert_called_once_with("postgres_prepare_restore_proof")
+            self.assertNotIn("PASSED", output.getvalue())
+
     def test_native_dump_is_private_bounded_and_never_contains_password_arguments(self):
         self.prepare()
         seen = []
