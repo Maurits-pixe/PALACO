@@ -2218,6 +2218,24 @@ Queries do not modify records or write files. `--trace` requires `--registry`;
 `--direction` requires `--trace`; trace and previous-registry comparison modes
 cannot be combined.
 
+Read-only object-type queries filter records by the exact canonical family:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-type REQ
+```
+
+`--find-type` accepts the case-sensitive object types declared by PMS-001, not
+display names or domains. After validating the entire snapshot, it emits only
+JSON containing `object_type`, sorted `object_ids` and a scope disclaimer.
+A recognized family with no matches returns an empty array and exit 0.
+Unknown types or invalid registries fail nonzero without query results, including
+invalid records outside the requested family. Results contain IDs, not record
+contents, and make no completeness, authorization or canonical-status claim.
+The query is read-only and requires `--registry`; it cannot be combined with
+`--trace`, `--direction` or `--previous-registry`.
+
 This MVP does not enforce upstream completeness, root reachability,
 authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending

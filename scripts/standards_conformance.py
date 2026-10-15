@@ -18,6 +18,7 @@ Checks, in one run:
   8. Optional previous-registry comparison: retained identities, adjacent forward
      lifecycle transitions and monotonic audit timestamps.
   9. Read-only upstream/downstream trace queries on validated closed snapshots.
+ 10. Read-only object-type queries using the PMS-001 object family vocabulary.
 
 Any failure exits non-zero.
 """
@@ -821,6 +822,83 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     }
 
 
+def find_palaco_objects(instance, object_type, validators=None):
+    """Filter a validated snapshot by exact object_type, returning IDs only."""
+    if validators is None:
+        validators = palaco_validators()
+    families = validators["PMS-001.schema.json"].schema["properties"]["object_type"]["enum"]
+    require(object_type in families, f"unknown PALACO object type: {object_type}")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "object_type": object_type,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["object_type"] == object_type
+        ),
+        "scope": "supplied snapshot only; not a completeness or authority decision",
+    }
+
+
+def check_palaco_find():
+    validators = palaco_validators()
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    original = copy.deepcopy(fixture)
+    families = validators["PMS-001.schema.json"].schema["properties"]["object_type"]["enum"]
+    for family in families:
+        expected = {
+            "object_type": family,
+            "object_ids": [record["metadata"]["id"] for record in fixture["objects"]
+                           if record["object_type"] == family],
+            "scope": "supplied snapshot only; not a completeness or authority decision",
+        }
+        require(find_palaco_objects(fixture, family, validators) == expected,
+                f"incorrect object-type query: {family}")
+    multiple = copy.deepcopy(fixture)
+    added = copy.deepcopy(multiple["objects"][0])
+    added["metadata"]["id"] = "FE-00002"
+    # Domain and display text must not determine canonical object family.
+    added["metadata"]["domain"] = "REQ"
+    added["metadata"]["name"] = "Service"
+    multiple["objects"].append(added)
+    result = find_palaco_objects(multiple, "FE", validators)
+    require(result["object_ids"] == ["FE-00001", "FE-00002"], "multiple matches not sorted")
+    reordered = copy.deepcopy(multiple)
+    reordered["objects"].reverse()
+    require(find_palaco_objects(reordered, "FE", validators) == result,
+            "object-type query depends on record order")
+    require(fixture == original, "object-type query mutated input")
+    untouched = copy.deepcopy(multiple)
+    find_palaco_objects(multiple, "FE", validators)
+    require(multiple == untouched, "multiple-result query mutated input")
+
+    negatives = [(fixture, value, "unknown PALACO object type")
+                 for value in ("", "fe", "UNKNOWN", None)]
+    dangling = copy.deepcopy(fixture)
+    dangling["objects"][2]["capability_ref"] = "CAP-99999"
+    negatives.append((dangling, "FE", "unresolved capability_ref"))
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    negatives.append((duplicate, "FE", "duplicate object ID"))
+    cyclic = copy.deepcopy(fixture)
+    cyclic["objects"][0]["traceability"]["upstream"] = ["REQ-00001"]
+    negatives.append((cyclic, "SVC", "upstream cycle"))
+    lifecycle = copy.deepcopy(fixture)
+    lifecycle["objects"][2]["lifecycle"]["status"] = "Active"
+    negatives.append((lifecycle, "FE", "requires approval.status Approved"))
+    negatives.append(({}, "FE", "registry structure"))
+    for instance, family, expected in negatives:
+        try:
+            find_palaco_objects(instance, family, validators)
+        except ConformanceError as error:
+            require(expected in str(error), f"unexpected object-type query diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid object-type query accepted: {expected}")
+    return (
+        f"registry find: {len(families)} families, sorted multiple/empty results, "
+        f"non-mutating output + {len(negatives)} rejections"
+    )
+
+
 def check_palaco_traces():
     validator = palaco_validators()["PCR-000.schema.json"]
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
@@ -1393,6 +1471,7 @@ CHECKS = (
     ("PALACO registry lifecycle conformance", check_palaco_lifecycle),
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
+    ("PALACO registry object-type query conformance", check_palaco_find),
 )
 
 
@@ -1403,6 +1482,8 @@ def main():
                         help="Compare --registry against the preceding closed snapshot")
     parser.add_argument("--trace", metavar="OBJECT_ID",
                         help="Return reachable IDs from traceability.upstream as JSON")
+    parser.add_argument("--find-type", metavar="OBJECT_TYPE",
+                        help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
@@ -1414,10 +1495,19 @@ def main():
         parser.error("--direction requires --trace")
     if args.trace is not None and args.previous_registry is not None:
         parser.error("--trace cannot be combined with --previous-registry")
+    if args.find_type is not None:
+        if args.registry is None:
+            parser.error("--find-type requires --registry")
+        if args.trace is not None or args.previous_registry is not None:
+            parser.error("--find-type cannot be combined with --trace or --previous-registry")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.trace is not None:
+            if args.find_type is not None:
+                result = find_palaco_objects(current, args.find_type)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.trace is not None:
                 result = trace_palaco_registry(current, args.trace, args.direction or "upstream")
                 print(json.dumps(result, indent=2))
                 return 0
