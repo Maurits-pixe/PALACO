@@ -54,7 +54,7 @@ onUnmounted(() => clearTimeout(timer));
       <div class="system-status"><span class="dot"></span><span>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</span></div>
     </header>
 
-    <div class="preview-banner" role="status"><strong>Mutaties zijn gesloten.</strong> Deze overdracht bevat alleen fixturedata. Bevestigen voert niets uit zolang de opslagdeadline niet bewezen is.</div>
+    <div class="preview-banner" role="status"><strong>PROTOTYPE / SYNTHETIC DATA / NOT FOR SENSITIVE INFORMATION</strong><p>Mutaties zijn gesloten. Deze overdracht bevat alleen fixturedata. Bevestigen voert niets uit zolang de opslagdeadline niet bewezen is.</p></div>
     <p v-if="blockedMessage" class="blocked-banner" role="alert">{{ blockedMessage }}</p>
 
     <main class="grid-layout">

@@ -28,6 +28,17 @@ For the prototype, use **independently deployable apps connected by ordinary HTT
 - A public preview containing sensitive data is **HOLD**. A public HTTPS endpoint, TLS indicator, metadata response, UI label, or test result is not sufficient evidence to lift that hold.
 - Claims of secure communications, verified identity, cryptographic safety, live monitoring, or guaranteed deletion require their own implementation evidence and independent review before appearing as established capabilities.
 - Production publication remains **NO-GO** until domain/hosting ownership, authentication and authorization, security review, deployment configuration, and operational controls are verified.
+- Before adding public hosting, changing DNS, or connecting real-user data, require a separate human-reviewed decision that assesses scope, access controls, data handling, and evidence. This ADR does not authorize those changes.
+
+## Known Limitations
+
+- Independent security review was not completed for this prototype. The review tooling was unavailable, and CodeQL was skipped; security validation therefore remains **UNKNOWN**.
+- Runtime authentication, authorization, preview access control, and public exposure have not been independently validated.
+- AETHER and 5CRIPTIE are not implemented apps in this repository; their catalog entries are destinations/placeholders, not operational integrations.
+- Launcher success checks only the configured origin's metadata response and expected app ID. It does not verify identity, authorization, application behavior, or security.
+- Bastion is an isolated local-fixture preview. Its visible tasks, messages, and audit entries are synthetic and are not durable production records.
+- No domain ownership, DNS configuration, production hosting, or deployed security-header state is verified by this ADR.
+- Passing local tests and builds demonstrates only the tested behavior; it does not establish privacy, cryptographic suitability, or production readiness.
 
 ## Consequences
 

@@ -23,6 +23,13 @@ test('fixture messages are not presented as secure communications', () => {
   assert.doesNotMatch(source, /SECURE COMMS/);
 });
 
+test('preview banner warns against sensitive information and template avoids security claims', () => {
+  const source = fs.readFileSync(new URL('src/App.vue', root), 'utf8');
+  const template = source.match(/<template>([\s\S]*?)<\/template>/)?.[1] || '';
+  assert.match(template, /PROTOTYPE \/ SYNTHETIC DATA \/ NOT FOR SENSITIVE INFORMATION/);
+  assert.doesNotMatch(template, /SECURE COMMS|ACTIVE\s*&\s*SECURE|SECURE CONNECTION ESTABLISHED|volwaardig cryptografisch|live security decision/i);
+});
+
 test('source has no production endpoint or credentials', () => {
   const files = ['src/App.vue', 'src/main.js', 'vite.config.js', 'public/.well-known/palaco-app.json'];
   for (const file of files) {

@@ -64,7 +64,8 @@ onUnmounted(() => {
 
     <main>
       <aside class="preview-note" aria-label="Previewstatus">
-        <strong>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</strong>
+        <strong>PROTOTYPE / SYNTHETIC DATA / NOT FOR SENSITIVE INFORMATION</strong>
+        <p>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</p>
         <p>Dit is de launcher. AETHER, BASTION en 5CRIPTIE zijn nog niet als werkende apps overgedragen.</p>
         <p>Agenda-uitvoering is geblokkeerd. Deze preview verleent geen toestemming om afspraken te wijzigen.</p>
       </aside>

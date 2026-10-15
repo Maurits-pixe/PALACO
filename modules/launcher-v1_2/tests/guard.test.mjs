@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { readFileSync } from 'node:fs';
 import { CATALOG } from '../src/catalog.js';
 import { createGuardServer } from '../server/mutation-guard.mjs';
 import { BLOCK_RESPONSE, MUTATION_PATHS } from '../server/guard-contract.mjs';
@@ -13,6 +14,13 @@ test('catalog describes unimplemented destinations as synthetic demos', () => {
   assert.match(CATALOG.find(module => module.id === 'aether').description, /demo.*testdata.*niet voor gevoelige gegevens/i);
   assert.match(CATALOG.find(module => module.id === 'bastion').description, /preview.*fixturedata/i);
   assert.match(CATALOG.find(module => module.id === '5criptie').description, /synthetische.*geen live telemetry/i);
+});
+
+test('launcher template keeps the synthetic-data warning and avoids security claims', () => {
+  const source = readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8');
+  const template = source.match(/<template>([\s\S]*?)<\/template>/)?.[1] || '';
+  assert.match(template, /PROTOTYPE \/ SYNTHETIC DATA \/ NOT FOR SENSITIVE INFORMATION/);
+  assert.doesNotMatch(template, /SECURE COMMS|ACTIVE\s*&\s*SECURE|SECURE CONNECTION ESTABLISHED|volwaardig cryptografisch|live security decision/i);
 });
 
 async function listen(t, server = createGuardServer()) {
