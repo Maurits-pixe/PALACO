@@ -174,6 +174,36 @@ redacted event outcomes. It prints inventory before startup, after operations,
 and after final cleanup without fresh probes. Its synthetic authorizer is
 **not production authentication**.
 
+Run a real host/child demonstration, without features or external helper binaries:
+`cargo run -p palaco-kernel --example process_plugin`.
+The same executable's explicit `--child` branch serves an in-memory worker with
+`palaco_runtime::plugin::process::server::serve_stdio`. The host uses an absolute
+`current_exe()` path, explicit arguments, no inherited environment, and a synthetic
+authorizer; it starts, checks health reports, pauses/resumes, and unconditionally
+attempts shutdown while checking report completeness. This is trusted-process
+crash isolation, **not a sandbox or production authentication**.
+
+Developers can pass an existing `Plugin` and local `PluginDescriptor` to
+`process::server::serve(plugin, descriptor, reader, writer)` for generic `Read`/
+`Write` streams, or use `serve_stdio` for a child executable. This descriptor is
+local callback metadata: the wire carries no identity/evidence or host authority.
+Only the host `PluginManager` enforces authorization. Keep child stdout exclusively
+for protocol replies; logs belong on stderr (the host adapter discards it).
+The server accepts only bounded LF-terminated commands with contiguous positive
+decimal sequences starting at 1, without leading zeroes. Repeated READY may report
+NOT_READY and recover; invalid transitions return correlated ERROR and terminate.
+Malformed/truncated/oversized requests get no fabricated reply. Callback failures
+and unwinding panics are redacted, return ERROR, and trigger one cleanup attempt,
+including after partial initialization. ERROR is flushed before cleanup so the
+host can observe failure and terminate the child even if cleanup hangs; host
+termination may interrupt that cleanup. EOF and I/O/protocol failures also clean
+up once after initialization entry. A failed STOP is not automatically retried;
+`ServeError.kind` preserves the primary failure and `cleanup_failed` signals
+unreleased resources, not successful cleanup. The standard panic hook may write
+to stderr; aborting panics cannot be caught. Child callbacks have no hard timeout:
+host deadlines and direct-child kill/reaping handle hangs or crashes, not
+grandchildren or external resource isolation.
+
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
 Readiness is an explicit startup/resume/probe snapshot, not continuous monitoring. `start_all` rolls back
 callback failures; individual calls leave partial resources for `stop`/`stop_all`.

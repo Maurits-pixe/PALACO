@@ -49,6 +49,16 @@ impl Plugin for TrackedProcess {
         self.plugin.readiness(context)
     }
 
+    fn pause(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.calls.set(self.calls.get() + 1);
+        self.plugin.pause(context)
+    }
+
+    fn resume(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.calls.set(self.calls.get() + 1);
+        self.plugin.resume(context)
+    }
+
     fn stop(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
         self.calls.set(self.calls.get() + 1);
         self.plugin.stop(context)
@@ -101,6 +111,43 @@ fn assert_reaped(pid: u32) {
     );
     #[cfg(not(target_os = "linux"))]
     let _ = pid;
+}
+
+#[test]
+fn sdk_child_full_manager_lifecycle_and_reaping() -> TestResult {
+    let pid = Rc::new(Cell::new(None));
+    let calls = Rc::new(Cell::new(0));
+    let id = descriptor()?.id;
+    let mut manager = PluginManager::new(vec![PluginRegistration {
+        descriptor: descriptor()?,
+        plugin: Box::new(TrackedProcess {
+            plugin: process("sdk-server")?,
+            pid: pid.clone(),
+            calls: calls.clone(),
+        }),
+    }])?;
+    let lifecycle = (|| -> TestResult {
+        manager.start_all(&mut allow)?;
+        let report = manager.check_health_report(&mut allow)?;
+        assert!(report.complete());
+        assert!(!report.all_ready());
+        assert_eq!(
+            manager.status(&id).expect("status").health,
+            PluginHealth::NotReady
+        );
+        assert_eq!(manager.check_health(&id, &mut allow)?, PluginHealth::Ready);
+        manager.pause_all(&mut allow)?;
+        manager.resume_all(&mut allow)?;
+        assert!(manager.check_health_report(&mut allow)?.all_ready());
+        Ok(())
+    })();
+    let cleanup = manager.execute_shutdown(ShutdownScope::All);
+    lifecycle?;
+    assert!(cleanup?.complete());
+    assert_eq!(calls.get(), 10);
+    assert_reaped(pid.get().expect("child was spawned"));
+    assert!(!manager.status(&id).expect("status").cleanup_pending);
+    Ok(())
 }
 
 #[test]

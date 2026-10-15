@@ -4,10 +4,68 @@ use std::{
     time::Duration,
 };
 
+use palaco_foundation::EvidenceRef;
+use palaco_runtime::plugin::{
+    CONTRACT_VERSION, Plugin, PluginContext, PluginDescriptor, PluginId, process::server,
+};
+
+#[derive(Default)]
+struct SdkPlugin {
+    resource: Option<Vec<u8>>,
+    active: bool,
+    probes: usize,
+}
+
+impl Plugin for SdkPlugin {
+    fn initialize(&mut self, _: &PluginContext<'_>) -> Result<(), String> {
+        if std::env::var_os("CARGO").is_some() {
+            return Err("host environment leaked".into());
+        }
+        self.resource = Some(vec![1]);
+        Ok(())
+    }
+    fn start(&mut self, _: &PluginContext<'_>) -> Result<(), String> {
+        if self.resource.is_none() || self.active {
+            return Err("invalid worker state".into());
+        }
+        self.active = true;
+        Ok(())
+    }
+    fn readiness(&mut self, _: &PluginContext<'_>) -> Result<bool, String> {
+        self.probes += 1;
+        Ok(self.active && self.resource.is_some() && self.probes != 2)
+    }
+    fn pause(&mut self, _: &PluginContext<'_>) -> Result<(), String> {
+        if !self.active || self.resource.is_none() {
+            return Err("invalid worker state".into());
+        }
+        self.active = false;
+        Ok(())
+    }
+    fn resume(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.start(context)
+    }
+    fn stop(&mut self, _: &PluginContext<'_>) -> Result<(), String> {
+        self.active = false;
+        self.resource = None;
+        Ok(())
+    }
+}
+
 fn main() -> io::Result<()> {
     let Some(mode) = std::env::args().nth(1) else {
         return Ok(());
     };
+    if mode == "sdk-server" {
+        let descriptor = PluginDescriptor {
+            id: PluginId::new("local-fixture").map_err(io::Error::other)?,
+            evidence: EvidenceRef::new("local-fixture-evidence").map_err(io::Error::other)?,
+            contract_version: CONTRACT_VERSION,
+            dependencies: vec![],
+        };
+        return server::serve_stdio(&mut SdkPlugin::default(), &descriptor)
+            .map_err(io::Error::other);
+    }
     let stdin = io::stdin();
     let mut stdout = io::stdout().lock();
     let mut readiness_count = 0;

@@ -31,6 +31,8 @@ use std::{
 
 use super::{Plugin, PluginContext};
 
+pub mod server;
+
 const MAX_LINE: usize = 64;
 
 /// Immutable process launch settings. No inherited environment or env opt-in.
