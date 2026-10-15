@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Disposable Linux-CI PostgreSQL TLS proof; never launches RIO or enrolls accounts."""
+"""Owned Linux-CI TLS storage/router proof; requires the local synthetic IdP fixture.
+
+Never launches the browser service, changes its runtime profile, or enrolls accounts.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -20,13 +23,18 @@ RUNTIME = ROOT / ".tls-runtime"
 COMPOSE = ROOT / "tls-compose.yaml"
 MANIFEST = REPO / "services/rio-accounts/Cargo.toml"
 TEST = "storage::tests::postgres_tls_store_contract"
+TESTS = (
+    (TEST, "test.log"),
+    ("tls_service_tests::postgres_tls_service_contract", "service-test.log"),
+)
 LIMIT = 1_048_576
 PROJECT = re.compile(r"rio-accounts-tls-[0-9a-f]{16}")
 FILES = (
     ".owner.json", "compose.env", "password",
     "ca.key", "ca.pem", "ca.der", "other-ca.key", "other-ca.pem", "other-ca.der",
     "server.key", "server.csr", "server.pem", "server-extensions.cnf",
-    "openssl.cnf", "pg_hba.conf", "plain-pg_hba.conf", "commands.log", "test.log", "inventory.log",
+    "openssl.cnf", "pg_hba.conf", "plain-pg_hba.conf", "commands.log", "test.log",
+    "service-test.log", "inventory.log",
 )
 TLS_ENV = ("RIO_PG_TLS_PASSWORD", "RIO_PG_TLS_CA_DER", "RIO_PG_TLS_OTHER_CA_DER")
 FAILURES = frozenset({
@@ -261,7 +269,9 @@ def _wait_ready(owner: Owner) -> None:
         raise FixtureFailure("READINESS_FAILED")
 
 
-def _run_rust_test(owner: Owner) -> None:
+def _run_rust_test(owner: Owner, test: str, log: str) -> None:
+    if (test, log) not in TESTS or _read_owned(owner, log):
+        raise FixtureFailure("RUST_TEST_FAILED")
     environment = _environment()
     password = _read_owned(owner, "password", 128).decode("ascii").strip()
     if not re.fullmatch(r"[0-9a-f]{64}", password):
@@ -273,12 +283,12 @@ def _run_rust_test(owner: Owner) -> None:
         "RIO_PG_TLS_OTHER_CA_DER": str(owner.directory / "other-ca.der"),
     })
     result = _run_private(owner, [
-        "cargo", "test", "--manifest-path", str(MANIFEST), "--locked", TEST,
+        "cargo", "test", "--manifest-path", str(MANIFEST), "--locked", test,
         "--", "--ignored", "--exact", "--color=never",
-    ], log="test.log", timeout=180, environment=environment)
-    output = _read_owned(owner, "test.log").decode("utf-8", errors="replace")
+    ], log=log, timeout=180, environment=environment)
+    output = _read_owned(owner, log).decode("utf-8", errors="replace")
     passed = re.search(
-        r"^test storage::tests::postgres_tls_store_contract \.\.\. ok\r?$", output, re.MULTILINE
+        r"^test " + re.escape(test) + r" \.\.\. ok\r?$", output, re.MULTILINE
     )
     one_case = re.search(
         r"^test result: ok\. 1 passed; 0 failed; 0 ignored;", output, re.MULTILINE
@@ -338,7 +348,7 @@ def _cleanup(owner: Owner) -> tuple[bool, bool]:
 def check() -> dict:
     owner = None
     phase = "PREPARATION_FAILED"
-    test_passed = False
+    test_results = [{"name": test, "passed": False} for test, _log in TESTS]
     error = None
     namespace_closed = True
     private_files_removed = True
@@ -360,8 +370,9 @@ def check() -> dict:
         phase = "READINESS_FAILED"
         _wait_ready(owner)
         phase = "RUST_TEST_FAILED"
-        _run_rust_test(owner)
-        test_passed = True
+        for result, (test, log) in zip(test_results, TESTS, strict=True):
+            _run_rust_test(owner, test, log)
+            result["passed"] = True
     except FixtureFailure as failure:
         error = failure.code
     except KeyboardInterrupt:
@@ -374,13 +385,15 @@ def check() -> dict:
     if not namespace_closed or not private_files_removed:
         error = "CLEANUP_FAILED"
     return {
-        "schemaVersion": "RIO_TLS_FIXTURE_EVIDENCE_V1",
+        "schemaVersion": "RIO_TLS_FIXTURE_EVIDENCE_V2",
         "scope": "LOCAL_SYNTHETIC_TLS_TEST",
-        "status": "PASS" if test_passed and error is None else "FAIL",
+        "status": "PASS" if all(result["passed"] for result in test_results) and error is None else "FAIL",
         "error": error,
         "createdOwnedFixture": owner is not None,
         "rustTest": TEST,
-        "rustTestPassed": test_passed,
+        "rustTestPassed": test_results[0]["passed"],
+        "rustTests": test_results,
+        "rustTestsPassed": all(result["passed"] for result in test_results),
         "cleanup": {
             "namespaceClosed": namespace_closed, "privateFilesRemoved": private_files_removed,
         },
@@ -404,8 +417,9 @@ def main() -> int:
         result = check()
     finally:
         signal.signal(signal.SIGTERM, previous)
-    if result["rustTestPassed"]:
-        print("RIO_TLS_RUST_TEST storage::tests::postgres_tls_store_contract PASS")
+    for test in result["rustTests"]:
+        if test["passed"]:
+            print("RIO_TLS_RUST_TEST " + test["name"] + " PASS")
     print("RIO_TLS_FIXTURE_SUMMARY " + json.dumps(result, sort_keys=True, separators=(",", ":")))
     return 0 if result["status"] == "PASS" else 1
 

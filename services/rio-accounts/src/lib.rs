@@ -42,6 +42,8 @@ use std::{
 };
 use storage::{PgStore, StoreError};
 mod consent_http;
+#[cfg(test)]
+mod tls_service_tests;
 use tokio::sync::{Mutex, Semaphore};
 
 #[cfg(test)]
@@ -98,12 +100,8 @@ impl DevConfig {
         Ok(config)
     }
     fn from_values(mode: &str, secret: &str, cert: &str, key: &str) -> Result<Self, io::Error> {
-        if mode != "SYNTHETIC_ONLY"
-            || !(64..=128).contains(&secret.len())
-            || !secret.bytes().all(|b| b.is_ascii_hexdigit())
-            || cert.trim().is_empty()
-            || key.trim().is_empty()
-        {
+        validate_synthetic_credentials(mode, secret)?;
+        if cert.trim().is_empty() || key.trim().is_empty() {
             return Err(io::Error::other(
                 "invalid synthetic development configuration",
             ));
@@ -115,6 +113,18 @@ impl DevConfig {
             tls_key: key.to_owned(),
         })
     }
+}
+
+fn validate_synthetic_credentials(mode: &str, secret: &str) -> Result<(), io::Error> {
+    if mode != "SYNTHETIC_ONLY"
+        || !(64..=128).contains(&secret.len())
+        || !secret.bytes().all(|b| b.is_ascii_hexdigit())
+    {
+        return Err(io::Error::other(
+            "invalid synthetic development configuration",
+        ));
+    }
+    Ok(())
 }
 
 /// The allowlist runs before discovery, JWKS or token network I/O. No proxy or redirects.
@@ -268,8 +278,6 @@ impl AppState {
     }
     /// Discover only the fixed synthetic IdP through the bounded, allowlisted transport.
     pub async fn discover(config: &DevConfig) -> Result<Self, io::Error> {
-        // The only runtime constructor remains fixed to the loopback profile.
-        let endpoints = RuntimeEndpoints::loopback();
         if config.database_url.contains("rio_synthetic_restore") {
             return Err(io::Error::other(
                 "restored database cannot serve browser sessions",
@@ -280,6 +288,30 @@ impl AppState {
                 .await
                 .map_err(|_| io::Error::other("synthetic database unavailable"))?,
         );
+        Self::discover_with_store(&config.client_secret, db).await
+    }
+
+    /// Connect verified TLS storage and discover only the fixed loopback synthetic IdP.
+    /// This typed library path does not load DevConfig, select staging endpoints,
+    /// read TLS files, choose a listener, or enable a launcher/environment option.
+    /// The database type fixes the closed rio_synthetic_tls schema target.
+    pub async fn discover_tls_synthetic(
+        mode: &str,
+        client_secret: &str,
+        database: &tls_database::SyntheticTlsDbConfig,
+    ) -> Result<Self, io::Error> {
+        validate_synthetic_credentials(mode, client_secret)?;
+        let db = Arc::new(
+            PgStore::connect_tls_synthetic(database)
+                .await
+                .map_err(|_| io::Error::other("synthetic TLS database unavailable"))?,
+        );
+        Self::discover_with_store(client_secret, db).await
+    }
+
+    async fn discover_with_store(client_secret: &str, db: Arc<PgStore>) -> Result<Self, io::Error> {
+        // Storage transport never selects or changes provider/browser endpoints.
+        let endpoints = RuntimeEndpoints::loopback();
         let http = GuardedHttp {
             client: reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::none())
@@ -305,7 +337,7 @@ impl AppState {
         let client = CoreClient::from_provider_metadata(
             metadata,
             ClientId::new(endpoints.client_id().to_owned()),
-            Some(ClientSecret::new(config.client_secret.clone())),
+            Some(ClientSecret::new(client_secret.to_owned())),
         )
         .set_auth_uri(
             AuthUrl::new(endpoints.auth_url().to_owned())
