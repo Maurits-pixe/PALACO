@@ -11,12 +11,12 @@ let tickTimer;
 const labels = Object.freeze({
   unconfigured: 'Niet ingesteld', not_approved: 'Bestemming niet goedgekeurd',
   checking: 'Controleren…', impossible: 'Controle niet mogelijk',
-  failed: 'Verificatie mislukt', expired: 'Verificatie verlopen',
+  failed: 'Metadata niet bevestigd', expired: 'Metadata-bevestiging verlopen',
   verified: 'Modulemetadata bevestigd'
 });
 const verifiedCount = computed(() => modules.filter(module => module.status === 'verified').length);
 const globalStatusText = computed(() => verifiedCount.value === modules.length ? 'Alle modules: metadata bevestigd'
-  : verifiedCount.value > 0 ? 'Gedeeltelijke verificatie' : 'Geen modules geverifieerd');
+  : verifiedCount.value > 0 ? 'Gedeeltelijke metadata bevestigd' : 'Geen metadata bevestigd');
 const globalStatusClass = computed(() => verifiedCount.value === modules.length ? 'ok' : verifiedCount.value ? 'warning' : 'critical');
 function remaining(module) {
   void clockTick.value;
@@ -99,7 +99,7 @@ onUnmounted(() => {
               @input="verifier.changeInput(module, $event.target.value)" />
             <div class="config-actions">
               <button type="button" data-verify :disabled="!module.isValid || module.isVerifying" @click="verifier.verify(module)">
-                {{ module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren' }}
+                {{ module.isVerifying ? 'Controleren…' : 'Opslaan & controleren' }}
               </button>
               <button v-if="module.isVerifying" type="button" class="cancel-btn" data-cancel @click="verifier.cancel(module)">Annuleren</button>
             </div>

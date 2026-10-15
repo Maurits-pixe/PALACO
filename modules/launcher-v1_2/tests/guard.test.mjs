@@ -2,11 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { CATALOG } from '../src/catalog.js';
 import { createGuardServer } from '../server/mutation-guard.mjs';
 import { BLOCK_RESPONSE, MUTATION_PATHS } from '../server/guard-contract.mjs';
 import {
   createOperationResult, recordGuardResponse, recordUnknownResult,
 } from '../server/client-result.mjs';
+
+test('catalog describes unimplemented destinations as synthetic demos', () => {
+  assert.match(CATALOG.find(module => module.id === 'aether').description, /demo.*testdata.*niet voor gevoelige gegevens/i);
+  assert.match(CATALOG.find(module => module.id === 'bastion').description, /preview.*fixturedata/i);
+  assert.match(CATALOG.find(module => module.id === '5criptie').description, /synthetische.*geen live telemetry/i);
+});
 
 async function listen(t, server = createGuardServer()) {
   server.listen(0, '127.0.0.1');

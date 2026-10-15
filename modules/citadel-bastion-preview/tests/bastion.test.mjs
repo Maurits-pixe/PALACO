@@ -17,6 +17,12 @@ test('task controls cannot claim a successful mutation', () => {
   assert.doesNotMatch(source, /task\.priority\s*=\s*['"]HIGH/);
 });
 
+test('fixture messages are not presented as secure communications', () => {
+  const source = fs.readFileSync(new URL('src/App.vue', root), 'utf8');
+  assert.match(source, /LOKALE BERICHTEN \(FIXTURE\)/);
+  assert.doesNotMatch(source, /SECURE COMMS/);
+});
+
 test('source has no production endpoint or credentials', () => {
   const files = ['src/App.vue', 'src/main.js', 'vite.config.js', 'public/.well-known/palaco-app.json'];
   for (const file of files) {

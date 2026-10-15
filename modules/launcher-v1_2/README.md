@@ -36,7 +36,7 @@ npm run preview
 ## Bediening en modulemetadata
 
 1. Vul een exacte origin uit `src/catalog.js` in, bijvoorbeeld `https://localhost:5175` voor BASTION. Geen afsluitende slash, pad, query, fragment of gebruikersgegevens.
-2. Kies **Opslaan & verifiëren**. De launcher vraagt `/.well-known/palaco-app.json` op, zonder credentials of redirects.
+2. Kies **Opslaan & controleren**. De launcher vraagt `/.well-known/palaco-app.json` op, zonder credentials of redirects.
 3. Open de module na **Modulemetadata bevestigd**. De bevestiging geldt maximaal 60 seconden en vervalt bij terugkeer naar de pagina.
 4. Tijdens een check kun je **Annuleren**, of de origin wijzigen; een wijziging trekt de oude poging meteen in. Start daarna de nieuwe check.
 

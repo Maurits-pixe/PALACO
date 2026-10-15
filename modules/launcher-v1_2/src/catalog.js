@@ -3,17 +3,17 @@
 export const CATALOG = Object.freeze([
   Object.freeze({
     id: 'aether', name: 'AETHER', expectedId: 'aether', color: '#00ff9d',
-    description: 'Cryptografische versleutelingsmachine.',
+    description: 'Cryptografische demo — uitsluitend testdata; niet voor gevoelige gegevens.',
     origins: Object.freeze(['https://localhost:5174', 'https://aether.hoofdkantoor.info'])
   }),
   Object.freeze({
     id: 'bastion', name: 'BASTION', expectedId: 'bastion', color: '#60a5fa',
-    description: 'Tactisch commandocentrum.',
+    description: 'Geïsoleerde samenwerking-preview met lokale fixturedata.',
     origins: Object.freeze(['https://localhost:5175', 'https://bastion.hoofdkantoor.info'])
   }),
   Object.freeze({
     id: '5criptie', name: '5CRIPTIE', expectedId: '5criptie', color: '#c084fc',
-    description: 'Monitoringdashboard voor netwerkbeveiliging.',
+    description: 'Synthetische monitoringdemo — geen live telemetry.',
     origins: Object.freeze(['https://localhost:5176', 'https://5criptie.hoofdkantoor.info'])
   })
 ]);

@@ -66,7 +66,7 @@ onUnmounted(() => clearTimeout(timer));
         </article></div>
       </section>
 
-      <div class="right-col"><section class="panel chat-panel"><div class="panel-header"><h2>SECURE COMMS (FIXTURE)</h2><span class="timer-warning">GEEN PRODUCTIEKANAAL</span></div><div class="chat-window"><div v-for="msg in messages" :key="msg.id" class="message"><span class="sender">{{ msg.sender }}:</span><p>{{ msg.text }}</p><span class="time">{{ msg.time }}</span></div></div><div class="chat-input"><input v-model="newMessage" @keyup.enter="sendMessage" placeholder="Lokaal fixturebericht…" aria-label="Lokaal fixturebericht" /><button @click="sendMessage">VERZEND</button></div></section>
+      <div class="right-col"><section class="panel chat-panel"><div class="panel-header"><h2>LOKALE BERICHTEN (FIXTURE)</h2><span class="timer-warning">GEEN PRODUCTIEKANAAL</span></div><div class="chat-window"><div v-for="msg in messages" :key="msg.id" class="message"><span class="sender">{{ msg.sender }}:</span><p>{{ msg.text }}</p><span class="time">{{ msg.time }}</span></div></div><div class="chat-input"><input v-model="newMessage" @keyup.enter="sendMessage" placeholder="Lokaal fixturebericht…" aria-label="Lokaal fixturebericht" /><button @click="sendMessage">VERZEND</button></div></section>
         <section class="panel log-panel"><div class="panel-header"><h2>AUDIT LOG (FIXTURE)</h2></div><div class="log-list"><div v-for="log in auditLogs" :key="log.id" class="log-entry"><span class="log-time">{{ log.time }}</span><span class="log-action" :class="log.type">{{ log.action }}</span><span class="log-user">{{ log.user }}</span></div></div></section>
       </div>
     </main>
