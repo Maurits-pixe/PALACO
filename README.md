@@ -2174,8 +2174,32 @@ overdue reviews and future dates are not compared to the current clock. Audit
 updates after `next_review` remain valid. These snapshot rules do not validate
 transition history, prove an approval or change standalone PMS-001 acceptance.
 
+To compare **consecutive** registry snapshots, add `--previous-registry`:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --previous-registry /tmp/previous-registry.json \
+  --registry /tmp/current-registry.json
+```
+
+Both inputs must independently pass closed registry validation. For existing IDs,
+the state may remain unchanged or advance one step along
+Proposed → Draft → Review → Approved → Active → Deprecated → Retired → Archived.
+Skipped states, backward transitions and reactivation are rejected by this MVP
+profile. Archived is terminal except for same-state metadata updates.
+The creation date cannot change. Audit timestamps cannot move backwards; any
+record change requires a strictly later audit instant, including lifecycle changes.
+Object ordering within the registry does not matter.
+
+All previous IDs must remain present: use retirement/archival instead of deletion.
+New IDs may be imported in any valid snapshot state; no prior history is inferred
+for them. `--previous-registry` requires `--registry`. Without the option, the
+existing single-snapshot behavior remains unchanged. This comparison checks only
+the supplied pair; it does not authenticate a baseline, establish an immutable
+history, verify intermediate events or authorize transitions.
+
 This MVP does not enforce upstream completeness, root reachability,
-lifecycle transitions, approval authority or evidence authenticity.
+authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending
 approval. Validation alone never grants authority or establishes PCC-001
 `CANONICAL` status.

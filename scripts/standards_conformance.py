@@ -15,6 +15,8 @@ Checks, in one run:
      owned relationships, consistency with dedicated reference fields, and
      acyclic dependency and upstream graphs (checked separately), and consistent
      lifecycle dates and approval state.
+  8. Optional previous-registry comparison: retained identities, adjacent forward
+     lifecycle transitions and monotonic audit timestamps.
 
 Any failure exits non-zero.
 """
@@ -660,6 +662,10 @@ def require_acyclic(graph, label):
                 stack.append(iter(sorted(graph[target])))
 
 
+def audit_instant(record):
+    return datetime.fromisoformat(record["audit"]["updated_at"].upper().replace("Z", "+00:00"))
+
+
 def validate_registry_lifecycle(record):
     """Check a snapshot, not transition history or approval authority."""
     object_id = record["metadata"]["id"]
@@ -667,7 +673,7 @@ def validate_registry_lifecycle(record):
     created = date.fromisoformat(lifecycle["created"])
     next_review = date.fromisoformat(lifecycle["next_review"])
     # Lifecycle dates are calendar dates in UTC for comparison with audit instants.
-    updated = datetime.fromisoformat(record["audit"]["updated_at"].upper().replace("Z", "+00:00"))
+    updated = audit_instant(record)
     require(created <= next_review,
             f"{object_id}: lifecycle.next_review precedes lifecycle.created")
     require(updated >= datetime.combine(created, time.min, timezone.utc),
@@ -741,6 +747,46 @@ def validate_palaco_registry(instance, validator=None):
     require_acyclic(dependencies, "dependency")
     require_acyclic(upstream, "upstream")
     return f"closed PALACO registry valid ({len(objects)} objects); not a canonical-status decision"
+
+
+LIFECYCLE_SEQUENCE = (
+    "Proposed", "Draft", "Review", "Approved", "Active", "Deprecated", "Retired", "Archived",
+)
+
+
+def validate_registry_transition(previous, current, validator=None):
+    """Compare consecutive supplied snapshots; neither input is trusted history."""
+    if validator is None:
+        validator = palaco_validators()["PCR-000.schema.json"]
+    for label, instance in (("previous", previous), ("current", current)):
+        try:
+            validate_palaco_registry(instance, validator)
+        except ConformanceError as error:
+            raise ConformanceError(f"{label} registry: {error}") from error
+    before = {record["metadata"]["id"]: record for record in previous["objects"]}
+    after = {record["metadata"]["id"]: record for record in current["objects"]}
+    removed = sorted(before.keys() - after.keys())
+    require(not removed, f"registry transition removes object IDs: {', '.join(removed)}; retire/archive instead")
+    for object_id, old in before.items():
+        new = after[object_id]
+        require(old["lifecycle"]["created"] == new["lifecycle"]["created"],
+                f"{object_id}: lifecycle.created is immutable across snapshots")
+        old_state = old["lifecycle"]["status"]
+        new_state = new["lifecycle"]["status"]
+        old_index = LIFECYCLE_SEQUENCE.index(old_state)
+        require(new_state == old_state or (
+            old_index + 1 < len(LIFECYCLE_SEQUENCE) and new_state == LIFECYCLE_SEQUENCE[old_index + 1]
+        ), f"{object_id}: invalid lifecycle transition {old_state} -> {new_state}")
+        old_updated = audit_instant(old)
+        new_updated = audit_instant(new)
+        require(new_updated >= old_updated,
+                f"{object_id}: audit.updated_at moves backwards across snapshots")
+        require(old == new or new_updated > old_updated,
+                f"{object_id}: changed record requires a later audit.updated_at")
+    return (
+        f"registry transition valid ({len(before)} retained, {len(after) - len(before)} added); "
+        "not authenticated history or a canonical-status decision"
+    )
 
 
 def check_palaco_registry():
@@ -875,6 +921,90 @@ def check_palaco_registry():
         record["traceability"]["relationships"][0]["target"] = other["metadata"]["id"]
         reject(instance, f"{relation} conflicts with {field}", f"contradictory {relation}")
     return f"PCR-000: closed fixture, complete 15-object snapshot + {negative_count} negative tests"
+
+
+def check_palaco_transitions():
+    validators = palaco_validators()
+    validator = validators["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    states = ("Proposed", "Draft", "Review", "Approved", "Active", "Deprecated", "Retired", "Archived")
+    require(tuple(validators["PMS-001.schema.json"].schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]) == states,
+            "transition states diverge from PMS-001 lifecycle vocabulary")
+    accepted = rejected = 0
+
+    def snapshot(state, timestamp):
+        record = copy.deepcopy(template)
+        record["lifecycle"]["status"] = state
+        record["lifecycle"]["approved"] = "2026-10-15"
+        record["approval"] = {
+            "status": "Approved", "authority": "Example governance team",
+            "approval_ref": "example-approval-001",
+        }
+        record["audit"]["updated_at"] = timestamp
+        return {"registry_version": "0.1.0", "objects": [record]}
+
+    def reject(previous, current, expected):
+        nonlocal rejected
+        try:
+            validate_registry_transition(previous, current, validator)
+        except ConformanceError as error:
+            require(expected in str(error), f"unexpected transition diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid transition accepted: {expected}")
+        rejected += 1
+
+    for index, old_state in enumerate(states):
+        for new_index, new_state in enumerate(states):
+            previous = snapshot(old_state, "2026-10-15T12:00:00Z")
+            current = snapshot(new_state, "2026-10-15T13:00:00Z")
+            if new_index in (index, index + 1):
+                validate_registry_transition(previous, current, validator)
+                accepted += 1
+            else:
+                reject(previous, current, f"invalid lifecycle transition {old_state} -> {new_state}")
+    previous = snapshot("Draft", "2026-10-15T12:00:00Z")
+    validate_registry_transition(previous, previous, validator)
+    accepted += 1
+    current = copy.deepcopy(previous)
+    current["objects"][0]["metadata"]["name"] = "Changed record"
+    reject(previous, current, "changed record requires a later audit.updated_at")
+    current["objects"][0]["audit"]["updated_at"] = "2026-10-15T13:00:00+01:00"
+    reject(previous, current, "changed record requires a later audit.updated_at")
+    current["objects"][0]["audit"]["updated_at"] = "2026-10-15T12:30:00+01:00"
+    reject(previous, current, "audit.updated_at moves backwards")
+    current["objects"][0]["audit"]["updated_at"] = "2026-10-15T13:30:00+01:00"
+    validate_registry_transition(previous, current, validator)
+    accepted += 1
+    current = snapshot("Review", "2026-10-15T12:00:00Z")
+    reject(previous, current, "changed record requires a later audit.updated_at")
+    current = snapshot("Review", "2026-10-15T13:00:00Z")
+    current["objects"][0]["lifecycle"]["created"] = "2026-10-14"
+    reject(previous, current, "lifecycle.created is immutable")
+    current = copy.deepcopy(previous)
+    added = copy.deepcopy(current["objects"][0])
+    added["metadata"]["id"] = "FE-00002"
+    current["objects"].append(added)
+    validate_registry_transition(previous, current, validator)
+    current["objects"].reverse()
+    validate_registry_transition(previous, current, validator)
+    accepted += 2
+    reject(current, previous, "removes object IDs: FE-00002")
+    renamed = copy.deepcopy(previous)
+    renamed["objects"][0]["metadata"]["id"] = "FE-00003"
+    reject(previous, renamed, "removes object IDs: FE-00001")
+    for label in ("previous", "current"):
+        invalid = copy.deepcopy(previous)
+        invalid["objects"][0]["dependencies"] = ["FE-99999"]
+        reject(invalid if label == "previous" else previous,
+               invalid if label == "current" else previous, f"{label} registry:")
+    invalid = copy.deepcopy(previous)
+    del invalid["objects"][0]["ownership"]
+    reject(invalid, previous, "previous registry: registry structure")
+    reject(previous, invalid, "current registry: registry structure")
+    # A pair of valid standalone snapshots remains valid without transition mode.
+    validate_palaco_registry(snapshot("Archived", "2026-10-15T12:00:00Z"), validator)
+    validate_palaco_registry(snapshot("Draft", "2026-10-15T12:00:00Z"), validator)
+    return f"registry transitions: {accepted} accepted + {rejected} rejected comparisons"
 
 
 def check_palaco_lifecycle():
@@ -1159,16 +1289,25 @@ CHECKS = (
     ("PALACO closed registry conformance", check_palaco_registry),
     ("PALACO registry cycle conformance", check_palaco_cycles),
     ("PALACO registry lifecycle conformance", check_palaco_lifecycle),
+    ("PALACO registry transition conformance", check_palaco_transitions),
 )
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--registry", type=Path, help="Validate one closed PCR-000 registry snapshot")
+    parser.add_argument("--previous-registry", type=Path,
+                        help="Compare --registry against the preceding closed snapshot")
     args = parser.parse_args()
+    if args.previous_registry is not None and args.registry is None:
+        parser.error("--previous-registry requires --registry")
     if args.registry is not None:
         try:
-            summary = validate_palaco_registry(read_json(args.registry))
+            current = read_json(args.registry)
+            if args.previous_registry is None:
+                summary = validate_palaco_registry(current)
+            else:
+                summary = validate_registry_transition(read_json(args.previous_registry), current)
         except Exception as error:  # fail closed, including unreadable files
             print(f"FAIL: {type(error).__name__}: {error}")
             return 1
