@@ -2106,7 +2106,9 @@ relationships. `IMPLEMENTS` accepts APP/SVC → REQ; `DEFINED_BY` accepts
 APP/SVC/ADR → ARC. Other relation endpoint types are declared in the schema,
 with `DEPENDS_ON` available between any canonical object families.
 [Synthetic example fixtures](docs/fixtures/palaco/) cover FE, ADR, SVC, COM and REQ.
-They intentionally reference illustrative IDs, not a complete registry.
+Those individual examples intentionally reference illustrative IDs, not a complete
+registry. The separate [closed registry fixture](docs/fixtures/palaco/registry.fixture.json)
+contains a self-contained FE → CAP → REQ example.
 
 Run the existing conformance gate (also run by GO-13 CI):
 
@@ -2115,16 +2117,42 @@ python -m pip install "jsonschema[format]==4.23.0"
 python scripts/standards_conformance.py
 ```
 
-The gate resolves both schemas locally, checks formats, and exercises positive
+The gate resolves all three schemas locally, checks formats, and exercises positive
 and negative cases alongside the unchanged RIO/VisitCard checks. Other validators
-must register both schema `$id` values and enable format assertions.
+must register the schema `$id` values and enable format assertions.
 
-This MVP validates record structure, not registry-wide semantics. Reference
-existence, edge ownership, upstream completeness, date ordering, lifecycle
-transitions, consistency of duplicated references, approval authority and evidence
-authenticity remain registry responsibilities. Empty upstream lists are allowed
-for roots; draft records can have pending approval. Validation alone never grants
-authority or establishes PCC-001 `CANONICAL` status.
+[PCR-000](docs/schemas/palaco/PCR-000.schema.json) adds a closed registry envelope:
+`registry_version` is `0.1.0` and `objects` contains at least one PMS-001 record.
+Validate a snapshot independently of the full conformance gate:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json
+```
+
+The CLI exits 0 for a valid snapshot and nonzero for malformed JSON, schema errors
+or registry-integrity failures. It uses strict JSON parsing and local schemas only;
+input cannot select schemas or trigger remote reference retrieval.
+
+Registry validation enforces unique object IDs, resolution of every explicit
+canonical object reference within the snapshot, no self-references, and embedded
+edge sources matching their owning object. Free-text ownership, approval authority,
+approval references and URLs are not canonical object references. When a dedicated
+field exists, corresponding edges must target one of its values:
+`IMPLEMENTS` → `requirement_refs`, `REALIZES` → `capability_ref`,
+`DEFINED_BY` → `architecture_ref`, `APPROVED_BY` → `approved_by`,
+`VERIFIED_BY` → `verification.verification_ref`, `PROVEN_BY` → `evidence`,
+`AUDITED_BY` → `audit.audit_refs`, `DEPENDS_ON` → `dependencies`.
+Absent fields impose no such edge constraint; empty arrays permit no corresponding
+edges. Dedicated references need not be duplicated as edges. An upstream list is
+not a dependency list. Partial snapshots and external object references are not
+supported by this closed profile; record-only PMS-001 validation stays unchanged.
+
+This MVP does not enforce upstream completeness, graph reachability or cycles,
+date ordering, lifecycle transitions, approval authority or evidence authenticity.
+Empty upstream lists are allowed for roots; draft records can have pending
+approval. Validation alone never grants authority or establishes PCC-001
+`CANONICAL` status.
 
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**

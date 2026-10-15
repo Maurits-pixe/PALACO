@@ -11,10 +11,13 @@ Checks, in one run:
      plus negative tests for required fields and structural disclosure bounds.
   6. PALACO canonical schemas and fixtures, with typed object/relationship
      contracts and negative tests, resolving references locally only.
+  7. PCR-000 closed registry snapshots: unique IDs, resolved object references,
+     owned relationships and consistency with dedicated reference fields.
 
 Any failure exits non-zero.
 """
 
+import argparse
 import copy
 import json
 import re
@@ -403,9 +406,9 @@ def check_visitcard_fixtures():
 # PALACO canonical fixtures + structural boundary tests
 # --------------------------------------------------------------------------
 
-def check_palaco_fixtures():
+def palaco_validators():
     schemas = {}
-    for filename in ("PMS-001.schema.json", "PMS-002.schema.json"):
+    for filename in ("PMS-001.schema.json", "PMS-002.schema.json", "PCR-000.schema.json"):
         schema = read_json(PALACO_SCHEMA_DIR / filename)
         require(schema.get("$schema") == DIALECT, f"{filename}: unexpected dialect")
         Draft202012Validator.check_schema(schema)
@@ -413,11 +416,17 @@ def check_palaco_fixtures():
     registry = Registry().with_resources(
         (schema["$id"], Resource.from_contents(schema)) for schema in schemas.values()
     )
-    bundle = schemas["PMS-001.schema.json"]
-    validator = Draft202012Validator(bundle, registry=registry, format_checker=FormatChecker())
-    edge_validator = Draft202012Validator(
-        schemas["PMS-002.schema.json"], registry=registry, format_checker=FormatChecker()
-    )
+    return {
+        filename: Draft202012Validator(schema, registry=registry, format_checker=FormatChecker())
+        for filename, schema in schemas.items()
+    }
+
+
+def check_palaco_fixtures():
+    validators = palaco_validators()
+    validator = validators["PMS-001.schema.json"]
+    edge_validator = validators["PMS-002.schema.json"]
+    bundle = validator.schema
     instances = {}
     negative_count = 0
 
@@ -590,6 +599,211 @@ def check_palaco_fixtures():
 
 
 # --------------------------------------------------------------------------
+# Closed PALACO registry integrity
+# --------------------------------------------------------------------------
+
+OBJECT_REFERENCE_FIELDS = (
+    ("risk",), ("approved_by",), ("architecture_ref",), ("capability_ref",),
+    ("requirement_refs",), ("dependencies",), ("evidence",), ("compliance",),
+    ("traceability", "upstream"), ("verification", "verification_ref"),
+    ("audit", "audit_refs"), ("repository", "repository_ref"),
+    ("runtime", "runtime_ref"),
+)
+RELATION_REFERENCE_FIELDS = {
+    "IMPLEMENTS": ("requirement_refs",),
+    "REALIZES": ("capability_ref",),
+    "DEFINED_BY": ("architecture_ref",),
+    "APPROVED_BY": ("approved_by",),
+    "VERIFIED_BY": ("verification", "verification_ref"),
+    "PROVEN_BY": ("evidence",),
+    "AUDITED_BY": ("audit", "audit_refs"),
+    "DEPENDS_ON": ("dependencies",),
+}
+
+
+def reference_value(record, path):
+    value = record
+    for field in path:
+        if field not in value:
+            return None
+        value = value[field]
+    return value
+
+
+def validate_palaco_registry(instance, validator=None):
+    """Validate a closed snapshot without fetching resources or granting authority."""
+    if validator is None:
+        validator = palaco_validators()["PCR-000.schema.json"]
+    error = next(validator.iter_errors(instance), None)
+    if error is not None:
+        location = "/".join(map(str, error.absolute_path)) or "<root>"
+        raise ConformanceError(f"registry structure at {location}: {error.message}")
+
+    objects = {}
+    for record in instance["objects"]:
+        object_id = record["metadata"]["id"]
+        require(object_id not in objects, f"duplicate object ID: {object_id}")
+        objects[object_id] = record
+
+    def check_reference(owner, target, field):
+        require(target in objects, f"{owner}: unresolved {field}: {target}")
+        require(target != owner, f"{owner}: self reference in {field}")
+
+    for object_id, record in objects.items():
+        for path in OBJECT_REFERENCE_FIELDS:
+            value = reference_value(record, path)
+            if value is not None:
+                targets = value if isinstance(value, list) else [value]
+                for target in targets:
+                    check_reference(object_id, target, ".".join(path))
+        for edge in record["traceability"]["relationships"]:
+            require(edge["source"] == object_id,
+                    f"{object_id}: relationship source must equal owning object ID")
+            check_reference(object_id, edge["target"], f"{edge['relation']} target")
+            path = RELATION_REFERENCE_FIELDS.get(edge["relation"])
+            if path is not None:
+                value = reference_value(record, path)
+                if value is not None:
+                    targets = value if isinstance(value, list) else [value]
+                    require(edge["target"] in targets,
+                            f"{object_id}: {edge['relation']} conflicts with {'.'.join(path)}")
+    return f"closed PALACO registry valid ({len(objects)} objects); not a canonical-status decision"
+
+
+def check_palaco_registry():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    print(f"  ok {validate_palaco_registry(fixture, validator)}")
+    negative_count = 0
+
+    def reject(instance, expected, label):
+        nonlocal negative_count
+        try:
+            validate_palaco_registry(instance, validator)
+        except ConformanceError as error:
+            require(expected in str(error), f"{label}: unexpected error: {error}")
+        else:
+            raise ConformanceError(f"registry negative test accepted: {label}")
+        negative_count += 1
+        print(f"  ok rejected registry {label}")
+
+    for invalid, label in (
+        ({}, "missing envelope"),
+        ({**fixture, "registry_version": "1.0.0"}, "unsupported version"),
+        ({**fixture, "objects": []}, "empty registry"),
+        ({**fixture, "extra": True}, "unknown envelope field"),
+        ({**fixture, "objects": [None]}, "non-object record"),
+    ):
+        reject(invalid, "registry structure", label)
+    invalid = copy.deepcopy(fixture)
+    del invalid["objects"][0]["ownership"]
+    reject(invalid, "registry structure", "missing ownership")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"].append(copy.deepcopy(invalid["objects"][0]))
+    invalid["objects"][-1]["metadata"]["name"] = "Different record with same identity"
+    reject(invalid, "duplicate object ID", "duplicate identity with different content")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"].reverse()
+    validate_palaco_registry(invalid, validator)
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][1]["traceability"]["relationships"][0]["source"] = "REQ-00001"
+    reject(invalid, "relationship source", "foreign edge owner")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][1]["traceability"]["relationships"][0]["target"] = "FE-99999"
+    reject(invalid, "unresolved DEPENDS_ON target", "dangling edge")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][1]["traceability"]["relationships"][0]["target"] = "CAP-00001"
+    reject(invalid, "self reference", "self edge")
+
+    complete = {
+        "registry_version": "0.1.0",
+        "objects": [
+            read_json(PALACO_FIXTURE_DIR / f"{family}-00001.fixture.json")
+            for family in ("FE", "ADR", "SVC", "COM", "REQ")
+        ],
+    }
+    for family in ("CAP", "OBJ", "ARC", "GOV", "REP", "RUN", "RSK", "VER", "EVD", "AUD"):
+        record = copy.deepcopy(complete["objects"][0])
+        record["object_type"] = family
+        record["metadata"]["id"] = f"{family}-00001"
+        if family == "AUD":
+            record["evidence"] = ["EVD-00001"]
+        complete["objects"].append(record)
+    validate_palaco_registry(complete, validator)
+    service = complete["objects"][2]
+    service["risk"] = "RSK-00001"
+    service["approved_by"] = "GOV-00001"
+    service["capability_ref"] = "CAP-00001"
+    service["dependencies"] = ["FE-00001"]
+    service["evidence"] = ["EVD-00001"]
+    service["compliance"] = ["COM-00001"]
+    service["verification"]["verification_ref"] = "VER-00001"
+    service["audit"]["audit_refs"] = ["AUD-00001"]
+    validate_palaco_registry(complete, validator)
+    for path in OBJECT_REFERENCE_FIELDS:
+        invalid = copy.deepcopy(complete)
+        parent = invalid["objects"][2]
+        for field in path[:-1]:
+            parent = parent[field]
+        value = parent[path[-1]]
+        target = value[0] if isinstance(value, list) else value
+        missing = target.rsplit("-", 1)[0] + "-99999"
+        parent[path[-1]] = [missing] if isinstance(value, list) else missing
+        reject(invalid, f"unresolved {'.'.join(path)}", f"dangling {'.'.join(path)}")
+    for field, value in (("dependencies", ["SVC-00001"]), ("compliance", ["SVC-00001"])):
+        invalid = copy.deepcopy(complete)
+        invalid["objects"][2][field] = value
+        reject(invalid, "self reference", f"self {field}")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][1]["traceability"]["upstream"] = ["CAP-00001"]
+    reject(invalid, "self reference", "self upstream")
+    invalid = copy.deepcopy(complete)
+    invalid["objects"][2]["requirement_refs"] = ["CAP-00001"]
+    reject(invalid, "registry structure", "wrong reference family")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][0]["metadata"]["id"] = "CAP-00001"
+    reject(invalid, "registry structure", "object type and ID mismatch")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][1]["dependencies"] = []
+    reject(invalid, "DEPENDS_ON conflicts with dependencies", "edge contradicting empty array")
+    opaque = copy.deepcopy(fixture)
+    opaque["objects"][0]["approval"] = {
+        "status": "Approved", "authority": "GOV-99999", "approval_ref": "AUD-99999"
+    }
+    validate_palaco_registry(opaque, validator)
+
+    edge_cases = (
+        ("IMPLEMENTS", "SVC", "requirement_refs", "REQ"),
+        ("REALIZES", "SVC", "capability_ref", "CAP"),
+        ("DEFINED_BY", "SVC", "architecture_ref", "ARC"),
+        ("APPROVED_BY", "ADR", "approved_by", "GOV"),
+        ("VERIFIED_BY", "COM", "verification.verification_ref", "VER"),
+        ("PROVEN_BY", "VER", "evidence", "EVD"),
+        ("AUDITED_BY", "EVD", "audit.audit_refs", "AUD"),
+        ("DEPENDS_ON", "SVC", "dependencies", "FE"),
+    )
+    for relation, family, field, target_family in edge_cases:
+        instance = copy.deepcopy(complete)
+        record = next(item for item in instance["objects"] if item["object_type"] == family)
+        parent = record
+        for part in field.split(".")[:-1]:
+            parent = parent[part]
+        key = field.split(".")[-1]
+        target = f"{target_family}-00001"
+        parent[key] = [target] if key in ("requirement_refs", "evidence", "audit_refs", "dependencies") else target
+        record["traceability"]["relationships"] = [
+            {"source": record["metadata"]["id"], "relation": relation, "target": target}
+        ]
+        validate_palaco_registry(instance, validator)
+        other = copy.deepcopy(next(item for item in instance["objects"] if item["metadata"]["id"] == target))
+        other["metadata"]["id"] = f"{target_family}-00002"
+        instance["objects"].append(other)
+        record["traceability"]["relationships"][0]["target"] = other["metadata"]["id"]
+        reject(instance, f"{relation} conflicts with {field}", f"contradictory {relation}")
+    return f"PCR-000: closed fixture, complete 15-object snapshot + {negative_count} negative tests"
+
+
+# --------------------------------------------------------------------------
 # Parser regression tests
 # --------------------------------------------------------------------------
 
@@ -694,10 +908,22 @@ CHECKS = (
     ("RIO schema/fixture conformance", check_rio_fixtures),
     ("VisitCard schema/fixture conformance", check_visitcard_fixtures),
     ("PALACO schema/fixture conformance", check_palaco_fixtures),
+    ("PALACO closed registry conformance", check_palaco_registry),
 )
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--registry", type=Path, help="Validate one closed PCR-000 registry snapshot")
+    args = parser.parse_args()
+    if args.registry is not None:
+        try:
+            summary = validate_palaco_registry(read_json(args.registry))
+        except Exception as error:  # fail closed, including unreadable files
+            print(f"FAIL: {type(error).__name__}: {error}")
+            return 1
+        print(f"PASS: {summary}")
+        return 0
     failures = 0
     for name, check in CHECKS:
         print(f"== {name}")
