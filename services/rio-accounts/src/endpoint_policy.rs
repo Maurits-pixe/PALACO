@@ -32,7 +32,8 @@ pub const DEV_CALLBACK: &str = "https://localhost:8088/auth/callback";
 
 const STAGING_REALM: &str = "/realms/rio-synthetic-staging";
 const STAGING_CLIENT: &str = "rio-bff-staging";
-const ENDPOINT_DOCUMENT_LIMIT: usize = 4096;
+/// Maximum endpoint-component JSON bytes, including any surrounding whitespace.
+pub const ENDPOINT_DOCUMENT_LIMIT: usize = 4096;
 
 // No Debug or Deserialize implementation: endpoint values are not diagnostics,
 // and callers cannot bypass constructors by filling fields or decoding this set.
