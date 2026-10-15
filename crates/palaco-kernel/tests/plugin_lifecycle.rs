@@ -9,7 +9,7 @@ use palaco_runtime::{
     plugin::{
         CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginError,
         PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration,
-        PluginState,
+        PluginSnapshot, PluginState, ShutdownScope,
     },
 };
 
@@ -135,6 +135,112 @@ fn allow(_: &PluginDescriptor, _: PluginAction) -> Result<RuntimePlan, String> {
 }
 
 #[test]
+fn shutdown_preview_is_read_only_including_queue_loss_sequence_and_authorization() -> TestResult {
+    for capacity in [0, 2, 64] {
+        let logs = [Log::default(), Log::default()];
+        let mut managers = Vec::new();
+        for log in &logs {
+            managers.push(PluginManager::with_event_capacity(
+                vec![
+                    registration("a", &[], log, Behavior::default())?,
+                    registration("c", &["a"], log, Behavior::default())?,
+                    registration("b", &["a"], log, Behavior::default())?,
+                ],
+                capacity,
+            )?);
+        }
+        let a = PluginId::new("a")?;
+        let missing = PluginId::new("missing")?;
+        for phase in [
+            PluginState::Registered,
+            PluginState::Running,
+            PluginState::Stopped,
+        ] {
+            if phase != PluginState::Registered {
+                for (manager, log) in managers.iter_mut().zip(&logs) {
+                    if phase == PluginState::Running {
+                        manager.start_all(&mut |descriptor: &PluginDescriptor, action| {
+                            log.borrow_mut().push(format!("authorize:{action:?}"));
+                            allow(descriptor, action)
+                        })?;
+                    } else {
+                        manager.stop_all()?;
+                    }
+                }
+            }
+            let manager = &managers[0];
+            let statuses = manager
+                .order()
+                .iter()
+                .map(|id| manager.status(id).cloned())
+                .collect::<Vec<_>>();
+            let before_log = logs[0].borrow().clone();
+            let before_loss = manager.lost_events();
+            for _ in 0..3 {
+                for scope in [
+                    ShutdownScope::Single(a.clone()),
+                    ShutdownScope::WithDependents(a.clone()),
+                    ShutdownScope::All,
+                ] {
+                    let preview = manager.plan_shutdown(scope)?;
+                    let root = preview.last().expect("root");
+                    assert_eq!(root.id, a);
+                    assert_eq!(root.snapshot.state, phase);
+                    assert_eq!(root.snapshot.cleanup_pending, phase == PluginState::Running);
+                    assert_eq!(
+                        root.blockers
+                            .iter()
+                            .map(PluginId::as_str)
+                            .collect::<Vec<_>>(),
+                        if phase == PluginState::Running {
+                            vec!["b", "c"]
+                        } else {
+                            vec![]
+                        }
+                    );
+                }
+                for scope in [
+                    ShutdownScope::Single(missing.clone()),
+                    ShutdownScope::WithDependents(missing.clone()),
+                ] {
+                    assert_eq!(
+                        manager.plan_shutdown(scope),
+                        Err(PluginError::UnknownPlugin(missing.clone()))
+                    );
+                }
+            }
+            assert_eq!(
+                manager
+                    .order()
+                    .iter()
+                    .map(|id| manager.status(id).cloned())
+                    .collect::<Vec<_>>(),
+                statuses
+            );
+            assert_eq!(*logs[0].borrow(), before_log);
+            assert_eq!(manager.lost_events(), before_loss);
+            assert_eq!(*logs[0].borrow(), *logs[1].borrow());
+            let observed = managers[0].drain_events().collect::<Vec<_>>();
+            let control = managers[1].drain_events().collect::<Vec<_>>();
+            assert_eq!(observed, control);
+            assert_eq!(managers[0].lost_events(), managers[1].lost_events());
+        }
+    }
+    let empty = PluginManager::new(vec![])?;
+    assert!(empty.plan_shutdown(ShutdownScope::All)?.is_empty());
+    for scope in [
+        ShutdownScope::Single(PluginId::new("missing")?),
+        ShutdownScope::WithDependents(PluginId::new("missing")?),
+    ] {
+        assert!(matches!(
+            empty.plan_shutdown(scope),
+            Err(PluginError::UnknownPlugin(_))
+        ));
+    }
+    Ok(())
+}
+
+#[test]
 fn scoped_stop_closure_is_deterministic_and_excludes_prerequisites_and_other_branches() -> TestResult
 {
     for diamond in [false, true] {
@@ -196,8 +302,46 @@ fn scoped_stop_closure_is_deterministic_and_excludes_prerequisites_and_other_bra
                 Err(PluginError::Authorization(..))
             ));
             manager.drain_events().for_each(drop);
+            let preview = manager.plan_shutdown(ShutdownScope::WithDependents(root.clone()))?;
+            assert_eq!(
+                preview
+                    .iter()
+                    .map(|step| step.id.as_str())
+                    .collect::<Vec<_>>(),
+                ["d", "c", "b", "root"]
+            );
+            let fleet = manager.plan_shutdown(ShutdownScope::All)?;
+            assert_eq!(
+                fleet
+                    .iter()
+                    .map(|step| step.id.as_str())
+                    .collect::<Vec<_>>(),
+                ["unrelated", "d", "shared", "c", "b", "root", "prerequisite"]
+            );
+            assert_eq!(
+                fleet.iter().map(|step| &step.id).collect::<Vec<_>>(),
+                manager.order().iter().rev().collect::<Vec<_>>()
+            );
+            let single = manager.plan_shutdown(ShutdownScope::Single(root.clone()))?;
+            assert_eq!(single.len(), 1);
+            assert_eq!(
+                single[0]
+                    .blockers
+                    .iter()
+                    .map(PluginId::as_str)
+                    .collect::<Vec<_>>(),
+                if diamond { vec!["b", "c"] } else { vec!["b"] }
+            );
             manager.stop_with_dependents(&root)?;
             assert_eq!(*log.borrow(), ["d:Stop", "c:Stop", "b:Stop", "root:Stop"]);
+            assert_eq!(
+                *log.borrow(),
+                preview
+                    .iter()
+                    .filter(|step| step.snapshot.cleanup_pending)
+                    .map(|step| format!("{}:Stop", step.id.as_str()))
+                    .collect::<Vec<_>>()
+            );
             let events = manager.drain_events().collect::<Vec<_>>();
             assert_eq!(
                 events
@@ -265,6 +409,25 @@ fn scoped_stop_traverses_registered_and_already_cleaned_intermediaries() -> Test
         manager.initialize(&c, &mut allow)?;
         log.borrow_mut().clear();
         manager.drain_events().for_each(drop);
+        let preview = manager.plan_shutdown(ShutdownScope::WithDependents(a.clone()))?;
+        assert_eq!(
+            preview
+                .iter()
+                .map(|step| step.id.as_str())
+                .collect::<Vec<_>>(),
+            ["c", "b", "a"]
+        );
+        assert_eq!(preview[1].blockers, std::slice::from_ref(&c));
+        assert!(!preview[1].snapshot.cleanup_pending);
+        assert_eq!(
+            preview[1].snapshot.state,
+            if cleaned {
+                PluginState::Stopped
+            } else {
+                PluginState::Registered
+            }
+        );
+        assert!(!preview[2].snapshot.cleanup_pending);
         manager.stop_with_dependents(&a)?;
         assert_eq!(*log.borrow(), ["c:Stop"]);
         assert_eq!(manager.status(&a), root.as_ref());
@@ -347,10 +510,46 @@ fn scoped_stop_continues_independent_branches_and_retries_failed_cleanup() -> Te
         );
         *cleanup.borrow_mut() = PluginOutcome::Success;
         log.borrow_mut().clear();
+        let retry = manager.plan_shutdown(ShutdownScope::WithDependents(a.clone()))?;
+        assert_eq!(
+            retry
+                .iter()
+                .map(|step| step.id.as_str())
+                .collect::<Vec<_>>(),
+            ["f", "e", "d", "c", "b-independent", "b", "a"]
+        );
+        assert_eq!(retry[2].blockers, std::slice::from_ref(&e));
+        assert_eq!(retry[5].blockers, std::slice::from_ref(&c));
+        assert_eq!(
+            retry[6]
+                .blockers
+                .iter()
+                .map(PluginId::as_str)
+                .collect::<Vec<_>>(),
+            ["b", "d"]
+        );
+        for step in [&retry[1], &retry[3]] {
+            assert!(
+                step.snapshot.failed
+                    && step.snapshot.cleanup_failed
+                    && step.snapshot.cleanup_pending
+            );
+            assert_eq!(step.snapshot.state, PluginState::Failed);
+        }
+        assert!(!format!("{retry:?}").contains("private-cleanup-secret"));
+        assert!(!format!("{retry:?}").contains("retry cleanup"));
         manager.stop_with_dependents(&a)?;
         assert_eq!(
             *log.borrow(),
             ["e:Stop", "d:Stop", "c:Stop", "b:Stop", "a:Stop"]
+        );
+        assert_eq!(
+            *log.borrow(),
+            retry
+                .iter()
+                .filter(|step| step.snapshot.cleanup_pending)
+                .map(|step| format!("{}:Stop", step.id.as_str()))
+                .collect::<Vec<_>>()
         );
         for (id, failure) in [&c, &e].into_iter().zip(first) {
             let status = manager.status(id).expect("status");
@@ -358,6 +557,12 @@ fn scoped_stop_continues_independent_branches_and_retries_failed_cleanup() -> Te
             assert_eq!(status.state, PluginState::Failed);
             assert!(!status.cleanup_pending);
             assert!(status.cleanup_error.is_none());
+            let preview = manager.plan_shutdown(ShutdownScope::Single(id.clone()))?;
+            assert_eq!(preview[0].snapshot, PluginSnapshot::from(status));
+            assert!(preview[0].snapshot.failed);
+            assert!(!preview[0].snapshot.cleanup_failed);
+            assert!(!preview[0].snapshot.cleanup_pending);
+            assert!(preview[0].blockers.is_empty());
         }
         assert_eq!(manager.drain_events().count(), 5);
         let before = manager

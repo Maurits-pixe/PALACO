@@ -17,7 +17,7 @@ use palaco_runtime::{
     plugin::{
         CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginError,
         PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome, PluginRegistration,
-        PluginState,
+        PluginState, ShutdownScope,
         process::{ProcessPlugin, ProcessPluginConfig},
     },
 };
@@ -28,24 +28,29 @@ const TIMEOUT: Duration = Duration::from_millis(500);
 struct TrackedProcess {
     plugin: ProcessPlugin,
     pid: Rc<Cell<Option<u32>>>,
+    calls: Rc<Cell<usize>>,
 }
 
 impl Plugin for TrackedProcess {
     fn initialize(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.calls.set(self.calls.get() + 1);
         self.plugin.initialize(context)?;
         self.pid.set(self.plugin.child_id());
         Ok(())
     }
 
     fn start(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.calls.set(self.calls.get() + 1);
         self.plugin.start(context)
     }
 
     fn readiness(&mut self, context: &PluginContext<'_>) -> Result<bool, String> {
+        self.calls.set(self.calls.get() + 1);
         self.plugin.readiness(context)
     }
 
     fn stop(&mut self, context: &PluginContext<'_>) -> Result<(), String> {
+        self.calls.set(self.calls.get() + 1);
         self.plugin.stop(context)
     }
 }
@@ -99,6 +104,58 @@ fn assert_reaped(pid: u32) {
 }
 
 #[test]
+fn shutdown_preview_never_spawns_or_calls_a_running_process() -> TestResult {
+    let descriptor = descriptor()?;
+    let id = descriptor.id.clone();
+    let pid = Rc::new(Cell::new(None));
+    let calls = Rc::new(Cell::new(0));
+    let mut manager = PluginManager::new(vec![PluginRegistration {
+        descriptor,
+        plugin: Box::new(TrackedProcess {
+            // An unexpected readiness probe after startup would time out.
+            plugin: process("probe-hang")?,
+            pid: pid.clone(),
+            calls: calls.clone(),
+        }),
+    }])?;
+    for running in [false, true] {
+        if running {
+            manager.start_all(&mut allow)?;
+        }
+        let before_calls = calls.get();
+        let before_status = manager.status(&id).cloned();
+        for _ in 0..3 {
+            for scope in [
+                ShutdownScope::Single(id.clone()),
+                ShutdownScope::WithDependents(id.clone()),
+                ShutdownScope::All,
+            ] {
+                let preview = manager.plan_shutdown(scope)?;
+                assert_eq!(preview.len(), 1);
+                assert_eq!(preview[0].snapshot.cleanup_pending, running);
+                assert_eq!(
+                    preview[0].snapshot.state,
+                    if running {
+                        PluginState::Running
+                    } else {
+                        PluginState::Registered
+                    }
+                );
+                assert!(preview[0].blockers.is_empty());
+            }
+        }
+        assert_eq!(calls.get(), before_calls);
+        assert_eq!(manager.status(&id), before_status.as_ref());
+        assert_eq!(pid.get().is_some(), running);
+    }
+    let pid = pid.get().expect("spawned child");
+    manager.stop_all()?;
+    assert_eq!(calls.get(), 4);
+    assert_reaped(pid);
+    Ok(())
+}
+
+#[test]
 fn scoped_process_shutdown_reaps_descendants_and_retains_unrelated_child() -> TestResult {
     for mode in ["healthy", "stop-error", "stop-hang", "probe-error"] {
         let ids = ["service", "worker", "leaf", "independent"]
@@ -124,6 +181,7 @@ fn scoped_process_shutdown_reaps_descendants_and_retains_unrelated_child() -> Te
                 plugin: Box::new(TrackedProcess {
                     plugin: process(mode)?,
                     pid: pids[index].clone(),
+                    calls: Rc::default(),
                 }),
             });
         }
@@ -207,6 +265,7 @@ fn selective_process_stop_reaps_only_target_and_retains_dependency_until_cleanup
                 plugin: Box::new(TrackedProcess {
                     plugin: process(mode)?,
                     pid: pids[index].clone(),
+                    calls: Rc::default(),
                 }),
             });
         }
@@ -367,6 +426,7 @@ fn ongoing_process_probe_error_dead_child_and_timeout_are_terminal_and_reaped() 
             plugin: Box::new(TrackedProcess {
                 plugin: process(mode)?,
                 pid: pid.clone(),
+                calls: Rc::default(),
             }),
         }])?;
         manager.start_all(&mut allow)?;

@@ -84,7 +84,7 @@ Run the three-plugin trusted lifecycle demonstration with
 `cargo run -p palaco-kernel --example plugin_lifecycle`.
 It starts, explicitly probes health, pauses, resumes, probes again, selectively stops
 service and its worker via an explicit cascade, proves the independent plugin remains
-ready, unconditionally attempts fleet cleanup even on errors, and drains
+ready, prints a scoped shutdown preview, unconditionally attempts fleet cleanup even on errors, and drains
 redacted event outcomes. Its synthetic authorizer is **not production authentication**.
 
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
@@ -123,6 +123,23 @@ callback error (not a dependency-blocking error).
 Retry failed cleanup explicitly; dependents must finish cleanup before dependencies
 are stopped. Keep the manager alive until
 cleanup succeeds. No unload API or automatic initialization/start retry is provided.
+
+`plan_shutdown(&self, ShutdownScope)` provides a read-only structured preview.
+`Single(PluginId)` selects one plugin, `WithDependents(PluginId)` selects exactly
+the same immutable graph closure as `stop_with_dependents` (including inactive
+intermediaries), and `All` selects the fleet. Unknown roots return `UnknownPlugin`;
+an empty fleet returns an empty plan. Each `ShutdownStep` contains its bounded ID,
+redacted `PluginSnapshot` (state, health, pending cleanup and failure flags), and
+all direct cleanup blocker IDs sorted lexicographically, even outside the scope.
+No raw errors, configuration, or evidence are copied. Steps include no-op nodes
+and follow deterministic reverse-topological execution candidate order.
+Blockers describe the **current snapshot**, not predicted future execution: a
+dependency can list a dependent appearing earlier in the same plan, which may
+unblock it after successful cleanup. Preview performs no authorization, callbacks,
+process spawning, events, queue/sequence/loss changes, or status changes.
+It is not an executable token, authorization, reservation, or guarantee of callback
+success. This snapshot can become stale (TOCTOU); normal stop methods re-evaluate
+live state, and there is no cached-plan executor.
 
 ### Bounded lifecycle observations
 

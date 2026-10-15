@@ -208,6 +208,27 @@ impl From<&PluginStatus> for PluginSnapshot {
     }
 }
 
+/// Graph selection for a read-only shutdown preview.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShutdownScope {
+    Single(PluginId),
+    /// Root and all transitive dependents, including inactive intermediaries.
+    WithDependents(PluginId),
+    All,
+}
+
+/// One shutdown candidate, including candidates with no pending cleanup.
+/// Contains bounded IDs and redacted status, never error text or evidence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShutdownStep {
+    pub id: PluginId,
+    pub snapshot: PluginSnapshot,
+    /// All direct dependents currently pending cleanup, lexicographically sorted,
+    /// even outside the scope. Not predicted blockers at execution time: an earlier
+    /// step may successfully clean up a dependent and unblock this candidate.
+    pub blockers: Vec<PluginId>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PluginEventKind {
     Registered,
@@ -366,6 +387,36 @@ impl PluginManager {
 
     pub fn status(&self, id: &PluginId) -> Option<&PluginStatus> {
         self.entries.get(id).map(|e| &e.status)
+    }
+
+    /// Previews every selected node in reverse-topological execution candidate
+    /// order, including no-ops. Unknown roots return `UnknownPlugin`.
+    /// Reads only the current graph/status: no authorization, callbacks, process
+    /// spawning, events, or state changes. This is not an executable token,
+    /// authorization, reservation, or guarantee of callback success. Normal stop
+    /// methods re-evaluate live state; blockers are current, not simulated.
+    pub fn plan_shutdown(&self, scope: ShutdownScope) -> Result<Vec<ShutdownStep>, PluginError> {
+        let selected = match scope {
+            ShutdownScope::Single(id) => {
+                if !self.entries.contains_key(&id) {
+                    return Err(PluginError::UnknownPlugin(id));
+                }
+                BTreeSet::from([id])
+            }
+            ShutdownScope::WithDependents(id) => self.dependent_closure(&id)?,
+            ShutdownScope::All => self.entries.keys().cloned().collect(),
+        };
+        Ok(self
+            .order
+            .iter()
+            .rev()
+            .filter(|id| selected.contains(*id))
+            .map(|id| ShutdownStep {
+                id: id.clone(),
+                snapshot: PluginSnapshot::from(&self.entries[id].status),
+                blockers: self.cleanup_blockers(id).cloned().collect(),
+            })
+            .collect())
     }
 
     /// Initializes once. A callback failure marks the plugin Failed and leaves
@@ -579,21 +630,7 @@ impl PluginManager {
     /// Independent branches continue after errors/panics; the first callback error
     /// is returned. Failed cleanup retains dependencies until explicit retry.
     pub fn stop_with_dependents(&mut self, id: &PluginId) -> Result<(), PluginError> {
-        if !self.entries.contains_key(id) {
-            return Err(PluginError::UnknownPlugin(id.clone()));
-        }
-        let mut closure = BTreeSet::from([id.clone()]);
-        for candidate in &self.order {
-            if self.entries[candidate]
-                .registration
-                .descriptor
-                .dependencies
-                .iter()
-                .any(|dependency| closure.contains(dependency))
-            {
-                closure.insert(candidate.clone());
-            }
-        }
+        let closure = self.dependent_closure(id)?;
         let mut first_error = None;
         for id in self.order.clone().into_iter().rev() {
             if !closure.contains(&id)
@@ -609,8 +646,31 @@ impl PluginManager {
         first_error.map_or(Ok(()), Err)
     }
 
-    fn cleanup_blocker(&self, id: &PluginId) -> Option<&PluginId> {
-        self.entries.iter().find_map(|(dependent, entry)| {
+    fn dependent_closure(&self, id: &PluginId) -> Result<BTreeSet<PluginId>, PluginError> {
+        if !self.entries.contains_key(id) {
+            return Err(PluginError::UnknownPlugin(id.clone()));
+        }
+        let mut closure = BTreeSet::from([id.clone()]);
+        for candidate in &self.order {
+            if self.entries[candidate]
+                .registration
+                .descriptor
+                .dependencies
+                .iter()
+                .any(|dependency| closure.contains(dependency))
+            {
+                closure.insert(candidate.clone());
+            }
+        }
+        Ok(closure)
+    }
+
+    fn cleanup_blocker<'a>(&'a self, id: &'a PluginId) -> Option<&'a PluginId> {
+        self.cleanup_blockers(id).next()
+    }
+
+    fn cleanup_blockers<'a>(&'a self, id: &'a PluginId) -> impl Iterator<Item = &'a PluginId> {
+        self.entries.iter().filter_map(move |(dependent, entry)| {
             (entry.status.cleanup_pending
                 && entry.registration.descriptor.dependencies.contains(id))
             .then_some(dependent)

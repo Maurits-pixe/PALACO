@@ -8,7 +8,7 @@ use palaco_runtime::{
     RuntimePlan,
     plugin::{
         CONTRACT_VERSION, Plugin, PluginAction, PluginContext, PluginDescriptor, PluginId,
-        PluginManager, PluginRegistration,
+        PluginManager, PluginRegistration, ShutdownScope,
     },
 };
 
@@ -95,7 +95,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         })
         // Explicit opt-in cascade stops worker before service, not the whole fleet.
         // In contrast, stop(&service) alone would reject while worker owns resources.
-        .and_then(|()| manager.stop_with_dependents(&service))
+        .and_then(|()| {
+            for step in manager.plan_shutdown(ShutdownScope::WithDependents(service.clone()))? {
+                println!(
+                    "shutdown {}: current blockers {:?}",
+                    step.id.as_str(),
+                    step.blockers
+                );
+            }
+            manager.stop_with_dependents(&service)
+        })
         .and_then(|()| {
             let health = manager.check_health(&independent, &mut synthetic_authorizer)?;
             println!("independent retained after scoped shutdown: {health:?}");
