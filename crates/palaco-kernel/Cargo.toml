@@ -8,6 +8,16 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+# Explicit opt-in; the protocol fault-injection helper is not a production binary.
+plugin-process-tests = []
+
+[[bin]]
+name = "plugin-process-fixture"
+path = "tests/support/plugin_process_fixture.rs"
+test = false
+required-features = ["plugin-process-tests"]
+
 [dependencies]
 palaco-foundation = { path = "../palaco-foundation" }
 palaco-runtime = { path = "../palaco-runtime" }

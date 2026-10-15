@@ -1,11 +1,11 @@
-//! Trusted, statically linked, synchronous plugins. This is not a sandbox or an
-//! authentication system. There are no hard timeouts, cancellation, hot reload,
-//! async workers, or event engine. Unwinding callback panics are caught; aborting
-//! panics and plugin-created tasks/resources are not isolated. Hosts must keep
-//! the manager alive and retry failed cleanup before releasing plugin resources.
+//! Synchronous trusted plugins with host authorization and bounded pull events.
+//! In-process callbacks have no timeout or sandbox. See [`process`] for optional
+//! child-process crash isolation (also not an OS sandbox).
+
+pub mod process;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     error::Error,
     fmt,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -17,6 +17,9 @@ use crate::RuntimePlan;
 
 /// The only supported callback contract version.
 pub const CONTRACT_VERSION: u32 = 1;
+
+/// Bounds evidence metadata copied into lifecycle observations.
+pub const MAX_PLUGIN_EVIDENCE_BYTES: usize = 1024;
 
 /// Stable ASCII identity: 1–64 lowercase letters, digits, `-`, `_`, or `.`;
 /// the first character must be a letter.
@@ -67,6 +70,13 @@ pub trait Plugin {
     fn initialize(&mut self, context: &PluginContext<'_>) -> Result<(), String>;
     fn start(&mut self, context: &PluginContext<'_>) -> Result<(), String>;
     fn readiness(&mut self, context: &PluginContext<'_>) -> Result<bool, String>;
+    /// Quiesce business work while retaining resources. Unsupported by default.
+    fn pause(&mut self, _context: &PluginContext<'_>) -> Result<(), String> {
+        Err("pause unsupported".into())
+    }
+    fn resume(&mut self, _context: &PluginContext<'_>) -> Result<(), String> {
+        Err("resume unsupported".into())
+    }
     fn stop(&mut self, context: &PluginContext<'_>) -> Result<(), String>;
 }
 
@@ -80,7 +90,10 @@ pub struct PluginRegistration {
 pub enum PluginState {
     Registered,
     Initialized,
+    /// Start/resume succeeded, but readiness has not yet been authorized/proven.
+    Starting,
     Running,
+    Paused,
     Stopped,
     Failed,
 }
@@ -98,6 +111,8 @@ pub enum PluginAction {
     Initialize,
     Start,
     Readiness,
+    Pause,
+    Resume,
     Stop,
 }
 
@@ -114,6 +129,7 @@ pub enum PluginError {
     UnknownPlugin(PluginId),
     InvalidTransition(PluginId, PluginState),
     DependencyNotRunning(PluginId),
+    DependencyInUse(PluginId),
     Authorization(PluginId, String),
     Callback(PluginId, PluginFailure),
 }
@@ -137,7 +153,8 @@ pub struct PluginStatus {
     pub cleanup_pending: bool,
 }
 
-/// Called afresh immediately before each initialization and startup callback.
+/// Called afresh immediately before every operational callback, including
+/// readiness, pause, and resume. Cleanup deliberately bypasses authorization.
 /// The host must evaluate its *current* plan for this exact plugin and action;
 /// neither metadata nor previously returned plans authenticate a plugin.
 pub trait PluginAuthorizer {
@@ -166,6 +183,58 @@ struct Entry {
     status: PluginStatus,
 }
 
+/// Redacted status: never includes plugin/authorizer error text or configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PluginSnapshot {
+    pub state: PluginState,
+    pub health: PluginHealth,
+    pub cleanup_pending: bool,
+    pub failed: bool,
+    pub cleanup_failed: bool,
+}
+
+impl From<&PluginStatus> for PluginSnapshot {
+    fn from(status: &PluginStatus) -> Self {
+        Self {
+            state: status.state,
+            health: status.health,
+            cleanup_pending: status.cleanup_pending,
+            failed: status.failure.is_some(),
+            cleanup_failed: status.cleanup_error.is_some(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginEventKind {
+    Registered,
+    Callback(PluginAction),
+    AuthorizationRejected(PluginAction),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PluginOutcome {
+    Success,
+    NotReady,
+    Error,
+    Panicked,
+    Rejected,
+}
+
+/// Manager-local observations, not authenticated or persistent audit records.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PluginEvent {
+    pub sequence: u64,
+    pub id: PluginId,
+    pub evidence: EvidenceRef,
+    pub kind: PluginEventKind,
+    pub previous: PluginSnapshot,
+    pub current: PluginSnapshot,
+    pub outcome: PluginOutcome,
+}
+
+pub const DEFAULT_EVENT_CAPACITY: usize = 256;
+
 /// Exclusive synchronous lifecycle ownership. There is deliberately no unload
 /// operation or public state setter, and no automatic initialization/start retry.
 /// Registration is immutable after construction; shutdown is only via
@@ -173,12 +242,30 @@ struct Entry {
 pub struct PluginManager {
     entries: BTreeMap<PluginId, Entry>,
     order: Vec<PluginId>,
+    events: VecDeque<PluginEvent>,
+    event_capacity: usize,
+    sequence: u64,
+    lost_events: u64,
 }
 
 impl PluginManager {
     /// Validates the entire graph before accepting registrations or invoking any
     /// callbacks. Ready DAG nodes are ordered lexicographically by ID.
-    pub fn new(mut registrations: Vec<PluginRegistration>) -> Result<Self, PluginError> {
+    pub fn new(registrations: Vec<PluginRegistration>) -> Result<Self, PluginError> {
+        Self::with_event_capacity(registrations, DEFAULT_EVENT_CAPACITY)
+    }
+
+    /// Drop the oldest event on overflow; zero capacity drops every event.
+    /// The capacity is limited to 65,536. Loss is cumulative across drains.
+    pub fn with_event_capacity(
+        mut registrations: Vec<PluginRegistration>,
+        event_capacity: usize,
+    ) -> Result<Self, PluginError> {
+        if event_capacity > 65_536 {
+            return Err(PluginError::InvalidDescriptor(
+                "event capacity too large".into(),
+            ));
+        }
         registrations.sort_by(|a, b| a.descriptor.id.cmp(&b.descriptor.id));
         let mut entries = BTreeMap::new();
         for mut registration in registrations {
@@ -187,11 +274,12 @@ impl PluginManager {
             let unique: BTreeSet<_> = descriptor.dependencies.iter().collect();
             if descriptor.contract_version != CONTRACT_VERSION
                 || descriptor.evidence.validate().is_err()
+                || descriptor.evidence.as_str().len() > MAX_PLUGIN_EVIDENCE_BYTES
                 || unique.len() != descriptor.dependencies.len()
                 || entries.contains_key(&descriptor.id)
             {
                 return Err(PluginError::InvalidDescriptor(format!(
-                    "duplicate ID/dependency, unsupported contract, or invalid evidence: {}",
+                    "duplicate ID/dependency, unsupported contract, or invalid/oversized evidence: {}",
                     descriptor.id.as_str()
                 )));
             }
@@ -237,7 +325,32 @@ impl PluginManager {
             remaining.remove(&next);
             order.push(next);
         }
-        Ok(Self { entries, order })
+        let mut manager = Self {
+            entries,
+            order,
+            events: VecDeque::new(),
+            event_capacity,
+            sequence: 0,
+            lost_events: 0,
+        };
+        for id in manager.order.clone() {
+            let snapshot = PluginSnapshot::from(&manager.entries[&id].status);
+            manager.record(
+                &id,
+                PluginEventKind::Registered,
+                snapshot,
+                PluginOutcome::Success,
+            );
+        }
+        Ok(manager)
+    }
+
+    pub fn drain_events(&mut self) -> impl Iterator<Item = PluginEvent> + '_ {
+        self.events.drain(..)
+    }
+
+    pub fn lost_events(&self) -> u64 {
+        self.lost_events
     }
 
     pub fn order(&self) -> &[PluginId] {
@@ -264,8 +377,8 @@ impl PluginManager {
         self.invoke(id, PluginAction::Initialize)
     }
 
-    /// Startup includes a synchronous readiness check under the fresh startup
-    /// authorization. Running means that check succeeded, not continuous health.
+    /// Startup includes a separately authorized synchronous readiness check.
+    /// Running means that check succeeded, not continuous health.
     /// Callback failure leaves cleanup pending until `stop_all` is called.
     pub fn start(
         &mut self,
@@ -280,6 +393,48 @@ impl PluginManager {
         }
         self.authorize(id, PluginAction::Start, authorizer)?;
         self.invoke(id, PluginAction::Start)?;
+        self.authorize(id, PluginAction::Readiness, authorizer)?;
+        self.invoke(id, PluginAction::Readiness)
+    }
+
+    /// Pause dependents before dependencies. Paused dependents retain resources
+    /// but promise no active business work; they still block dependency shutdown.
+    /// Failed dependents with pending cleanup block both pause and shutdown.
+    pub fn pause(
+        &mut self,
+        id: &PluginId,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<(), PluginError> {
+        self.require_state(id, PluginState::Running)?;
+        if let Some((dependent, _)) = self.entries.iter().find(|(_, entry)| {
+            entry.registration.descriptor.dependencies.contains(id)
+                && (matches!(
+                    entry.status.state,
+                    PluginState::Running | PluginState::Starting
+                ) || (entry.status.state == PluginState::Failed
+                    && entry.status.cleanup_pending))
+        }) {
+            return Err(PluginError::DependencyInUse(dependent.clone()));
+        }
+        self.authorize(id, PluginAction::Pause, authorizer)?;
+        self.invoke(id, PluginAction::Pause)
+    }
+
+    /// Resume dependencies first. Both resume and readiness need fresh authority.
+    pub fn resume(
+        &mut self,
+        id: &PluginId,
+        authorizer: &mut impl PluginAuthorizer,
+    ) -> Result<(), PluginError> {
+        self.require_state(id, PluginState::Paused)?;
+        for dependency in &self.entries[id].registration.descriptor.dependencies {
+            if self.entries[dependency].status.state != PluginState::Running {
+                return Err(PluginError::DependencyNotRunning(dependency.clone()));
+            }
+        }
+        self.authorize(id, PluginAction::Resume, authorizer)?;
+        self.invoke(id, PluginAction::Resume)?;
+        self.authorize(id, PluginAction::Readiness, authorizer)?;
         self.invoke(id, PluginAction::Readiness)
     }
 
@@ -339,7 +494,7 @@ impl PluginManager {
     }
 
     fn authorize(
-        &self,
+        &mut self,
         id: &PluginId,
         action: PluginAction,
         authorizer: &mut impl PluginAuthorizer,
@@ -353,11 +508,21 @@ impl PluginManager {
             Ok(())
         }))
         .unwrap_or_else(|_| Err("authorizer panicked".into()));
-        result.map_err(|message| PluginError::Authorization(id.clone(), message))
+        result.map_err(|message| {
+            let snapshot = PluginSnapshot::from(&self.entries[id].status);
+            self.record(
+                id,
+                PluginEventKind::AuthorizationRejected(action),
+                snapshot,
+                PluginOutcome::Rejected,
+            );
+            PluginError::Authorization(id.clone(), message)
+        })
     }
 
     fn invoke(&mut self, id: &PluginId, action: PluginAction) -> Result<(), PluginError> {
         let entry = self.entries.get_mut(id).expect("validated plugin ID");
+        let previous = PluginSnapshot::from(&entry.status);
         entry.status.cleanup_pending = true;
         let context = PluginContext {
             id: &entry.registration.descriptor.id,
@@ -368,6 +533,8 @@ impl PluginManager {
             PluginAction::Initialize => plugin.initialize(&context).map(|()| true),
             PluginAction::Start => plugin.start(&context).map(|()| true),
             PluginAction::Readiness => plugin.readiness(&context),
+            PluginAction::Pause => plugin.pause(&context).map(|()| true),
+            PluginAction::Resume => plugin.resume(&context).map(|()| true),
             PluginAction::Stop => plugin.stop(&context).map(|()| true),
         }));
         let not_ready = matches!(result, Ok(Ok(false)));
@@ -375,7 +542,16 @@ impl PluginManager {
             Ok(Ok(true)) => {
                 match action {
                     PluginAction::Initialize => entry.status.state = PluginState::Initialized,
-                    PluginAction::Start => {}
+                    PluginAction::Start | PluginAction::Resume => {
+                        // A successful resume may already have activated work.
+                        // Track active work even if readiness authorization is denied.
+                        entry.status.state = PluginState::Starting;
+                        entry.status.health = PluginHealth::Unknown;
+                    }
+                    PluginAction::Pause => {
+                        entry.status.state = PluginState::Paused;
+                        entry.status.health = PluginHealth::Unknown;
+                    }
                     PluginAction::Readiness => {
                         entry.status.state = PluginState::Running;
                         entry.status.health = PluginHealth::Ready;
@@ -389,6 +565,12 @@ impl PluginManager {
                         }
                     }
                 }
+                self.record(
+                    id,
+                    PluginEventKind::Callback(action),
+                    previous,
+                    PluginOutcome::Success,
+                );
                 return Ok(());
             }
             Ok(Ok(false)) => PluginFailure {
@@ -419,7 +601,45 @@ impl PluginManager {
         if entry.status.failure.is_none() {
             entry.status.failure = Some(failure.clone());
         }
+        let outcome = if failure.panicked {
+            PluginOutcome::Panicked
+        } else if not_ready {
+            PluginOutcome::NotReady
+        } else {
+            PluginOutcome::Error
+        };
+        self.record(id, PluginEventKind::Callback(action), previous, outcome);
         Err(PluginError::Callback(id.clone(), failure))
+    }
+
+    fn record(
+        &mut self,
+        id: &PluginId,
+        kind: PluginEventKind,
+        previous: PluginSnapshot,
+        outcome: PluginOutcome,
+    ) {
+        self.sequence = self
+            .sequence
+            .checked_add(1)
+            .expect("event sequence exhausted");
+        if self.events.len() == self.event_capacity {
+            self.events.pop_front();
+            self.lost_events = self.lost_events.saturating_add(1);
+        }
+        if self.event_capacity == 0 {
+            return;
+        }
+        let entry = &self.entries[id];
+        self.events.push_back(PluginEvent {
+            sequence: self.sequence,
+            id: id.clone(),
+            evidence: entry.registration.descriptor.evidence.clone(),
+            kind,
+            previous,
+            current: PluginSnapshot::from(&entry.status),
+            outcome,
+        });
     }
 }
 
@@ -479,6 +699,10 @@ mod tests {
         let mut bad = registration("bad", &[]);
         bad.descriptor.contract_version = CONTRACT_VERSION + 1;
         assert!(PluginManager::new(vec![registration("good", &[]), bad]).is_err());
+        let mut bad = registration("bad", &[]);
+        bad.descriptor.evidence =
+            EvidenceRef::new("e".repeat(MAX_PLUGIN_EVIDENCE_BYTES + 1)).expect("nonempty evidence");
+        assert!(PluginManager::new(vec![bad]).is_err());
     }
 
     #[test]

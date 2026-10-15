@@ -12,10 +12,10 @@ Thank you for your interest in contributing to PALACO! This document outlines th
 
 For Vercel preview deployment setup and URLs for PALACO's web apps, see [Web preview deployments](docs/operations/Preview-Deployments.md).
 
-## Trusted plugin lifecycle MVP
+## Trusted plugin lifecycle
 
-`palaco_runtime::plugin` supports trusted, statically linked, in-process plugins
-with synchronous `initialize`, `start`, `readiness`, and retry-safe `stop` callbacks.
+`palaco_runtime::plugin` supports trusted synchronous plugins with `initialize`,
+`start`, `readiness`, `pause`, `resume`, and retry-safe `stop` callbacks.
 Build `PluginRegistration` values with validated `PluginId`s, evidence references,
 contract version `CONTRACT_VERSION`, and required dependency IDs, then call
 `PluginManager::new(registrations)`. The whole graph is validated before callbacks;
@@ -23,14 +23,27 @@ startup is deterministic/topological and shutdown is reverse-topological.
 
 Implement a host `PluginAuthorizer` (or closure) that evaluates the **current**
 `RuntimePlan` for the supplied descriptor and action. Call
-`manager.start_all(&mut authorizer)`; each initialization/startup separately
-requires a validating **Execute** plan. Hold/Deny never execute. No initial plan is
+`manager.start_all(&mut authorizer)`; every operational callback (including
+readiness, pause, and resume) separately requires a validating **Execute** plan.
+Hold/Deny never execute. No initial plan is
 cached as authority. IDs and evidence are metadata, not authentication or grants.
 `initialize`/`start` also support explicit one-plugin sequencing; dependencies
 must actually be Running before a dependent starts.
 
+`pause(id, authorizer)` quiesces business work but retains resources; existing
+implementors default to an unsupported error, not fake success. Pausing is
+cooperative, not OS suspension/SIGSTOP. Pause dependents
+before dependencies; Running/Starting dependents and Failed dependents awaiting
+cleanup block dependency pause. Paused dependents permit dependency pause but still
+block shutdown until cleaned up. `resume(id, authorizer)` requires Running
+dependencies and a new readiness check: resume dependencies first. Successful
+start/resume enters Starting until readiness succeeds; if readiness authorization
+is revoked, active work remains tracked in Starting for dependency safety.
+Use `stop_all` after such revocation. Failed/panicking pause/resume leaves Failed
+with cleanup pending; health is Unknown while paused and Ready after readiness.
+
 Inspect `status` for separate lifecycle, health, first failure, and pending cleanup.
-Readiness is a startup snapshot, not continuous monitoring. `start_all` rolls back
+Readiness is a startup/resume snapshot, not continuous monitoring. `start_all` rolls back
 callback failures; individual calls leave partial resources for `stop_all`.
 Authorization rejection invokes no callbacks and leaves already-acquired resources
 untouched: explicitly call `manager.stop_all()`, which needs no authorization and
@@ -38,10 +51,61 @@ remains available after revocation. Retry failed cleanup explicitly; dependents
 must finish cleanup before dependencies are stopped. Keep the manager alive until
 cleanup succeeds. No unload API or automatic initialization/start retry is provided.
 
-This is **not a sandbox or production authentication system**: no hard timeout,
-cancellation, hot reload, async workers, or event engine. Unwinding callback and
-authorizer panics are caught, but `panic=abort`, hangs, and unmanaged plugin-created
-tasks are not isolated. Plugins must clean up their own resources safely.
+### Bounded lifecycle observations
+
+`drain_events()` pulls structured `PluginEvent`s without subscriber callbacks.
+Registration events appear in topological order only after the whole graph validates;
+each actual callback outcome and authorization rejection records previous/current
+state, health and cleanup flags, a typed outcome, ID, evidence, and sequence.
+Unknown IDs/invalid transitions produce no events. Events never contain arbitrary
+callback/authorizer error strings, configuration, or panic payloads; detailed errors
+remain in returned errors/status (treat those as potentially sensitive).
+Plugin evidence references are limited to 1,024 bytes at registration so retained
+event metadata is bounded too; hosts must use non-secret evidence identifiers.
+The default capacity is 256; `with_event_capacity` accepts 0–65,536.
+Overflow **drops the oldest** observation (zero drops all), never blocks lifecycle
+or cleanup, and increments cumulative `lost_events()`; drains do not reset loss.
+Sequences increase across dropped events and drains, so gaps expose loss.
+IDs and sequences are manager-local, not globally unique or authenticated;
+this volatile queue is not persistent auditing or an external event bus.
+Registrations are immutable; there is no hot reload.
+
+### Optional process isolation
+
+`plugin::process::ProcessPlugin` implements the same trait using only `std`.
+Construct `ProcessPluginConfig` with a trusted **absolute executable path**,
+explicit arguments, and a positive command timeout up to 60 seconds; register
+the adapter normally. Construction/discovery never spawns: initialization does.
+No shell interpolation is performed; the child environment is cleared, stdin/stdout
+are protocol pipes, and stderr is discarded. Filesystem/network capabilities
+are **not restricted**. This is address-space/crash isolation, **not an OS sandbox
+or a safe malicious-code executor**, nor production authentication.
+
+The bounded ASCII line protocol is `<sequence> COMMAND\n` with commands
+`INIT`, `START`, `READY`, `PAUSE`, `RESUME`, `STOP`. Reply with the same sequence
+and `OK` for non-readiness commands, `READY`/`NOT_READY` for `READY`, or `ERROR`
+for failure. Maximum reply line length is 64 bytes including newline; no CRLF,
+logs, extra fields, or unsolicited replies. Sequence mismatches and malformed,
+oversized, partial/deadline-expired replies fail closed. Extra buffered replies
+are detected on the next exchange via correlation. Replies convey no authority.
+The adapter is single-use (no automatic respawn).
+
+One worker and bounded one-slot channels per adapter cover command writes and
+reply reads under one deadline. Protocol/I/O errors attempt direct-child kill/reap;
+stop always attempts kill/reap even if STOP fails. STOP errors remain failures
+until explicit cleanup retry, even when the child was reaped. Reap attempts have
+their own configured deadline; ownership is retained on failure. Drop makes a
+bounded best-effort direct-child cleanup attempt, not a replacement for host
+cleanup retries. OS spawn/kill/status calls themselves have no portable hard deadline.
+There is **no process-tree isolation**: grandchildren may survive and inherit
+pipes. The worker is never joined, so inherited pipes cannot hang parent shutdown,
+but can retain that adapter's single worker until closed. Use host OS supervision
+for process-tree/resource guarantees. In-process callback hangs, aborting panics,
+and plugin-created tasks remain unisolated; unwinding panics are caught.
+
+Process integration tests use an explicitly opt-in Rust protocol fault fixture
+(not a default production binary):
+`cargo test -p palaco-runtime -p palaco-kernel --all-targets --features plugin-process-tests`.
 
 ---
 
