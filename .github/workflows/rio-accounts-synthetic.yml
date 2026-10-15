@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore', 'codex/rio-tls-restored-service']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
@@ -51,6 +51,7 @@ jobs:
           node --check verification/rio-accounts/test_safe_reporter.mjs
           node --test verification/rio-accounts/test_safe_reporter.mjs
           node --check verification/rio-accounts/playwright.tls-oidc.config.mjs
+          node --check verification/rio-accounts/playwright.tls-restore-oidc.config.mjs
           node --check verification/rio-accounts/tls-oidc-reporter.mjs
           node --test verification/rio-accounts/test_tls_oidc_reporter.mjs
           node --check verification/rio-accounts/playwright.durable.config.mjs
