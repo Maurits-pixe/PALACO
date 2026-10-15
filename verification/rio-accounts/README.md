@@ -468,3 +468,19 @@ The complete browser/TLS test boundary is documented in
 [T05 real OIDC over TLS storage](../../specs/rio-accounts/T05-TLS-REAL-OIDC.md).
 Initialization and non-repairing reopen behavior are documented in
 [T05 bootstrap guard](../../specs/rio-accounts/T05-BINDING-BOOTSTRAP-GUARD.md).
+
+## Login request failure evidence
+
+The failure-only mobile login observation now retains at most eight request
+failure records. Each contains only a fixed endpoint category, an independently
+classified transport error and a boolean/null indicating whether the request
+started after an observed callback redirect. A helper timeout remains a separate
+field. Unknown start time stays null; duplicate events do not create new records.
+Overflow is explicit. No raw URL, query, body, error or cookie is retained.
+
+The annotation has a fixed 2048-character limit and exact nested-field checks.
+The existing controlled initial-navigation and provider-POST interruptions verify
+the request/error pairing in both browser projects; successful explicit recovery
+leaves no expected-fault annotation. These checks do not reproduce or explain
+spontaneous network changes. See the
+[request failure contract](../../specs/rio-accounts/T05-LOGIN-REQUEST-FAILURES.md).

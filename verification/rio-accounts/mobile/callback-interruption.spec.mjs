@@ -65,6 +65,11 @@ test('[RIO-MOBILE-07] Interrupted provider submission cannot grant a session or 
           // original interrupted provider POST, not a delivered BFF callback.
           expect(observed?.providerSubmitRequests).toBe(1);
           expect(observed?.providerSubmitRequestFailed).toBe(true);
+          expect(observed?.requestFailures).toEqual([{
+            endpoint: 'providerSubmit', errorKind: 'connection-reset',
+            afterCallbackRedirect: false,
+          }]);
+          expect(observed?.requestFailuresOverflow).toBe(false);
           expect(observed?.callbackRequests).toBe(0);
           expect(observed?.callbackStatuses).toEqual([]);
           expect(observed?.callbackRequestFailed).toBe(false);
