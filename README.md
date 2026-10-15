@@ -2236,6 +2236,29 @@ contents, and make no completeness, authorization or canonical-status claim.
 The query is read-only and requires `--registry`; it cannot be combined with
 `--trace`, `--direction` or `--previous-registry`.
 
+Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-orphans
+```
+
+After whole-snapshot validation, the query emits JSON containing `graph`,
+`definition`, sorted `object_ids` and a scope disclaimer. Here an orphan means
+**no incoming and no outgoing `traceability.upstream` edges**. Roots with
+downstream records and leaves with upstream records are not orphans. A standalone
+root is reported as isolated, but is not thereby invalid. Disconnected components
+with multiple linked records are not reported: this is not a root-reachability or
+foundation-completeness check. Dependency fields, embedded relationship edges and
+other references do not affect isolation in this particular graph.
+
+Orphans are diagnostic findings, not conformance failures: successful queries
+exit 0 whether the array is empty or populated. Invalid snapshots fail nonzero
+without results. The query neither writes files nor changes canonical status or
+authority. `--find-orphans` requires `--registry` and cannot be combined with
+`--find-type`, `--trace`, `--direction` or `--previous-registry`.
+
 This MVP does not enforce upstream completeness, root reachability,
 authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending

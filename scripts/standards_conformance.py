@@ -19,6 +19,7 @@ Checks, in one run:
      lifecycle transitions and monotonic audit timestamps.
   9. Read-only upstream/downstream trace queries on validated closed snapshots.
  10. Read-only object-type queries using the PMS-001 object family vocabulary.
+ 11. Read-only lineage orphan diagnostics for isolated upstream-graph nodes.
 
 Any failure exits non-zero.
 """
@@ -839,6 +840,98 @@ def find_palaco_objects(instance, object_type, validators=None):
     }
 
 
+def find_palaco_orphans(instance, validator=None):
+    """Find isolated upstream-graph nodes, not invalid or non-canonical records."""
+    validate_palaco_registry(instance, validator)
+    connected = set()
+    object_ids = set()
+    for record in instance["objects"]:
+        object_id = record["metadata"]["id"]
+        object_ids.add(object_id)
+        upstream = record["traceability"]["upstream"]
+        if upstream:
+            connected.add(object_id)
+            connected.update(upstream)
+    return {
+        "graph": "traceability.upstream",
+        "definition": "no incoming or outgoing upstream edges",
+        "object_ids": sorted(object_ids - connected),
+        "scope": "supplied snapshot only; diagnostic, not a canonical-status or authority decision",
+    }
+
+
+def check_palaco_orphans():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    positive_count = 0
+
+    def check(instance, expected):
+        nonlocal positive_count
+        original = copy.deepcopy(instance)
+        result = find_palaco_orphans(instance, validator)
+        require(result == {
+            "graph": "traceability.upstream",
+            "definition": "no incoming or outgoing upstream edges",
+            "object_ids": expected,
+            "scope": "supplied snapshot only; diagnostic, not a canonical-status or authority decision",
+        }, f"unexpected orphan result: {result}")
+        require(instance == original, "orphan query mutated input")
+        reordered = copy.deepcopy(instance)
+        reordered["objects"].reverse()
+        require(find_palaco_orphans(reordered, validator) == result,
+                "orphan output depends on object order")
+        positive_count += 1
+
+    # A connected root and a leaf both participate in lineage.
+    check(fixture, [])
+    check({"registry_version": "0.1.0", "objects": [copy.deepcopy(template)]}, ["FE-00001"])
+    mixed = copy.deepcopy(fixture)
+    for index in (3, 2):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        mixed["objects"].append(record)
+    check(mixed, ["FE-00002", "FE-00003"])
+    # Non-lineage links do not hide isolated nodes, including incoming references.
+    non_lineage = copy.deepcopy(mixed)
+    non_lineage["objects"][3]["dependencies"] = ["FE-00002"]
+    non_lineage["objects"][3]["compliance"] = ["FE-00001"]
+    non_lineage["objects"][3]["traceability"]["relationships"] = [
+        {"source": "FE-00003", "relation": "DEPENDS_ON", "target": "FE-00002"}
+    ]
+    check(non_lineage, ["FE-00002", "FE-00003"])
+    # A disconnected multi-node component is not an isolated node.
+    component = copy.deepcopy(mixed)
+    component["objects"][3]["traceability"]["upstream"] = ["FE-00002"]
+    check(component, [])
+    all_isolated = copy.deepcopy(mixed)
+    for record in all_isolated["objects"]:
+        record["traceability"]["upstream"] = []
+    check(all_isolated, ["CAP-00001", "FE-00001", "FE-00002", "FE-00003", "REQ-00001"])
+
+    negatives = [({}, "registry structure")]
+    dangling = copy.deepcopy(mixed)
+    dangling["objects"][2]["capability_ref"] = "CAP-99999"
+    negatives.append((dangling, "unresolved capability_ref"))
+    duplicate = copy.deepcopy(mixed)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    negatives.append((duplicate, "duplicate object ID"))
+    cyclic = copy.deepcopy(mixed)
+    cyclic["objects"][0]["traceability"]["upstream"] = ["REQ-00001"]
+    negatives.append((cyclic, "upstream cycle"))
+    lifecycle = copy.deepcopy(mixed)
+    lifecycle["objects"][2]["lifecycle"]["status"] = "Active"
+    negatives.append((lifecycle, "requires approval.status Approved"))
+    for instance, expected in negatives:
+        try:
+            find_palaco_orphans(instance, validator)
+        except ConformanceError as error:
+            require(expected in str(error), f"unexpected orphan diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid orphan query accepted: {expected}")
+    return f"registry orphans: {positive_count} deterministic/non-mutating queries + {len(negatives)} rejections"
+
+
 def check_palaco_find():
     validators = palaco_validators()
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
@@ -1472,6 +1565,7 @@ CHECKS = (
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
     ("PALACO registry object-type query conformance", check_palaco_find),
+    ("PALACO registry orphan query conformance", check_palaco_orphans),
 )
 
 
@@ -1484,6 +1578,8 @@ def main():
                         help="Return reachable IDs from traceability.upstream as JSON")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
+    parser.add_argument("--find-orphans", action="store_true",
+                        help="Return IDs isolated in traceability.upstream as JSON")
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
@@ -1500,10 +1596,19 @@ def main():
             parser.error("--find-type requires --registry")
         if args.trace is not None or args.previous_registry is not None:
             parser.error("--find-type cannot be combined with --trace or --previous-registry")
+    if args.find_orphans:
+        if args.registry is None:
+            parser.error("--find-orphans requires --registry")
+        if args.trace is not None or args.find_type is not None or args.previous_registry is not None:
+            parser.error("--find-orphans cannot be combined with --trace, --find-type or --previous-registry")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_type is not None:
+            if args.find_orphans:
+                result = find_palaco_orphans(current)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_type is not None:
                 result = find_palaco_objects(current, args.find_type)
                 print(json.dumps(result, indent=2))
                 return 0
