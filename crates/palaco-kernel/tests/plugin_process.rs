@@ -17,7 +17,7 @@ use palaco_runtime::{
     plugin::{
         CONTRACT_VERSION, HealthOutcome, Plugin, PluginAction, PluginContext, PluginDescriptor,
         PluginError, PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome,
-        PluginRegistration, PluginState, ShutdownOutcome, ShutdownScope,
+        PluginRegistration, PluginState, ShutdownOutcome, ShutdownScope, StartupDisposition,
         process::{ProcessPlugin, ProcessPluginConfig},
     },
 };
@@ -210,7 +210,7 @@ fn scoped_process_start_spawns_only_required_children_and_rolls_back_only_new_ch
 }
 
 #[test]
-fn shutdown_preview_never_spawns_or_calls_a_running_process() -> TestResult {
+fn startup_and_shutdown_previews_never_spawn_or_call_a_running_process() -> TestResult {
     let descriptor = descriptor()?;
     let id = descriptor.id.clone();
     let pid = Rc::new(Cell::new(None));
@@ -231,6 +231,21 @@ fn shutdown_preview_never_spawns_or_calls_a_running_process() -> TestResult {
         let before_calls = calls.get();
         let before_status = manager.status(&id).cloned();
         for _ in 0..3 {
+            let startup = manager.plan_startup(&id)?;
+            assert!(startup.can_start());
+            assert_eq!(startup.steps().len(), 1);
+            assert_eq!(
+                startup.steps()[0].disposition,
+                if running {
+                    StartupDisposition::AlreadyRunning
+                } else {
+                    StartupDisposition::Start
+                }
+            );
+            assert_eq!(
+                manager.plan_startup(&PluginId::new("missing")?),
+                Err(PluginError::UnknownPlugin(PluginId::new("missing")?))
+            );
             for scope in [
                 ShutdownScope::Single(id.clone()),
                 ShutdownScope::WithDependents(id.clone()),
@@ -258,6 +273,55 @@ fn shutdown_preview_never_spawns_or_calls_a_running_process() -> TestResult {
     manager.stop_all()?;
     assert_eq!(calls.get(), 4);
     assert_reaped(pid);
+    Ok(())
+}
+
+#[test]
+fn startup_preview_accepts_unspawnable_configuration_without_executing_it() -> TestResult {
+    // A path below the fixture executable cannot be an executable itself.
+    let executable = PathBuf::from(env!("CARGO_BIN_EXE_plugin-process-fixture")).join("missing");
+    assert!(executable.is_absolute() && !executable.exists());
+    let descriptor = descriptor()?;
+    let id = descriptor.id.clone();
+    let calls = Rc::new(Cell::new(0));
+    let pid = Rc::new(Cell::new(None));
+    let mut manager = PluginManager::new(vec![PluginRegistration {
+        descriptor,
+        plugin: Box::new(TrackedProcess {
+            plugin: ProcessPlugin::new(ProcessPluginConfig {
+                executable,
+                args: vec![],
+                timeout: TIMEOUT,
+            })?,
+            calls: calls.clone(),
+            pid: pid.clone(),
+        }),
+    }])?;
+    assert!(manager.plan_startup(&id)?.can_start());
+    assert_eq!(
+        manager.plan_startup(&PluginId::new("missing")?),
+        Err(PluginError::UnknownPlugin(PluginId::new("missing")?))
+    );
+    assert_eq!(calls.get(), 0);
+    assert!(pid.get().is_none());
+    assert_eq!(
+        manager.status(&id).expect("status").state,
+        PluginState::Registered
+    );
+    assert!(matches!(
+        manager.start_with_dependencies(&id, &mut allow),
+        Err(PluginError::Callback(_, failure)) if failure.action == PluginAction::Initialize
+    ));
+    assert_eq!(calls.get(), 2); // Failed initialize and scoped rollback cleanup.
+    assert!(pid.get().is_none());
+    let failed = manager.plan_startup(&id)?;
+    assert!(!failed.can_start());
+    assert_eq!(
+        failed.steps()[0].disposition,
+        StartupDisposition::InvalidState
+    );
+    assert!(failed.steps()[0].snapshot.failed);
+    manager.stop_all()?;
     Ok(())
 }
 

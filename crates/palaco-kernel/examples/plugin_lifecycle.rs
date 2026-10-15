@@ -80,8 +80,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     let independent = PluginId::new("independent")?;
     let mut scoped_complete = true;
     let lifecycle = manager
-        .start_with_dependencies(&worker, &mut synthetic_authorizer)
+        .plan_startup(&worker)
         .map_err(Box::<dyn Error>::from)
+        .and_then(|preview| {
+            for step in preview.steps() {
+                println!("startup {}: {:?}", step.id.as_str(), step.disposition);
+            }
+            println!("startup can_start: {}", preview.can_start());
+            if !preview.can_start() {
+                return Err("startup scope failed local preflight".into());
+            }
+            // Recompute live preflight and authorize each action, not the preview.
+            Ok(manager.start_with_dependencies(&worker, &mut synthetic_authorizer)?)
+        })
         .and_then(
             |()| Ok(manager.start_with_dependencies(&independent, &mut synthetic_authorizer)?),
         )

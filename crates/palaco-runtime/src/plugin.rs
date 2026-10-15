@@ -208,6 +208,65 @@ impl From<&PluginStatus> for PluginSnapshot {
     }
 }
 
+/// Local startup preflight eligibility, not simulated dependency readiness or
+/// a guarantee that initialization, startup, or readiness callbacks will succeed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupDisposition {
+    /// Registered: expected to start after earlier prerequisites in the plan.
+    Start,
+    /// Running with retained Ready health; scoped startup skips this node.
+    AlreadyRunning,
+    /// Running without retained Ready health, including at the root.
+    NotReady,
+    /// Neither Registered nor Running; see the step's snapshot for its state.
+    InvalidState,
+}
+
+impl StartupDisposition {
+    fn classify(snapshot: PluginSnapshot) -> Self {
+        match snapshot.state {
+            PluginState::Registered => Self::Start,
+            PluginState::Running if snapshot.health == PluginHealth::Ready => Self::AlreadyRunning,
+            PluginState::Running => Self::NotReady,
+            _ => Self::InvalidState,
+        }
+    }
+}
+
+/// Owned, redacted observation of one selected startup node.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartupStep {
+    pub id: PluginId,
+    pub snapshot: PluginSnapshot,
+    pub disposition: StartupDisposition,
+}
+
+/// Immutable read-only startup preview, not authority or an executable token.
+/// Snapshots can become stale; live startup recomputes selection and preflight.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StartupPlan {
+    steps: Vec<StartupStep>,
+}
+
+impl StartupPlan {
+    /// All selected nodes, including blockers and no-ops, in topological order.
+    pub fn steps(&self) -> &[StartupStep] {
+        &self.steps
+    }
+
+    /// Every node is locally eligible for scoped startup at this snapshot.
+    /// The entire scope must pass preflight before any callback; a Start node
+    /// may still have a blocked prerequisite. This is no success guarantee.
+    pub fn can_start(&self) -> bool {
+        self.steps.iter().all(|step| {
+            matches!(
+                step.disposition,
+                StartupDisposition::Start | StartupDisposition::AlreadyRunning
+            )
+        })
+    }
+}
+
 /// Fresh probe outcome, independent of any readiness retained in the snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HealthOutcome {
@@ -799,6 +858,30 @@ impl PluginManager {
         Ok(())
     }
 
+    /// Previews exactly the root and its transitive required dependencies in
+    /// deterministic DAG order, including every blocker. Only an unknown root
+    /// returns an error. Dispositions describe local eligibility, not simulated
+    /// startup: Registered prerequisites are expected to start earlier.
+    /// No authorization, callbacks, health probes, process I/O/spawning, events,
+    /// or status changes occur. This is no reservation or time-valid guarantee;
+    /// `start_with_dependencies` recomputes live preflight and authorizes actions.
+    pub fn plan_startup(&self, id: &PluginId) -> Result<StartupPlan, PluginError> {
+        Ok(StartupPlan {
+            steps: self
+                .startup_selection(id)?
+                .into_iter()
+                .map(|id| {
+                    let snapshot = PluginSnapshot::from(&self.entries[&id].status);
+                    StartupStep {
+                        id,
+                        snapshot,
+                        disposition: StartupDisposition::classify(snapshot),
+                    }
+                })
+                .collect(),
+        })
+    }
+
     /// Starts exactly the root and its transitive required dependencies in DAG order.
     /// Preflights the entire closure before side effects: only Registered or
     /// Running+Ready is accepted. Running without Ready returns DependencyNotReady
@@ -818,37 +901,8 @@ impl PluginManager {
         id: &PluginId,
         authorizer: &mut impl PluginAuthorizer,
     ) -> Result<(), PluginError> {
-        if !self.entries.contains_key(id) {
-            return Err(PluginError::UnknownPlugin(id.clone()));
-        }
-        let mut selected = BTreeSet::from([id.clone()]);
-        for candidate in self.order.iter().rev() {
-            if selected.contains(candidate) {
-                selected.extend(
-                    self.entries[candidate]
-                        .registration
-                        .descriptor
-                        .dependencies
-                        .iter()
-                        .cloned(),
-                );
-            }
-        }
-        let order: Vec<_> = self
-            .order
-            .iter()
-            .filter(|id| selected.contains(*id))
-            .cloned()
-            .collect();
-        for id in &order {
-            let status = &self.entries[id].status;
-            match status.state {
-                PluginState::Registered => {}
-                PluginState::Running if status.health == PluginHealth::Ready => {}
-                PluginState::Running => return Err(PluginError::DependencyNotReady(id.clone())),
-                state => return Err(PluginError::InvalidTransition(id.clone(), state)),
-            }
-        }
+        let order = self.startup_selection(id)?;
+        self.startup_preflight(&order)?;
         let mut acquired = Vec::new();
         for id in order {
             if self.entries[&id].status.state == PluginState::Running {
@@ -871,6 +925,47 @@ impl PluginManager {
                     }
                 }
                 return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    fn startup_selection(&self, id: &PluginId) -> Result<Vec<PluginId>, PluginError> {
+        if !self.entries.contains_key(id) {
+            return Err(PluginError::UnknownPlugin(id.clone()));
+        }
+        let mut selected = BTreeSet::from([id.clone()]);
+        for candidate in self.order.iter().rev() {
+            if selected.contains(candidate) {
+                selected.extend(
+                    self.entries[candidate]
+                        .registration
+                        .descriptor
+                        .dependencies
+                        .iter()
+                        .cloned(),
+                );
+            }
+        }
+        Ok(self
+            .order
+            .iter()
+            .filter(|id| selected.contains(*id))
+            .cloned()
+            .collect())
+    }
+
+    fn startup_preflight(&self, order: &[PluginId]) -> Result<(), PluginError> {
+        for id in order {
+            let snapshot = PluginSnapshot::from(&self.entries[id].status);
+            match StartupDisposition::classify(snapshot) {
+                StartupDisposition::Start | StartupDisposition::AlreadyRunning => {}
+                StartupDisposition::NotReady => {
+                    return Err(PluginError::DependencyNotReady(id.clone()));
+                }
+                StartupDisposition::InvalidState => {
+                    return Err(PluginError::InvalidTransition(id.clone(), snapshot.state));
+                }
             }
         }
         Ok(())
@@ -1179,6 +1274,92 @@ mod tests {
                 evidence: EvidenceRef::new("test-evidence").expect("valid evidence"),
             },
             plugin: Box::new(NoCallbacks),
+        }
+    }
+
+    #[test]
+    fn startup_preview_preserves_observations_even_with_zero_or_full_event_queue() {
+        let root = PluginId::new("root").expect("ID");
+        let missing = PluginId::new("missing").expect("ID");
+        for capacity in [0, 1, 2, 8] {
+            let mut manager = PluginManager::with_event_capacity(
+                vec![registration("root", &["a"]), registration("a", &[])],
+                capacity,
+            )
+            .expect("valid graph");
+            let statuses: Vec<_> = manager
+                .order()
+                .iter()
+                .map(|id| manager.status(id).cloned())
+                .collect();
+            let events = manager.events.clone();
+            let sequence = manager.sequence;
+            let loss = manager.lost_events();
+            let first = manager.plan_startup(&root).expect("preview");
+            for _ in 0..3 {
+                assert_eq!(manager.plan_startup(&root), Ok(first.clone()));
+                assert_eq!(
+                    manager.plan_startup(&missing),
+                    Err(PluginError::UnknownPlugin(missing.clone()))
+                );
+            }
+            assert_eq!(manager.events, events);
+            assert_eq!(manager.sequence, sequence);
+            assert_eq!(manager.lost_events(), loss);
+            assert_eq!(
+                manager
+                    .order()
+                    .iter()
+                    .map(|id| manager.status(id).cloned())
+                    .collect::<Vec<_>>(),
+                statuses
+            );
+            // The next real event retains the original sequence, even at capacity zero.
+            let mut deny = |_: &PluginDescriptor, _: PluginAction| Err("denied".into());
+            assert!(matches!(
+                manager.initialize(&root, &mut deny),
+                Err(PluginError::Authorization(..))
+            ));
+            assert_eq!(manager.sequence, sequence + 1);
+        }
+    }
+
+    #[test]
+    fn startup_preview_classifies_every_retained_running_health_without_probing() {
+        let a = PluginId::new("a").expect("ID");
+        let root = PluginId::new("root").expect("ID");
+        let mut manager =
+            PluginManager::new(vec![registration("a", &[]), registration("root", &["a"])])
+                .expect("valid graph");
+        for health in [
+            PluginHealth::Unknown,
+            PluginHealth::Ready,
+            PluginHealth::NotReady,
+            PluginHealth::Unhealthy,
+        ] {
+            let status = &mut manager.entries.get_mut(&a).expect("entry").status;
+            status.state = PluginState::Running;
+            status.health = health;
+            let preview = manager.plan_startup(&root).expect("preview");
+            assert_eq!(preview.steps()[0].snapshot.health, health);
+            assert_eq!(
+                preview.steps()[0].disposition,
+                if health == PluginHealth::Ready {
+                    StartupDisposition::AlreadyRunning
+                } else {
+                    StartupDisposition::NotReady
+                }
+            );
+            assert_eq!(preview.steps()[1].disposition, StartupDisposition::Start);
+            assert_eq!(preview.can_start(), health == PluginHealth::Ready);
+            assert_eq!(
+                manager.startup_preflight(&manager.startup_selection(&root).expect("selection")),
+                if health == PluginHealth::Ready {
+                    Ok(())
+                } else {
+                    Err(PluginError::DependencyNotReady(a.clone()))
+                }
+            );
         }
     }
 

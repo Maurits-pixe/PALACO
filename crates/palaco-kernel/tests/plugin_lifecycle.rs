@@ -10,6 +10,7 @@ use palaco_runtime::{
         CONTRACT_VERSION, HealthOutcome, Plugin, PluginAction, PluginContext, PluginDescriptor,
         PluginError, PluginEventKind, PluginHealth, PluginId, PluginManager, PluginOutcome,
         PluginRegistration, PluginSnapshot, PluginState, ShutdownOutcome, ShutdownScope,
+        StartupDisposition,
     },
 };
 
@@ -157,6 +158,14 @@ fn scoped_start_chain_and_diamond_are_deterministic_and_idempotent() -> TestResu
             }
             let mut manager = PluginManager::new(registrations)?;
             let root = PluginId::new("root")?;
+            let preview = manager.plan_startup(&root)?;
+            assert!(preview.can_start());
+            assert!(preview.steps().iter().all(|step| {
+                step.disposition == StartupDisposition::Start
+                    && step.snapshot
+                        == PluginSnapshot::from(manager.status(&step.id).expect("status"))
+            }));
+            assert!(log.borrow().is_empty());
             let mut authorized = Vec::new();
             manager.start_with_dependencies(&root, &mut |d: &PluginDescriptor, action| {
                 authorized.push(format!("{}:{action:?}", d.id.as_str()));
@@ -167,6 +176,14 @@ fn scoped_start_chain_and_diamond_are_deterministic_and_idempotent() -> TestResu
             } else {
                 vec!["a", "b", "root"]
             };
+            assert_eq!(
+                preview
+                    .steps()
+                    .iter()
+                    .map(|step| step.id.as_str())
+                    .collect::<Vec<_>>(),
+                names
+            );
             let expected: Vec<_> = names
                 .iter()
                 .flat_map(|name| {
@@ -191,6 +208,21 @@ fn scoped_start_chain_and_diamond_are_deterministic_and_idempotent() -> TestResu
                 .collect::<Vec<_>>();
             manager.drain_events().for_each(drop);
             log.borrow_mut().clear();
+            let running = manager.plan_startup(&root)?;
+            assert!(running.can_start());
+            assert!(
+                running
+                    .steps()
+                    .iter()
+                    .all(|step| { step.disposition == StartupDisposition::AlreadyRunning })
+            );
+            // The owned initial plan is unchanged after startup.
+            assert!(
+                preview
+                    .steps()
+                    .iter()
+                    .all(|step| { step.disposition == StartupDisposition::Start })
+            );
             manager.start_with_dependencies(&root, &mut |_: &PluginDescriptor, _| {
                 panic!("idempotent scoped start must not authorize")
             })?;
@@ -237,6 +269,20 @@ fn scoped_start_skips_running_dependencies_and_excludes_unrelated_failure() -> T
     let b_before = manager.status(&b).cloned();
     log.borrow_mut().clear();
     manager.drain_events().for_each(drop);
+    let preview = manager.plan_startup(&PluginId::new("root")?)?;
+    assert!(preview.can_start());
+    assert_eq!(
+        preview
+            .steps()
+            .iter()
+            .map(|step| step.disposition)
+            .collect::<Vec<_>>(),
+        [
+            StartupDisposition::AlreadyRunning,
+            StartupDisposition::AlreadyRunning,
+            StartupDisposition::Start
+        ]
+    );
     manager.start_with_dependencies(
         &PluginId::new("root")?,
         &mut |d: &PluginDescriptor, action| {
@@ -281,6 +327,8 @@ fn scoped_start_preflights_every_required_state_and_unknown_root() -> TestResult
             registration("root", &["a", "c"], &log, Behavior::default())?,
         ])?;
         let b = PluginId::new("b")?;
+        let old_preview = manager.plan_startup(&PluginId::new("root")?)?;
+        assert!(old_preview.can_start());
         let initialized = manager.initialize(&b, &mut allow);
         if state == PluginState::Failed {
             assert!(initialized.is_err());
@@ -318,6 +366,31 @@ fn scoped_start_preflights_every_required_state_and_unknown_root() -> TestResult
         let loss = manager.lost_events();
         for name in ["root", "missing"] {
             let id = PluginId::new(name)?;
+            if name == "missing" {
+                assert_eq!(
+                    manager.plan_startup(&id),
+                    Err(PluginError::UnknownPlugin(id.clone()))
+                );
+            } else {
+                let preview = manager.plan_startup(&id)?;
+                assert!(!preview.can_start());
+                assert_eq!(preview.steps().len(), 4);
+                for step in preview.steps() {
+                    assert_eq!(
+                        step.snapshot,
+                        PluginSnapshot::from(manager.status(&step.id).expect("status"))
+                    );
+                    assert_eq!(
+                        step.disposition,
+                        if step.id == b {
+                            StartupDisposition::InvalidState
+                        } else {
+                            StartupDisposition::Start
+                        }
+                    );
+                }
+                assert!(old_preview.can_start());
+            }
             let expected = if name == "missing" {
                 PluginError::UnknownPlugin(id.clone())
             } else {
@@ -365,6 +438,8 @@ fn scoped_start_running_not_ready_root_or_prerequisite_rejects_without_probing()
     ])?;
     let a = PluginId::new("a")?;
     manager.start_with_dependencies(&a, &mut allow)?;
+    let old_preview = manager.plan_startup(&PluginId::new("root")?)?;
+    assert!(old_preview.can_start());
     *health.borrow_mut() = PluginOutcome::NotReady;
     assert_eq!(
         manager.check_health(&a, &mut allow)?,
@@ -374,6 +449,15 @@ fn scoped_start_running_not_ready_root_or_prerequisite_rejects_without_probing()
     log.borrow_mut().clear();
     manager.drain_events().for_each(drop);
     for name in ["a", "root"] {
+        let preview = manager.plan_startup(&PluginId::new(name)?)?;
+        assert!(!preview.can_start());
+        assert_eq!(preview.steps()[0].id, a);
+        assert_eq!(preview.steps()[0].disposition, StartupDisposition::NotReady);
+        assert!(
+            preview.steps()[1..]
+                .iter()
+                .all(|step| { step.disposition == StartupDisposition::Start })
+        );
         assert_eq!(
             manager.start_with_dependencies(
                 &PluginId::new(name)?,
@@ -389,7 +473,85 @@ fn scoped_start_running_not_ready_root_or_prerequisite_rejects_without_probing()
     );
     assert!(log.borrow().is_empty());
     assert_eq!(manager.drain_events().count(), 0);
+    assert!(old_preview.can_start());
     manager.stop_all()?;
+    Ok(())
+}
+
+#[test]
+fn startup_preview_reports_all_blockers_without_retaining_callback_details() -> TestResult {
+    for outcome in [PluginOutcome::Error, PluginOutcome::Panicked] {
+        let log = Log::default();
+        let health = Rc::new(RefCell::new(PluginOutcome::Success));
+        let mut manager = PluginManager::new(vec![
+            registration(
+                "a",
+                &[],
+                &log,
+                Behavior {
+                    health: Some(health.clone()),
+                    ..Behavior::default()
+                },
+            )?,
+            registration(
+                "b",
+                &[],
+                &log,
+                Behavior {
+                    health: Some(Rc::new(RefCell::new(outcome))),
+                    ..Behavior::default()
+                },
+            )?,
+            registration("child", &["a", "b"], &log, Behavior::default())?,
+            registration("root", &["child"], &log, Behavior::default())?,
+        ])?;
+        let a = PluginId::new("a")?;
+        manager.start_with_dependencies(&a, &mut allow)?;
+        *health.borrow_mut() = PluginOutcome::NotReady;
+        manager.check_health(&a, &mut allow)?;
+        let b = PluginId::new("b")?;
+        manager.initialize(&b, &mut allow)?;
+        assert!(matches!(
+            manager.start(&b, &mut allow),
+            Err(PluginError::Callback(..))
+        ));
+        log.borrow_mut().clear();
+        manager.drain_events().for_each(drop);
+        let root = PluginId::new("root")?;
+        let preview = manager.plan_startup(&root)?;
+        assert!(!preview.can_start());
+        assert_eq!(
+            preview
+                .steps()
+                .iter()
+                .map(|step| step.disposition)
+                .collect::<Vec<_>>(),
+            [
+                StartupDisposition::NotReady,
+                StartupDisposition::InvalidState,
+                StartupDisposition::Start,
+                StartupDisposition::Start
+            ]
+        );
+        assert!(preview.steps()[1].snapshot.failed);
+        let redacted = format!("{preview:?}");
+        for private in [
+            "private-health-secret",
+            "plugin callback panicked",
+            "plugin-evidence",
+        ] {
+            assert!(!redacted.contains(private));
+        }
+        assert_eq!(
+            manager.start_with_dependencies(&root, &mut |_: &PluginDescriptor, _| {
+                panic!("whole-scope preflight must reject before authorization")
+            }),
+            Err(PluginError::DependencyNotReady(a))
+        );
+        assert!(log.borrow().is_empty());
+        assert_eq!(manager.drain_events().count(), 0);
+        manager.stop_all()?;
+    }
     Ok(())
 }
 
@@ -408,6 +570,7 @@ fn scoped_start_authorization_rejection_keeps_partial_progress_without_rollback(
         ])?;
         let root = PluginId::new("root")?;
         manager.drain_events().for_each(drop);
+        assert!(manager.plan_startup(&root)?.can_start());
         let mut authorizations = Vec::new();
         let result = manager.start_with_dependencies(&root, &mut |d: &PluginDescriptor, action| {
             authorizations.push((d.id.clone(), action));

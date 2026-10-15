@@ -43,6 +43,24 @@ Skipping grants no new authority, and retained health snapshots are not new
 authentication or health probes. New initialize, start, and readiness callbacks
 each require fresh current authorization through the normal lifecycle methods.
 
+`plan_startup(&id)` is a read-only preview of exactly that same root/prerequisite
+scope. Its owned immutable `StartupPlan.steps()` lists every selected node once in
+deterministic topological order, with a redacted `PluginSnapshot` and typed local
+disposition: `Start` (Registered), `AlreadyRunning` (Running+Ready), `NotReady`
+(Running with any other health), or `InvalidState` (all other states). Only an
+unknown root returns an error; all blockers are displayed rather than stopping at
+the first. `can_start()` is true only if every step is `Start` or `AlreadyRunning`.
+These are **local preflight eligibility**, not claims that dependencies are ready:
+Registered prerequisites are expected to start earlier. Registered descendants
+still show `Start` behind a blocker, but the **entire scope** must pass live
+preflight before any callback. The preview does not simulate callback success.
+It performs no authorization, callbacks, health probes, process I/O/spawning,
+status changes, events, sequence changes, or event loss. It contains no evidence,
+configuration, or arbitrary error/panic text. Snapshots may become stale: a plan is
+not authority, a reservation, or a time-valid success guarantee. There is no
+cached-plan executor; `start_with_dependencies` recomputes selection and preflight
+from live state and freshly authorizes each new operational action.
+
 On callback error, unwinding panic, or startup readiness false, scoped startup
 attempts cleanup only for plugins whose initialize callback was entered during
 **this call**, including partially failed initialization. Preexisting Running
