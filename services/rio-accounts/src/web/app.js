@@ -479,8 +479,9 @@
         if (!file) return;
         try {
             if (file.size > MAX_DRAFT_BYTES || file.size === 0) throw new Error('invalid file size');
-            const content = await file.text();
-            if (new TextEncoder().encode(content).byteLength > MAX_DRAFT_BYTES) throw new Error('oversized draft');
+            const bytes = await file.arrayBuffer();
+            if (bytes.byteLength === 0 || bytes.byteLength > MAX_DRAFT_BYTES) throw new Error('invalid file size');
+            const content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
             const value = canonicalDraft(JSON.parse(content));
             if (round !== importRead) return;
             draft = value;

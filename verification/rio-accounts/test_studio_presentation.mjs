@@ -9,6 +9,7 @@ const ORIGIN = 'https://rio-ui.invalid';
 const EMPTY_TITLE = 'Jouw titel verschijnt hier';
 const EMPTY_NOTE = 'Je notitie krijgt hier de ruimte.';
 const IMPORT_ERROR = 'Dit is geen geldig lokaal conceptbestand. Er is niets gewijzigd.';
+const IMPORT_SUCCESS = 'Concept geopend, alleen in deze pagina. Het is niet geverifieerd. Je account en toestemming zijn niet gewijzigd.';
 const AUTHORITY = {
   accountActive: false, canOpenContact: false, operativeAuthority: 'NONE', consentGranted: false,
 };
@@ -88,8 +89,12 @@ function envelope(title, note) {
 }
 
 async function importDraft(page, value, name = 'rio-lokaal-concept.json') {
+  await importBytes(page, Buffer.from(JSON.stringify(value), 'utf8'), name);
+}
+
+async function importBytes(page, bytes, name = 'rio-lokaal-concept.json') {
   await page.locator('#studio-import').setInputFiles({
-    name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(value), 'utf8'),
+    name, mimeType: 'application/json', buffer: bytes,
   });
 }
 
@@ -196,8 +201,8 @@ test('clear and canonical import update the preview while rejected imports prese
 test('a stale asynchronous import cannot replace newer typed text or its preview', { timeout: 45_000 }, async t => {
   await presentation(t, async page => {
     await page.evaluate(() => {
-      const original = File.prototype.text;
-      File.prototype.text = function () {
+      const original = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = function () {
         if (this.name !== 'delayed-draft.json') return original.call(this);
         return new Promise(resolve => { window.rioReleaseDraft = resolve; });
       };
@@ -207,12 +212,79 @@ test('a stale asynchronous import cannot replace newer typed text or its preview
     await page.locator('#studio-title').fill('Nieuw getypt');
     await page.locator('#studio-note').fill('Deze tekst blijft lokaal.');
     await page.evaluate(async content => {
-      window.rioReleaseDraft(content);
+      window.rioReleaseDraft(new TextEncoder().encode(content).buffer);
       await Promise.resolve();
       await Promise.resolve();
     }, JSON.stringify(envelope('Oud bestand', 'Oude inhoud')));
     await preview(page, 'Nieuw getypt', 'Deze tekst blijft lokaal.');
     assert.deepEqual(await exportedDraft(page), envelope('Nieuw getypt', 'Deze tekst blijft lokaal.'));
+    await page.evaluate(() => { delete window.rioReleaseDraft; });
+    await importDraft(page, envelope('Opnieuw oud', 'Oude inhoud'), 'delayed-draft.json');
+    await page.waitForFunction(() => typeof window.rioReleaseDraft === 'function');
+    await page.locator('#studio-title').fill('Nog nieuwer getypt');
+    await page.locator('#studio-note').fill('Ook een late leesfout wijzigt dit niet.');
+    const feedback = await page.locator('#studio-feedback').textContent();
+    await page.evaluate(async () => {
+      window.rioReleaseDraft(new Uint8Array([0xff]).buffer);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await preview(page, 'Nog nieuwer getypt', 'Ook een late leesfout wijzigt dit niet.');
+    await expect(page.locator('#studio-feedback')).toHaveJSProperty('textContent', feedback);
+    assert.deepEqual(await exportedDraft(page), envelope('Nog nieuwer getypt', 'Ook een late leesfout wijzigt dit niet.'));
+  });
+});
+
+test('malformed UTF-8 File bytes preserve the previous draft while valid Unicode and BOM remain accepted', { timeout: 45_000 }, async t => {
+  await presentation(t, async page => {
+    const title = 'Behoud dit lokale concept';
+    const note = '  Deze notitie blijft exact.\nOok de tweede regel.  ';
+    await page.locator('#studio-title').fill(title);
+    await page.locator('#studio-note').fill(note);
+    for (const [field, invalid] of [
+      ['title', [0xc3, 0x28]], // Invalid continuation: File.text previously produced U+FFFD + '('.
+      ['note', [0xe2, 0x82]], // Truncated three-byte sequence inside otherwise valid JSON.
+      ['title', [0xc0, 0xaf]], // Overlong UTF-8 sequence.
+      ['note', [0xed, 0xa0, 0x80]], // UTF-8 cannot encode a surrogate code point.
+      ['title', [0xff]],
+    ]) {
+      const marker = 'SYNTHETIC_BYTE_MARKER';
+      const value = envelope('Bestandstitel', 'Bestandsnotitie');
+      value.draft[field] = marker;
+      const encoded = Buffer.from(JSON.stringify(value), 'utf8');
+      const offset = encoded.indexOf(Buffer.from(marker, 'utf8'));
+      assert.ok(offset > 0);
+      const bytes = Buffer.concat([
+        encoded.subarray(0, offset), Buffer.from(invalid), encoded.subarray(offset + marker.length),
+      ]);
+      await importBytes(page, bytes);
+      await expect(page.locator('#studio-feedback')).toHaveText(IMPORT_ERROR);
+      await expect(page.locator('#studio-title')).toHaveValue(title);
+      await expect(page.locator('#studio-note')).toHaveValue(note);
+      await preview(page, title, note);
+      assert.deepEqual(await exportedDraft(page), envelope(title, note));
+    }
+    const validTitle = 'Een echt teken \uFFFD en een emoji 😀';
+    const validNote = 'Ook geldig: \uFFFD 😀\nEen tweede regel.';
+    for (const bom of [Buffer.alloc(0), Buffer.from([0xef, 0xbb, 0xbf])]) {
+      await importBytes(page, Buffer.concat([bom, Buffer.from(JSON.stringify(envelope(validTitle, validNote)), 'utf8')]));
+      await expect(page.locator('#studio-feedback')).toHaveText(IMPORT_SUCCESS);
+      await expect(page.locator('#studio-title')).toHaveValue(validTitle);
+      await expect(page.locator('#studio-note')).toHaveValue(validNote);
+      await preview(page, validTitle, validNote);
+      assert.deepEqual(await exportedDraft(page), envelope(validTitle, validNote));
+    }
+    const validBytes = Buffer.from(JSON.stringify(envelope(validTitle, validNote)), 'utf8');
+    const atLimit = Buffer.concat([validBytes, Buffer.alloc(12288 - validBytes.length, 0x20)]);
+    await importBytes(page, atLimit);
+    await expect(page.locator('#studio-feedback')).toHaveText(IMPORT_SUCCESS);
+    await preview(page, validTitle, validNote);
+    await importBytes(page, Buffer.concat([atLimit, Buffer.from([0x20])]));
+    await expect(page.locator('#studio-feedback')).toHaveText(IMPORT_ERROR);
+    await expect(page.locator('#studio-title')).toHaveValue(validTitle);
+    await expect(page.locator('#studio-note')).toHaveValue(validNote);
+    await preview(page, validTitle, validNote);
+    assert.deepEqual(await exportedDraft(page), envelope(validTitle, validNote));
   });
 });
 
