@@ -141,8 +141,14 @@ test('[RIO-MOBILE-02] Real local draft downloads cannot become account authority
   const observer = observeWrites(page);
   try {
     await test.step('mobile-local-download', async () => {
+      await expect(page.locator('#studio-draft-state')).toHaveText('Nog leeg');
       await page.locator('#studio-title').fill('Mijn lokaal testconcept');
       await page.locator('#studio-note').fill(note);
+      await expect(page.locator('#studio-preview-title')).toHaveJSProperty('textContent', 'Mijn lokaal testconcept');
+      await expect(page.locator('#studio-preview-note')).toHaveJSProperty('textContent', note);
+      await expect(page.locator('#studio-title-count')).toHaveText('23 / 80');
+      await expect(page.locator('#studio-note-count')).toHaveText(`${note.length} / 2000`);
+      await expect(page.locator('#studio-draft-state')).toHaveText('Alleen in deze pagina');
       const exported = await downloadDraft(page, testInfo);
       expect(exported.value).toEqual({
         schema: 'RIO_LOCAL_DRAFT_V1', verification: 'UNVERIFIED',
@@ -155,11 +161,18 @@ test('[RIO-MOBILE-02] Real local draft downloads cannot become account authority
       await expect(page.locator('#studio-title')).toHaveValue('');
       await expect(page.locator('#studio-note')).toHaveValue('');
       await expect(page.locator('#studio-title')).toBeFocused();
+      await expect(page.locator('#studio-preview-title')).toHaveJSProperty('textContent', 'Jouw titel verschijnt hier');
+      await expect(page.locator('#studio-preview-note')).toHaveJSProperty('textContent', 'Je notitie krijgt hier de ruimte.');
+      await expect(page.locator('#studio-title-count')).toHaveText('0 / 80');
+      await expect(page.locator('#studio-note-count')).toHaveText('0 / 2000');
+      await expect(page.locator('#studio-draft-state')).toHaveText('Nog leeg');
       await page.locator('#studio-import').setInputFiles({
         name: 'rio-lokaal-concept.json', mimeType: 'application/json', buffer: exported.bytes,
       });
       await expect(page.locator('#studio-title')).toHaveValue('Mijn lokaal testconcept');
       await expect(page.locator('#studio-note')).toHaveValue(note);
+      await expect(page.locator('#studio-preview-title')).toHaveJSProperty('textContent', 'Mijn lokaal testconcept');
+      await expect(page.locator('#studio-preview-note')).toHaveJSProperty('textContent', note);
       await expect(page.locator('#studio-feedback')).toHaveText(
         'Concept geopend, alleen in deze pagina. Het is niet geverifieerd. Je account en toestemming zijn niet gewijzigd.'
       );

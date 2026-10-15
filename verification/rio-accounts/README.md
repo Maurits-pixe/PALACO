@@ -249,6 +249,15 @@ A managed Linux CI run is still required before claiming these new checks pass.
 
 ## Mobile account and local Studio checks (T04)
 
+The Studio has a local reading preview and field counters alongside its native
+editor. Typed/imported text stays literal and in this page; counters follow the
+existing 80/2000 UTF-16 limits. No save, authority or verification is implied.
+After installing the pinned browser, `node --test verification/rio-accounts/test_studio_presentation.mjs`
+runs separate presentation-only checks with actual web assets and a fixed 401
+stub, without credentials or real-provider evidence. The existing real mobile
+Studio case also verifies preview/export/isolation behavior. See
+[local Studio preview](../../specs/rio-accounts/T04-LOCAL-STUDIO-PREVIEW.md).
+
 The same BFF origin serves the mobile account page, `/app.js` and `/app.css`.
 It reads only the signed-in fictitious account and its own stored receipt. The
 native checkbox is never preselected; an explicit confirmation applies only to
@@ -496,6 +505,9 @@ The separate typed TLS recovery target and native archive proof are documented i
 [T05 TLS native recovery](../../specs/rio-accounts/T05-TLS-NATIVE-RESTORE.md).
 The application-state recovery and restored-clone browser proof are documented in
 [T05 TLS restored service](../../specs/rio-accounts/T05-TLS-RESTORED-SERVICE.md).
+The sixth native case also requires full rollback after a late SQL recovery
+failure, before continuing its original successful fence. See
+[T05 TLS recovery rollback](../../specs/rio-accounts/T05-TLS-RECOVERY-ROLLBACK.md).
 
 ## Login request failure evidence
 

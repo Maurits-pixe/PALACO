@@ -97,9 +97,31 @@
         </div>
         <span class="draft-badge">Lokaal concept · niet geverifieerd</span>
       </div>
-      <div class="studio-fields">
-        <div class="field"><label for="studio-title">Titel van je concept</label><input id="studio-title" type="text" maxlength="80" autocomplete="off" aria-describedby="studio-title-help"><p id="studio-title-help" class="field-help">Maximaal 80 tekens.</p></div>
-        <div class="field"><label for="studio-note">Notitie</label><textarea id="studio-note" rows="5" maxlength="2000" autocomplete="off" aria-describedby="studio-note-help"></textarea><p id="studio-note-help" class="field-help">Maximaal 2.000 tekens. De inhoud wordt niet naar de server gestuurd.</p></div>
+      <div class="studio-workspace">
+        <div class="studio-editor">
+          <div class="workspace-heading"><p class="small-label">Jouw werkblad</p><span class="local-indicator">Alleen lokaal</span></div>
+          <div class="studio-fields">
+            <div class="field">
+              <label for="studio-title">Titel van je concept</label>
+              <input id="studio-title" type="text" maxlength="80" autocomplete="off" aria-describedby="studio-title-help studio-title-count">
+              <div class="field-meta"><p id="studio-title-help" class="field-help">Maximaal 80 tekens.</p><span id="studio-title-count" class="field-count">0 / 80</span></div>
+            </div>
+            <div class="field">
+              <label for="studio-note">Notitie</label>
+              <textarea id="studio-note" rows="7" maxlength="2000" autocomplete="off" aria-describedby="studio-note-help studio-note-count"></textarea>
+              <div class="field-meta"><p id="studio-note-help" class="field-help">Maximaal 2.000 tekens. De inhoud wordt niet naar de server gestuurd.</p><span id="studio-note-count" class="field-count">0 / 2000</span></div>
+            </div>
+          </div>
+        </div>
+        <aside class="studio-preview" aria-labelledby="studio-preview-heading">
+          <div class="workspace-heading"><h3 id="studio-preview-heading">Lees je concept</h3><span id="studio-draft-state" class="preview-state">Nog leeg</span></div>
+          <div class="preview-paper" role="region" aria-label="Leesvoorbeeld van je lokale concept" tabindex="0">
+            <span class="preview-kicker" aria-hidden="true">Een idee in wording</span>
+            <p id="studio-preview-title" class="preview-title">Jouw titel verschijnt hier</p>
+            <p id="studio-preview-note" class="preview-note">Je notitie krijgt hier de ruimte.</p>
+          </div>
+          <p class="preview-footnote">Een leesvoorbeeld van je eigen tekst. Alleen in deze pagina, niet geverifieerd.</p>
+        </aside>
       </div>
       <p class="quiet-note">Een conceptbestand bevat alleen je titel en notitie. Het bewijst geen account of toestemming. Sluiten of herladen wist het concept uit deze pagina.</p>
       <div class="studio-actions">

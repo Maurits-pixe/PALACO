@@ -13,7 +13,10 @@
         choice: $('consent-choice'), consentSave: $('consent-save'),
         consentRevoke: $('consent-revoke'), consentRefresh: $('consent-refresh'),
         title: $('studio-title'), note: $('studio-note'), import: $('studio-import'),
-        export: $('studio-export'), clear: $('studio-clear'), studioFeedback: $('studio-feedback')
+        export: $('studio-export'), clear: $('studio-clear'), studioFeedback: $('studio-feedback'),
+        titleCount: $('studio-title-count'), noteCount: $('studio-note-count'),
+        previewTitle: $('studio-preview-title'), previewNote: $('studio-preview-note'),
+        draftState: $('studio-draft-state')
     };
     let epoch = 0;
     let receiptRead = 0;
@@ -415,8 +418,18 @@
         if (focus) elements.studioFeedback.focus();
     }
 
+    function renderDraft() {
+        elements.titleCount.textContent = `${draft.title.length} / 80`;
+        elements.noteCount.textContent = `${draft.note.length} / 2000`;
+        elements.previewTitle.textContent = draft.title || 'Jouw titel verschijnt hier';
+        elements.previewNote.textContent = draft.note || 'Je notitie krijgt hier de ruimte.';
+        elements.draftState.textContent = draft.title.length === 0 && draft.note.length === 0
+            ? 'Nog leeg' : 'Alleen in deze pagina';
+    }
+
     function readDraftFields() {
         draft = { title: elements.title.value, note: elements.note.value };
+        renderDraft();
         return draft;
     }
 
@@ -426,6 +439,7 @@
         elements.title.value = '';
         elements.note.value = '';
         elements.import.value = '';
+        renderDraft();
         studioFeedback(message);
     }
 
@@ -472,6 +486,7 @@
             draft = value;
             elements.title.value = value.title;
             elements.note.value = value.note;
+            readDraftFields();
             studioFeedback('Concept geopend, alleen in deze pagina. Het is niet geverifieerd. Je account en toestemming zijn niet gewijzigd.', true);
         } catch {
             if (round === importRead) studioFeedback('Dit is geen geldig lokaal conceptbestand. Er is niets gewijzigd.', true);
@@ -499,5 +514,6 @@
     window.addEventListener('pageshow', (event) => {
         if (event.persisted) void loadAccount();
     });
+    renderDraft();
     void loadAccount();
 })();
