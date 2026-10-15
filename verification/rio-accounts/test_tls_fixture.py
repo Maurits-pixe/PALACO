@@ -37,6 +37,8 @@ def local_root():
 def fake_commands(
     record: dict, *, cargo_code: int = 0, selected_case: bool = True,
     down_code: int = 0, tamper_marker: bool = False,
+    service_code: int | None = None, service_selected: bool | None = None,
+    service_case: str | None = None,
 ):
     def execute(arguments, **options):
         record.setdefault("commands", []).append(list(arguments))
@@ -46,6 +48,10 @@ def fake_commands(
             for path in runtime.iterdir():
                 assert stat.S_IMODE(path.stat().st_mode) == 0o600
         if arguments[0] == "cargo":
+            selected_test = arguments[arguments.index("--locked") + 1]
+            record.setdefault("rustTests", []).append(selected_test)
+            metadata = os.fstat(options["stdout"].fileno())
+            record.setdefault("rustTestLogs", []).append((metadata.st_dev, metadata.st_ino))
             password = options["env"]["RIO_PG_TLS_PASSWORD"]
             record["password"] = password
             record["test_environment"] = options["env"].copy()
@@ -53,14 +59,18 @@ def fake_commands(
             assert arguments[-3:] == ["--ignored", "--exact", "--color=never"]
             output = options["stdout"]
             output.write((CANARY + "\n" + password + "\n").encode())
-            if selected_case:
-                output.write(("test " + fixture.TEST + " ... ok\n").encode())
+            is_service = selected_test == fixture.TESTS[1][0]
+            selected = service_selected if is_service and service_selected is not None else selected_case
+            case = service_case if is_service and service_case is not None else selected_test
+            code = service_code if is_service and service_code is not None else cargo_code
+            if selected:
+                output.write(("test " + case + " ... ok\n").encode())
                 output.write(b"test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;\n")
             else:
                 output.write(b"test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured;\n")
             if tamper_marker:
                 (runtime / ".owner.json").write_bytes(b'{"forged":true}\n')
-            return SimpleNamespace(returncode=cargo_code)
+            return SimpleNamespace(returncode=code)
         if arguments[0] == "docker" and "down" in arguments:
             return SimpleNamespace(returncode=down_code)
         return SimpleNamespace(returncode=0)
@@ -106,6 +116,15 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(result["status"], "PASS")
             self.assertTrue(result["rustTestPassed"])
+            self.assertEqual(result["schemaVersion"], "RIO_TLS_FIXTURE_EVIDENCE_V2")
+            self.assertTrue(result["rustTestsPassed"])
+            self.assertEqual(result["rustTests"], [
+                {"name": test, "passed": True} for test, _log in fixture.TESTS
+            ])
+            self.assertEqual(record["rustTests"], [test for test, _log in fixture.TESTS])
+            self.assertEqual(len(set(record["rustTestLogs"])), 2)
+            for test, _log in fixture.TESTS:
+                self.assertIn("RIO_TLS_RUST_TEST " + test + " PASS", output)
             self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
             self.assertFalse(fixture.RUNTIME.exists())
             self.assert_private_output(output, record, root)
@@ -147,6 +166,80 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertEqual(result["error"], "RUST_TEST_FAILED")
             self.assertFalse(result["rustTestPassed"])
             self.assertNotIn("RIO_TLS_RUST_TEST", output)
+            self.assert_private_output(output, record, root)
+            self.assert_closed(result)
+
+    def test_second_rust_failure_cannot_reuse_first_pass_and_still_cleans(self):
+        with local_root() as root:
+            record = {}
+            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, service_code=1)):
+                code, output, result = run_main()
+            self.assertEqual(code, 1)
+            self.assertEqual(result["status"], "FAIL")
+            self.assertEqual(result["error"], "RUST_TEST_FAILED")
+            self.assertTrue(result["rustTestPassed"])
+            self.assertFalse(result["rustTestsPassed"])
+            self.assertEqual(result["rustTests"], [
+                {"name": fixture.TESTS[0][0], "passed": True},
+                {"name": fixture.TESTS[1][0], "passed": False},
+            ])
+            self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.TESTS[1][0] + " PASS", output)
+            self.assertFalse(fixture.RUNTIME.exists())
+            self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
+            self.assert_private_output(output, record, root)
+            self.assert_closed(result)
+
+    def test_zero_selected_second_rust_case_cannot_reuse_first_pass(self):
+        with local_root() as root:
+            record = {}
+            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, service_selected=False)):
+                code, output, result = run_main()
+            self.assertEqual(code, 1)
+            self.assertEqual(result["error"], "RUST_TEST_FAILED")
+            self.assertTrue(result["rustTestPassed"])
+            self.assertFalse(result["rustTestsPassed"])
+            self.assertFalse(result["rustTests"][1]["passed"])
+            self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.TESTS[1][0] + " PASS", output)
+            self.assertFalse(fixture.RUNTIME.exists())
+            self.assert_private_output(output, record, root)
+            self.assert_closed(result)
+
+    def test_second_log_with_only_first_case_pass_cannot_prove_service_test(self):
+        with local_root() as root:
+            record = {}
+            with mock.patch.object(fixture.subprocess, "run", side_effect=fake_commands(record, service_case=fixture.TEST)):
+                code, output, result = run_main()
+            self.assertEqual(code, 1)
+            self.assertEqual(result["error"], "RUST_TEST_FAILED")
+            self.assertTrue(result["rustTestPassed"])
+            self.assertFalse(result["rustTestsPassed"])
+            self.assertFalse(result["rustTests"][1]["passed"])
+            self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.TESTS[1][0] + " PASS", output)
+            self.assertFalse(fixture.RUNTIME.exists())
+            self.assert_private_output(output, record, root)
+            self.assert_closed(result)
+
+    def test_preexisting_second_log_is_rejected_before_cargo_can_use_stale_pass(self):
+        with local_root() as root:
+            record = {}
+            execute = fake_commands(record)
+            def stale_service_log(arguments, **options):
+                completed = execute(arguments, **options)
+                if arguments[0] == "cargo":
+                    (fixture.RUNTIME / fixture.TESTS[1][1]).write_bytes((
+                        "test " + fixture.TESTS[1][0] + " ... ok\n"
+                        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;\n"
+                    ).encode())
+                return completed
+            with mock.patch.object(fixture.subprocess, "run", side_effect=stale_service_log):
+                code, output, result = run_main()
+            self.assertEqual(code, 1)
+            self.assertEqual(result["error"], "RUST_TEST_FAILED")
+            self.assertTrue(result["rustTestPassed"])
+            self.assertFalse(result["rustTestsPassed"])
+            self.assertEqual(record["rustTests"], [fixture.TEST])
+            self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.TESTS[1][0] + " PASS", output)
+            self.assertFalse(fixture.RUNTIME.exists())
             self.assert_private_output(output, record, root)
             self.assert_closed(result)
 
