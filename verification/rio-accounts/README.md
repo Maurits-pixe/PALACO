@@ -407,7 +407,11 @@ lived test CAs/certificates and private credentials, runs exactly
 `storage::tests::postgres_tls_store_contract` followed by
 `storage::bootstrap_tests::postgres_tls_bootstrap_contract`,
 `tls_service_tests::postgres_tls_service_contract` and
-`tls_oidc_tests::postgres_tls_oidc_contract` with separate private logs,
+`tls_oidc_tests::postgres_tls_oidc_contract` with separate private logs. After
+creating a fixed empty restore database through verified TLS, it runs
+`storage::tls_restore_tests::postgres_tls_prepare_restore_contract`, native
+`pg_dump`/`pg_restore`, and
+`storage::tls_restore_tests::postgres_tls_verify_restore_contract`,
 then verifies its own containers,
 network, volumes and private files are removed. Existing fixture namespaces and
 files are not reused or deleted. Public output is fixed evidence metadata only;
@@ -448,10 +452,19 @@ The loopback self-signed certificate exception remains test-only; this is not
 public certificate trust or staging acceptance. The standard development-profile
 OIDC/browser suite still runs separately after the TLS proofs.
 
-Evidence schema `RIO_TLS_FIXTURE_EVIDENCE_V2` reports all four exact test names and
-results; aggregate PASS requires all four and verified cleanup. Legacy `rustTest`
+The final two proofs prepare fresh still-live marker sessions, a pending login
+and granted consent, then inspect the actual restored clone before recovery.
+The explicit typed restore constructor refuses empty/incomplete clones and
+fences sessions, login flows and consent before returning a store. Source state
+must remain unchanged; a fresh bound session on the recovered clone can be issued.
+Native clients require CA/hostname verification and SCRAM channel binding over
+TLS. The custom-format schema-and-data archive remains private inside the owned
+container and is removed with that namespace. No database is overwritten.
+
+Evidence schema `RIO_TLS_FIXTURE_EVIDENCE_V2` reports all six exact test names and
+results; aggregate PASS requires all six, native backup/restore phases and verified cleanup. Legacy `rustTest`
 and `rustTestPassed` refer only to the first storage case. A first-case PASS can
-never substitute for another case. Twenty-six fixture tests guard selection,
+never substitute for another case. Fixture tests guard selection,
 private-log isolation, false PASS rejection, owned process groups and lifecycle.
 Cargo leaders remain unreaped while their owned groups receive bounded TERM/KILL
 cleanup. This does not by itself prove detached Chromium group cleanup; the
@@ -468,6 +481,8 @@ The complete browser/TLS test boundary is documented in
 [T05 real OIDC over TLS storage](../../specs/rio-accounts/T05-TLS-REAL-OIDC.md).
 Initialization and non-repairing reopen behavior are documented in
 [T05 bootstrap guard](../../specs/rio-accounts/T05-BINDING-BOOTSTRAP-GUARD.md).
+The separate typed TLS recovery target and native archive proof are documented in
+[T05 TLS native recovery](../../specs/rio-accounts/T05-TLS-NATIVE-RESTORE.md).
 
 ## Login request failure evidence
 

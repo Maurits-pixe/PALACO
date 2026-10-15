@@ -43,6 +43,12 @@ def fake_commands(
     service_case: str | None = None,
     oidc_code: int | None = None, oidc_selected: bool | None = None,
     oidc_case: str | None = None,
+    restore_prepare_code: int | None = None, restore_prepare_selected: bool | None = None,
+    restore_prepare_case: str | None = None,
+    restore_verify_code: int | None = None, restore_verify_selected: bool | None = None,
+    restore_verify_case: str | None = None,
+    native_tls_code: int = 0, createdb_code: int = 0,
+    backup_code: int = 0, restore_code: int = 0,
 ):
     def execute(arguments, **options):
         record.setdefault("commands", []).append(list(arguments))
@@ -67,6 +73,12 @@ def fake_commands(
                 fixture.BOOTSTRAP_TEST: (bootstrap_selected, bootstrap_case, bootstrap_code),
                 fixture.SERVICE_TEST: (service_selected, service_case, service_code),
                 fixture.OIDC_TEST: (oidc_selected, oidc_case, oidc_code),
+                fixture.RESTORE_PREPARE_TEST: (
+                    restore_prepare_selected, restore_prepare_case, restore_prepare_code,
+                ),
+                fixture.RESTORE_VERIFY_TEST: (
+                    restore_verify_selected, restore_verify_case, restore_verify_code,
+                ),
             }
             override_selected, override_case, override_code = overrides.get(selected_test, (None, None, None))
             selected = override_selected if override_selected is not None else selected_case
@@ -82,6 +94,17 @@ def fake_commands(
             return SimpleNamespace(returncode=code)
         if arguments[0] == "docker" and "down" in arguments:
             return SimpleNamespace(returncode=down_code)
+        if arguments[0] == "docker" and "exec" in arguments:
+            native = {
+                fixture.NATIVE_TLS_CONTROL_SCRIPT: ("tls", native_tls_code),
+                fixture.CREATE_RESTORE_SCRIPT: ("createdb", createdb_code),
+                fixture.BACKUP_SCRIPT: ("backup", backup_code),
+                fixture.RESTORE_SCRIPT: ("restore", restore_code),
+            }.get(arguments[-1])
+            if native is not None:
+                record.setdefault("nativePhases", []).append(native[0])
+                options["stdout"].write((CANARY + "\n").encode())
+                return SimpleNamespace(returncode=native[1])
         return SimpleNamespace(returncode=0)
     return execute
 
@@ -140,7 +163,7 @@ class TlsFixtureTests(unittest.TestCase):
         ])
         self.assertEqual(result["rustTest"], fixture.TEST)
         self.assertEqual(result["rustTestPassed"], fixture.TEST in passed)
-        self.assertEqual(result["rustTestsPassed"], len(passed) == 4)
+        self.assertEqual(result["rustTestsPassed"], len(passed) == len(fixture.TESTS))
 
     def test_success_has_private_environment_exact_test_and_owned_cleanup(self):
         with local_root() as root:
@@ -156,7 +179,11 @@ class TlsFixtureTests(unittest.TestCase):
                 {"name": test, "passed": True} for test, _log in fixture.TESTS
             ])
             self.assertEqual(record["rustTests"], [test for test, _log in fixture.TESTS])
-            self.assertEqual(len(set(record["rustTestLogs"])), 4)
+            self.assertEqual(len(set(record["rustTestLogs"])), len(fixture.TESTS))
+            self.assertEqual(result["backupRestore"], {
+                "tlsVerified": True, "restoreDatabaseCreated": True,
+                "backupCreated": True, "restored": True,
+            })
             for test, _log in fixture.TESTS:
                 self.assertIn("RIO_TLS_RUST_TEST " + test + " PASS", output)
             self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
@@ -174,7 +201,8 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertIn("--volumes", down)
             for command in commands:
                 if command[0] == "docker" and "exec" in command:
-                    self.assertIn("--command=\"SELECT 1\"", command[-1])
+                    if command[-1] == fixture.READY_SCRIPT:
+                        self.assertIn("--command=\"SELECT 1\"", command[-1])
                     self.assertNotIn(record["password"], " ".join(command))
 
     def test_failed_rust_test_never_echoes_private_logs_and_still_cleans(self):
@@ -329,7 +357,7 @@ class TlsFixtureTests(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertEqual(result["error"], "RUST_TEST_FAILED")
                 self.assert_rust_results(result, {fixture.TEST, fixture.BOOTSTRAP_TEST, fixture.SERVICE_TEST})
-                self.assertEqual(record["rustTests"], [test for test, _log in fixture.TESTS])
+                self.assertEqual(record["rustTests"], [test for test, _log in fixture.BASE_TESTS])
                 self.assertNotIn("RIO_TLS_RUST_TEST " + fixture.OIDC_TEST + " PASS", output)
                 self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
                 self.assertFalse(fixture.RUNTIME.exists())
@@ -358,6 +386,123 @@ class TlsFixtureTests(unittest.TestCase):
                 self.assertFalse(fixture.RUNTIME.exists())
                 self.assert_private_output(output, record, root)
                 self.assert_closed(result)
+
+    def test_native_tls_createdb_prepare_dump_restore_verify_are_ordered(self):
+        with local_root() as root:
+            record = {}
+            with mock_commands(fake_commands(record)):
+                code, output, result = run_main()
+            self.assertEqual(code, 0)
+            steps = []
+            native = {
+                fixture.NATIVE_TLS_CONTROL_SCRIPT: "tls",
+                fixture.CREATE_RESTORE_SCRIPT: "createdb",
+                fixture.BACKUP_SCRIPT: "backup",
+                fixture.RESTORE_SCRIPT: "restore",
+            }
+            for command in record["commands"]:
+                if command[0] == "cargo":
+                    steps.append(command[command.index("--locked") + 1])
+                elif command[-1] in native:
+                    self.assertEqual(command[-4:-1], ["postgres_tls", "sh", "-ceu"])
+                    steps.append(native[command[-1]])
+            self.assertEqual(steps, [
+                *[test for test, _log in fixture.BASE_TESTS], "tls", "createdb",
+                fixture.RESTORE_PREPARE_TEST, "backup", "restore", fixture.RESTORE_VERIFY_TEST,
+            ])
+            self.assertTrue(result["rustTestsPassed"])
+            self.assert_private_output(output, record, root)
+
+    def test_native_failure_does_not_turn_source_passes_into_restore_proof(self):
+        cases = (
+            ("native_tls_code", "READINESS_FAILED", [], set(), 4),
+            ("createdb_code", "CREATE_RESTORE_FAILED", ["tls"], {"tlsVerified"}, 4),
+            ("backup_code", "BACKUP_FAILED", ["tls", "createdb"],
+             {"tlsVerified", "restoreDatabaseCreated"}, 5),
+            ("restore_code", "RESTORE_FAILED", ["tls", "createdb", "backup"],
+             {"tlsVerified", "restoreDatabaseCreated", "backupCreated"}, 5),
+        )
+        for option, failure, completed, native_passed, rust_count in cases:
+            with self.subTest(option=option), local_root() as root:
+                record = {}
+                with mock_commands(fake_commands(record, **{option: 1})):
+                    code, output, result = run_main()
+                self.assertEqual(code, 1)
+                self.assertEqual(result["error"], failure)
+                self.assertEqual(result["status"], "FAIL")
+                self.assert_rust_results(result, {test for test, _log in fixture.TESTS[:rust_count]})
+                self.assertEqual(
+                    {key for key, value in result["backupRestore"].items() if value}, native_passed,
+                )
+                self.assertEqual(record["nativePhases"][:-1], completed)
+                self.assertFalse(fixture.RUNTIME.exists())
+                self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
+                self.assert_private_output(output, record, root)
+
+    def test_restore_cases_require_their_own_selected_success(self):
+        for name, prefix, earlier_count in (
+            (fixture.RESTORE_PREPARE_TEST, "restore_prepare", 4),
+            (fixture.RESTORE_VERIFY_TEST, "restore_verify", 5),
+        ):
+            for option, value in (("code", 1), ("selected", False), ("case", fixture.TEST)):
+                with self.subTest(case=name, option=option), local_root() as root:
+                    record = {}
+                    with mock_commands(fake_commands(record, **{prefix + "_" + option: value})):
+                        code, output, result = run_main()
+                    self.assertEqual(code, 1)
+                    self.assertEqual(result["error"], "RUST_TEST_FAILED")
+                    self.assert_rust_results(result, {test for test, _log in fixture.TESTS[:earlier_count]})
+                    self.assertEqual(record["rustTests"][-1], name)
+                    self.assertNotIn("RIO_TLS_RUST_TEST " + name + " PASS", output)
+                    self.assertFalse(fixture.RUNTIME.exists())
+                    self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
+                    self.assert_private_output(output, record, root)
+
+    def test_stale_restore_prepare_or_verify_log_is_rejected_before_invocation(self):
+        for index in (4, 5):
+            with self.subTest(index=index), local_root() as root:
+                record = {}
+                execute = fake_commands(record)
+                name, log = fixture.TESTS[index]
+                previous_name = fixture.TESTS[index - 1][0]
+                def stale_restore_log(arguments, **options):
+                    completed = execute(arguments, **options)
+                    if arguments[0] == "cargo" and arguments[arguments.index("--locked") + 1] == previous_name:
+                        (fixture.RUNTIME / log).write_bytes((
+                            "test " + name + " ... ok\n"
+                            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;\n"
+                        ).encode())
+                    return completed
+                with mock_commands(stale_restore_log):
+                    code, output, result = run_main()
+                self.assertEqual(code, 1)
+                self.assertEqual(result["error"], "RUST_TEST_FAILED")
+                self.assert_rust_results(result, {test for test, _log in fixture.TESTS[:index]})
+                self.assertNotIn(name, record["rustTests"])
+                self.assertFalse(fixture.RUNTIME.exists())
+                self.assert_private_output(output, record, root)
+
+    def test_native_timeout_or_cancellation_always_cleans_without_exception_payload(self):
+        for error, category in (
+            (subprocess.TimeoutExpired(CANARY, 60), "BACKUP_FAILED"),
+            (KeyboardInterrupt(CANARY), "CANCELLED"),
+        ):
+            with self.subTest(category=category), local_root() as root:
+                record = {}
+                execute = fake_commands(record)
+                def interrupted_backup(arguments, **options):
+                    if arguments[-1] == fixture.BACKUP_SCRIPT:
+                        raise error
+                    return execute(arguments, **options)
+                with mock_commands(interrupted_backup):
+                    code, output, result = run_main()
+                self.assertEqual(code, 1)
+                self.assertEqual(result["error"], category)
+                self.assertFalse(result["backupRestore"]["backupCreated"])
+                self.assertFalse(result["backupRestore"]["restored"])
+                self.assertFalse(fixture.RUNTIME.exists())
+                self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
+                self.assert_private_output(output, record, root)
 
     def test_namespace_cleanup_failure_prevents_overall_pass_but_removes_private_files(self):
         with local_root() as root:
@@ -475,6 +620,157 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertNotIn("SYNTHETIC_OWNED_VOLUME_REMAINS", output)
             self.assert_private_output(output, record, root)
             self.assert_closed(result)
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "Native archive guards use Linux shell/fd semantics.")
+class NativeArchiveScriptTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.private = self.root / "private"
+        self.private.mkdir(mode=0o700)
+        (self.private / "password").write_text(CANARY)
+        (self.private / "password").chmod(0o600)
+        self.archive = self.private / "tls-snapshot.dump"
+        self.restored = self.private / "restored"
+        self.bin = self.root / "bin"
+        self.bin.mkdir(mode=0o700)
+        self.program("id", "printf '%s\\n' " + str(os.getuid()))
+        self.program("pg_dump", "printf 'PGDMP_SYNTHETIC_FIXTURE_PAYLOAD'")
+        self.program("pg_restore", (
+            "test \"$(cat)\" = PGDMP_SYNTHETIC_FIXTURE_PAYLOAD\n"
+            "printf restored > '" + str(self.restored) + "'"
+        ))
+
+    def program(self, name, script):
+        target = self.bin / name
+        target.write_text("#!/bin/sh\nset -eu\n" + script + "\n")
+        target.chmod(0o700)
+
+    def execute(self, script):
+        # Only tests substitute paths; fixture commands contain fixed constants.
+        script = script.replace("/run/rio-proof", str(self.private))
+        result = subprocess.run(
+            ["sh", "-ceu", script], cwd=self.root,
+            env={"PATH": str(self.bin) + os.pathsep + os.environ["PATH"]},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5, check=False,
+        )
+        self.assertNotIn(CANARY.encode(), result.stdout + result.stderr)
+        return result.returncode
+
+    def test_custom_archive_is_private_and_restore_reads_all_bytes_from_checked_descriptor(self):
+        self.assertEqual(self.execute(fixture.BACKUP_SCRIPT), 0)
+        self.assertEqual(self.archive.read_bytes(), b"PGDMP_SYNTHETIC_FIXTURE_PAYLOAD")
+        self.assertEqual(stat.S_IMODE(self.archive.stat().st_mode), 0o600)
+        self.assertEqual(self.archive.stat().st_nlink, 1)
+        self.assertEqual(self.execute(fixture.RESTORE_SCRIPT), 0)
+        self.assertEqual(self.restored.read_text(), "restored")
+
+    def test_backup_never_overwrites_a_preexisting_file_or_link(self):
+        target = self.private / "unrelated"
+        target.write_bytes(b"PRESERVE")
+        for kind in ("file", "symlink", "dangling", "hardlink"):
+            with self.subTest(kind=kind):
+                if kind == "file":
+                    self.archive.write_bytes(b"PRESERVE")
+                elif kind == "symlink":
+                    self.archive.symlink_to(target)
+                elif kind == "dangling":
+                    self.archive.symlink_to(self.private / "absent")
+                else:
+                    os.link(target, self.archive)
+                self.assertNotEqual(self.execute(fixture.BACKUP_SCRIPT), 0)
+                self.assertEqual(target.read_bytes(), b"PRESERVE")
+                if kind == "file":
+                    self.assertEqual(self.archive.read_bytes(), b"PRESERVE")
+                self.archive.unlink()
+
+    def test_restore_rejects_links_permissions_empty_magic_and_oversized_archives(self):
+        target = self.private / "unrelated"
+        target.write_bytes(b"PGDMP_SYNTHETIC_FIXTURE_PAYLOAD")
+        target.chmod(0o600)
+        for kind in ("symlink", "hardlink", "permissions", "empty", "magic", "oversized"):
+            with self.subTest(kind=kind):
+                if kind == "symlink":
+                    self.archive.symlink_to(target)
+                elif kind == "hardlink":
+                    os.link(target, self.archive)
+                else:
+                    self.archive.write_bytes(
+                        b"" if kind == "empty" else b"WRONG" if kind == "magic" else target.read_bytes()
+                    )
+                    self.archive.chmod(0o644 if kind == "permissions" else 0o600)
+                    if kind == "oversized":
+                        with self.archive.open("r+b") as archive:
+                            archive.truncate(16_777_217)
+                self.assertNotEqual(self.execute(fixture.RESTORE_SCRIPT), 0)
+                self.assertFalse(self.restored.exists())
+                self.archive.unlink()
+
+    def test_failed_dump_cannot_be_restored_as_a_successful_archive(self):
+        self.program("pg_dump", "exit 7")
+        self.assertNotEqual(self.execute(fixture.BACKUP_SCRIPT), 0)
+        self.assertNotEqual(self.execute(fixture.RESTORE_SCRIPT), 0)
+        self.assertFalse(self.restored.exists())
+
+
+class NativeTlsCommandTests(unittest.TestCase):
+    def test_native_clients_keep_fixed_verified_tls_and_private_credential_source(self):
+        for script in (
+            fixture.NATIVE_TLS_CONTROL_SCRIPT, fixture.CREATE_RESTORE_SCRIPT,
+            fixture.BACKUP_SCRIPT, fixture.RESTORE_SCRIPT,
+        ):
+            with self.subTest(script=script.splitlines()[-1]):
+                self.assertTrue(script.startswith(fixture.NATIVE_TLS_ENV))
+                self.assertIn('PGPASSWORD="$(cat /run/rio-proof/password)"', script)
+                for required in (
+                    "PGHOST=localhost", "PGHOSTADDR=127.0.0.1", "PGPORT=5432", "PGUSER=rio_dev",
+                    "PGSSLMODE=verify-full", "PGSSLROOTCERT=/run/rio-proof-input/ca.pem",
+                    "PGCHANNELBINDING=require", "PGGSSENCMODE=disable",
+                    "PGSSLMINPROTOCOLVERSION=TLSv1.2", "PGCONNECT_TIMEOUT=8",
+                ):
+                    self.assertIn(required, script)
+                self.assertNotIn("sslmode=prefer", script)
+                self.assertNotIn("sslmode=require", script)
+                self.assertNotIn("postgres://", script)
+                self.assertNotIn("--password=", script)
+        self.assertIn("other-ca.pem psql", fixture.NATIVE_TLS_CONTROL_SCRIPT)
+        self.assertIn("pg_stat_ssl", fixture.NATIVE_TLS_CONTROL_SCRIPT)
+        self.assertIn("--maintenance-db=rio_synthetic_tls", fixture.CREATE_RESTORE_SCRIPT)
+        self.assertIn("--template=template0 rio_synthetic_tls_restore", fixture.CREATE_RESTORE_SCRIPT)
+        self.assertNotIn("--if-exists", fixture.CREATE_RESTORE_SCRIPT)
+        self.assertIn("umask 077", fixture.BACKUP_SCRIPT)
+        self.assertIn("set -C\nexec 3>", fixture.BACKUP_SCRIPT)
+        self.assertIn("--schema=rio_synthetic --format=custom >&3", fixture.BACKUP_SCRIPT)
+        self.assertNotIn("--schema-only", fixture.BACKUP_SCRIPT)
+        self.assertNotIn("--data-only", fixture.BACKUP_SCRIPT)
+        self.assertIn("--single-transaction --exit-on-error --no-owner --no-privileges", fixture.RESTORE_SCRIPT)
+        self.assertIn("--dbname=rio_synthetic_tls_restore <&4", fixture.RESTORE_SCRIPT)
+        self.assertNotIn("--clean", fixture.RESTORE_SCRIPT)
+        for script in (fixture.BACKUP_SCRIPT, fixture.RESTORE_SCRIPT):
+            self.assertIn("test ! -L /run/rio-proof/tls-snapshot.dump", script)
+            self.assertIn('"600:$(id -u):1"', script)
+            self.assertIn('test "$size" -ge 5 && test "$size" -le 16777216', script)
+            self.assertIn("= PGDMP", script)
+        self.assertIn("/proc/self/fd/4", fixture.RESTORE_SCRIPT)
+
+    def test_native_failure_is_fixed_and_has_bounded_private_execution(self):
+        owner = mock.Mock()
+        for script, category in (
+            (fixture.NATIVE_TLS_CONTROL_SCRIPT, "READINESS_FAILED"),
+            (fixture.CREATE_RESTORE_SCRIPT, "CREATE_RESTORE_FAILED"),
+            (fixture.BACKUP_SCRIPT, "BACKUP_FAILED"),
+            (fixture.RESTORE_SCRIPT, "RESTORE_FAILED"),
+        ):
+            with (
+                self.subTest(category=category),
+                mock.patch.object(fixture, "_compose", return_value=["docker", "exec", script]),
+                mock.patch.object(fixture, "_run_private", return_value=1) as private,
+            ):
+                with self.assertRaisesRegex(fixture.FixtureFailure, "^" + category + "$"):
+                    fixture._run_native(owner, script, category, timeout=30)
+                private.assert_called_once_with(owner, ["docker", "exec", script], timeout=30)
 
 
 class OwnedRustProcessTests(unittest.TestCase):
