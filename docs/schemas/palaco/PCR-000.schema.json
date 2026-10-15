@@ -3,7 +3,7 @@
   "$id": "https://palaco.example/schemas/palaco/PCR-000.schema.json",
   "title": "PCR-000 — PALACO Registry Model — MVP",
   "description": "A closed snapshot of PALACO registry records. All canonical object references must resolve within objects; external or partial registries are not supported in this profile.",
-  "$comment": "JSON Schema checks structure only. Use the registry validator for unique identifiers, reference existence, edge ownership and consistency with dedicated reference fields. Passing does not establish PCC-001 CANONICAL status or grant authority.",
+  "$comment": "JSON Schema checks structure only. Use the registry validator for unique identifiers, reference existence, edge ownership, consistency with dedicated reference fields, and separate dependency/upstream acyclicity checks. Passing does not establish PCC-001 CANONICAL status or grant authority.",
   "type": "object",
   "required": ["registry_version", "objects"],
   "properties": {

@@ -12,7 +12,8 @@ Checks, in one run:
   6. PALACO canonical schemas and fixtures, with typed object/relationship
      contracts and negative tests, resolving references locally only.
   7. PCR-000 closed registry snapshots: unique IDs, resolved object references,
-     owned relationships and consistency with dedicated reference fields.
+     owned relationships, consistency with dedicated reference fields, and
+     acyclic dependency and upstream graphs (checked separately).
 
 Any failure exits non-zero.
 """
@@ -630,6 +631,33 @@ def reference_value(record, path):
     return value
 
 
+def require_acyclic(graph, label):
+    """Iterative depth-first traversal; shared ancestors are not cycles."""
+    finished = set()
+    active = {}
+    path = []
+    for root in graph:
+        if root in finished:
+            continue
+        active[root] = 0
+        path.append(root)
+        stack = [iter(sorted(graph[root]))]
+        while stack:
+            target = next(stack[-1], None)
+            if target is None:
+                stack.pop()
+                completed = path.pop()
+                finished.add(completed)
+                del active[completed]
+            elif target in active:
+                cycle = path[active[target]:] + [target]
+                raise ConformanceError(f"{label} cycle: {' -> '.join(cycle)}")
+            elif target not in finished:
+                active[target] = len(path)
+                path.append(target)
+                stack.append(iter(sorted(graph[target])))
+
+
 def validate_palaco_registry(instance, validator=None):
     """Validate a closed snapshot without fetching resources or granting authority."""
     if validator is None:
@@ -667,6 +695,19 @@ def validate_palaco_registry(instance, validator=None):
                     targets = value if isinstance(value, list) else [value]
                     require(edge["target"] in targets,
                             f"{object_id}: {edge['relation']} conflicts with {'.'.join(path)}")
+    dependencies = {
+        object_id: set(record.get("dependencies", [])) | {
+            edge["target"] for edge in record["traceability"]["relationships"]
+            if edge["relation"] == "DEPENDS_ON"
+        }
+        for object_id, record in objects.items()
+    }
+    upstream = {
+        object_id: set(record["traceability"]["upstream"])
+        for object_id, record in objects.items()
+    }
+    require_acyclic(dependencies, "dependency")
+    require_acyclic(upstream, "upstream")
     return f"closed PALACO registry valid ({len(objects)} objects); not a canonical-status decision"
 
 
@@ -803,6 +844,101 @@ def check_palaco_registry():
     return f"PCR-000: closed fixture, complete 15-object snapshot + {negative_count} negative tests"
 
 
+def check_palaco_cycles():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    ids = [f"FE-{index:05d}" for index in range(1, 5)]
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for object_id in ids:
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = object_id
+        fixture["objects"].append(record)
+    negative_count = 0
+    positive_count = 0
+
+    def snapshot(edges):
+        instance = copy.deepcopy(fixture)
+        for source, target, representation in edges:
+            record = instance["objects"][source]
+            if representation == "upstream":
+                record["traceability"]["upstream"].append(ids[target])
+            elif representation == "dependencies":
+                record.setdefault("dependencies", []).append(ids[target])
+            else:
+                record["traceability"]["relationships"].append({
+                    "source": ids[source], "relation": "DEPENDS_ON", "target": ids[target],
+                })
+        return instance
+
+    def reject(instance, label, cycle):
+        nonlocal negative_count
+        try:
+            validate_palaco_registry(instance, validator)
+        except ConformanceError as error:
+            require(str(error) == f"{label} cycle: {cycle}",
+                    f"unexpected cycle diagnostic: {error}")
+        else:
+            raise ConformanceError(f"{label}: cyclic registry accepted")
+        negative_count += 1
+
+    for representation in ("dependencies", "edge", "upstream"):
+        label = "upstream" if representation == "upstream" else "dependency"
+        reject(snapshot([(0, 1, representation), (1, 0, representation)]),
+               label, "FE-00001 -> FE-00002 -> FE-00001")
+        # Root 0 finishes first: the cycle is in another component.
+        reject(snapshot([(1, 2, representation), (2, 3, representation), (3, 1, representation)]),
+               label, "FE-00002 -> FE-00003 -> FE-00004 -> FE-00002")
+        # A diamond has shared ancestors, but no back edge.
+        diamond = snapshot([(0, 1, representation), (0, 2, representation),
+                            (1, 3, representation), (2, 3, representation)])
+        validate_palaco_registry(diamond, validator)
+        diamond["objects"].reverse()
+        validate_palaco_registry(diamond, validator)
+        positive_count += 2
+    reject(snapshot([(0, 1, "dependencies"), (1, 2, "edge"), (2, 0, "dependencies")]),
+           "dependency", "FE-00001 -> FE-00002 -> FE-00003 -> FE-00001")
+    # Duplicate representations of the same edge must not create a cycle.
+    validate_palaco_registry(snapshot([(0, 1, "dependencies"), (0, 1, "edge")]), validator)
+    # Upstream and dependency edges describe distinct graphs.
+    validate_palaco_registry(snapshot([(0, 1, "dependencies"), (1, 0, "upstream")]), validator)
+    # Generic references can be reciprocal, such as evidence and audit links.
+    reciprocal = copy.deepcopy(fixture)
+    reciprocal["objects"][0]["compliance"] = [ids[1]]
+    reciprocal["objects"][1]["compliance"] = [ids[0]]
+    validate_palaco_registry(reciprocal, validator)
+    evidence = copy.deepcopy(template)
+    evidence["object_type"] = "EVD"
+    evidence["metadata"]["id"] = "EVD-00001"
+    evidence["audit"]["audit_refs"] = ["AUD-00001"]
+    evidence["traceability"]["relationships"] = [
+        {"source": "EVD-00001", "relation": "AUDITED_BY", "target": "AUD-00001"}
+    ]
+    audit = copy.deepcopy(template)
+    audit["object_type"] = "AUD"
+    audit["metadata"]["id"] = "AUD-00001"
+    audit["evidence"] = ["EVD-00001"]
+    validate_palaco_registry({"registry_version": "0.1.0", "objects": [evidence, audit]}, validator)
+    positive_count += 4
+
+    # Exercise traversal past Python's normal recursion limit without schema overhead.
+    depth = sys.getrecursionlimit() + 100
+    graph = {f"FE-{index:05d}": {f"FE-{index + 1:05d}"} for index in range(depth)}
+    graph[f"FE-{depth:05d}"] = set()
+    require_acyclic(graph, "dependency")
+    graph[f"FE-{depth:05d}"] = {f"FE-{depth - 1:05d}"}
+    try:
+        require_acyclic(graph, "dependency")
+    except ConformanceError as error:
+        expected = f"dependency cycle: FE-{depth - 1:05d} -> FE-{depth:05d} -> FE-{depth - 1:05d}"
+        require(str(error) == expected, f"unexpected deep-cycle diagnostic: {error}")
+    else:
+        raise ConformanceError("deep dependency cycle accepted")
+    return (
+        f"registry cycles: {negative_count} rejected, {positive_count} acyclic snapshots "
+        f"accepted + deep traversal checks ({depth + 1} nodes)"
+    )
+
+
 # --------------------------------------------------------------------------
 # Parser regression tests
 # --------------------------------------------------------------------------
@@ -909,6 +1045,7 @@ CHECKS = (
     ("VisitCard schema/fixture conformance", check_visitcard_fixtures),
     ("PALACO schema/fixture conformance", check_palaco_fixtures),
     ("PALACO closed registry conformance", check_palaco_registry),
+    ("PALACO registry cycle conformance", check_palaco_cycles),
 )
 
 

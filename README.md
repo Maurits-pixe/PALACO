@@ -2148,7 +2148,17 @@ edges. Dedicated references need not be duplicated as edges. An upstream list is
 not a dependency list. Partial snapshots and external object references are not
 supported by this closed profile; record-only PMS-001 validation stays unchanged.
 
-This MVP does not enforce upstream completeness, graph reachability or cycles,
+The closed registry validator rejects cycles in two separate directed graphs:
+the union of `dependencies` and embedded `DEPENDS_ON` edges, and
+`traceability.upstream`. Duplicate representations of an edge count once.
+Diagnostics identify the graph and the object-ID path closing the cycle.
+Traversal is iterative, so deep chains do not depend on Python's recursion limit.
+The two graphs are not merged: opposite edges across the graphs are allowed.
+Other references and relation types are not cycle-checked; reciprocal evidence
+and audit references remain valid. Standalone PMS-001/PMS-002 schema validation
+does not perform these graph checks.
+
+This MVP does not enforce upstream completeness, root reachability,
 date ordering, lifecycle transitions, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending
 approval. Validation alone never grants authority or establishes PCC-001
