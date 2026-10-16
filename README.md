@@ -2114,6 +2114,12 @@ permission**. A different request under the same key is rejected. A stale
 authorized boundary cannot create a new commit after this gate is revoked.
 Caller-supplied revoked, expired, or indeterminate provenance is always rejected,
 including on retries. Mutex poisoning and sequence exhaustion fail closed.
+Direct unit tests inject these otherwise hard-to-reach states for both commit
+APIs: the last sequence can be recorded and replayed, but new records and a new
+revocation cannot wrap the counter. Exhaustion takes precedence over the record
+limit for a new valid key. A poisoned mutex rejects even historical retries,
+both before and after revocation; it is not automatically recovered. These
+fault-injection checks are not crash-recovery or security evidence.
 
 `commit_with_outcome` makes this distinction explicit: `CommitOutcome::Recorded`
 means this call inserted a local record; `CommitOutcome::Replayed` means it

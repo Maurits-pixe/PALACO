@@ -222,7 +222,154 @@ impl InMemoryCommitGate {
 
 #[cfg(test)]
 mod tests {
-    use super::{CommitGateError, InMemoryCommitGate, State};
+    use palaco_eventbus::EventEnvelope;
+    use palaco_foundation::{AuthorityState, ContractError, EvidenceRef};
+    use palaco_quay::ProvenanceRecord;
+
+    use super::{CommitGateError, CommitOutcome, ExecutionBoundary, InMemoryCommitGate, State};
+
+    fn boundary(authority: AuthorityState) -> ExecutionBoundary {
+        ExecutionBoundary::new(ProvenanceRecord::new(
+            EventEnvelope::new(
+                "execution.requested",
+                EvidenceRef::new("test-evidence").expect("nonempty evidence"),
+            ),
+            authority,
+        ))
+    }
+
+    #[test]
+    fn final_commit_sequence_preserves_retries_and_rejects_new_effects() {
+        for use_legacy in [false, true] {
+            let gate = InMemoryCommitGate {
+                state: std::sync::Mutex::new(State {
+                    sequence: u64::MAX - 1,
+                    ..State::default()
+                }),
+                ..InMemoryCommitGate::with_record_limit(1)
+            };
+            let key = EvidenceRef::new("last").expect("nonempty key");
+            let fresh_key = EvidenceRef::new("fresh").expect("nonempty key");
+            let authorized = boundary(AuthorityState::Authorized);
+            let receipt = if use_legacy {
+                gate.commit(&key, &authorized, b"payload")
+                    .expect("last sequence can be recorded")
+            } else {
+                let outcome = gate
+                    .commit_with_outcome(&key, &authorized, b"payload")
+                    .expect("last sequence can be recorded");
+                assert!(matches!(outcome, CommitOutcome::Recorded(_)));
+                outcome.receipt()
+            };
+            assert_eq!(receipt.sequence(), u64::MAX);
+            assert_eq!(gate.commit(&key, &authorized, b"payload"), Ok(receipt));
+            assert_eq!(
+                gate.commit_with_outcome(&key, &authorized, b"payload"),
+                Ok(CommitOutcome::Replayed(receipt))
+            );
+            for payload in [b"payload".as_slice(), b"changed".as_slice()] {
+                assert_eq!(
+                    gate.commit(&fresh_key, &authorized, payload),
+                    Err(CommitGateError::SequenceExhausted)
+                );
+                assert_eq!(
+                    gate.commit_with_outcome(&fresh_key, &authorized, payload),
+                    Err(CommitGateError::SequenceExhausted)
+                );
+            }
+            assert_eq!(
+                gate.commit(&key, &authorized, b"changed"),
+                Err(CommitGateError::IdempotencyConflict)
+            );
+            assert_eq!(
+                gate.commit_with_outcome(&key, &authorized, b"changed"),
+                Err(CommitGateError::IdempotencyConflict)
+            );
+            let invalid = boundary(AuthorityState::Revoked);
+            assert_eq!(
+                gate.commit(&key, &invalid, b"payload"),
+                Err(CommitGateError::InvalidBoundary(
+                    ContractError::RevokedAuthority
+                ))
+            );
+            assert_eq!(
+                gate.commit_with_outcome(&key, &invalid, b"payload"),
+                Err(CommitGateError::InvalidBoundary(
+                    ContractError::RevokedAuthority
+                ))
+            );
+            assert_eq!(gate.revoke(), Err(CommitGateError::SequenceExhausted));
+            let state = gate.state.lock().expect("exhaustion does not poison");
+            assert_eq!(state.sequence, u64::MAX);
+            assert_eq!(state.revoked_at, None);
+            assert_eq!(state.commits.len(), 1);
+            assert_eq!(state.commits[key.as_str()].payload, b"payload");
+        }
+    }
+
+    #[test]
+    fn exhaustion_precedes_zero_record_limit_without_inserting_or_revoking() {
+        let gate = InMemoryCommitGate {
+            state: std::sync::Mutex::new(State {
+                sequence: u64::MAX,
+                ..State::default()
+            }),
+            ..InMemoryCommitGate::with_record_limit(0)
+        };
+        let key = EvidenceRef::new("fresh").expect("nonempty key");
+        let authorized = boundary(AuthorityState::Authorized);
+        assert_eq!(
+            gate.commit(&key, &authorized, b"payload"),
+            Err(CommitGateError::SequenceExhausted)
+        );
+        assert_eq!(
+            gate.commit_with_outcome(&key, &authorized, b"payload"),
+            Err(CommitGateError::SequenceExhausted)
+        );
+        assert_eq!(gate.revoke(), Err(CommitGateError::SequenceExhausted));
+        let state = gate.state.lock().expect("exhaustion does not poison");
+        assert_eq!(state.sequence, u64::MAX);
+        assert_eq!(state.revoked_at, None);
+        assert!(state.commits.is_empty());
+    }
+
+    #[test]
+    fn poisoning_blocks_fresh_requests_and_historical_retries_before_and_after_revocation() {
+        for revoked in [false, true] {
+            let gate = InMemoryCommitGate::with_record_limit(1);
+            let key = EvidenceRef::new("recorded").expect("nonempty key");
+            let fresh_key = EvidenceRef::new("fresh").expect("nonempty key");
+            let authorized = boundary(AuthorityState::Authorized);
+            gate.commit(&key, &authorized, b"payload").expect("commit");
+            if revoked {
+                assert_eq!(gate.revoke(), Ok(2));
+            }
+            assert!(
+                std::panic::catch_unwind(|| {
+                    let _guard = gate.state.lock().expect("initially usable");
+                    panic!("simulate interrupted operation");
+                })
+                .is_err()
+            );
+            for request_key in [&key, &fresh_key] {
+                for authority in [AuthorityState::Authorized, AuthorityState::Revoked] {
+                    let boundary = boundary(authority);
+                    for payload in [b"payload".as_slice(), b"changed".as_slice()] {
+                        assert_eq!(
+                            gate.commit(request_key, &boundary, payload),
+                            Err(CommitGateError::Unavailable)
+                        );
+                        assert_eq!(
+                            gate.commit_with_outcome(request_key, &boundary, payload),
+                            Err(CommitGateError::Unavailable)
+                        );
+                    }
+                }
+            }
+            assert_eq!(gate.revoke(), Err(CommitGateError::Unavailable));
+            assert!(gate.state.is_poisoned());
+        }
+    }
 
     #[test]
     fn exhausted_sequence_does_not_wrap_or_mutate_revocation() {
