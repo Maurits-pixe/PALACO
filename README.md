@@ -2132,6 +2132,14 @@ including `Recorded`: revocation can occur before the caller receives it.
 Focused tests cover mixed-API retries, error precedence, post-revocation
 replays, and concurrent outcome classification.
 
+The public `InMemoryCommitGate` Rustdoc includes a runnable synthetic example
+covering both APIs, capacity rejection, conflicting retries, idempotent
+revocation, and historical replay after revocation. Run it from the repository
+root with `cargo test -p palaco-citadel --doc`; view it with
+`cargo doc -p palaco-citadel --no-deps --open`. The example performs no external
+effects, authenticates no authority, and is not a production adapter or security
+validation.
+
 Additional tests compare both APIs against an independent accepted-event log for
 all 32,768 length-five histories over eight operations at each of four record
 limits (unlimited, zero, one, two): 131,072 history/configuration cases covering

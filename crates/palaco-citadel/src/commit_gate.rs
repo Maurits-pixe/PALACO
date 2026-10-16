@@ -104,6 +104,63 @@ impl State {
 /// the gate to an authority context; this model does not authenticate that binding.
 /// All payloads and keys remain in memory without eviction. No persistence,
 /// replication, runtime wiring, or external side effects are provided.
+///
+/// # Example
+///
+/// Synthetic, caller-supplied authority is used only to exercise the reference
+/// model. Neither a new record nor a replay permits external execution.
+///
+/// ```
+/// use palaco_citadel::{CommitGateError, CommitOutcome, ExecutionBoundary, InMemoryCommitGate};
+/// use palaco_eventbus::EventEnvelope;
+/// use palaco_foundation::{AuthorityState, EvidenceRef};
+/// use palaco_quay::ProvenanceRecord;
+///
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+/// let gate = InMemoryCommitGate::with_record_limit(1);
+/// let request_key = EvidenceRef::new("request-1")?;
+/// let other_key = EvidenceRef::new("request-2")?;
+/// let boundary = ExecutionBoundary::new(ProvenanceRecord::new(
+///     EventEnvelope::new("example.request", EvidenceRef::new("synthetic-evidence")?),
+///     AuthorityState::Authorized,
+/// ));
+///
+/// let outcome = gate.commit_with_outcome(&request_key, &boundary, b"payload")?;
+/// let receipt = outcome.receipt();
+/// assert_eq!(outcome, CommitOutcome::Recorded(receipt));
+/// assert_eq!(receipt.sequence(), 1);
+///
+/// // Both APIs share the same record; retries consume no sequence or capacity.
+/// assert_eq!(gate.commit(&request_key, &boundary, b"payload")?, receipt);
+/// assert_eq!(
+///     gate.commit_with_outcome(&request_key, &boundary, b"payload")?,
+///     CommitOutcome::Replayed(receipt),
+/// );
+/// assert_eq!(
+///     gate.commit(&request_key, &boundary, b"changed"),
+///     Err(CommitGateError::IdempotencyConflict),
+/// );
+/// assert_eq!(
+///     gate.commit(&other_key, &boundary, b"payload"),
+///     Err(CommitGateError::RecordLimitReached),
+/// );
+///
+/// // A full gate can still be revoked. Repeating revocation is idempotent.
+/// assert_eq!(gate.revoke()?, 2);
+/// assert_eq!(gate.revoke()?, 2);
+/// assert_eq!(
+///     gate.commit(&other_key, &boundary, b"payload"),
+///     Err(CommitGateError::Revoked),
+/// );
+///
+/// // Historical acknowledgement only: never dispatch an effect from this replay.
+/// assert_eq!(
+///     gate.commit_with_outcome(&request_key, &boundary, b"payload")?,
+///     CommitOutcome::Replayed(receipt),
+/// );
+/// # Ok(())
+/// # }
+/// ```
 #[derive(Default)]
 pub struct InMemoryCommitGate {
     state: Mutex<State>,
