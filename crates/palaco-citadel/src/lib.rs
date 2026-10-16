@@ -5,7 +5,7 @@
 
 mod commit_gate;
 
-pub use commit_gate::{CommitGateError, CommitReceipt, InMemoryCommitGate};
+pub use commit_gate::{CommitGateError, CommitOutcome, CommitReceipt, InMemoryCommitGate};
 
 use palaco_foundation::{
     ContractDisposition, ContractError, FailClosed, Validatable, disposition_for,

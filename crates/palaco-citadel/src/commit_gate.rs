@@ -20,6 +20,28 @@ impl CommitReceipt {
     }
 }
 
+/// Classification of an in-memory acknowledgement, never execution permission.
+///
+/// The classification is made under the same lock as commit and revocation.
+/// Neither variant establishes current authority or performs an external effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommitOutcome {
+    /// This call inserted a new local record.
+    Recorded(CommitReceipt),
+    /// This call returned the receipt of an earlier exact-match record.
+    Replayed(CommitReceipt),
+}
+
+impl CommitOutcome {
+    /// Original local receipt, whether newly recorded or replayed.
+    #[must_use]
+    pub fn receipt(self) -> CommitReceipt {
+        match self {
+            Self::Recorded(receipt) | Self::Replayed(receipt) => receipt,
+        }
+    }
+}
+
 /// Fail-closed outcomes of the process-local model.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommitGateError {
@@ -96,12 +118,30 @@ impl InMemoryCommitGate {
     /// authorize execution. Conflicting retries and rejected requests consume no
     /// sequence positions. Validation of caller-supplied authority is not
     /// authentication or a refresh from an external authority service.
+    ///
+    /// Use [`Self::commit_with_outcome`] to distinguish new records from retries.
     pub fn commit(
         &self,
         key: &EvidenceRef,
         boundary: &ExecutionBoundary,
         payload: &[u8],
     ) -> Result<CommitReceipt, CommitGateError> {
+        self.commit_with_outcome(key, boundary, payload)
+            .map(CommitOutcome::receipt)
+    }
+
+    /// Records or replays a request with an explicit local acknowledgement kind.
+    ///
+    /// Uses the same validation, error precedence, and sequence semantics as
+    /// [`Self::commit`]. Exactly one successful caller records a given key; exact
+    /// retries replay it, including after revocation. `Recorded` is not a permit
+    /// to execute: revocation may occur before the caller even receives it.
+    pub fn commit_with_outcome(
+        &self,
+        key: &EvidenceRef,
+        boundary: &ExecutionBoundary,
+        payload: &[u8],
+    ) -> Result<CommitOutcome, CommitGateError> {
         let mut state = self
             .state
             .lock()
@@ -112,7 +152,7 @@ impl InMemoryCommitGate {
             .map_err(CommitGateError::InvalidBoundary)?;
         if let Some(committed) = state.commits.get(key.as_str()) {
             return if committed.boundary == *boundary && committed.payload == payload {
-                Ok(committed.receipt)
+                Ok(CommitOutcome::Replayed(committed.receipt))
             } else {
                 Err(CommitGateError::IdempotencyConflict)
             };
@@ -131,7 +171,7 @@ impl InMemoryCommitGate {
             },
         );
         state.sequence = sequence;
-        Ok(receipt)
+        Ok(CommitOutcome::Recorded(receipt))
     }
 
     /// Permanently revokes this instance in the same local order as commits.

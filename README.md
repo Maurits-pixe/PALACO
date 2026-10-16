@@ -2115,6 +2115,17 @@ authorized boundary cannot create a new commit after this gate is revoked.
 Caller-supplied revoked, expired, or indeterminate provenance is always rejected,
 including on retries. Mutex poisoning and sequence exhaustion fail closed.
 
+`commit_with_outcome` makes this distinction explicit: `CommitOutcome::Recorded`
+means this call inserted a local record; `CommitOutcome::Replayed` means it
+returned an earlier receipt. Classification occurs inside the same mutex as
+commit/revocation, so concurrent identical requests produce one `Recorded` and
+only `Replayed` outcomes thereafter. Both variants expose the original receipt
+through `receipt()`. The existing `commit` API preserves its receipt/error
+behavior and shares the same state. Neither outcome grants execution permission,
+including `Recorded`: revocation can occur before the caller receives it.
+Focused tests cover mixed-API retries, error precedence, post-revocation
+replays, and concurrent outcome classification.
+
 Authority context binding, authentication, evidence verification, expiry refresh,
 and routing every relevant caller through the same gate remain caller
 responsibilities, not guarantees of this model. Receipts acknowledge only
