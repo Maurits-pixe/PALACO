@@ -2091,6 +2091,86 @@ MBvanGeen/palaco-foundation # PALACO
 
 
 ```
+### ERA-009 — process-local reference model
+
+ERA-009 is isolated in `palaco-citadel::InMemoryCommitGate`. It is not wired
+into runtime execution and does not change `ExecutionBoundary` or `RuntimePlan`.
+It is separate from the release registry's ERA-008 draft interval checker and
+does not revalidate time freshness.
+
+| Evidence level | Scope |
+|---|---|
+| Conceptually specified | Local commit/revocation ordering and exact idempotent retries; wider ERA architecture, including ERA-010–033, is not implemented or verified by this model. |
+| Locally implemented | One mutex-protected in-memory gate per caller-defined authority context, with checked sequence numbers and terminal revocation. |
+| Tested | Focused tests cover exact retries, input conflicts, authority rejection, revocation ordering, independent instances, concurrent callers, poisoning, and sequence exhaustion. Workspace validation is reported separately in the PR. |
+| Security-validated | **PENDING/UNKNOWN**. The previously reported CodeQL timeout is not a security pass. Tests, Clippy, and formatting do not establish security validation. |
+
+Share one gate instance across participating threads. Successful new commits and
+the first revocation consume a single local sequence starting at one; rejected
+requests, exact retries, and repeated revocations do not. An idempotency key
+binds the complete boundary and exact payload bytes. An exact retry after
+revocation returns only the historical receipt, **not renewed execution
+permission**. A different request under the same key is rejected. A stale
+authorized boundary cannot create a new commit after this gate is revoked.
+Caller-supplied revoked, expired, or indeterminate provenance is always rejected,
+including on retries. Mutex poisoning and sequence exhaustion fail closed.
+Direct unit tests inject these otherwise hard-to-reach states for both commit
+APIs: the last sequence can be recorded and replayed, but new records and a new
+revocation cannot wrap the counter. Exhaustion takes precedence over the record
+limit for a new valid key. A poisoned mutex rejects even historical retries,
+both before and after revocation; it is not automatically recovered. These
+fault-injection checks are not crash-recovery or security evidence.
+
+`commit_with_outcome` makes this distinction explicit: `CommitOutcome::Recorded`
+means this call inserted a local record; `CommitOutcome::Replayed` means it
+returned an earlier receipt. Classification occurs inside the same mutex as
+commit/revocation, so concurrent identical requests produce one `Recorded` and
+only `Replayed` outcomes thereafter. Both variants expose the original receipt
+through `receipt()`. The existing `commit` API preserves its receipt/error
+behavior and shares the same state. Neither outcome grants execution permission,
+including `Recorded`: revocation can occur before the caller receives it.
+Focused tests cover mixed-API retries, error precedence, post-revocation
+replays, and concurrent outcome classification.
+
+The public `InMemoryCommitGate` Rustdoc includes a runnable synthetic example
+covering both APIs, capacity rejection, conflicting retries, idempotent
+revocation, and historical replay after revocation. Run it from the repository
+root with `cargo test -p palaco-citadel --doc`; view it with
+`cargo doc -p palaco-citadel --no-deps --open`. The example performs no external
+effects, authenticates no authority, and is not a production adapter or security
+validation.
+
+Additional tests compare both APIs against an independent accepted-event log for
+all 32,768 length-five histories over eight operations at each of four record
+limits (unlimited, zero, one, two): 131,072 history/configuration cases covering
+two keys, conflicting payloads, changed evidence, each non-authorized authority
+state, and revocation. Both APIs retain historical receipts after revocation.
+A separate concurrent test races four revokers with eight mixed-API committers.
+At limits one and two, eight identical requests racing for the final free slot
+must produce exactly one new record and seven historical replays.
+These are bounded local checks, not exhaustive concurrency exploration, formal
+verification, or security validation; they do not widen the model's guarantees.
+
+Authority context binding, authentication, evidence verification, expiry refresh,
+and routing every relevant caller through the same gate remain caller
+responsibilities, not guarantees of this model. Receipts acknowledge only
+in-memory records: no external operation is performed, rolled back, or made
+exactly-once. `new()` and `Default` retain records without a count limit.
+`with_record_limit(max_records)` optionally caps the number of distinct committed
+keys: full gates reject new keys with `RecordLimitReached`, without consuming a
+sequence or evicting records. Exact retries, conflict/authority checks, and
+revocation remain available; zero permits no new records but still permits
+revocation. The admission check shares the commit mutex. Tests cover saturation,
+zero, retained retries, and concurrent admission. This is **not a memory-byte
+limit**: individual keys, payloads, and boundaries remain unrestricted in size,
+and allocation failure is not recovered. No records are evicted. Separate
+instances and process restarts share no ordering, idempotency, or revocation
+state. There is no durability, replication, multi-process coordination, or
+production, exchange, or financial-grade guarantee. Other persistence or consensus
+claims elsewhere in this README do not apply to ERA-009.
+
+Decision boundary: **ADVISORY — HUMAN DECISION REQUIRED**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

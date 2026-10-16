@@ -11,3 +11,6 @@ workspace = true
 [dependencies]
 palaco-foundation = { path = "../palaco-foundation" }
 palaco-quay = { path = "../palaco-quay" }
+
+[dev-dependencies]
+palaco-eventbus = { path = "../palaco-eventbus" }
