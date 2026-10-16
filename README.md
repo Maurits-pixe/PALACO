@@ -2137,7 +2137,15 @@ Authority context binding, authentication, evidence verification, expiry refresh
 and routing every relevant caller through the same gate remain caller
 responsibilities, not guarantees of this model. Receipts acknowledge only
 in-memory records: no external operation is performed, rolled back, or made
-exactly-once. Keys and payloads are retained without bounds or eviction; separate
+exactly-once. `new()` and `Default` retain records without a count limit.
+`with_record_limit(max_records)` optionally caps the number of distinct committed
+keys: full gates reject new keys with `RecordLimitReached`, without consuming a
+sequence or evicting records. Exact retries, conflict/authority checks, and
+revocation remain available; zero permits no new records but still permits
+revocation. The admission check shares the commit mutex. Tests cover saturation,
+zero, retained retries, and concurrent admission. This is **not a memory-byte
+limit**: individual keys, payloads, and boundaries remain unrestricted in size,
+and allocation failure is not recovered. No records are evicted. Separate
 instances and process restarts share no ordering, idempotency, or revocation
 state. There is no durability, replication, multi-process coordination, or
 production, exchange, or financial-grade guarantee. Other persistence or consensus

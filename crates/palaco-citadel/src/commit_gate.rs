@@ -55,6 +55,8 @@ pub enum CommitGateError {
     Unavailable,
     /// The local sequence cannot advance without wrapping.
     SequenceExhausted,
+    /// The optional record-count limit prevents inserting another unique key.
+    RecordLimitReached,
 }
 
 impl fmt::Display for CommitGateError {
@@ -65,6 +67,9 @@ impl fmt::Display for CommitGateError {
             Self::IdempotencyConflict => formatter.write_str("idempotency key conflicts"),
             Self::Unavailable => formatter.write_str("process-local gate is unavailable"),
             Self::SequenceExhausted => formatter.write_str("process-local sequence is exhausted"),
+            Self::RecordLimitReached => {
+                formatter.write_str("process-local record limit is reached")
+            }
         }
     }
 }
@@ -102,6 +107,7 @@ impl State {
 #[derive(Default)]
 pub struct InMemoryCommitGate {
     state: Mutex<State>,
+    record_limit: Option<usize>,
 }
 
 impl InMemoryCommitGate {
@@ -109,6 +115,20 @@ impl InMemoryCommitGate {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Creates a gate admitting at most `max_records` distinct committed keys.
+    ///
+    /// Records are never evicted, so exact retries remain available when full.
+    /// Zero rejects every new record but still permits revocation. This bounds
+    /// record count only, not memory bytes: keys, payloads, and boundaries have
+    /// no size limits. [`Self::new`] and `Default` remain unlimited.
+    #[must_use]
+    pub fn with_record_limit(max_records: usize) -> Self {
+        Self {
+            record_limit: Some(max_records),
+            ..Self::default()
+        }
     }
 
     /// Records a validated request or returns the original exact-match receipt.
@@ -161,6 +181,12 @@ impl InMemoryCommitGate {
             return Err(CommitGateError::Revoked);
         }
         let sequence = state.next_sequence()?;
+        if self
+            .record_limit
+            .is_some_and(|limit| state.commits.len() >= limit)
+        {
+            return Err(CommitGateError::RecordLimitReached);
+        }
         let receipt = CommitReceipt { sequence };
         state.commits.insert(
             key.as_str().to_owned(),
@@ -205,6 +231,7 @@ mod tests {
                 sequence: u64::MAX,
                 ..State::default()
             }),
+            ..InMemoryCommitGate::default()
         };
         assert_eq!(gate.revoke(), Err(CommitGateError::SequenceExhausted));
         let state = gate.state.lock().expect("gate must remain usable");
@@ -220,6 +247,7 @@ mod tests {
                 sequence: u64::MAX - 1,
                 ..State::default()
             }),
+            ..InMemoryCommitGate::default()
         };
         assert_eq!(gate.revoke(), Ok(u64::MAX));
         assert_eq!(gate.revoke(), Ok(u64::MAX));

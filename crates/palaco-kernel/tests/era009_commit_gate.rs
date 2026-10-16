@@ -17,6 +17,124 @@ fn boundary(evidence: &str, authority: AuthorityState) -> ExecutionBoundary {
 }
 
 #[test]
+fn record_limit_preserves_retries_conflicts_and_revocation() {
+    let gate = InMemoryCommitGate::with_record_limit(1);
+    let authorized = boundary("evidence-1", AuthorityState::Authorized);
+    let receipt = gate
+        .commit(&key("first"), &authorized, b"payload")
+        .expect("first record fits");
+    assert_eq!(receipt.sequence(), 1);
+    for _ in 0..2 {
+        assert_eq!(
+            gate.commit(&key("next"), &authorized, b"payload"),
+            Err(CommitGateError::RecordLimitReached)
+        );
+        assert_eq!(
+            gate.commit_with_outcome(&key("next"), &authorized, b"payload"),
+            Err(CommitGateError::RecordLimitReached)
+        );
+    }
+    assert_eq!(
+        gate.commit_with_outcome(&key("first"), &authorized, b"payload"),
+        Ok(CommitOutcome::Replayed(receipt))
+    );
+    assert_eq!(
+        gate.commit(&key("first"), &authorized, b"changed"),
+        Err(CommitGateError::IdempotencyConflict)
+    );
+    assert_eq!(
+        gate.commit(
+            &key("next"),
+            &boundary("evidence-1", AuthorityState::InDoubt),
+            b"payload",
+        ),
+        Err(CommitGateError::InvalidBoundary(
+            ContractError::AuthorityInDoubt
+        ))
+    );
+    assert_eq!(gate.revoke(), Ok(2));
+    assert_eq!(gate.revoke(), Ok(2));
+    assert_eq!(
+        gate.commit_with_outcome(&key("first"), &authorized, b"payload"),
+        Ok(CommitOutcome::Replayed(receipt))
+    );
+    assert_eq!(
+        gate.commit(&key("next"), &authorized, b"payload"),
+        Err(CommitGateError::Revoked)
+    );
+}
+
+#[test]
+fn zero_record_limit_allows_revocation_without_consuming_commit_sequences() {
+    let gate = InMemoryCommitGate::with_record_limit(0);
+    let authorized = boundary("evidence-1", AuthorityState::Authorized);
+    assert_eq!(
+        gate.commit_with_outcome(&key("first"), &authorized, b""),
+        Err(CommitGateError::RecordLimitReached)
+    );
+    assert_eq!(gate.revoke(), Ok(1));
+    assert_eq!(
+        gate.commit(&key("first"), &authorized, b""),
+        Err(CommitGateError::Revoked)
+    );
+}
+
+#[test]
+fn concurrent_unique_keys_cannot_exceed_the_record_limit() {
+    let gate = Arc::new(InMemoryCommitGate::with_record_limit(3));
+    let barrier = Arc::new(Barrier::new(8));
+    let threads: Vec<_> = (0..8)
+        .map(|index| {
+            let gate = Arc::clone(&gate);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                let request_key = key(&format!("key-{index}"));
+                barrier.wait();
+                let result = gate.commit_with_outcome(
+                    &request_key,
+                    &boundary("evidence-1", AuthorityState::Authorized),
+                    b"payload",
+                );
+                (request_key, result)
+            })
+        })
+        .collect();
+    let mut admitted = Vec::new();
+    let mut rejected = 0;
+    for thread in threads {
+        let (request_key, result) = thread.join().expect("worker");
+        match result {
+            Ok(CommitOutcome::Recorded(receipt)) => admitted.push((request_key, receipt)),
+            Ok(CommitOutcome::Replayed(_)) => panic!("unique request cannot replay"),
+            Err(error) => {
+                assert_eq!(error, CommitGateError::RecordLimitReached);
+                rejected += 1;
+            }
+        }
+    }
+    assert_eq!((admitted.len(), rejected), (3, 5));
+    admitted.sort_unstable_by_key(|(_, receipt)| receipt.sequence());
+    assert_eq!(
+        admitted
+            .iter()
+            .map(|(_, receipt)| receipt.sequence())
+            .collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
+    assert_eq!(gate.revoke(), Ok(4));
+    for (request_key, receipt) in admitted {
+        assert_eq!(
+            gate.commit_with_outcome(
+                &request_key,
+                &boundary("evidence-1", AuthorityState::Authorized),
+                b"payload",
+            ),
+            Ok(CommitOutcome::Replayed(receipt))
+        );
+    }
+}
+
+#[test]
 fn bounded_histories_match_an_independent_accepted_event_log() {
     let boundaries = [
         boundary("evidence-1", AuthorityState::Authorized),
