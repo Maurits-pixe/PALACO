@@ -32,13 +32,22 @@ const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js','preview'
 const backend = spawn(process.execPath, ['server.js'], { cwd: root, env: { ...process.env, BASTION_PORT: '3005', BASTION_DB_PATH: path.join(certDir, 'bastion.db') }, stdio: ['ignore','pipe','pipe'] });
 let log=''; child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
 const request = (url, opts={}) => new Promise((resolve,reject) => { const req=https.get(url,{ca:fs.readFileSync(path.join(certDir,'ca.pem')),...opts},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString()}));});req.on('error',reject); });
+let pageBrowser;
 try {
   for (let i=0;i<100;i++) { try { const r=await request('https://127.0.0.1:5175/'); if(r.status===200) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   for (let i=0;i<100;i++) { try { const r=await fetch('http://127.0.0.1:3005/api/messages'); if(r.ok) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   const identity=await request('https://127.0.0.1:5175/.well-known/palaco-app.json'); assert.equal(identity.status,200); assert.equal(JSON.parse(identity.body).appId,'bastion');
-  const pageBrowser=await chromium.launch({headless:true,...(browserExecutable ? { executablePath: browserExecutable } : {})});
+  pageBrowser=await chromium.launch({headless:true,...(browserExecutable ? { executablePath: browserExecutable } : {})});
   const context=await pageBrowser.newContext({ignoreHTTPSErrors:true}); const page=await context.newPage(); const response=await page.goto('https://127.0.0.1:5175/'); assert.equal(response.status(),200);
+  const secondPage=await context.newPage(); await secondPage.goto('https://127.0.0.1:5175/');
   assert.match(await page.locator('.preview-banner').textContent(),/Taakmutaties blijven gesloten/); assert.match(response.headers()['content-security-policy'],/frame-ancestors 'none'/); assert.equal(response.headers()['x-content-type-options'],'nosniff');
-  const original=await page.locator('.task-card').first().locator('.task-desc').textContent(); await page.locator('.task-card').first().getByRole('button',{name:'Afronden'}).click(); assert.equal(await page.getByRole('dialog').count(),1); await page.getByRole('button',{name:'TOON BLOKKERING'}).click(); assert.match(await page.locator('.blocked-banner').textContent(),/STORAGE_EFFECT_DEADLINE_UNSUPPORTED/); assert.equal(await page.locator('.task-card').first().locator('.task-desc').textContent(),original); await context.close(); await pageBrowser.close();
-  console.log(JSON.stringify({identity:'bastion',preview:'loaded',securityHeaders:'observed',mutation:'blocked-without-local-write'}));
-} finally { child.kill(); backend.kill(); }
+  await page.locator('.chat-input button:not([disabled])').waitFor();
+  await secondPage.locator('.chat-input button:not([disabled])').waitFor();
+  const liveMessage=`Browser realtime ${Date.now()}`;
+  await page.getByRole('textbox',{name:'Lokaal previewbericht'}).fill(liveMessage);
+  await page.locator('.chat-input button').click();
+  await secondPage.getByText(liveMessage,{exact:true}).waitFor();
+  await secondPage.locator('.log-entry').filter({hasText:'MESSAGE_SENT'}).waitFor();
+  const original=await page.locator('.task-card').first().locator('.task-desc').textContent(); await page.locator('.task-card').first().getByRole('button',{name:'Afronden'}).click(); assert.equal(await page.getByRole('dialog').count(),1); await page.getByRole('button',{name:'TOON BLOKKERING'}).click(); await page.getByText(/STORAGE_EFFECT_DEADLINE_UNSUPPORTED/).waitFor(); assert.equal(await page.locator('.task-card').first().locator('.task-desc').textContent(),original); await context.close();
+  console.log(JSON.stringify({identity:'bastion',preview:'loaded',securityHeaders:'observed',realtimeChat:'broadcast-to-second-client',audit:'database-backed',mutation:'blocked-without-local-write'}));
+} finally { await pageBrowser?.close(); child.kill(); backend.kill(); }
