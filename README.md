@@ -2126,6 +2126,13 @@ including `Recorded`: revocation can occur before the caller receives it.
 Focused tests cover mixed-API retries, error precedence, post-revocation
 replays, and concurrent outcome classification.
 
+Additional tests compare both APIs against an independent accepted-event log for
+all 32,768 length-five histories over eight operations: two keys, conflicting
+payloads, changed evidence, each non-authorized authority state, and revocation.
+A separate concurrent test races four revokers with eight mixed-API committers.
+These are bounded local checks, not exhaustive concurrency exploration, formal
+verification, or security validation; they do not widen the model's guarantees.
+
 Authority context binding, authentication, evidence verification, expiry refresh,
 and routing every relevant caller through the same gate remain caller
 responsibilities, not guarantees of this model. Receipts acknowledge only

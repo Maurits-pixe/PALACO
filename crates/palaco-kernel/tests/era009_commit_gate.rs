@@ -17,6 +17,195 @@ fn boundary(evidence: &str, authority: AuthorityState) -> ExecutionBoundary {
 }
 
 #[test]
+fn bounded_histories_match_an_independent_accepted_event_log() {
+    let boundaries = [
+        boundary("evidence-1", AuthorityState::Authorized),
+        boundary("evidence-2", AuthorityState::Authorized),
+        boundary("evidence-1", AuthorityState::Revoked),
+        boundary("evidence-1", AuthorityState::Expired),
+        boundary("evidence-1", AuthorityState::InDoubt),
+    ];
+    let authority_errors = [
+        None,
+        None,
+        Some(ContractError::RevokedAuthority),
+        Some(ContractError::ExpiredAuthority),
+        Some(ContractError::AuthorityInDoubt),
+    ];
+    let keys = [key("key-1"), key("key-2")];
+    let payloads: [&[u8]; 2] = [b"payload", b"changed"];
+    let requests = [
+        (0, 0, 0),
+        (0, 1, 0),
+        (1, 0, 0),
+        (0, 0, 1),
+        (0, 0, 2),
+        (0, 0, 3),
+        (0, 0, 4),
+    ];
+    let revoke = requests.len();
+    let alphabet = revoke + 1;
+    // Event positions, not mutable gate counters, define expected sequences.
+    for history in 0..alphabet.pow(5) {
+        let explicit = InMemoryCommitGate::new();
+        let legacy = InMemoryCommitGate::new();
+        let mut accepted: Vec<usize> = Vec::new();
+        let mut remaining = history;
+        for step in 0..5 {
+            let operation = remaining % alphabet;
+            remaining /= alphabet;
+            if operation == revoke {
+                let position = match accepted.iter().position(|event| *event == revoke) {
+                    Some(position) => position,
+                    None => {
+                        accepted.push(revoke);
+                        accepted.len() - 1
+                    }
+                };
+                let expected = Ok(position as u64 + 1);
+                assert_eq!(
+                    explicit.revoke(),
+                    expected,
+                    "history={history}, step={step}"
+                );
+                assert_eq!(legacy.revoke(), expected, "history={history}, step={step}");
+                continue;
+            }
+            let (key_index, payload_index, boundary_index) = requests[operation];
+            let prior = accepted
+                .iter()
+                .position(|event| *event != revoke && requests[*event].0 == key_index);
+            let expected = if let Some(error) = authority_errors[boundary_index] {
+                Err(CommitGateError::InvalidBoundary(error))
+            } else if let Some(position) = prior {
+                if requests[accepted[position]] == requests[operation] {
+                    Ok((position as u64 + 1, false))
+                } else {
+                    Err(CommitGateError::IdempotencyConflict)
+                }
+            } else if accepted.contains(&revoke) {
+                Err(CommitGateError::Revoked)
+            } else {
+                accepted.push(operation);
+                Ok((accepted.len() as u64, true))
+            };
+            let actual = explicit
+                .commit_with_outcome(
+                    &keys[key_index],
+                    &boundaries[boundary_index],
+                    payloads[payload_index],
+                )
+                .map(|outcome| {
+                    (
+                        outcome.receipt().sequence(),
+                        matches!(outcome, CommitOutcome::Recorded(_)),
+                    )
+                });
+            assert_eq!(actual, expected, "history={history}, step={step}");
+            assert_eq!(
+                legacy
+                    .commit(
+                        &keys[key_index],
+                        &boundaries[boundary_index],
+                        payloads[payload_index],
+                    )
+                    .map(|receipt| receipt.sequence()),
+                expected.map(|(sequence, _)| sequence),
+                "legacy history={history}, step={step}"
+            );
+        }
+        let revoked_at = accepted
+            .iter()
+            .position(|event| *event == revoke)
+            .map_or(accepted.len() as u64 + 1, |position| position as u64 + 1);
+        assert_eq!(explicit.revoke(), Ok(revoked_at), "history={history}");
+        assert_eq!(legacy.revoke(), Ok(revoked_at), "history={history}");
+        for (position, operation) in accepted.iter().enumerate() {
+            if *operation == revoke {
+                continue;
+            }
+            let (key_index, payload_index, boundary_index) = requests[*operation];
+            let outcome = explicit
+                .commit_with_outcome(
+                    &keys[key_index],
+                    &boundaries[boundary_index],
+                    payloads[payload_index],
+                )
+                .expect("accepted record must remain replayable after revocation");
+            assert!(matches!(outcome, CommitOutcome::Replayed(_)));
+            assert_eq!(outcome.receipt().sequence(), position as u64 + 1);
+        }
+    }
+}
+
+#[test]
+fn concurrent_revokers_share_one_position_with_mixed_api_commits() {
+    let gate = Arc::new(InMemoryCommitGate::new());
+    let authorized = boundary("evidence-1", AuthorityState::Authorized);
+    let original = gate
+        .commit(&key("original"), &authorized, b"payload")
+        .expect("initial record");
+    let barrier = Arc::new(Barrier::new(12));
+    let revokers: Vec<_> = (0..4)
+        .map(|_| {
+            let gate = Arc::clone(&gate);
+            let barrier = Arc::clone(&barrier);
+            std::thread::spawn(move || {
+                barrier.wait();
+                gate.revoke()
+            })
+        })
+        .collect();
+    let committers: Vec<_> = (0..8)
+        .map(|index| {
+            let gate = Arc::clone(&gate);
+            let barrier = Arc::clone(&barrier);
+            let authorized = authorized.clone();
+            std::thread::spawn(move || {
+                let request_key = key(&format!("key-{index}"));
+                barrier.wait();
+                if index % 2 == 0 {
+                    gate.commit(&request_key, &authorized, b"payload")
+                } else {
+                    gate.commit_with_outcome(&request_key, &authorized, b"payload")
+                        .map(|outcome| {
+                            assert!(matches!(outcome, CommitOutcome::Recorded(_)));
+                            outcome.receipt()
+                        })
+                }
+            })
+        })
+        .collect();
+    let revoked_at = revokers
+        .into_iter()
+        .map(|thread| thread.join().expect("revoker").expect("revoke"))
+        .collect::<Vec<_>>();
+    assert!(revoked_at.iter().all(|position| *position == revoked_at[0]));
+    let revoked_at = revoked_at[0];
+    let mut sequences = vec![original.sequence()];
+    for thread in committers {
+        match thread.join().expect("committer") {
+            Ok(receipt) => {
+                assert!(receipt.sequence() < revoked_at);
+                sequences.push(receipt.sequence());
+            }
+            Err(error) => assert_eq!(error, CommitGateError::Revoked),
+        }
+    }
+    sequences.sort_unstable();
+    assert_eq!(sequences, (1..revoked_at).collect::<Vec<_>>());
+    assert_eq!(gate.revoke(), Ok(revoked_at));
+    assert_eq!(
+        gate.commit_with_outcome(&key("original"), &authorized, b"payload"),
+        Ok(CommitOutcome::Replayed(original))
+    );
+    assert_eq!(
+        gate.commit(&key("after-revocation"), &authorized, b"payload"),
+        Err(CommitGateError::Revoked)
+    );
+}
+
+#[test]
 fn explicit_outcomes_preserve_receipts_across_both_apis_and_revocation() {
     let gate = InMemoryCommitGate::new();
     let boundary = boundary("evidence-1", AuthorityState::Authorized);
