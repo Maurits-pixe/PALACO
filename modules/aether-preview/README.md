@@ -17,4 +17,4 @@ npm run build
 npm run dev
 ```
 
-De launcher verwacht lokaal `https://localhost:5174/.well-known/palaco-app.json`. De statische build maakt `dist/`; stel voor een Vercel-preview de root in op `modules/aether-preview`.
+De launcher verwacht lokaal `https://localhost:5174/.well-known/palaco-app.json`; de metadata staat alleen CORS-toegang toe voor de lokale launcher-origin `https://127.0.0.1:5173`. De tijdelijke Vercel-preview is geen toegestane launcher-origin. De statische build maakt `dist/`; stel voor een Vercel-preview de root in op `modules/aether-preview`.

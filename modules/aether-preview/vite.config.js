@@ -6,6 +6,7 @@ import path from 'node:path';
 import { securityHeaders } from './scripts/security-headers.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
+const launcherOrigin = 'https://127.0.0.1:5173';
 
 export default defineConfig(({ command }) => {
   const shared = { plugins: [vue()] };
@@ -18,7 +19,21 @@ export default defineConfig(({ command }) => {
   const https = { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) };
   return {
     ...shared,
-    server: { https, host: '127.0.0.1', port: 5174, strictPort: true, headers: securityHeaders },
-    preview: { https, host: '127.0.0.1', port: 5174, strictPort: true, headers: securityHeaders }
+    server: {
+      https,
+      host: '127.0.0.1',
+      port: 5174,
+      strictPort: true,
+      headers: securityHeaders,
+      cors: { origin: launcherOrigin }
+    },
+    preview: {
+      https,
+      host: '127.0.0.1',
+      port: 5174,
+      strictPort: true,
+      headers: securityHeaders,
+      cors: { origin: launcherOrigin }
+    }
   };
 });

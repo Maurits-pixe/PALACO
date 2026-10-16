@@ -47,8 +47,18 @@ test('rejects short passphrases and unknown envelope formats', async () => {
 });
 
 test('AETHER uses the launcher-configured local origin and no remote font', () => {
-  const catalog = fs.readFileSync(new URL('../../launcher-v1_2/src/catalog.js', root), 'utf8');
+  const catalog = fs.readFileSync(new URL('../launcher-v1_2/src/catalog.js', root), 'utf8');
   const stylesheet = fs.readFileSync(new URL('src/style.css', root), 'utf8');
+  const viteConfig = fs.readFileSync(new URL('vite.config.js', root), 'utf8');
+  const vercel = JSON.parse(fs.readFileSync(new URL('vercel.json', root)));
   assert.match(catalog, /https:\/\/localhost:5174/);
+  assert.match(viteConfig, /https:\/\/127\.0\.0\.1:5173/);
+  assert.ok(vercel.headers.some(entry =>
+    entry.source === '/.well-known/palaco-app.json' &&
+    entry.headers.some(header =>
+      header.key === 'Access-Control-Allow-Origin' &&
+      header.value === 'https://127.0.0.1:5173'
+    )
+  ));
   assert.doesNotMatch(stylesheet, /https?:\/\//);
 });
