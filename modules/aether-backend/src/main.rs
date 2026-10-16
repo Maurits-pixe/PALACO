@@ -3,14 +3,18 @@ use std::{env, fs, io, path::PathBuf, sync::Arc};
 use actix_cors::Cors;
 use actix_web::{App, HttpServer, http::header};
 use aether_backend::{AppState, configure, decode_master_key, open_vault};
+use zeroize::Zeroize;
 
 const DEFAULT_PORT: u16 = 3006;
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
-    let key = env::var("AETHER_MASTER_KEY")
-        .map_err(|_| io::Error::other("AETHER_MASTER_KEY must be set to a base64-encoded 32-byte key"))?;
-    let key = decode_master_key(&key).map_err(io::Error::other)?;
+    let mut encoded_key = env::var("AETHER_MASTER_KEY").map_err(|_| {
+        io::Error::other("AETHER_MASTER_KEY must be set to a base64-encoded 32-byte key")
+    })?;
+    let key_result = decode_master_key(&encoded_key);
+    encoded_key.zeroize();
+    let key = key_result.map_err(io::Error::other)?;
 
     let database_path = env::var_os("AETHER_DB_PATH")
         .map(PathBuf::from)

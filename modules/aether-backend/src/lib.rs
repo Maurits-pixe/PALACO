@@ -15,7 +15,8 @@ use actix_web::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use ring::{
-    aead::{Aad, AES_256_GCM, LessSafeKey, NONCE_LEN, Nonce, UnboundKey},
+    aead::{AES_256_GCM, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey},
+    hmac,
     rand::{SecureRandom, SystemRandom},
 };
 use rusqlite::{Connection, OptionalExtension, params};
@@ -33,10 +34,13 @@ pub fn decode_master_key(value: &str) -> Result<[u8; 32], &'static str> {
         decoded.zeroize();
         return Err("AETHER_MASTER_KEY must decode to exactly 32 bytes");
     }
-    let key = decoded
-        .as_slice()
-        .try_into()
-        .map_err(|_| "AETHER_MASTER_KEY must decode to exactly 32 bytes")?;
+    let key = match decoded.as_slice().try_into() {
+        Ok(key) => key,
+        Err(_) => {
+            decoded.zeroize();
+            return Err("AETHER_MASTER_KEY must decode to exactly 32 bytes");
+        }
+    };
     decoded.zeroize();
     Ok(key)
 }
@@ -203,10 +207,7 @@ async fn health() -> HttpResponse {
     })
 }
 
-async fn encrypt(
-    state: web::Data<Arc<AppState>>,
-    request: web::Json<EncryptRequest>,
-) -> HttpResponse {
+async fn encrypt(state: web::Data<AppState>, request: web::Json<EncryptRequest>) -> HttpResponse {
     let plaintext = request.into_inner().plaintext;
     if plaintext.is_empty() || plaintext.len() > MAX_PLAINTEXT_BYTES {
         return json_error(StatusCode::BAD_REQUEST, "INVALID_PLAINTEXT_SIZE");
@@ -238,7 +239,7 @@ async fn encrypt(
     }
 }
 
-async fn get_secret(state: web::Data<Arc<AppState>>, path: web::Path<String>) -> HttpResponse {
+async fn get_secret(state: web::Data<AppState>, path: web::Path<String>) -> HttpResponse {
     let Ok(id) = Uuid::parse_str(path.as_str()) else {
         return json_error(StatusCode::BAD_REQUEST, "INVALID_SECRET_ID");
     };
@@ -259,21 +260,33 @@ async fn get_secret(state: web::Data<Arc<AppState>>, path: web::Path<String>) ->
     }
 }
 
-fn encrypt_blob(key: &CryptoKey, id: String, plaintext: &[u8]) -> Result<EncryptedBlob, &'static str> {
+fn encrypt_blob(
+    key: &CryptoKey,
+    id: String,
+    plaintext: &[u8],
+) -> Result<EncryptedBlob, &'static str> {
     let rng = SystemRandom::new();
     let mut nonce = [0_u8; NONCE_LEN];
-    rng.fill(&mut nonce).map_err(|_| "CRYPTO_OPERATION_FAILED")?;
+    rng.fill(&mut nonce)
+        .map_err(|_| "CRYPTO_OPERATION_FAILED")?;
+    let mut record_key = derive_record_key(&key.0, &id);
     let unbound_key =
-        UnboundKey::new(&AES_256_GCM, &key.0).map_err(|_| "CRYPTO_OPERATION_FAILED")?;
+        UnboundKey::new(&AES_256_GCM, &record_key).map_err(|_| "CRYPTO_OPERATION_FAILED");
+    record_key.zeroize();
+    let unbound_key = unbound_key?;
     let sealing_key = LessSafeKey::new(unbound_key);
     let mut ciphertext = plaintext.to_vec();
-    sealing_key
+    if sealing_key
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce),
             Aad::from(id.as_bytes()),
             &mut ciphertext,
         )
-        .map_err(|_| "CRYPTO_OPERATION_FAILED")?;
+        .is_err()
+    {
+        ciphertext.zeroize();
+        return Err("CRYPTO_OPERATION_FAILED");
+    }
     let created_at = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "CLOCK_UNAVAILABLE")?
@@ -288,24 +301,30 @@ fn encrypt_blob(key: &CryptoKey, id: String, plaintext: &[u8]) -> Result<Encrypt
     })
 }
 
+fn derive_record_key(master_key: &[u8; 32], id: &str) -> [u8; 32] {
+    let derivation_key = hmac::Key::new(hmac::HMAC_SHA256, master_key);
+    let mut record_key = [0_u8; 32];
+    record_key.copy_from_slice(hmac::sign(&derivation_key, id.as_bytes()).as_ref());
+    record_key
+}
+
 #[cfg(test)]
 mod tests {
-    use actix_web::{App, http::StatusCode, test, web};
+    use actix_web::{App, http::StatusCode, test as actix_test, web};
     use base64::{Engine as _, engine::general_purpose::STANDARD};
-    use ring::{
-        aead::{Aad, AES_256_GCM, LessSafeKey, Nonce, UnboundKey},
-    };
+    use ring::aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey};
     use serde_json::{Value, json};
     use std::sync::Arc;
 
     use super::{
         AppState, CryptoKey, EncryptedBlob, MAX_PLAINTEXT_BYTES, Vault, configure,
-        decode_master_key,
+        decode_master_key, derive_record_key,
     };
 
-    fn decrypt(key: &[u8; 32], blob: &EncryptedBlob) -> Result<Vec<u8>, &'static str> {
+    fn decrypt(master_key: &[u8; 32], blob: &EncryptedBlob) -> Result<Vec<u8>, &'static str> {
+        let record_key = derive_record_key(master_key, &blob.id);
         let unbound_key =
-            UnboundKey::new(&AES_256_GCM, key).map_err(|_| "invalid key")?;
+            UnboundKey::new(&AES_256_GCM, &record_key).map_err(|_| "invalid key")?;
         let opening_key = LessSafeKey::new(unbound_key);
         let nonce: [u8; 12] = blob
             .nonce
@@ -331,7 +350,10 @@ mod tests {
         let second = super::encrypt_blob(&key, "secret-2".to_owned(), b"classified")
             .expect("encryption should succeed");
         assert_ne!(first.nonce, second.nonce);
-        assert_eq!(decrypt(&key.0, &first).expect("authenticated decryption"), b"classified");
+        assert_eq!(
+            decrypt(&key.0, &first).expect("authenticated decryption"),
+            b"classified"
+        );
 
         let tampered = EncryptedBlob {
             id: "another-id".to_owned(),
@@ -358,35 +380,45 @@ mod tests {
             .expect("vault query should succeed")
             .expect("saved blob should exist");
         assert_eq!(loaded, blob);
-        assert!(!loaded.ciphertext.windows(9).any(|part| part == b"plaintext"));
+        assert!(
+            !loaded
+                .ciphertext
+                .windows(9)
+                .any(|part| part == b"plaintext")
+        );
     }
 
     #[actix_web::test]
     async fn api_encrypts_persists_and_returns_only_ciphertext() {
         let vault = Vault::in_memory().expect("in-memory SQLite vault");
         let state = Arc::new(AppState::new([3; 32], vault.clone()));
-        let app = test::init_service(
+        let app = actix_test::init_service(
             App::new()
                 .app_data(web::Data::from(state))
                 .app_data(super::json_config())
                 .configure(configure),
         )
         .await;
-        let health = test::call_and_read_body_json::<_, _, Value>(
+        let health = actix_test::call_and_read_body_json::<_, _, Value>(
             &app,
-            test::TestRequest::get().uri("/health").to_request(),
+            actix_test::TestRequest::get().uri("/health").to_request(),
         )
         .await;
         assert_eq!(health["appId"], "aether");
         assert_eq!(health["status"], "preview-only");
 
-        let request = test::TestRequest::post()
+        let request = actix_test::TestRequest::post()
             .uri("/api/encrypt")
             .set_json(json!({"plaintext": "secret value"}))
             .to_request();
-        let response = test::call_service(&app, request).await;
-        assert_eq!(response.status(), StatusCode::OK);
-        let body: Value = test::read_body_json(response).await;
+        let response = actix_test::call_service(&app, request).await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "{}",
+            String::from_utf8_lossy(&actix_test::read_body(response).await)
+        );
+        let body: Value = actix_test::read_body_json(response).await;
         assert_eq!(body["status"], "encrypted_and_stored");
         assert_ne!(body["ciphertext"], "secret value");
         let id = body["id"].as_str().expect("response id");
@@ -402,7 +434,7 @@ mod tests {
     async fn api_rejects_empty_and_oversized_plaintext() {
         let vault = Vault::in_memory().expect("in-memory SQLite vault");
         let state = Arc::new(AppState::new([5; 32], vault));
-        let app = test::init_service(
+        let app = actix_test::init_service(
             App::new()
                 .app_data(web::Data::from(state))
                 .app_data(super::json_config())
@@ -410,12 +442,17 @@ mod tests {
         )
         .await;
         for plaintext in ["".to_owned(), "x".repeat(MAX_PLAINTEXT_BYTES + 1)] {
-            let request = test::TestRequest::post()
+            let request = actix_test::TestRequest::post()
                 .uri("/api/encrypt")
                 .set_json(json!({"plaintext": plaintext}))
                 .to_request();
-            let response = test::call_service(&app, request).await;
-            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let response = actix_test::call_service(&app, request).await;
+            assert_eq!(
+                response.status(),
+                StatusCode::BAD_REQUEST,
+                "{}",
+                String::from_utf8_lossy(&actix_test::read_body(response).await)
+            );
         }
     }
 
@@ -423,38 +460,38 @@ mod tests {
     async fn api_returns_ciphertext_for_existing_id_and_404_for_missing_id() {
         let vault = Vault::in_memory().expect("in-memory SQLite vault");
         let state = Arc::new(AppState::new([6; 32], vault));
-        let app = test::init_service(
+        let app = actix_test::init_service(
             App::new()
                 .app_data(web::Data::from(state))
                 .app_data(super::json_config())
                 .configure(configure),
         )
         .await;
-        let response = test::call_service(
+        let response = actix_test::call_service(
             &app,
-            test::TestRequest::post()
+            actix_test::TestRequest::post()
                 .uri("/api/encrypt")
                 .set_json(json!({"plaintext": "persist me"}))
                 .to_request(),
         )
         .await;
-        let created: Value = test::read_body_json(response).await;
+        let created: Value = actix_test::read_body_json(response).await;
         let id = created["id"].as_str().expect("response id");
-        let fetched = test::call_service(
+        let fetched = actix_test::call_service(
             &app,
-            test::TestRequest::get()
+            actix_test::TestRequest::get()
                 .uri(&format!("/api/secrets/{id}"))
                 .to_request(),
         )
         .await;
         assert_eq!(fetched.status(), StatusCode::OK);
-        let fetched_body: Value = test::read_body_json(fetched).await;
+        let fetched_body: Value = actix_test::read_body_json(fetched).await;
         assert_eq!(fetched_body["id"], id);
         assert_eq!(fetched_body["ciphertext"], created["ciphertext"]);
 
-        let missing = test::call_service(
+        let missing = actix_test::call_service(
             &app,
-            test::TestRequest::get()
+            actix_test::TestRequest::get()
                 .uri("/api/secrets/4f3c3fe2-2cc0-44b8-9a12-111111111111")
                 .to_request(),
         )
