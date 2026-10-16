@@ -23,6 +23,10 @@ Open **https://127.0.0.1:5173**. Dev en preview gebruiken dezelfde vaste poort e
 
 Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
 
+## Render-preview (publiek)
+
+De repository-root bevat [`render.yaml`](../../render.yaml) voor een afzonderlijke Render Static Site met `modules/launcher-v1_2` als root. De gebruiker heeft ingestemd met **publieke previewhosting**, niet met productieacceptatie. Render Static Sites zijn publiek toegankelijk; publiceer hier geen geheimen of gevoelige gegevens. Automatische deploys staan uit. Om de preview daadwerkelijk aan te maken, importeer je deze repository in je Render-account als Blueprint en controleer je de getoonde service vóór het toepassen. Deze repositoryconfiguratie is geen bewijs dat de service al bestaat of live is.
+
 Een productiebundle bouwen vereist geen lokale certificaten:
 
 ```bash

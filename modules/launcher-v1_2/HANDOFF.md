@@ -31,4 +31,4 @@ De originele README beschrijft lokale HTTPS-start met eigen certificaten. De apa
 
 ## Tijdelijkheid
 
-Preview is privé en afzonderlijk van bestaande applicaties. Er is nog geen verwijderdatum overeengekomen of automatische verwijdering ingesteld. Bron en bewijs blijven behouden als de preview later wordt verwijderd.
+De gebruiker heeft ingestemd met een publieke Render-preview van alleen de launcher. `render.yaml` beschrijft een handmatig te deployen Static Site; accountimport en daadwerkelijke deployment zijn niet uitgevoerd of bevestigd. Inhoud van Render Static Sites is publiek toegankelijk. Dit verandert de status ACCEPTATIE / INTEGRATIE / PRODUCTIE: HOLD niet en maakt de achterliggende modules niet operationeel. Er is nog geen verwijderdatum overeengekomen of automatische verwijdering ingesteld. Bron en bewijs blijven behouden als de preview later wordt verwijderd.
