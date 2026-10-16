@@ -9,6 +9,7 @@ members = [
   "crates/palaco-citadel",
   "crates/palaco-evolution",
   "crates/palaco-la",
+  "modules/aether-backend",
 ]
 
 [workspace.package]
