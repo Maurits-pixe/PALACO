@@ -1,4 +1,4 @@
-# PALACO Hoofdkantoor — Launcher v1.2
+# PALACO NEO — Launcher v1.2
 
 **Afzonderlijke herstelcandidate `1.2.0-candidate.1`.** Het pakket bevat een volledige Vue-launcher, productiebundle, vastgelegde dependencies, regressietests en evidence. Lees `REVIEW.md` voor de uitgevoerde controles en hun grenzen. `ACCEPTANCE.md` bevat de gerichte acceptatiebasis.
 

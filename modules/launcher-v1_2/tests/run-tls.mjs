@@ -40,7 +40,7 @@ try {
     const process = viteProcess(directory, preview);
     try {
       const response = await waitForHttps(process, tls.ca); assert.equal(response.status, 200);
-      assert.match(response.body, /PALACO Hoofdkantoor/);
+      assert.match(response.body, /PALACO NEO/);
       await assert.rejects(request('http://127.0.0.1:5173'));
       await assert.rejects(request('https://127.0.0.1:5173'));
       return { status: response.status, plainHttpAccepted: false, untrustedCaAccepted: false, log: process.log() };

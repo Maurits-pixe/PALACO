@@ -9,7 +9,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #e2e8f0; outline-
 .palaco-container { max-width: 1500px; min-height: 100vh; margin: auto; padding: clamp(1.2rem, 4vw, 3.5rem); display: flex; flex-direction: column; }
 .palaco-header { display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; padding-bottom: 1.5rem; border-bottom: 1px solid #333; }
 .eyebrow { font-size: .7rem; letter-spacing: .24em; margin: 0 0 .6rem; color: #94a3b8; }
-.brand h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); line-height: 1; letter-spacing: .08em; margin: 0; }
+.brand h1 { font-size: clamp(2.2rem, 5vw, 3.2rem); line-height: 1; letter-spacing: 4px; margin: 0; color: #f8fafc; }
 .subtitle { display: block; font-size: .66rem; letter-spacing: .08em; color: #94a3b8; margin-top: .8rem; }
 .system-status { display: flex; align-items: center; gap: .6rem; font-size: .8rem; border: 1px solid #333; background: #111; border-radius: 5px; padding: .8rem 1rem; }
 .status-dot { flex: 0 0 8px; height: 8px; border-radius: 50%; }

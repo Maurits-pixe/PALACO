@@ -52,9 +52,9 @@ onUnmounted(() => {
   <div class="palaco-container">
     <header class="palaco-header">
       <div class="brand">
-        <p class="eyebrow">HOOFDKANTOOR</p>
-        <h1>PALACO</h1>
-        <span class="subtitle">LAUNCHER // v1.2 HERSTELCANDIDATE</span>
+        <p class="eyebrow">NEO // COMMANDO CENTRUM</p>
+        <h1>PALACO NEO</h1>
+        <span class="subtitle">NIEUWE REALITEIT // EVOLUTIE GESTART</span>
       </div>
       <div class="system-status" role="status">
         <span class="status-dot" :class="globalStatusClass" aria-hidden="true"></span>
