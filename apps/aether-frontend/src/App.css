@@ -29,6 +29,9 @@ dl { font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.7; ma
 dt { color: #aaa; margin-top: 14px; }
 dd { margin: 2px 0 0; overflow-wrap: anywhere; }
 .copy-button { width: 100%; margin-top: 12px; font-family: ui-monospace, monospace; }
+.export-link { display: block; text-align: center; margin-top: 12px; padding: 13px 16px; border-radius: 2px; font-size: 11px; line-height: 1.6; text-decoration: none; }
+.export-link:hover { border-color: #fff; }
+.export-link:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .result .hint { margin-bottom: 0; }
 .privacy-note { font-size: 10px; color: #aaa; line-height: 1.8; padding-top: 24px; margin: 0; }
 @media (max-width: 460px) {

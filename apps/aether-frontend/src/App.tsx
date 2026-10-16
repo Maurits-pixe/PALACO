@@ -1,6 +1,6 @@
 import { useReducer, useState } from 'react'
 import type { FormEvent } from 'react'
-import { encryptText, initialState, MAX_PLAINTEXT_BYTES, operationReducer } from './protocol.ts'
+import { createRecordExport, encryptText, initialState, MAX_PLAINTEXT_BYTES, operationReducer } from './protocol.ts'
 import './App.css'
 
 function App() {
@@ -12,6 +12,7 @@ function App() {
   const bytes = new TextEncoder().encode(plaintext).length
   const validInput = plaintext.trim().length > 0 && bytes <= MAX_PLAINTEXT_BYTES
   const result = state.phase === 'Voltooid' ? state.result : null
+  const recordExport = result ? createRecordExport(result) : null
 
   function reset() {
     dispatch({ type: 'reset' })
@@ -32,11 +33,11 @@ function App() {
     }
   }
 
-  async function copyCiphertext() {
-    if (!result) return
+  async function copyResult(complete: boolean) {
+    if (!result || !recordExport) return
     try {
-      await navigator.clipboard.writeText(result.ciphertext)
-      setCopyStatus('Ciphertext gekopieerd.')
+      await navigator.clipboard.writeText(complete ? recordExport.json : result.ciphertext)
+      setCopyStatus(complete ? 'Volledig versleuteld record gekopieerd.' : 'Ciphertext gekopieerd.')
     } catch {
       setCopyStatus('Kopiëren mislukt. Selecteer en kopieer de ciphertext handmatig.')
     }
@@ -87,7 +88,7 @@ function App() {
             aria-valuemin={0} aria-valuemax={100} className="pending-note">De engine verwerkt uw verzoek. Er wordt geen voortgang geschat.</div>}
           {state.phase === 'Wachtend' && <p className="empty-state">Gereed voor uw invoer.<br />Een resultaat verschijnt pas na bevestigde versleuteling én opslag.</p>}
           {state.phase === 'Fout' && <p className="error" role="alert">{state.message}</p>}
-          {result && (
+          {result && recordExport && (
             <div className="result">
               <p className="confirmation">Versleuteling en lokale opslag bevestigd.</p>
               <dl>
@@ -97,7 +98,10 @@ function App() {
               </dl>
               <label htmlFor="ciphertext">Ciphertext (base64, inclusief authenticatietag)</label>
               <textarea id="ciphertext" value={result.ciphertext} readOnly rows={6} spellCheck={false} />
-              <button className="secondary copy-button" type="button" onClick={copyCiphertext}>Ciphertext kopiëren</button>
+              <button className="secondary copy-button" type="button" onClick={() => copyResult(false)}>Ciphertext kopiëren</button>
+              <button className="secondary copy-button" type="button" onClick={() => copyResult(true)}>Volledig record kopiëren (JSON)</button>
+              <a className="secondary export-link" href={recordExport.href} download={recordExport.filename}>Versleuteld record downloaden</a>
+              <p className="hint">Bewaar het volledige record met ID en nonce voor later herstel. Deze export bevat geen plaintext, sessietoken of mastersleutel en vervangt geen sleutelback-up. Import en ontsleuteling zijn nog niet beschikbaar.</p>
               <p className="hint" role="status" aria-live="polite">{copyStatus}</p>
             </div>
           )}

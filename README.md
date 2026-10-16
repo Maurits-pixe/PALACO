@@ -85,7 +85,12 @@ kan deze API geen eerlijk tussentijds voortgangspercentage leveren.
 De Rust-service gebruikt `ring` voor AES-256-GCM en `rusqlite` voor ciphertext,
 nonce en recordmetadata. Plaintext en sleutels worden niet als vaultrecords
 opgeslagen. Bewaar het volledige resultaat, inclusief ID en nonce, niet alleen
-de ciphertext. Deze eerste API biedt encryptie, geen herstel-/decryptie-endpoint,
+de ciphertext. Gebruik **Versleuteld record downloaden** voor een JSON-export
+of **Volledig record kopiëren (JSON)**. De versiegebonden export bevat ook het
+HKDF-/AAD-formaat, maar nooit plaintext, sessietoken of mastersleutel.
+Bewaar de masterkey afzonderlijk: de export is geen sleutelback-up en
+`status: stored` is geen cryptografisch opslagbewijs.
+Deze eerste API biedt encryptie, geen import-/herstel-/decryptie-endpoint,
 sleutelbeheerplatform of onafhankelijke securitycertificering.
 Bij een netwerkfout kan het resultaat onbekend zijn; een foutmelding bewijst
 geen rollback en een blinde retry kan een extra record maken.

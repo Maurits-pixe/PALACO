@@ -48,6 +48,32 @@ export function validateRecord(value: unknown): value is EncryptedRecord {
     && decodedLength(record.ciphertext) <= MAX_PLAINTEXT_BYTES + 16
 }
 
+export function createRecordExport(record: EncryptedRecord) {
+  if (!validateRecord(record)) throw new Error('Geen geldig bevestigd record om te exporteren.')
+  const json = JSON.stringify({
+    format: 'palaco-aether-record',
+    version: 1,
+    keyDerivation: {
+      algorithm: 'HKDF-SHA256',
+      salt: 'record-id-utf8',
+      info: 'aether/record/aes-256-gcm/v1',
+    },
+    additionalAuthenticatedData: 'record-id-utf8',
+    record: {
+      id: record.id,
+      algorithm: record.algorithm,
+      nonce: record.nonce,
+      ciphertext: record.ciphertext,
+      status: record.status,
+    },
+  }, null, 2)
+  return {
+    filename: `aether-${record.id}.json`,
+    json,
+    href: `data:application/json;charset=utf-8,${encodeURIComponent(json)}`,
+  }
+}
+
 const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'
 
 export async function encryptText(plaintext: string, token: string): Promise<EncryptedRecord> {
