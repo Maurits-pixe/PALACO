@@ -22,6 +22,7 @@ export function createModuleStates() {
   return CATALOG.map(({ id, name, color, description, origins }) => ({
     id, name, color, description, placeholder: origins[0], inputUrl: '',
     savedUrl: null, status: 'unconfigured', isValid: false, error: '',
-    errorCode: null, isVerifying: false, currentCheckId: null, lastCheck: null
+    errorCode: null, isVerifying: false, currentCheckId: null, lastCheck: null,
+    checkLatencyMs: null, tlsStatus: 'unknown'
   }));
 }

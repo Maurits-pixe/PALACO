@@ -4,6 +4,8 @@
 
 De launcher controleert modulemetadata en opent de geverifieerde origin. AETHER, BASTION en 5CRIPTIE behouden hun namen en appId. Dit pakket bevat niet de achterliggende versleutelings-, commandocentrum- of monitoringmachines.
 
+Het dashboard toont de gemeten duur en het resultaat van de laatste metadata-check, de resterende lokale verificatiegeldigheid, recent gestarte openverzoeken en een sessiegebonden launcherlog. Dit zijn geen echte module-heartbeats, certificaatvervalcontroles, externe sessiestatussen of een ecosysteembrede auditfeed. De lokale noodstop trekt alleen launcher-verificaties in en wist de openingslijst; browsers geven de launcher geen beheer over elders geopende tabs. Er wordt geen `localStorage` of andere blijvende sessiedata gewist omdat deze launcher daar niets opslaat.
+
 ## Lokaal starten
 
 Gebruik Node 22.12 of nieuwer; deze candidate is uitgevoerd met Node 24.19.0. De dependencies staan exact gepind in `package.json` en `package-lock.json`.

@@ -97,10 +97,26 @@ try {
     for (const [id, port] of [['aether', 5174], ['bastion', 5175], ['5criptie', 5176]]) {
       await verify(id, `https://localhost:${port}`); await status(id, 'Modulemetadata bevestigd');
       assert.equal(await card(id).locator('[data-launch]').isEnabled(), true);
+      assert.match(await card(id).locator('[data-latency]').textContent(), /Round trip: \d+ ms/);
+      assert.equal((await card(id).locator('[data-tls]').textContent()).trim(), 'HTTPS-handshake: geaccepteerd door browser');
     }
+    assert.match(await page.locator('.audit-panel').textContent(), /LOKALE LAUNCHERLOG/);
     await page.screenshot({ path: path.join(root, 'evidence/desktop-verified.png'), fullPage: true });
-    return { moduleIds: ['aether', 'bastion', '5criptie'], transport: 'native HTTPS Fetch, CORS, stream and emitted JSON Worker' };
+    return { moduleIds: ['aether', 'bastion', '5criptie'], transport: 'native HTTPS Fetch, CORS, stream and emitted JSON Worker',
+      measuredLatency: true, browserAcceptedHttps: true, localOnlyAudit: true };
   }, 'real browser Fetch/Worker with TLS fixtures and restrictive CORS headers');
+  await report.check('BROWSER-LOCAL-PANIC-REVOCATION', async () => {
+    await fresh(); await verify(); await status('aether', 'Modulemetadata bevestigd');
+    page.once('dialog', dialog => dialog.accept());
+    await page.locator('.panic-button').click();
+    await page.getByRole('alert').getByText('LOKALE NOODSTOP ACTIEF').waitFor();
+    await status('aether', 'Niet ingesteld');
+    assert.equal(await card('aether').locator('input').isDisabled(), true);
+    assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
+    assert.match(await page.locator('.panic-state').textContent(), /Andere browsertabs zijn niet gesloten/);
+    assert.match(await page.locator('.audit-panel').textContent(), /lokale launcherlog/);
+    return { verificationRevoked: true, controlsLocked: true, externalTabsClosed: false };
+  }, 'native browser confirm and UI; verifies local-only emergency behavior');
   for (const [id, mode, label] of [
     ['BROWSER-SCHEMA-MISSING-STATUS', 'missing-status', 'Verificatie mislukt'],
     ['BROWSER-IDENTITY-MISMATCH', 'wrong-id', 'Verificatie mislukt'],
