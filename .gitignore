@@ -1,0 +1,30 @@
+# Dependencies and generated output
+node_modules/
+target/
+dist/
+build/
+
+# Local databases (including SQLite journals)
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+
+# Secrets and local TLS material
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+certs/
+
+# OS files and logs
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*

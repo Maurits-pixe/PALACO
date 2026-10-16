@@ -1,4 +1,105 @@
-# Contributing to PALACO
+# 🏛️ PALACO-CITADEL
+
+**Een monorepo voor PALACO's Rust-kern en lokale Vue-previewapplicaties.**
+
+PALACO-CITADEL is de ecosysteemnaam binnen de bestaande repository
+[`Maurits-pixe/PALACO`](https://github.com/Maurits-pixe/PALACO).
+De beoogde combinatie van NEO, AETHER en BASTION is **nog geen geïntegreerd
+product**. De aanwezige launcher controleert modulemetadata; dat is geen
+authenticatie, autorisatie of veiligheidscertificering.
+
+## 🏗️ Architectuur en leveringsstatus
+
+| Onderdeel | Bron | Status |
+| --- | --- | --- |
+| NEO-launcher (Vue) | [`apps/neo-launcher`](apps/neo-launcher) → `modules/launcher-v1_2` | Lokale HTTPS-preview; metadata via `/.well-known/palaco-app.json` |
+| BASTION-interface (Vue) | [`apps/bastion-frontend`](apps/bastion-frontend) → `modules/citadel-bastion-preview` | Fictieve taken; mutaties standaard geweigerd |
+| PALACO-kern (Rust) | [`crates/`](crates) | Bestaande Cargo-workspace, los van de webpreviews |
+| AETHER-frontend en Rust-engine | Niet aanwezig | Beoogde `apps/aether-frontend` en `services/aether-engine`; geen geleverde AES-256-GCM-service |
+| BASTION Node.js/Socket.IO-backend | Niet aangesloten | Beoogde `services/bastion-core`; geen geleverde D-013-conforme mutatieservice |
+
+De `apps/`-ingangen zijn relatieve symlinks naar de bestaande bronmappen:
+deploymentconfiguratie, tests en historisch bewijs behouden hun oorspronkelijke
+paden. De bestaande `services/rio-accounts` blijft ongewijzigd.
+Zie [architectuur](docs/ARCHITECTURE.md) en [D-013](docs/D-013-PROTOCOL.md).
+
+## 🚀 Quick start: lokale previews
+
+Vereisten: Bash 4.3+, Node.js **22.12+**, npm, OpenSSL en
+[mkcert](https://github.com/FiloSottile/mkcert) met een reeds ingerichte lokale CA.
+Voor de afzonderlijke Rust-workspace: Rust **1.90+**.
+Onder Windows vereisen de `apps/`-symlinks een checkout met symlinkondersteuning;
+de oorspronkelijke `modules/`-paden blijven ook rechtstreeks bruikbaar.
+
+```bash
+git clone https://github.com/Maurits-pixe/PALACO.git
+cd PALACO
+
+for app in modules/launcher-v1_2 modules/citadel-bastion-preview; do
+  (cd "$app" &&
+    npm ci &&
+    mkdir -p certs &&
+    mkcert -cert-file certs/localhost.pem -key-file certs/localhost-key.pem \
+      localhost 127.0.0.1 ::1)
+done
+
+./scripts/start-all.sh
+```
+
+Open NEO op **https://127.0.0.1:5173** en BASTION op
+**https://localhost:5175**. Kies in NEO de BASTION-origin
+`https://localhost:5175` en vervolgens **Opslaan & verifiëren**.
+Het script start uitsluitend deze twee previews op loopback, installeert niets
+en stopt beide procesgroepen bij afsluiten of wanneer één preview stopt.
+Het start geen ontbrekende engine of productiebackend.
+
+Ngrok is niet nodig voor deze lokale quickstart. Externe tunnels zijn geen
+onderdeel van de veilige standaardconfiguratie: daarvoor moeten zowel de exacte
+origin-allowlist in `modules/launcher-v1_2/src/catalog.js` als de CORS-/TLS-instellingen
+van de doelmodule afzonderlijk worden beoordeeld. Publiceer geen lokale guards
+of fictieve previews als geautoriseerde services.
+
+### Bestaande controles
+
+```bash
+for app in modules/launcher-v1_2 modules/citadel-bastion-preview; do
+  (cd "$app" && npm test && npm run build)
+done
+(cd modules/launcher-v1_2 && npm run test:guard && npm run test:tls)
+```
+
+Browsercontroles en hun aanvullende vereisten staan in de module-README's.
+De Rust-workspace heeft afzonderlijke tests; PostgreSQL-integratietests vereisen
+een ingerichte database en `DATABASE_URL`.
+
+## 🔒 Veiligheid en publicatie
+
+D-013 is een te bewijzen opslag-/bevoegdheidscontract, geen claim die een
+afteller of tijdcheck vóór een transactie waarmaakt. De BASTION-preview weigert
+mutaties met `STORAGE_EFFECT_DEADLINE_UNSUPPORTED`; een onzekere eerdere uitkomst
+blijft `RESULT_UNKNOWN`. Zie de [protocolgrenzen](docs/D-013-PROTOCOL.md).
+
+De root-`.gitignore` sluit nieuwe dependencies, buildproducten, lokale databases
+en secrets uit; reeds gevolgde bestanden en Git-historie worden daardoor niet
+geschoond. Controleer vóór publieke publicatie ook de historie en meegeleverde
+archieven op secrets, rechten en privégegevens; roteer eventueel blootgestelde
+credentials. Deze wijziging wijzigt geen repositoryzichtbaarheid, remote of
+GitHub-profielinstellingen en publiceert geen release.
+
+Maintainers kunnen na die controle de repository publiek maken, topics
+(`rust`, `cybersecurity`, `vue`, `nodejs`, `encryption`, `monorepo`, `d-013`)
+toevoegen en haar op hun profiel pinnen. Publiceer `v1.0.0 - Genesis` pas met
+releasebewijs dat overeenkomt met de werkelijk geleverde componenten.
+
+## 📄 Licentie
+
+**MIT OR Apache-2.0**, naar keuze; zie [LICENSE](LICENSE),
+[LICENSE-MIT](LICENSE-MIT) en [LICENSE-APACHE](LICENSE-APACHE).
+De bestaande dubbele licentie blijft behouden.
+
+---
+
+## Contributing to PALACO
 
 **Version:** 1.0  
 **Status:** ACTIVE  
