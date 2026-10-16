@@ -106,7 +106,6 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   const messagesAfterExpiry = await (await fetch(`${baseUrl}/api/messages`)).json();
   assert.deepEqual(messagesAfterExpiry, []);
   assert.deepEqual(await destroyEvent, [{ id: message.id }]);
-  db.close();
 
   const blocked = await fetch(`${baseUrl}/api/mutations/blocked`, {
     method: 'POST',
@@ -116,13 +115,47 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(blocked.status, 403);
   assert.equal((await blocked.json()).code, 'STORAGE_EFFECT_DEADLINE_UNSUPPORTED');
 
+  const invalidClient = io(baseUrl, { transports: ['websocket'], reconnection: false, autoConnect: false });
+  const invalidConnected = once(invalidClient, 'connect');
+  invalidClient.connect();
+  await invalidConnected;
+  const invalidAck = new Promise(resolve => invalidClient.emit('send_message', {
+    text: '',
+    sender: 'untrusted',
+    ttlSeconds: 1
+  }, resolve));
+  assert.deepEqual(await invalidAck, { ok: false, error: 'INVALID_MESSAGE' });
+  invalidClient.disconnect();
+
+  const spamClient = io(baseUrl, { transports: ['websocket'], reconnection: false, autoConnect: false });
+  const spamConnected = once(spamClient, 'connect');
+  spamClient.connect();
+  await spamConnected;
+  for (let index = 0; index < 5; index += 1) {
+    const accepted = new Promise(resolve => spamClient.emit('send_message', {
+      text: `Rate test ${index}`,
+      sender: 'spoofed sender'
+    }, resolve));
+    assert.equal((await accepted).ok, true);
+  }
+  const rejected = new Promise(resolve => spamClient.emit('send_message', {
+    text: 'Rate test overflow'
+  }, resolve));
+  assert.deepEqual(await rejected, { ok: false, error: 'RATE_LIMITED' });
+  spamClient.disconnect();
+  assert.equal(db.prepare("SELECT count(*) AS count FROM messages WHERE text LIKE 'Rate test %'").get().count, 5);
+
   const audit = await (await fetch(`${baseUrl}/api/audit`)).json();
-  assert.deepEqual(audit.map(entry => entry.action).sort(), [
-    'MESSAGE_EXPIRED',
-    'MESSAGE_SENT',
-    'MUTATION_BLOCKED_INVALID_REQUEST',
-    'MUTATION_BLOCKED_NO_D013_BACKEND'
-  ]);
+  const actions = audit.map(entry => entry.action);
+  assert.ok(actions.includes('MESSAGE_EXPIRED'));
+  assert.ok(actions.includes('MESSAGE_SENT'));
+  assert.ok(actions.includes('MESSAGE_REJECTED_INVALID'));
+  assert.ok(actions.includes('MESSAGE_REJECTED_RATE_LIMIT'));
+  assert.ok(actions.includes('MUTATION_BLOCKED_INVALID_REQUEST'));
+  assert.ok(actions.includes('MUTATION_BLOCKED_NO_D013_BACKEND'));
   const invalidAttempt = audit.find(entry => entry.action === 'MUTATION_BLOCKED_INVALID_REQUEST');
   assert.equal(invalidAttempt.details, 'Invalid preview mutation request');
+  assert.equal(audit.find(entry => entry.action === 'MESSAGE_REJECTED_INVALID').details, 'Invalid chat message request');
+  assert.equal(audit.find(entry => entry.action === 'MESSAGE_REJECTED_RATE_LIMIT').details, 'Chat message rate limit exceeded');
+  db.close();
 });

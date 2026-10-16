@@ -9,6 +9,8 @@ import { Server } from 'socket.io';
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const host = '127.0.0.1';
 const port = Number(process.env.BASTION_PORT ?? 3005);
+const messageWindowMs = 10_000;
+const messageLimit = 5;
 const databasePath = path.resolve(process.env.BASTION_DB_PATH ?? path.join(moduleDir, '.bastion-preview', 'bastion.db'));
 const allowedOrigins = new Set(
   (process.env.BASTION_ALLOWED_ORIGINS ?? 'https://localhost:5175,https://127.0.0.1:5175')
@@ -93,6 +95,10 @@ const recordInvalidMutation = db.transaction(() => {
   );
 });
 
+const recordRejectedMessage = db.transaction((action, details, timestamp) => {
+  insertAudit.run(action, 'Preview', details, timestamp);
+});
+
 app.get('/api/messages', (_req, res) => {
   removeExpiredMessages();
   res.json(listMessages.all(Date.now()));
@@ -117,19 +123,38 @@ app.post('/api/mutations/blocked', (req, res) => {
 });
 
 io.on('connection', socket => {
+  const sentAt = [];
+  let lastRejectionAuditAt = 0;
   removeExpiredMessages();
   socket.emit('init_messages', listMessages.all(Date.now()));
   socket.emit('init_audit', listAudit.all());
 
   socket.on('send_message', (data, acknowledge) => {
+    const now = Date.now();
+    while (sentAt.length && sentAt[0] <= now - messageWindowMs) sentAt.shift();
     const text = typeof data?.text === 'string' ? data.text.trim() : '';
     const ttlSeconds = data?.ttlSeconds ?? null;
     if (!text || text.length > 1000 || (ttlSeconds !== null && ttlSeconds !== 30)) {
+      if (lastRejectionAuditAt <= now - messageWindowMs) {
+        recordRejectedMessage('MESSAGE_REJECTED_INVALID', 'Invalid chat message request', now);
+        publishAudit();
+        lastRejectionAuditAt = now;
+      }
       if (typeof acknowledge === 'function') acknowledge({ ok: false, error: 'INVALID_MESSAGE' });
       return;
     }
+    if (sentAt.length >= messageLimit) {
+      if (lastRejectionAuditAt <= now - messageWindowMs) {
+        recordRejectedMessage('MESSAGE_REJECTED_RATE_LIMIT', 'Chat message rate limit exceeded', now);
+        publishAudit();
+        lastRejectionAuditAt = now;
+      }
+      if (typeof acknowledge === 'function') acknowledge({ ok: false, error: 'RATE_LIMITED' });
+      return;
+    }
 
-    const createdAt = Date.now();
+    sentAt.push(now);
+    const createdAt = now;
     const expiresAt = ttlSeconds === null ? null : createdAt + ttlSeconds * 1000;
     const saveMessage = db.transaction(() => {
       const result = db.prepare(
