@@ -10,6 +10,13 @@ const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const host = '127.0.0.1';
 const port = Number(process.env.BASTION_PORT ?? 3005);
 const databasePath = path.resolve(process.env.BASTION_DB_PATH ?? path.join(moduleDir, '.bastion-preview', 'bastion.db'));
+const allowedOrigins = new Set(
+  (process.env.BASTION_ALLOWED_ORIGINS ?? 'https://localhost:5175,https://127.0.0.1:5175')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+);
+const isAllowedOrigin = origin => !origin || allowedOrigins.has(origin);
 
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 const db = new Database(databasePath);
@@ -33,8 +40,16 @@ db.exec(`
 
 const app = express();
 app.use(express.json({ limit: '16kb' }));
+app.use('/api', (req, res, next) => {
+  if (!isAllowedOrigin(req.get('origin'))) {
+    return res.status(403).json({ error: 'ORIGIN_NOT_ALLOWED' });
+  }
+  return next();
+});
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  allowRequest: (req, callback) => callback(null, isAllowedOrigin(req.headers.origin))
+});
 const listMessages = db.prepare('SELECT id, sender, text, created_at, expires_at FROM messages WHERE expires_at IS NULL OR expires_at > ? ORDER BY created_at ASC, id ASC');
 const listAudit = db.prepare('SELECT id, action, user_id, details, timestamp FROM audit_logs ORDER BY timestamp DESC, id DESC LIMIT 50');
 const insertAudit = db.prepare('INSERT INTO audit_logs (action, user_id, details, timestamp) VALUES (?, ?, ?, ?)');

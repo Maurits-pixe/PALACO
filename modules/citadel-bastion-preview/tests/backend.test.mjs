@@ -23,7 +23,7 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   }));
   const child = spawn(process.execPath, ['server.js'], {
     cwd: new URL('.', root),
-    env: { ...process.env, BASTION_PORT: String(probe), BASTION_DB_PATH: databasePath },
+    env: { ...process.env, BASTION_PORT: String(probe), BASTION_DB_PATH: databasePath, BASTION_ALLOWED_ORIGINS: `https://localhost:5175,https://127.0.0.1:5175,${`http://127.0.0.1:${probe}`}` },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   const baseUrl = `http://127.0.0.1:${probe}`;
@@ -70,6 +70,27 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(broadcastMessage.id, message.id);
   assert.equal(message.expires_at, message.created_at + 30_000);
   assert.deepEqual(await (await fetch(`${baseUrl}/api/messages`)).json(), [message]);
+
+  const deniedMutation = await fetch(`${baseUrl}/api/mutations/blocked`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://untrusted.example' },
+    body: JSON.stringify({ action: 'COMPLETE', taskId: 1 })
+  });
+  assert.equal(deniedMutation.status, 403);
+  assert.equal((await deniedMutation.json()).error, 'ORIGIN_NOT_ALLOWED');
+
+  const hostileClient = io(baseUrl, {
+    transports: ['websocket'],
+    reconnection: false,
+    extraHeaders: { Origin: 'https://untrusted.example' }
+  });
+  const hostileResult = await Promise.race([
+    once(hostileClient, 'connect').then(() => 'connected'),
+    once(hostileClient, 'connect_error').then(() => 'rejected'),
+    wait(1000).then(() => 'timeout')
+  ]);
+  assert.equal(hostileResult, 'rejected');
+  hostileClient.disconnect();
 
   const destroyEvent = once(secondClient, 'message_destroyed');
   const db = new Database(databasePath);

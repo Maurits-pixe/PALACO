@@ -2,7 +2,7 @@
 
 Last Updated: 2026-10-16
 
-Dit is een geïsoleerde preview. Taken zijn fixtures; de SQLite-backend is uitsluitend voor lokaal gebruik op `127.0.0.1`. De lokale Socket.IO-chat, audit en berichtverval worden niet gedeployed en zijn geen beveiligd communicatiekanaal.
+Dit is een geïsoleerde preview. Taken zijn fixtures; de SQLite-backend is uitsluitend voor lokaal gebruik op `127.0.0.1`. API- en Socket.IO-requests vanaf origins buiten `https://localhost:5175` en `https://127.0.0.1:5175` worden geweigerd. De lokale Socket.IO-chat, audit en berichtverval worden niet gedeployed en zijn geen beveiligd communicatiekanaal.
 
 Taakmutaties blijven gesloten. Pogingen worden als `MUTATION_BLOCKED_NO_D013_BACKEND` in SQLite geaudit en geven `STORAGE_EFFECT_DEADLINE_UNSUPPORTED` terug; er is geen mutation ticket of route die taken kan wijzigen. Dit is een guard, geen D-013-fix of conformiteitsbewijs. De database en previewbackend bieden geen authenticatie en mogen niet aan een netwerkinterface worden blootgesteld.
 
