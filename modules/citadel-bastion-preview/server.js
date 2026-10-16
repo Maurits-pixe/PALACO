@@ -11,6 +11,8 @@ const host = '127.0.0.1';
 const port = Number(process.env.BASTION_PORT ?? 3005);
 const messageWindowMs = 10_000;
 const messageLimit = 5;
+const messageRetention = 500;
+const auditRetention = 1000;
 const databasePath = path.resolve(process.env.BASTION_DB_PATH ?? path.join(moduleDir, '.bastion-preview', 'bastion.db'));
 const allowedOrigins = new Set(
   (process.env.BASTION_ALLOWED_ORIGINS ?? 'https://localhost:5175,https://127.0.0.1:5175')
@@ -55,6 +57,28 @@ const io = new Server(server, {
 const listMessages = db.prepare('SELECT id, sender, text, created_at, expires_at FROM messages WHERE expires_at IS NULL OR expires_at > ? ORDER BY created_at ASC, id ASC');
 const listAudit = db.prepare('SELECT id, action, user_id, details, timestamp FROM audit_logs ORDER BY timestamp DESC, id DESC LIMIT 50');
 const insertAudit = db.prepare('INSERT INTO audit_logs (action, user_id, details, timestamp) VALUES (?, ?, ?, ?)');
+const pruneAudit = db.prepare('DELETE FROM audit_logs WHERE id NOT IN (SELECT id FROM audit_logs ORDER BY id DESC LIMIT ?)');
+const findPrunedMessages = db.prepare('SELECT id FROM messages ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?');
+const deleteMessage = db.prepare('DELETE FROM messages WHERE id = ?');
+
+function writeAudit(action, userId, details, timestamp) {
+  insertAudit.run(action, userId, details, timestamp);
+  pruneAudit.run(auditRetention);
+}
+
+function pruneMessageHistory() {
+  const pruned = findPrunedMessages.all(messageRetention);
+  for (const { id } of pruned) deleteMessage.run(id);
+  if (pruned.length) {
+    writeAudit(
+      'MESSAGE_HISTORY_PRUNED',
+      'Preview',
+      `Removed ${pruned.length} oldest messages due to retention limit`,
+      Date.now()
+    );
+  }
+  return pruned.map(({ id }) => id);
+}
 
 function publishAudit() {
   io.emit('audit_updated', listAudit.all());
@@ -67,8 +91,8 @@ function removeExpiredMessages() {
 
   const removeAndAudit = db.transaction(rows => {
     for (const { id } of rows) {
-      db.prepare('DELETE FROM messages WHERE id = ?').run(id);
-      insertAudit.run('MESSAGE_EXPIRED', 'Preview', `Message ${id} expired`, now);
+      deleteMessage.run(id);
+      writeAudit('MESSAGE_EXPIRED', 'Preview', `Message ${id} expired`, now);
     }
   });
   removeAndAudit(expired);
@@ -78,7 +102,7 @@ function removeExpiredMessages() {
 
 const recordBlockedMutation = db.transaction(({ action, taskId }) => {
   const timestamp = Date.now();
-  insertAudit.run(
+  writeAudit(
     'MUTATION_BLOCKED_NO_D013_BACKEND',
     'Preview',
     `${action} blocked for task ${taskId}: no authorized D-013 backend`,
@@ -87,7 +111,7 @@ const recordBlockedMutation = db.transaction(({ action, taskId }) => {
 });
 
 const recordInvalidMutation = db.transaction(() => {
-  insertAudit.run(
+  writeAudit(
     'MUTATION_BLOCKED_INVALID_REQUEST',
     'Preview',
     'Invalid preview mutation request',
@@ -96,7 +120,7 @@ const recordInvalidMutation = db.transaction(() => {
 });
 
 const recordRejectedMessage = db.transaction((action, details, timestamp) => {
-  insertAudit.run(action, 'Preview', details, timestamp);
+  writeAudit(action, 'Preview', details, timestamp);
 });
 
 app.get('/api/messages', (_req, res) => {
@@ -160,13 +184,18 @@ io.on('connection', socket => {
       const result = db.prepare(
         'INSERT INTO messages (sender, text, created_at, expires_at) VALUES (?, ?, ?, ?)'
       ).run('Preview', text, createdAt, expiresAt);
-      insertAudit.run('MESSAGE_SENT', 'Preview', `Message ${result.lastInsertRowid} sent`, createdAt);
-      return { id: Number(result.lastInsertRowid), sender: 'Preview', text, created_at: createdAt, expires_at: expiresAt };
+      writeAudit('MESSAGE_SENT', 'Preview', `Message ${result.lastInsertRowid} sent`, createdAt);
+      const prunedIds = pruneMessageHistory();
+      return {
+        message: { id: Number(result.lastInsertRowid), sender: 'Preview', text, created_at: createdAt, expires_at: expiresAt },
+        prunedIds
+      };
     });
 
     try {
-      const message = saveMessage();
+      const { message, prunedIds } = saveMessage();
       io.emit('new_message', message);
+      for (const id of prunedIds) io.emit('message_destroyed', { id });
       publishAudit();
       if (typeof acknowledge === 'function') acknowledge({ ok: true, id: message.id });
     } catch {
@@ -176,6 +205,8 @@ io.on('connection', socket => {
 });
 
 removeExpiredMessages();
+db.transaction(pruneMessageHistory)();
+pruneAudit.run(auditRetention);
 const expiryTimer = setInterval(removeExpiredMessages, 1000);
 expiryTimer.unref();
 

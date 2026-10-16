@@ -157,5 +157,41 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(invalidAttempt.details, 'Invalid preview mutation request');
   assert.equal(audit.find(entry => entry.action === 'MESSAGE_REJECTED_INVALID').details, 'Invalid chat message request');
   assert.equal(audit.find(entry => entry.action === 'MESSAGE_REJECTED_RATE_LIMIT').details, 'Chat message rate limit exceeded');
+
+  const messageInsert = db.prepare('INSERT INTO messages (sender, text, created_at, expires_at) VALUES (?, ?, ?, NULL)');
+  for (let index = 0; index < 500; index += 1) {
+    messageInsert.run('Preview', `Retention seed ${index}`, Date.now() - 100_000 + index);
+  }
+  const prunedEvents = new Promise(resolve => {
+    const ids = [];
+    const listener = ({ id }) => {
+      ids.push(id);
+      if (ids.length === 6) {
+        secondClient.off('message_destroyed', listener);
+        resolve(ids);
+      }
+    };
+    secondClient.on('message_destroyed', listener);
+  });
+  const retentionAck = new Promise(resolve => client.emit('send_message', { text: 'Retention newest message' }, resolve));
+  assert.equal((await retentionAck).ok, true);
+  const prunedIds = await prunedEvents;
+  assert.equal(prunedIds.length, 6);
+  assert.equal(db.prepare('SELECT count(*) AS count FROM messages').get().count, 500);
+  assert.equal(db.prepare('SELECT text FROM messages ORDER BY created_at DESC, id DESC LIMIT 1').get().text, 'Retention newest message');
+  assert.equal(db.prepare("SELECT details FROM audit_logs WHERE action = 'MESSAGE_HISTORY_PRUNED' ORDER BY id DESC LIMIT 1").get().details, 'Removed 6 oldest messages due to retention limit');
+
+  const seedAudit = db.prepare('INSERT INTO audit_logs (action, user_id, details, timestamp) VALUES (?, ?, ?, ?)');
+  for (let index = 0; index < 1001; index += 1) {
+    seedAudit.run('RETENTION_SEED', 'Test', 'retention seed', Date.now());
+  }
+  const retentionAuditResponse = await fetch(`${baseUrl}/api/mutations/blocked`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'COMPLETE', taskId: 1 })
+  });
+  assert.equal(retentionAuditResponse.status, 403);
+  assert.equal(db.prepare('SELECT count(*) AS count FROM audit_logs').get().count, 1000);
+  assert.equal(db.prepare('SELECT action FROM audit_logs ORDER BY id DESC LIMIT 1').get().action, 'MUTATION_BLOCKED_NO_D013_BACKEND');
   db.close();
 });
