@@ -2091,6 +2091,42 @@ MBvanGeen/palaco-foundation # PALACO
 
 
 ```
+### ERA-009 — process-local reference model
+
+ERA-009 is isolated in `palaco-citadel::InMemoryCommitGate`. It is not wired
+into runtime execution and does not change `ExecutionBoundary` or `RuntimePlan`.
+It is separate from the release registry's ERA-008 draft interval checker and
+does not revalidate time freshness.
+
+| Evidence level | Scope |
+|---|---|
+| Conceptually specified | Local commit/revocation ordering and exact idempotent retries; wider ERA architecture, including ERA-010–033, is not implemented or verified by this model. |
+| Locally implemented | One mutex-protected in-memory gate per caller-defined authority context, with checked sequence numbers and terminal revocation. |
+| Tested | Focused tests cover exact retries, input conflicts, authority rejection, revocation ordering, independent instances, concurrent callers, poisoning, and sequence exhaustion. Workspace validation is reported separately in the PR. |
+| Security-validated | **PENDING/UNKNOWN**. The previously reported CodeQL timeout is not a security pass. Tests, Clippy, and formatting do not establish security validation. |
+
+Share one gate instance across participating threads. Successful new commits and
+the first revocation consume a single local sequence starting at one; rejected
+requests, exact retries, and repeated revocations do not. An idempotency key
+binds the complete boundary and exact payload bytes. An exact retry after
+revocation returns only the historical receipt, **not renewed execution
+permission**. A different request under the same key is rejected. A stale
+authorized boundary cannot create a new commit after this gate is revoked.
+Caller-supplied revoked, expired, or indeterminate provenance is always rejected,
+including on retries. Mutex poisoning and sequence exhaustion fail closed.
+
+Authority context binding, authentication, evidence verification, expiry refresh,
+and routing every relevant caller through the same gate remain caller
+responsibilities, not guarantees of this model. Receipts acknowledge only
+in-memory records: no external operation is performed, rolled back, or made
+exactly-once. Keys and payloads are retained without bounds or eviction; separate
+instances and process restarts share no ordering, idempotency, or revocation
+state. There is no durability, replication, multi-process coordination, or
+production, exchange, or financial-grade guarantee. Other persistence or consensus
+claims elsewhere in this README do not apply to ERA-009.
+
+Decision boundary: **ADVISORY — HUMAN DECISION REQUIRED**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

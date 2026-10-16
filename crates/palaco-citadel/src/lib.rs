@@ -3,6 +3,10 @@
 
 //! Constitutional execution boundary.
 
+mod commit_gate;
+
+pub use commit_gate::{CommitGateError, CommitReceipt, InMemoryCommitGate};
+
 use palaco_foundation::{
     ContractDisposition, ContractError, FailClosed, Validatable, disposition_for,
 };
