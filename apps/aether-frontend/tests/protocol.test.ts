@@ -294,6 +294,90 @@ test('pre-cancelled readback never reaches the network', async () => {
   } finally { globalThis.fetch = original }
 })
 
+test('rejected status bodies are cancelled without reading or waiting for cleanup', async () => {
+  const original = globalThis.fetch
+  try {
+    for (const operation of ['read', 'encrypt']) {
+      for (const status of [200, 201, 202, 400, 401, 403, 404, 413, 415, 429, 500]) {
+        if (status === (operation === 'read' ? 200 : 201)) continue
+        for (const cleanupFails of [false, true]) {
+          let cancelled = false
+          let calls = 0
+          const response = new Response(new ReadableStream<Uint8Array>({
+            cancel() {
+              cancelled = true
+              return cleanupFails ? Promise.reject(new Error('cleanup failed')) : new Promise<void>(() => {})
+            },
+          }), { status })
+          response.json = async () => { assert.fail('Rejected body must not be parsed') }
+          globalThis.fetch = async () => { calls++; return response }
+          const expected = status === 401 ? /sessietoken/
+            : operation === 'encrypt' && [400, 403, 413, 415].includes(status) ? /Verzoek geweigerd/
+            : operation === 'encrypt' ? /Uitkomst onbekend.*kan wel zijn opgeslagen/
+            : status === 403 ? /Origin niet toegestaan/
+            : status === 404 ? /Geen opgeslagen record/ : /Vault lezen mislukt/
+          await assert.rejects(operation === 'read'
+            ? fetchStoredRecord(record.id, 'token') : encryptText('input', 'token'), expected)
+          assert.equal(cancelled, true)
+          assert.equal(calls, 1)
+          assert.equal(response.body?.locked, false)
+        }
+      }
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('late cancelled responses discard unused bodies before preserving abort reasons', async () => {
+  const original = globalThis.fetch
+  try {
+    for (const status of [200, 404]) {
+      const controller = new AbortController()
+      let finish!: (response: Response) => void
+      let cancelled = false
+      globalThis.fetch = async () => new Promise<Response>(resolve => { finish = resolve })
+      const read = fetchStoredRecord(record.id, 'token', controller.signal)
+      const rejected = assert.rejects(read, { name: 'AbortError' })
+      controller.abort()
+      finish(new Response(new ReadableStream({ cancel() { cancelled = true } }), { status }))
+      await rejected
+      assert.equal(cancelled, true)
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('native fetch closes rejected streaming HTTP responses without waiting for their end', { timeout: 10_000 }, async () => {
+  const original = globalThis.fetch
+  try {
+    for (const operation of ['read', 'encrypt']) {
+      let disconnected!: () => void
+      const closed = new Promise<void>(resolve => { disconnected = resolve })
+      let requests = 0
+      const server = createServer((request, response) => {
+        requests++
+        request.resume()
+        response.on('close', disconnected)
+        response.writeHead(operation === 'read' ? 404 : 202, { 'Content-Type': 'application/json' })
+        response.write('{"unfinished":')
+      })
+      server.listen(0, '127.0.0.1')
+      await once(server, 'listening')
+      try {
+        const address = server.address()
+        assert.ok(address && typeof address !== 'string')
+        globalThis.fetch = (url, options) => original(`http://127.0.0.1:${address.port}${url}`, options)
+        await assert.rejects(operation === 'read'
+          ? fetchStoredRecord(record.id, 'token') : encryptText('input', 'token'),
+        operation === 'read' ? /Geen opgeslagen record/ : /Uitkomst onbekend/)
+        await closed
+        assert.equal(requests, 1)
+      } finally {
+        server.closeAllConnections()
+        await new Promise<void>(resolve => { server.close(() => resolve()) })
+      }
+    }
+  } finally { globalThis.fetch = original }
+})
+
 test('cancellation aborts a pending fetch without becoming a missing-record or write error', async () => {
   const original = globalThis.fetch
   const controller = new AbortController()

@@ -127,6 +127,10 @@ export async function readRecordExport(file: Pick<File, 'size' | 'text'>): Promi
 
 const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'
 
+function discardResponse(response: Response) {
+  void response.body?.cancel().catch(() => {})
+}
+
 async function readRecordResponse(response: Response, signal?: AbortSignal): Promise<unknown> {
   signal?.throwIfAborted()
   if (!response.body) throw new Error('Leeg recordantwoord.')
@@ -177,7 +181,11 @@ export async function fetchStoredRecord(id: string, token: string, signal?: Abor
     signal?.throwIfAborted()
     throw new Error(failure)
   }
-  signal?.throwIfAborted()
+  if (signal?.aborted) {
+    discardResponse(response)
+    signal.throwIfAborted()
+  }
+  if (response.status !== 200) discardResponse(response)
   if (response.status === 401) throw new Error('Toegang geweigerd. Controleer uw sessietoken.')
   if (response.status === 403) throw new Error('Origin niet toegestaan. Controleer uw lokale configuratie.')
   if (response.status === 404) throw new Error('Geen opgeslagen record met deze UUID gevonden.')
@@ -206,7 +214,8 @@ export async function encryptText(plaintext: string, token: string): Promise<Enc
   } catch {
     throw new Error(UNKNOWN_OUTCOME)
   }
-  if (!response.ok) {
+  if (response.status !== 201) {
+    discardResponse(response)
     if ([400, 401, 403, 413, 415].includes(response.status)) {
       throw new Error(response.status === 401
         ? 'Toegang geweigerd. Controleer uw sessietoken.'
@@ -216,6 +225,6 @@ export async function encryptText(plaintext: string, token: string): Promise<Enc
   }
   let record: unknown
   try { record = await readRecordResponse(response) } catch { throw new Error(UNKNOWN_OUTCOME) }
-  if (response.status !== 201 || !validateRecord(record)) throw new Error(UNKNOWN_OUTCOME)
+  if (!validateRecord(record)) throw new Error(UNKNOWN_OUTCOME)
   return record
 }

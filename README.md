@@ -126,6 +126,11 @@ Voor encryptie blijft een te groot, onderbroken of ongeldig succesantwoord een
 **onbekende opslaguitkomst**: de server kan al hebben opgeslagen. Het stoppen
 van de responsebody draait niets terug en veroorzaakt geen automatische retry.
 De handmatige annuleerbediening blijft uitsluitend voor teruglezen beschikbaar.
+Bij afgewezen HTTP-statussen stopt de frontend de ongebruikte responsebody
+zonder de fouttekst te lezen. Voor encryptie geldt uitsluitend HTTP 201 met
+een geldig record als bevestigd succes; bijvoorbeeld HTTP 200 of 202 blijft
+een onbekende opslaguitkomst, ook als de body een geldig record zou bevatten.
+Het sluiten van de response wijzigt geen opslag en start geen retry.
 Bij een geopend exportbestand kun je **Record-ID overnemen voor teruglezen**
 kiezen. Dit vult alleen de UUID in en wist een eerdere vaultweergave; het doet
 geen netwerkverzoek. Kies vervolgens **Opgeslagen record ophalen**.
