@@ -10,13 +10,15 @@
     "dev": "vite --configLoader native",
     "build": "node scripts/write-headers.mjs && vite build --configLoader native",
     "preview": "vite preview --configLoader native",
-    "test": "node --test tests/aether.test.mjs"
+    "test": "node --test tests/aether.test.mjs",
+    "test:browser": "npm run build && node tests/browser.mjs"
   },
   "dependencies": {
     "vue": "3.5.43"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.9",
+    "playwright": "1.62.1",
     "vite": "7.3.7"
   },
   "allowScripts": {
