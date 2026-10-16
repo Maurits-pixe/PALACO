@@ -117,11 +117,15 @@ browserverzoek af met een AbortController. Ook als een antwoord toch nog
 binnenkomt, wordt het niet meer getoond. Dit garandeert niet dat serverwerk
 onmiddellijk stopt en bewijst geen afwezigheid van het record.
 Deze bediening geldt uitsluitend voor lezen, niet voor encryptie of rollback.
-Terugleesantwoorden worden tijdens het streamen begrensd tot **64 KiB**
+Teruglees- en encryptie-antwoorden worden tijdens het streamen begrensd tot **64 KiB**
 (daadwerkelijk ontvangen bodybytes, niet alleen `Content-Length`).
 Een te groot, onderbroken of ongeldig UTF-8-/JSON-antwoord levert geen record
 op. Dit is geen bewijs dat het record ontbreekt. De limiet is geen tijdslimiet;
-een stilgevallen verbinding kun je zelf annuleren.
+een stilgevallen terugleesverbinding kun je zelf annuleren.
+Voor encryptie blijft een te groot, onderbroken of ongeldig succesantwoord een
+**onbekende opslaguitkomst**: de server kan al hebben opgeslagen. Het stoppen
+van de responsebody draait niets terug en veroorzaakt geen automatische retry.
+De handmatige annuleerbediening blijft uitsluitend voor teruglezen beschikbaar.
 Bij een geopend exportbestand kun je **Record-ID overnemen voor teruglezen**
 kiezen. Dit vult alleen de UUID in en wist een eerdere vaultweergave; het doet
 geen netwerkverzoek. Kies vervolgens **Opgeslagen record ophalen**.

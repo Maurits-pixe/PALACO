@@ -215,7 +215,7 @@ export async function encryptText(plaintext: string, token: string): Promise<Enc
     throw new Error(UNKNOWN_OUTCOME)
   }
   let record: unknown
-  try { record = await response.json() } catch { throw new Error(UNKNOWN_OUTCOME) }
+  try { record = await readRecordResponse(response) } catch { throw new Error(UNKNOWN_OUTCOME) }
   if (response.status !== 201 || !validateRecord(record)) throw new Error(UNKNOWN_OUTCOME)
   return record
 }

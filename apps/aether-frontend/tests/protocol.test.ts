@@ -181,6 +181,77 @@ test('network errors and invalid successes explicitly leave storage outcome unkn
   } finally { globalThis.fetch = original }
 })
 
+test('encryption accepts streamed maximum records and exact 64 KiB response boundaries', async () => {
+  const original = globalThis.fetch
+  try {
+    const largest = { ...record, ciphertext: btoa('x'.repeat(MAX_PLAINTEXT_BYTES + 16)) }
+    for (const value of [record, largest]) {
+      const bytes = new TextEncoder().encode(JSON.stringify(value).padEnd(65_536, ' '))
+      for (const length of [undefined, '1', '999999']) {
+        globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+          start(stream) {
+            for (let i = 0; i < bytes.length; i += 113) stream.enqueue(bytes.subarray(i, i + 113))
+            stream.close()
+          },
+        }), { status: 201, headers: length ? { 'Content-Length': length } : {} })
+        assert.deepEqual(await encryptText('input', 'token'), value)
+      }
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('oversized encryption responses cancel the body and leave storage outcome unknown without retries', async () => {
+  const original = globalThis.fetch
+  try {
+    for (const split of [false, true]) {
+      let calls = 0
+      let cancelled = false
+      const bytes = new TextEncoder().encode(JSON.stringify(record).padEnd(65_537, ' '))
+      const response = new Response(new ReadableStream<Uint8Array>({
+        start(stream) {
+          if (split) {
+            stream.enqueue(bytes.subarray(0, 65_536))
+            stream.enqueue(bytes.subarray(65_536))
+          } else stream.enqueue(bytes)
+        },
+        cancel() { cancelled = true },
+      }), { status: 201, headers: { 'Content-Length': '1' } })
+      globalThis.fetch = async () => { calls += 1; return response }
+      await assert.rejects(encryptText('input', 'token'), /Uitkomst onbekend.*kan wel zijn opgeslagen/)
+      assert.equal(calls, 1)
+      assert.equal(cancelled, true)
+      assert.equal(response.body?.locked, false)
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('invalid UTF-8, absent, interrupted and truncated encryption bodies never confirm storage', async () => {
+  const original = globalThis.fetch
+  try {
+    for (const body of [null, new Uint8Array(), new Uint8Array([0xff]), new TextEncoder().encode('{"id":')]) {
+      globalThis.fetch = async () => new Response(body, { status: 201 })
+      await assert.rejects(encryptText('input', 'token'), /Uitkomst onbekend.*kan wel zijn opgeslagen/)
+    }
+    let stream!: ReadableStreamDefaultController<Uint8Array>
+    let received!: () => void
+    const reading = new Promise<void>(resolve => { received = resolve })
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        stream = controller
+        controller.enqueue(new TextEncoder().encode('{"id":'))
+      },
+      pull() { received() },
+    }), { status: 201 })
+    globalThis.fetch = async () => response
+    const request = encryptText('input', 'token')
+    const rejected = assert.rejects(request, /Uitkomst onbekend.*kan wel zijn opgeslagen/)
+    await reading
+    stream.error(new TypeError('connection interrupted after headers'))
+    await rejected
+    assert.equal(response.body?.locked, false)
+  } finally { globalThis.fetch = original }
+})
+
 test('readback validates canonical v4 UUID locally before any network request', async () => {
   const original = globalThis.fetch
   globalThis.fetch = async () => { assert.fail('Invalid UUID must not reach the network') }
