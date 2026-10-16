@@ -21,7 +21,7 @@ The service uses plain HTTP on loopback for this preview. CORS allows only the l
 - `POST /api/encrypt` accepts `{"plaintext":"..."}` (1–65,536 UTF-8 bytes), stores the encrypted blob, and returns its ID, Base64 ciphertext, Base64 nonce, and creation time.
 - `GET /api/secrets/{id}` returns the stored encrypted blob. No decryption endpoint is exposed.
 
-The AES-GCM associated data binds each ciphertext to its UUID. Encryption uses a fresh cryptographically random 96-bit nonce per record. The master key is read from `AETHER_MASTER_KEY`; no key is hardcoded, returned, or stored in SQLite. The process zeroizes its in-memory key and request plaintext buffers on a best-effort basis; this does not guarantee removal of copies made by the operating system, allocator, or runtime.
+The AES-GCM associated data binds each ciphertext to its UUID. HMAC-SHA-256 derives a distinct AES key for each UUID from the master key, and encryption uses a fresh cryptographically random 96-bit nonce per record. The master key is read from `AETHER_MASTER_KEY`; no key is hardcoded, returned, or stored in SQLite. The process zeroizes temporary derived keys, its in-memory master key, and request plaintext buffers on a best-effort basis; this does not guarantee removal of copies made by the operating system, allocator, or runtime.
 
 ## Checks
 

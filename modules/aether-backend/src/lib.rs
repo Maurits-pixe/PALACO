@@ -323,8 +323,7 @@ mod tests {
 
     fn decrypt(master_key: &[u8; 32], blob: &EncryptedBlob) -> Result<Vec<u8>, &'static str> {
         let record_key = derive_record_key(master_key, &blob.id);
-        let unbound_key =
-            UnboundKey::new(&AES_256_GCM, &record_key).map_err(|_| "invalid key")?;
+        let unbound_key = UnboundKey::new(&AES_256_GCM, &record_key).map_err(|_| "invalid key")?;
         let opening_key = LessSafeKey::new(unbound_key);
         let nonce: [u8; 12] = blob
             .nonce
