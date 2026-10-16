@@ -1,0 +1,79 @@
+export const MAX_PLAINTEXT_BYTES = 32_768
+
+export type EncryptedRecord = {
+  id: string
+  ciphertext: string
+  nonce: string
+  algorithm: 'AES-256-GCM'
+  status: 'stored'
+}
+
+export type OperationState =
+  | { phase: 'Wachtend' }
+  | { phase: 'Verwerkend' }
+  | { phase: 'Voltooid'; result: EncryptedRecord }
+  | { phase: 'Fout'; message: string }
+
+export type OperationAction =
+  | { type: 'reset' }
+  | { type: 'start' }
+  | { type: 'success'; result: EncryptedRecord }
+  | { type: 'failure'; message: string }
+
+export const initialState: OperationState = { phase: 'Wachtend' }
+
+export function operationReducer(state: OperationState, action: OperationAction): OperationState {
+  switch (action.type) {
+    case 'reset': return state.phase === 'Verwerkend' ? state : initialState
+    case 'start': return { phase: 'Verwerkend' }
+    case 'success': return state.phase === 'Verwerkend' ? { phase: 'Voltooid', result: action.result } : state
+    case 'failure': return state.phase === 'Verwerkend' ? { phase: 'Fout', message: action.message } : state
+  }
+}
+
+function decodedLength(value: unknown): number {
+  if (typeof value !== 'string' || value.length > 43_712 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) return -1
+  try { return atob(value).length } catch { return -1 }
+}
+
+export function validateRecord(value: unknown): value is EncryptedRecord {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return Object.keys(record).sort().join(',') === 'algorithm,ciphertext,id,nonce,status'
+    && typeof record.id === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(record.id)
+    && record.algorithm === 'AES-256-GCM' && record.status === 'stored'
+    && decodedLength(record.nonce) === 12
+    && decodedLength(record.ciphertext) >= 17
+    && decodedLength(record.ciphertext) <= MAX_PLAINTEXT_BYTES + 16
+}
+
+const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'
+
+export async function encryptText(plaintext: string, token: string): Promise<EncryptedRecord> {
+  let response: Response
+  try {
+    response = await fetch('/api/encrypt', {
+      method: 'POST',
+      credentials: 'omit',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', Authorization: ['Bearer', token].join(' ') },
+      body: JSON.stringify({ plaintext }),
+    })
+  } catch {
+    throw new Error(UNKNOWN_OUTCOME)
+  }
+  if (!response.ok) {
+    if ([400, 401, 403, 413, 415].includes(response.status)) {
+      throw new Error(response.status === 401
+        ? 'Toegang geweigerd. Controleer uw sessietoken.'
+        : `Verzoek geweigerd (${response.status}). Controleer uw invoer en lokale configuratie.`)
+    }
+    throw new Error(UNKNOWN_OUTCOME)
+  }
+  let record: unknown
+  try { record = await response.json() } catch { throw new Error(UNKNOWN_OUTCOME) }
+  if (response.status !== 201 || !validateRecord(record)) throw new Error(UNKNOWN_OUTCOME)
+  return record
+}

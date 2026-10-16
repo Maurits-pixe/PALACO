@@ -43,9 +43,11 @@ De launcher heeft daarnaast een afzonderlijke standalone guard die
 prepare/execute-ingangen weigert. Die guard is geen geïntegreerde opslagbackend
 en geen D-013-bewijs. `scripts/start-all.sh` start deze guard niet.
 
-Er wordt hier geen Rust AETHER-engine of Node.js/Socket.IO-mutatiebackend
-meegeleverd. Een SQLite-transactie of dertigsecondenafteller toevoegen zou de
-ontbrekende garanties niet oplossen.
+De lokale AETHER-encryptie-API is geen D-013-mutatieservice: haar
+ciphertextopslag biedt geen tijdgebonden toestemmingstickets of bewijs van
+deadlinegebonden duurzaamheid. Een Node.js/Socket.IO-mutatiebackend wordt
+niet meegeleverd. Een SQLite-transactie of dertigsecondenafteller toevoegen
+zou de ontbrekende garanties niet oplossen.
 
 De bronbeoordelingen blijven leidend:
 

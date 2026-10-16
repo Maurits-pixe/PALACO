@@ -1,11 +1,12 @@
 # 🏛️ PALACO-CITADEL
 
-**Een monorepo voor PALACO's Rust-kern en lokale Vue-previewapplicaties.**
+**Een monorepo voor PALACO's Rust-kern en lokale Vue-/React-applicaties.**
 
 PALACO-CITADEL is de ecosysteemnaam binnen de bestaande repository
 [`Maurits-pixe/PALACO`](https://github.com/Maurits-pixe/PALACO).
 De beoogde combinatie van NEO, AETHER en BASTION is **nog geen geïntegreerd
-product**. De aanwezige launcher controleert modulemetadata; dat is geen
+product**. AETHER biedt een lokale encryptie-API; BASTION blijft een gesloten
+preview. De launcher controleert modulemetadata; dat is geen
 authenticatie, autorisatie of veiligheidscertificering.
 
 ## 🏗️ Architectuur en leveringsstatus
@@ -13,21 +14,21 @@ authenticatie, autorisatie of veiligheidscertificering.
 | Onderdeel | Bron | Status |
 | --- | --- | --- |
 | NEO-launcher (Vue) | [`apps/neo-launcher`](apps/neo-launcher) → `modules/launcher-v1_2` | Lokale HTTPS-preview; metadata via `/.well-known/palaco-app.json` |
+| AETHER Engine (React + Rust) | [`apps/aether-frontend`](apps/aether-frontend), [`services/aether-engine`](services/aether-engine) | Lokale, tokenbeveiligde AES-256-GCM-encryptie met SQLite-opslag |
 | BASTION-interface (Vue) | [`apps/bastion-frontend`](apps/bastion-frontend) → `modules/citadel-bastion-preview` | Fictieve taken; mutaties standaard geweigerd |
 | PALACO-kern (Rust) | [`crates/`](crates) | Bestaande Cargo-workspace, los van de webpreviews |
-| AETHER-frontend en Rust-engine | Niet aanwezig | Beoogde `apps/aether-frontend` en `services/aether-engine`; geen geleverde AES-256-GCM-service |
 | BASTION Node.js/Socket.IO-backend | Niet aangesloten | Beoogde `services/bastion-core`; geen geleverde D-013-conforme mutatieservice |
 
-De `apps/`-ingangen zijn relatieve symlinks naar de bestaande bronmappen:
+De NEO- en BASTION-ingangen in `apps/` zijn relatieve symlinks naar de bestaande bronmappen:
 deploymentconfiguratie, tests en historisch bewijs behouden hun oorspronkelijke
 paden. De bestaande `services/rio-accounts` blijft ongewijzigd.
 Zie [architectuur](docs/ARCHITECTURE.md) en [D-013](docs/D-013-PROTOCOL.md).
 
-## 🚀 Quick start: lokale previews
+## 🚀 Quick start: lokale ontwikkeling
 
-Vereisten: Bash 4.3+, Node.js **22.12+**, npm, OpenSSL en
+Vereisten: Bash 4.3+, Node.js **22.12+**, npm, Rust **1.90+**, een C-compiler
+(voor SQLite), OpenSSL en
 [mkcert](https://github.com/FiloSottile/mkcert) met een reeds ingerichte lokale CA.
-Voor de afzonderlijke Rust-workspace: Rust **1.90+**.
 Onder Windows vereisen de `apps/`-symlinks een checkout met symlinkondersteuning;
 de oorspronkelijke `modules/`-paden blijven ook rechtstreeks bruikbaar.
 
@@ -35,7 +36,7 @@ de oorspronkelijke `modules/`-paden blijven ook rechtstreeks bruikbaar.
 git clone https://github.com/Maurits-pixe/PALACO.git
 cd PALACO
 
-for app in modules/launcher-v1_2 modules/citadel-bastion-preview; do
+for app in modules/launcher-v1_2 apps/aether-frontend modules/citadel-bastion-preview; do
   (cd "$app" &&
     npm ci &&
     mkdir -p certs &&
@@ -43,15 +44,51 @@ for app in modules/launcher-v1_2 modules/citadel-bastion-preview; do
       localhost 127.0.0.1 ::1)
 done
 
+# Alleen voor een nieuwe, wegwerp-vault:
+export AETHER_MASTER_KEY="$(openssl rand -base64 32)"
+export AETHER_API_TOKEN="$(openssl rand -hex 32)"
+
 ./scripts/start-all.sh
 ```
 
-Open NEO op **https://127.0.0.1:5173** en BASTION op
-**https://localhost:5175**. Kies in NEO de BASTION-origin
-`https://localhost:5175` en vervolgens **Opslaan & verifiëren**.
-Het script start uitsluitend deze twee previews op loopback, installeert niets
-en stopt beide procesgroepen bij afsluiten of wanneer één preview stopt.
-Het start geen ontbrekende engine of productiebackend.
+Bewaar bij blijvend gebruik de masterkey veilig buiten Git en laad **dezelfde**
+sleutel bij volgende starts; opnieuw genereren maakt bestaande records niet
+meer ontsleutelbaar. De masterkey is base64 van exact 32 willekeurige bytes.
+Het API-token is een afzonderlijk, sterk geheim van minimaal 32 afdrukbare
+ASCII-tekens zonder spaties. Geen van beide hoort in een
+`VITE_*`-variabele, frontendbundle of commit.
+
+Open NEO op **https://127.0.0.1:5173**, AETHER op
+**https://localhost:5174** en BASTION op **https://localhost:5175**.
+Voer het API-token alleen in het wachtwoordveld van AETHER in; de browser
+bewaart dit niet in localStorage. Gebruik in NEO de overeenkomstige
+`https://localhost:5174`- of `https://localhost:5175`-origin en kies
+**Opslaan & verifiëren**.
+
+Het script start drie interfaces en de AETHER-API op loopback, installeert niets
+en stopt alle procesgroepen bij afsluiten of wanneer één component stopt.
+De eerste Rust-compilatie kan even duren. De HTTP-API op
+`127.0.0.1:3006` is alleen via de lokale HTTPS-proxy bedoeld voor de browser.
+Dit is geen productiehosting of D-013-mutatiebackend.
+De vault staat standaard in `services/aether-engine/data/aether.sqlite3`;
+`AETHER_DB_PATH` kan een ander opslagpad aanwijzen. Een verkeerde masterkey
+voor een bestaande vault blokkeert de start.
+
+### AETHER: The Silent Engine
+
+Een centraal monochroom vlak, strakke typografie en kopieerbare ciphertext.
+De interface toont **Wachtend**, **Verwerkend** en pas na een gevalideerd
+API-resultaat **Voltooid**. Geen nep-logs, draaiende iconen, timers,
+kunstmatige vertraging of verzonnen percentages. Zonder meetbare tussenresultaten
+kan deze API geen eerlijk tussentijds voortgangspercentage leveren.
+
+De Rust-service gebruikt `ring` voor AES-256-GCM en `rusqlite` voor ciphertext,
+nonce en recordmetadata. Plaintext en sleutels worden niet als vaultrecords
+opgeslagen. Bewaar het volledige resultaat, inclusief ID en nonce, niet alleen
+de ciphertext. Deze eerste API biedt encryptie, geen herstel-/decryptie-endpoint,
+sleutelbeheerplatform of onafhankelijke securitycertificering.
+Bij een netwerkfout kan het resultaat onbekend zijn; een foutmelding bewijst
+geen rollback en een blinde retry kan een extra record maken.
 
 Ngrok is niet nodig voor deze lokale quickstart. Externe tunnels zijn geen
 onderdeel van de veilige standaardconfiguratie: daarvoor moeten zowel de exacte
@@ -66,8 +103,12 @@ for app in modules/launcher-v1_2 modules/citadel-bastion-preview; do
   (cd "$app" && npm test && npm run build)
 done
 (cd modules/launcher-v1_2 && npm run test:guard && npm run test:tls)
+(cd apps/aether-frontend && npm run lint && npm run build)
+(cd services/aether-engine && cargo test --locked)
 ```
 
+De AETHER-protocoltests draaien met `npm test` in `apps/aether-frontend`
+(Node.js 24+, of een Node-versie met ingeschakelde TypeScript-stripping).
 Browsercontroles en hun aanvullende vereisten staan in de module-README's.
 De Rust-workspace heeft afzonderlijke tests; PostgreSQL-integratietests vereisen
 een ingerichte database en `DATABASE_URL`.

@@ -1,0 +1,4 @@
+/target/
+/data/
+/*.sqlite3*
+.env

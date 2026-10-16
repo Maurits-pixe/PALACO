@@ -1,0 +1,38 @@
+main { min-height: 100svh; display: grid; place-items: center; padding: 40px 20px; }
+.engine-card { width: 100%; max-width: 600px; padding: 40px; display: flex; flex-direction: column; gap: 24px; background: #0a0a0a; border: 1px solid #252525; border-radius: 2px; }
+h1 { margin: 0 0 12px; font-size: 13px; font-weight: 500; line-height: 1.5; letter-spacing: .24em; text-transform: uppercase; }
+.lede { margin: 0; color: #aaa; font-size: 12px; line-height: 1.8; }
+.workspace { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.input-panel, .result-panel { min-width: 0; }
+.result-panel { border-top: 1px solid #292929; padding-top: 24px; }
+h2 { margin: 0 0 20px; color: #bbb; font-size: 11px; font-weight: 500; line-height: 1.5; letter-spacing: .12em; text-transform: uppercase; }
+fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+label { display: block; font-size: 12px; color: #ccc; margin: 0 0 10px; }
+input, textarea { width: 100%; border: 1px solid #3d3d3d; border-radius: 2px; background: #030303; color: #f0f0f0; padding: 14px; }
+input { min-height: 44px; }
+textarea { resize: vertical; line-height: 1.7; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+.hint { font-size: 11px; line-height: 1.7; color: #aaa; margin: 10px 0 24px; }
+.text-meta .hint { margin-bottom: 8px; }
+.byte-count { color: #aaa; font-size: 10px; text-align: right; font-family: ui-monospace, monospace; margin: 0 0 24px; }
+.actions { display: flex; flex-direction: column; gap: 12px; }
+button { min-height: 44px; border-radius: 2px; padding: 13px 16px; font-size: 11px; font-weight: 500; letter-spacing: .08em; }
+.primary { width: 100%; background: #fff; border: 1px solid #fff; color: #000; text-transform: uppercase; }
+.secondary { background: transparent; border: 1px solid #444; color: #ccc; }
+button:not(:disabled):hover { border-color: #fff; }
+.status { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.status strong { font-size: 13px; font-weight: 500; }
+.status span { font-size: 11px; color: #aaa; text-align: right; font-family: ui-monospace, monospace; }
+.pending-note, .empty-state { color: #aaa; line-height: 1.8; font-size: 12px; margin: 20px 0 0; }
+.error { border: 1px solid #888; padding: 14px; font-size: 12px; line-height: 1.8; overflow-wrap: anywhere; margin: 20px 0 0; }
+.confirmation { font-size: 12px; margin: 20px 0; }
+dl { font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.7; margin: 0 0 24px; }
+dt { color: #aaa; margin-top: 14px; }
+dd { margin: 2px 0 0; overflow-wrap: anywhere; }
+.copy-button { width: 100%; margin-top: 12px; font-family: ui-monospace, monospace; }
+.result .hint { margin-bottom: 0; }
+.privacy-note { font-size: 10px; color: #aaa; line-height: 1.8; padding-top: 24px; margin: 0; }
+@media (max-width: 460px) {
+  main { padding: 20px 12px; }
+  .engine-card { padding: 24px; }
+  .status { align-items: start; flex-direction: column; }
+}
