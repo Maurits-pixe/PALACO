@@ -1,0 +1,20 @@
+# AETHER — lokale previewcandidate
+
+AETHER is een afzonderlijke PALACO-preview op `https://localhost:5174`. De app gebruikt de browser-Web-Crypto-API om bestanden lokaal met AES-GCM-256 te versleutelen; een sleutel wordt met PBKDF2-SHA-256 uit een wachtzin afgeleid. De versleutelde inhoud wordt opgeslagen in IndexedDB van de huidige browser. Bestandsnaam en MIME-type zitten in de versleutelde inhoud. De wachtzin en afgeleide sleutel worden niet opgeslagen; zonder de juiste wachtzin kan AETHER bestanden niet herstellen.
+
+Dit is een geïsoleerde preview, geen productiekluis of beveiligingscertificering. De metadata gebruikt daarom `preview-blocked` en `preview-only`, niet `operational` of `maximum`. Een launcher-metadata-match bewijst alleen de beperkte metadata-identiteit. Het is geen authenticatie, autorisatie of bewijs van veiligheid. De module staat al in de lokale AETHER-originlijst van de launcher; de tijdelijke Vercel-preview-origin wordt niet vertrouwd of automatisch toegestaan.
+
+IndexedDB bewaart versleutelde bytes, maar dit beschermt niet tegen een gecompromitteerde browser of apparaat, verwijdert geen mogelijke browser-/OS-back-ups en biedt geen herstel bij verlies van de wachtzin. Bestandsnamen zijn alleen na ontsleuteling beschikbaar. App-verwijdering is geen gegarandeerde veilige verwijdering van opslagmedia. De browseropslag is lokaal aan het browserprofiel en is geen back-up.
+
+## Lokale checks
+
+Voor de HTTPS-devserver moeten tijdelijke `certs/localhost.pem` en `certs/localhost-key.pem` aanwezig zijn. Die certificaten worden niet meegeleverd of ingecheckt.
+
+```bash
+npm ci
+npm test
+npm run build
+npm run dev
+```
+
+De launcher verwacht lokaal `https://localhost:5174/.well-known/palaco-app.json`. De statische build maakt `dist/`; stel voor een Vercel-preview de root in op `modules/aether-preview`.

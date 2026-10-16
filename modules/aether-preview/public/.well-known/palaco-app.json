@@ -1,0 +1,7 @@
+{
+  "appId": "aether",
+  "version": "1.0.0-preview.1",
+  "status": "preview-blocked",
+  "description": "Lokale AES-GCM-bestandskluis — geïsoleerde previewcandidate",
+  "securityLevel": "preview-only"
+}
