@@ -8,7 +8,7 @@ Taakmutaties blijven gesloten. Pogingen worden als `MUTATION_BLOCKED_NO_D013_BAC
 
 De bron gebruikt Vue 3 en Vite. Start de backend met `npm run server` en de HTTPS-preview met `npm run dev` in aparte terminals; de preview proxy’t alleen `/api` en `/socket.io` naar localhost-poort 3005. De backend maakt `.bastion-preview/bastion.db`; die lokale data-directory wordt niet ingecheckt. Berichten met de optie **Vervalt na 30s** worden uit SQLite verwijderd en de verwijdering wordt geaudit. `npm test` test de gesloten UI-grens en backendgedrag; `npm run build` maakt alleen de statische preview.
 
-Lokale dev/preview gebruikt HTTPS op poort 5175 wanneer een wegwerpcertificaat in `certs/` aanwezig is. De statische preview bevat security headers via `public/_headers`; de preview is niet functioneel zonder de afzonderlijk gestarte lokale backend. `npm run test:browser` controleert de identiteit, headers en blokkering van taakmutaties.
+Lokale dev/preview gebruikt HTTPS op poort 5175 wanneer een wegwerpcertificaat in `certs/` aanwezig is. De statische preview bevat security headers via `public/_headers`; de preview is niet functioneel zonder de afzonderlijk gestarte lokale backend. `npm run test:browser` gebruikt OpenSSL, Playwright en een geïnstalleerde Chromium/Edge-browser om identiteit, headers en geblokkeerde taakmutaties te controleren; stel zo nodig `BASTION_OPENSSL_BIN` of `BASTION_BROWSER_EXECUTABLE` in.
 
 Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
 

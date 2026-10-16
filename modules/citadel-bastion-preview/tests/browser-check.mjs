@@ -2,14 +2,28 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
-import { chromium } from '../../launcher-candidate/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const certDir = path.join(root, 'certs'); fs.mkdirSync(certDir, { recursive: true });
 const configPath = path.join(certDir, 'openssl.cnf'); fs.writeFileSync(configPath, '[req]\ndistinguished_name = dn\n[dn]\n');
-const run = args => execFileSync('C:/Strawberry/c/bin/openssl.exe', args, { cwd: certDir, env: { ...process.env, OPENSSL_CONF: configPath }, stdio: 'pipe' });
+const opensslCandidates = process.platform === 'win32'
+  ? ['C:/Strawberry/c/bin/openssl.exe', 'openssl']
+  : ['openssl'];
+const openssl = process.env.BASTION_OPENSSL_BIN ?? opensslCandidates.find(candidate => candidate === 'openssl' || fs.existsSync(candidate));
+const browserCandidates = process.platform === 'win32'
+  ? [
+      path.join(process.env['PROGRAMFILES(X86)'] ?? 'C:/Program Files (x86)', 'Microsoft/Edge/Application/msedge.exe'),
+      path.join(process.env.PROGRAMFILES ?? 'C:/Program Files', 'Microsoft/Edge/Application/msedge.exe'),
+      path.join(process.env.PROGRAMFILES ?? 'C:/Program Files', 'Google/Chrome/Application/chrome.exe')
+    ]
+  : process.platform === 'darwin'
+    ? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge']
+    : ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/opt/google/chrome/chrome', '/opt/microsoft/msedge/msedge'];
+const browserExecutable = process.env.BASTION_BROWSER_EXECUTABLE ?? browserCandidates.find(candidate => fs.existsSync(candidate));
+const run = args => execFileSync(openssl, args, { cwd: certDir, env: { ...process.env, OPENSSL_CONF: configPath }, stdio: 'pipe' });
 run(['req','-x509','-newkey','rsa:2048','-nodes','-keyout','ca-key.pem','-out','ca.pem','-days','1','-subj','/CN=Bastion preview CA','-addext','basicConstraints=critical,CA:TRUE']);
 run(['req','-new','-newkey','rsa:2048','-nodes','-keyout','localhost-key.pem','-out','localhost.csr','-subj','/CN=localhost']);
 fs.writeFileSync(path.join(certDir,'ext.cnf'),'subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n');
@@ -22,7 +36,7 @@ try {
   for (let i=0;i<100;i++) { try { const r=await request('https://127.0.0.1:5175/'); if(r.status===200) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   for (let i=0;i<100;i++) { try { const r=await fetch('http://127.0.0.1:3005/api/messages'); if(r.ok) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   const identity=await request('https://127.0.0.1:5175/.well-known/palaco-app.json'); assert.equal(identity.status,200); assert.equal(JSON.parse(identity.body).appId,'bastion');
-  const pageBrowser=await chromium.launch({headless:true,executablePath:'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'});
+  const pageBrowser=await chromium.launch({headless:true,...(browserExecutable ? { executablePath: browserExecutable } : {})});
   const context=await pageBrowser.newContext({ignoreHTTPSErrors:true}); const page=await context.newPage(); const response=await page.goto('https://127.0.0.1:5175/'); assert.equal(response.status(),200);
   assert.match(await page.locator('.preview-banner').textContent(),/Taakmutaties blijven gesloten/); assert.match(response.headers()['content-security-policy'],/frame-ancestors 'none'/); assert.equal(response.headers()['x-content-type-options'],'nosniff');
   const original=await page.locator('.task-card').first().locator('.task-desc').textContent(); await page.locator('.task-card').first().getByRole('button',{name:'Afronden'}).click(); assert.equal(await page.getByRole('dialog').count(),1); await page.getByRole('button',{name:'TOON BLOKKERING'}).click(); assert.match(await page.locator('.blocked-banner').textContent(),/STORAGE_EFFECT_DEADLINE_UNSUPPORTED/); assert.equal(await page.locator('.task-card').first().locator('.task-desc').textContent(),original); await context.close(); await pageBrowser.close();

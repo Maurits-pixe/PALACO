@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.9",
+    "playwright": "1.62.1",
     "vite": "7.3.7"
   }
 }
