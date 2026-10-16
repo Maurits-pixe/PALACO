@@ -1,11 +1,19 @@
 export const MIN_PASSPHRASE_LENGTH = 12;
+export const MAX_PASSPHRASE_LENGTH = 1024;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const KDF_ITERATIONS = 310_000;
 const MAX_ENVELOPE_BYTES = MAX_FILE_BYTES + 64 * 1024 + 16;
 const ENCODER = new TextEncoder();
 
 function requirePassphrase(passphrase) {
-  if (typeof passphrase !== 'string' || [...passphrase].length < MIN_PASSPHRASE_LENGTH) {
+  if (
+    typeof passphrase !== 'string' ||
+    passphrase.length > MAX_PASSPHRASE_LENGTH * 2 ||
+    [...passphrase].length > MAX_PASSPHRASE_LENGTH
+  ) {
+    throw new Error(`Gebruik een wachtzin van maximaal ${MAX_PASSPHRASE_LENGTH} tekens.`);
+  }
+  if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
     throw new Error(`Gebruik een wachtzin van minimaal ${MIN_PASSPHRASE_LENGTH} tekens.`);
   }
 }

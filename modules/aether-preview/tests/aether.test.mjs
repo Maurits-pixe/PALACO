@@ -2,7 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { webcrypto } from 'node:crypto';
-import { decryptBytes, encryptBytes, MIN_PASSPHRASE_LENGTH, validateEnvelope } from '../src/crypto.js';
+import {
+  decryptBytes,
+  encryptBytes,
+  MAX_PASSPHRASE_LENGTH,
+  MIN_PASSPHRASE_LENGTH,
+  validateEnvelope
+} from '../src/crypto.js';
 
 const root = new URL('../', import.meta.url);
 const passphrase = 'correct paard batterij';
@@ -28,6 +34,14 @@ test('encrypts and restores arbitrary bytes with an authenticated envelope', asy
   assert.notDeepEqual([...restored], [...new TextEncoder().encode(encrypted.ciphertext)]);
 });
 
+test('uses a new salt and nonce for each encryption', async () => {
+  const input = new Uint8Array([42]);
+  const first = await encryptBytes(input, passphrase, webcrypto);
+  const second = await encryptBytes(input, passphrase, webcrypto);
+  assert.notEqual(first.salt, second.salt);
+  assert.notEqual(first.iv, second.iv);
+});
+
 test('rejects incorrect passphrases and modified ciphertext', async () => {
   const encrypted = await encryptBytes(new Uint8Array([1, 2, 3]), passphrase, webcrypto);
   await assert.rejects(decryptBytes(encrypted, 'wrong passphrase', webcrypto));
@@ -43,6 +57,10 @@ test('rejects short passphrases and unknown envelope formats', async () => {
   await assert.rejects(
     decryptBytes({ schema: 'unknown' }, passphrase, webcrypto),
     /Onbekend of ongeldig/
+  );
+  await assert.rejects(
+    encryptBytes(new Uint8Array([1]), 'a'.repeat(MAX_PASSPHRASE_LENGTH + 1), webcrypto),
+    new RegExp(`maximaal ${MAX_PASSPHRASE_LENGTH}`)
   );
 });
 

@@ -1,10 +1,18 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { decryptBytes, encryptBytes, MAX_FILE_BYTES, MIN_PASSPHRASE_LENGTH, validateEnvelope } from './crypto.js';
+import {
+  decryptBytes,
+  encryptBytes,
+  MAX_FILE_BYTES,
+  MAX_PASSPHRASE_LENGTH,
+  MIN_PASSPHRASE_LENGTH,
+  validateEnvelope
+} from './crypto.js';
 import { listVaultItems, removeVaultItem, saveVaultItem } from './vault.js';
 
 const selectedFile = ref(null);
-const passphrase = ref('');
+const encryptPassphrase = ref('');
+const decryptPassphrase = ref('');
 const vaultItems = ref([]);
 const busy = ref(false);
 const cryptoAvailable = ref(false);
@@ -75,11 +83,11 @@ async function encryptSelectedFile() {
   busy.value = true;
   try {
     const bytes = new Uint8Array(await selectedFile.value.arrayBuffer());
-    const envelope = await encryptBytes(packFile(selectedFile.value, bytes), passphrase.value);
+    const envelope = await encryptBytes(packFile(selectedFile.value, bytes), encryptPassphrase.value);
     const id = crypto.randomUUID();
     await saveVaultItem({ id, envelope });
     selectedFile.value = null;
-    passphrase.value = '';
+    encryptPassphrase.value = '';
     const fileInput = document.querySelector('#file-to-encrypt');
     if (fileInput) fileInput.value = '';
     await refreshVault();
@@ -96,7 +104,7 @@ async function decryptVaultItem(item) {
   errorMessage.value = '';
   busy.value = true;
   try {
-    const packed = await decryptBytes(item.envelope, passphrase.value);
+    const packed = await decryptBytes(item.envelope, decryptPassphrase.value);
     const file = unpackFile(packed);
     const downloadUrl = URL.createObjectURL(new Blob([file.bytes], { type: file.type }));
     const link = document.createElement('a');
@@ -104,7 +112,7 @@ async function decryptVaultItem(item) {
     link.download = file.name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-    passphrase.value = '';
+    decryptPassphrase.value = '';
     message.value = 'Bestand lokaal ontsleuteld en als download aangeboden.';
   } catch (error) {
     errorMessage.value = error.message || 'Ontsleutelen is mislukt.';
@@ -210,10 +218,11 @@ onMounted(async () => {
           <label class="field-label" for="passphrase">Wachtzin <small>MIN. {{ MIN_PASSPHRASE_LENGTH }} TEKENS</small></label>
           <input
             id="passphrase"
-            v-model="passphrase"
+            v-model="encryptPassphrase"
             type="password"
             autocomplete="new-password"
             :minlength="MIN_PASSPHRASE_LENGTH"
+            :maxlength="MAX_PASSPHRASE_LENGTH"
             :disabled="busy || !systemReady"
             placeholder="Gebruik een unieke, sterke wachtzin"
           />
@@ -240,10 +249,11 @@ onMounted(async () => {
           <label class="field-label" for="vault-passphrase">Wachtzin voor ontsleutelen</label>
           <input
             id="vault-passphrase"
-            v-model="passphrase"
+            v-model="decryptPassphrase"
             type="password"
             autocomplete="current-password"
             :minlength="MIN_PASSPHRASE_LENGTH"
+            :maxlength="MAX_PASSPHRASE_LENGTH"
             :disabled="busy || !systemReady"
             placeholder="Vul dezelfde wachtzin in"
           />
