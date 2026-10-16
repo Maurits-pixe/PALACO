@@ -97,7 +97,7 @@ try {
     for (const [id, port] of [['aether', 5174], ['bastion', 5175], ['5criptie', 5176]]) {
       await verify(id, `https://localhost:${port}`); await status(id, 'Modulemetadata bevestigd');
       assert.equal(await card(id).locator('[data-launch]').isEnabled(), true);
-      assert.match(await card(id).locator('[data-latency]').textContent(), /Round trip: \d+ ms/);
+      assert.match(await card(id).locator('[data-latency]').textContent(), /Checkduur: \d+ ms/);
       assert.equal((await card(id).locator('[data-tls]').textContent()).trim(), 'HTTPS-handshake: geaccepteerd door browser');
     }
     assert.match(await page.locator('.audit-panel').textContent(), /LOKALE LAUNCHERLOG/);
@@ -113,8 +113,8 @@ try {
     await status('aether', 'Niet ingesteld');
     assert.equal(await card('aether').locator('input').isDisabled(), true);
     assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
-    assert.match(await page.locator('.panic-state').textContent(), /Andere browsertabs zijn niet gesloten/);
-    assert.match(await page.locator('.audit-panel').textContent(), /lokale launcherlog/);
+    assert.match(await page.locator('.panic-state').textContent(), /Reeds geopende externe tabs zijn niet gesloten/);
+    assert.match(await page.locator('.audit-panel').textContent(), /Noodstop/);
     return { verificationRevoked: true, controlsLocked: true, externalTabsClosed: false };
   }, 'native browser confirm and UI; verifies local-only emergency behavior');
   for (const [id, mode, label] of [

@@ -167,7 +167,7 @@ onUnmounted(() => {
               <div v-if="module.lastCheck" class="check-details">
                 <span>Laatste check: {{ localTime(module.lastCheck.time) }}</span>
                 <span v-if="module.lastCheck.result === 'success'" class="success-detail">ID bevestigd: {{ module.lastCheck.receivedId }}</span>
-                <span data-latency>Round trip: {{ module.checkLatencyMs == null ? '—' : `${module.checkLatencyMs} ms` }}</span>
+                <span data-latency>Checkduur: {{ module.checkLatencyMs == null ? '—' : `${module.checkLatencyMs} ms` }}</span>
                 <span data-tls>HTTPS-handshake: {{ module.tlsStatus === 'accepted' ? 'geaccepteerd door browser' : 'niet bevestigd' }}</span>
               </div>
             </div>
