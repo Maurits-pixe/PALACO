@@ -20,7 +20,12 @@ function App() {
   const [readError, setReadError] = useState(false)
   const [readPending, setReadPending] = useState(false)
   const readAttempt = useRef(0)
-  useEffect(() => () => { readAttempt.current += 1 }, [])
+  const readController = useRef<AbortController | null>(null)
+  useEffect(() => () => {
+    readAttempt.current += 1
+    readController.current?.abort()
+    readController.current = null
+  }, [])
   const pending = state.phase === 'Verwerkend'
   const bytes = new TextEncoder().encode(plaintext).length
   const validInput = plaintext.trim().length > 0 && bytes <= MAX_PLAINTEXT_BYTES
@@ -32,6 +37,8 @@ function App() {
 
   function clearReadback() {
     readAttempt.current += 1
+    readController.current?.abort()
+    readController.current = null
     setStoredResult(null)
     setReadStatus('')
     setReadError(false)
@@ -43,10 +50,12 @@ function App() {
     if (readPending || !isRecordId(recordId) || !token) return
     clearReadback()
     const attempt = readAttempt.current
+    const controller = new AbortController()
+    readController.current = controller
     setReadPending(true)
     setReadStatus('Opgeslagen record wordt opgehaald.')
     try {
-      const record = await fetchStoredRecord(recordId, token)
+      const record = await fetchStoredRecord(recordId, token, controller.signal)
       if (attempt !== readAttempt.current) return
       setStoredResult(record)
       setReadStatus('Record uit de vault opgehaald. Geen cryptografische verificatie of ontsleuteling uitgevoerd.')
@@ -55,7 +64,10 @@ function App() {
       setReadError(true)
       setReadStatus(error instanceof Error ? error.message : 'Vault lezen mislukt; dit leesverzoek wijzigt geen records.')
     } finally {
-      if (attempt === readAttempt.current) setReadPending(false)
+      if (attempt === readAttempt.current) {
+        readController.current = null
+        setReadPending(false)
+      }
     }
   }
 
@@ -185,6 +197,10 @@ function App() {
                 {readPending ? 'Record wordt opgehaald' : 'Opgeslagen record ophalen'}
               </button>
               <button className="secondary" type="button" onClick={clearReadback}>Vaultweergave wissen</button>
+              {readPending && <button className="secondary" type="button" onClick={() => {
+                clearReadback()
+                setReadStatus('Teruglezen geannuleerd in de browser. Dit zegt niets over de aanwezigheid van het record.')
+              }}>Teruglezen annuleren</button>}
             </div>
           </form>
           <p className={readError ? 'error' : 'hint'} role={readError ? 'alert' : 'status'}>{readStatus}</p>

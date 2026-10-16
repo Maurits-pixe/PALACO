@@ -126,7 +126,8 @@ export async function readRecordExport(file: Pick<File, 'size' | 'text'>): Promi
 
 const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'
 
-export async function fetchStoredRecord(id: string, token: string): Promise<EncryptedRecord> {
+export async function fetchStoredRecord(id: string, token: string, signal?: AbortSignal): Promise<EncryptedRecord> {
+  signal?.throwIfAborted()
   if (!isRecordId(id)) throw new Error('Gebruik een canonieke v4-UUID met kleine letters.')
   const failure = 'Vault lezen mislukt. Het record kon niet worden opgehaald; dit leesverzoek wijzigt geen records.'
   let response: Response
@@ -137,16 +138,23 @@ export async function fetchStoredRecord(id: string, token: string): Promise<Encr
       redirect: 'error',
       cache: 'no-store',
       headers: { Authorization: ['Bearer', token].join(' ') },
+      signal,
     })
   } catch {
+    signal?.throwIfAborted()
     throw new Error(failure)
   }
+  signal?.throwIfAborted()
   if (response.status === 401) throw new Error('Toegang geweigerd. Controleer uw sessietoken.')
   if (response.status === 403) throw new Error('Origin niet toegestaan. Controleer uw lokale configuratie.')
   if (response.status === 404) throw new Error('Geen opgeslagen record met deze UUID gevonden.')
   if (response.status !== 200) throw new Error(failure)
   let record: unknown
-  try { record = await response.json() } catch { throw new Error(failure) }
+  try { record = await response.json() } catch {
+    signal?.throwIfAborted()
+    throw new Error(failure)
+  }
+  signal?.throwIfAborted()
   if (!validateRecord(record) || record.id !== id) throw new Error(failure)
   return record
 }

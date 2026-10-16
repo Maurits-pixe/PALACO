@@ -111,6 +111,12 @@ functie die poging niet reconstrueren. Een 404 betekent alleen dat deze vault
 op dat moment geen record met die ID bevat. Een netwerk- of opslagfout bewijst
 geen afwezigheid. Tokenwijziging, een andere ID of wissen trekt de huidige
 weergave/poging in; een laat antwoord mag de oude weergave niet herstellen.
+Tijdens teruglezen kun je **Teruglezen annuleren** kiezen. Annuleren, wissen,
+token-/ID-wijziging en het verlaten van de interface breken het lopende
+browserverzoek af met een AbortController. Ook als een antwoord toch nog
+binnenkomt, wordt het niet meer getoond. Dit garandeert niet dat serverwerk
+onmiddellijk stopt en bewijst geen afwezigheid van het record.
+Deze bediening geldt uitsluitend voor lezen, niet voor encryptie of rollback.
 Bij een geopend exportbestand kun je **Record-ID overnemen voor teruglezen**
 kiezen. Dit vult alleen de UUID in en wist een eerdere vaultweergave; het doet
 geen netwerkverzoek. Kies vervolgens **Opgeslagen record ophalen**.
