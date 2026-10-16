@@ -1,23 +1,22 @@
 <script setup>
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { io } from 'socket.io-client';
 
 const tasks = ref([
   { id: 1, title: 'Beveiliging Perimeter Oost', description: 'Controleer sensoren sector 4–9.', priority: 'HIGH', status: 'ACTIVE', assignee: 'Alpha Team', clearance: 3 },
   { id: 2, title: 'Decryptie Data Packet #402', description: 'Analyseer hoofdheader voor signatures.', priority: 'CRITICAL', status: 'ACTIVE', assignee: 'Tech Ops', clearance: 5 },
   { id: 3, title: 'Logistieke Voorraad Check', description: 'Inventarisatie unit 7.', priority: 'MEDIUM', status: 'PENDING', assignee: 'Support', clearance: 1 },
 ]);
-const messages = ref([
-  { id: 1, sender: 'Cmdr. Shepard', text: 'Team, bevestig status van Sector 7.', time: '10:42' },
-  { id: 2, sender: 'Lt. Koenig', text: 'Sector 7 veilig. Beweeg naar rendezvous.', time: '10:44' },
-]);
-const auditLogs = ref([
-  { id: 1, time: '10:40:01', action: 'LOGIN_SUCCESS (FIXTURE)', user: 'Preview', type: 'info' },
-  { id: 2, time: '10:41:15', action: 'VIEW_TASKS (FIXTURE)', user: 'Preview', type: 'info' },
-]);
+const messages = ref([]);
+const auditLogs = ref([]);
 const newMessage = ref('');
+const selfDestruct = ref(false);
 const pendingMutation = ref(null);
 const blockedMessage = ref('');
-let timer;
+const mutationBlockedCode = 'STORAGE_EFFECT_DEADLINE_UNSUPPORTED';
+const backendConnected = ref(false);
+let socket;
+const expiryTimers = new Map();
 
 const activeCount = computed(() => tasks.value.filter(task => task.status !== 'COMPLETED').length);
 
@@ -26,25 +25,76 @@ function initiateMutation(action, task) {
   pendingMutation.value = { action, task };
 }
 
-function confirmMutation() {
-  // This preview intentionally has no mutation backend and never changes task state.
-  blockedMessage.value = 'Uitvoering geblokkeerd: STORAGE_EFFECT_DEADLINE_UNSUPPORTED. Er is geen ticket geconsumeerd en geen taak gewijzigd.';
-  auditLogs.value.unshift({ id: crypto.randomUUID(), time: new Date().toLocaleTimeString(), action: 'MUTATION_BLOCKED_STORAGE_DEADLINE', user: 'Preview', type: 'blocked' });
+async function confirmMutation() {
+  if (!pendingMutation.value) return;
+  const { action, task } = pendingMutation.value;
+  try {
+    const response = await fetch('/api/mutations/blocked', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, taskId: task.id })
+    });
+    const result = await response.json();
+    blockedMessage.value = `${result.code ?? mutationBlockedCode}: ${result.message ?? 'Mutatie niet uitgevoerd.'}`;
+  } catch {
+    blockedMessage.value = 'MUTATION_BLOCKED: previewbackend niet beschikbaar; taak niet gewijzigd.';
+  }
   pendingMutation.value = null;
-  clearTimeout(timer);
 }
 
-function cancelMutation() { pendingMutation.value = null; clearTimeout(timer); }
+function cancelMutation() { pendingMutation.value = null; }
+
+function upsertMessage(message) {
+  if (message.expires_at && message.expires_at <= Date.now()) {
+    removeMessage(message.id);
+    return;
+  }
+  const index = messages.value.findIndex(existing => existing.id === message.id);
+  if (index === -1) messages.value.push(message);
+  else messages.value[index] = message;
+  messages.value.sort((a, b) => a.created_at - b.created_at || a.id - b.id);
+  if (message.expires_at) {
+    clearTimeout(expiryTimers.get(message.id));
+    expiryTimers.set(message.id, setTimeout(() => removeMessage(message.id), Math.max(0, message.expires_at - Date.now())));
+  }
+}
+
+function removeMessage(id) {
+  clearTimeout(expiryTimers.get(id));
+  expiryTimers.delete(id);
+  messages.value = messages.value.filter(message => message.id !== id);
+}
 
 function sendMessage() {
   const text = newMessage.value.trim();
-  if (!text) return;
-  messages.value.push({ id: crypto.randomUUID(), sender: 'Preview', text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+  if (!text || !socket?.connected) return;
+  socket.emit('send_message', { text, ttlSeconds: selfDestruct.value ? 30 : null }, result => {
+    if (!result?.ok) blockedMessage.value = 'Bericht niet opgeslagen door de previewbackend.';
+  });
   newMessage.value = '';
-  auditLogs.value.unshift({ id: crypto.randomUUID(), time: new Date().toLocaleTimeString(), action: 'LOCAL_MESSAGE_FIXTURE', user: 'Preview', type: 'info' });
 }
 
-onUnmounted(() => clearTimeout(timer));
+function formatTime(timestamp) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+onMounted(() => {
+  socket = io({ path: '/socket.io' });
+  socket.on('connect', () => { backendConnected.value = true; });
+  socket.on('disconnect', () => { backendConnected.value = false; });
+  socket.on('connect_error', () => { backendConnected.value = false; });
+  socket.on('init_messages', initialMessages => initialMessages.forEach(upsertMessage));
+  socket.on('new_message', upsertMessage);
+  socket.on('message_destroyed', ({ id }) => removeMessage(id));
+  socket.on('init_audit', logs => { auditLogs.value = logs; });
+  socket.on('audit_updated', logs => { auditLogs.value = logs; });
+});
+
+onUnmounted(() => {
+  socket?.disconnect();
+  for (const timer of expiryTimers.values()) clearTimeout(timer);
+  expiryTimers.clear();
+});
 </script>
 
 <template>
@@ -54,7 +104,7 @@ onUnmounted(() => clearTimeout(timer));
       <div class="system-status"><span class="dot"></span><span>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</span></div>
     </header>
 
-    <div class="preview-banner" role="status"><strong>Mutaties zijn gesloten.</strong> Deze overdracht bevat alleen fixturedata. Bevestigen voert niets uit zolang de opslagdeadline niet bewezen is.</div>
+    <div class="preview-banner" role="status"><strong>Preview-backend: {{ backendConnected ? 'verbonden' : 'niet verbonden' }}.</strong> Chat, audit en berichtverval werken lokaal via SQLite/Socket.IO. Taakmutaties blijven gesloten; dit is geen D-013-bewijs of productiebackend.</div>
     <p v-if="blockedMessage" class="blocked-banner" role="alert">{{ blockedMessage }}</p>
 
     <main class="grid-layout">
@@ -66,8 +116,8 @@ onUnmounted(() => clearTimeout(timer));
         </article></div>
       </section>
 
-      <div class="right-col"><section class="panel chat-panel"><div class="panel-header"><h2>SECURE COMMS (FIXTURE)</h2><span class="timer-warning">GEEN PRODUCTIEKANAAL</span></div><div class="chat-window"><div v-for="msg in messages" :key="msg.id" class="message"><span class="sender">{{ msg.sender }}:</span><p>{{ msg.text }}</p><span class="time">{{ msg.time }}</span></div></div><div class="chat-input"><input v-model="newMessage" @keyup.enter="sendMessage" placeholder="Lokaal fixturebericht…" aria-label="Lokaal fixturebericht" /><button @click="sendMessage">VERZEND</button></div></section>
-        <section class="panel log-panel"><div class="panel-header"><h2>AUDIT LOG (FIXTURE)</h2></div><div class="log-list"><div v-for="log in auditLogs" :key="log.id" class="log-entry"><span class="log-time">{{ log.time }}</span><span class="log-action" :class="log.type">{{ log.action }}</span><span class="log-user">{{ log.user }}</span></div></div></section>
+      <div class="right-col"><section class="panel chat-panel"><div class="panel-header"><h2>SECURE COMMS (LOKALE PREVIEW)</h2><span class="timer-warning">GEEN PRODUCTIEKANAAL</span></div><div class="chat-window"><div v-for="msg in messages" :key="msg.id" class="message"><span class="sender">{{ msg.sender }}:</span><p>{{ msg.text }}</p><span class="time">{{ formatTime(msg.created_at) }}<template v-if="msg.expires_at"> · vervalt {{ formatTime(msg.expires_at) }}</template></span></div><p v-if="!messages.length" class="empty-state">Nog geen berichten.</p></div><div class="chat-input"><input v-model="newMessage" @keyup.enter="sendMessage" placeholder="Lokaal previewbericht…" aria-label="Lokaal previewbericht" maxlength="1000" :disabled="!backendConnected" /><label class="self-destruct"><input v-model="selfDestruct" type="checkbox" :disabled="!backendConnected" /> Vervalt na 30s</label><button @click="sendMessage" :disabled="!backendConnected">VERZEND</button></div></section>
+        <section class="panel log-panel"><div class="panel-header"><h2>AUDIT LOG (DATABASE)</h2></div><div class="log-list"><div v-for="log in auditLogs" :key="log.id" class="log-entry"><span class="log-time">{{ formatTime(log.timestamp) }}</span><span class="log-action" :class="{ blocked: log.action.startsWith('MUTATION_BLOCKED') }">{{ log.action }} — {{ log.details }}</span><span class="log-user">{{ log.user_id }}</span></div><p v-if="!auditLogs.length" class="empty-state">Nog geen auditgebeurtenissen.</p></div></section>
       </div>
     </main>
 

@@ -1,15 +1,15 @@
 # Citadel Bastion — previewcandidate
 
-Last Updated: 2026-10-07
+Last Updated: 2026-10-16
 
-Dit is een afzonderlijke privépreview van de aangeleverde Bastion-interface. De fixturetaken, chat en auditregels zijn lokaal en fictief. De metadata-route is uitsluitend bedoeld voor de launchercontrole.
+Dit is een geïsoleerde preview. Taken zijn fixtures; de SQLite-backend is uitsluitend voor lokaal gebruik op `127.0.0.1`. De lokale Socket.IO-chat, audit en berichtverval worden niet gedeployed en zijn geen beveiligd communicatiekanaal.
 
-De aangeleverde `const success = true` en lokale `applyMutation` zijn verwijderd. Bevestigen schrijft niets, consumeert geen ticket en verandert geen taak. De interface rapporteert `STORAGE_EFFECT_DEADLINE_UNSUPPORTED`; dit is een guard, geen D-013-fix. Geen serverroute, database, agenda-provider, login of productiegegevens is aangesloten.
+Taakmutaties blijven gesloten. Pogingen worden als `MUTATION_BLOCKED_NO_D013_BACKEND` in SQLite geaudit en geven `STORAGE_EFFECT_DEADLINE_UNSUPPORTED` terug; er is geen mutation ticket of route die taken kan wijzigen. Dit is een guard, geen D-013-fix of conformiteitsbewijs. De database en previewbackend bieden geen authenticatie en mogen niet aan een netwerkinterface worden blootgesteld.
 
-De bron gebruikt Vue 3 en Vite. `npm test` controleert de identity-binding en de default-deny-eigenschap; `npm run build` maakt de statische preview. Lokale dev/preview gebruikt HTTPS op poort 5175 wanneer een wegwerpcertificaat in `certs/` aanwezig is. De statische preview bevat security headers via `public/_headers`.
+De bron gebruikt Vue 3 en Vite. Start de backend met `npm run server` en de HTTPS-preview met `npm run dev` in aparte terminals; de preview proxy’t alleen `/api` en `/socket.io` naar localhost-poort 3005. De backend maakt `.bastion-preview/bastion.db`; die lokale data-directory wordt niet ingecheckt. Berichten met de optie **Vervalt na 30s** worden uit SQLite verwijderd en de verwijdering wordt geaudit. `npm test` test de gesloten UI-grens en backendgedrag; `npm run build` maakt alleen de statische preview.
 
-De volledige achterliggende Citadel-module is niet bewezen door deze preview. De voorgestelde 30-secondenafteltekst is daarom niet als bevoegdheidscontract opgenomen. `npm run test:browser` laadt de gebouwde preview in Edge, controleert de identity-route en headers en bevestigt dat een mutatieklikwflow geen taak verandert.
+Lokale dev/preview gebruikt HTTPS op poort 5175 wanneer een wegwerpcertificaat in `certs/` aanwezig is. De statische preview bevat security headers via `public/_headers`; de preview is niet functioneel zonder de afzonderlijk gestarte lokale backend. `npm run test:browser` controleert de identiteit, headers en blokkering van taakmutaties.
 
 Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
 
-Zie [D013-REVIEW.md](D013-REVIEW.md) voor de beoordeling van de later aangeleverde SQLite-backend. Die backend is niet aangesloten.
+Zie [D013-REVIEW.md](D013-REVIEW.md) voor de reden waarom deze local-only backend niet als D-013-mutatiebackend kan worden gebruikt.

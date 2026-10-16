@@ -4,3 +4,4 @@ certs/
 .test-tmp/
 evidence/
 .sites-runtime/
+.bastion-preview/
