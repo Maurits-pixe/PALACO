@@ -5,7 +5,7 @@ services:
     rootDir: modules/launcher-v1_2
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
-    autoDeployTrigger: off
+    autoDeployTrigger: "off"
     headers:
       - source: /*
         headers:
