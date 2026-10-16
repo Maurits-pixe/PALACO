@@ -1,6 +1,7 @@
-import { useReducer, useState } from 'react'
+import { useReducer, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createRecordExport, encryptText, initialState, MAX_PLAINTEXT_BYTES, operationReducer } from './protocol.ts'
+import { createRecordExport, encryptText, initialState, MAX_PLAINTEXT_BYTES, operationReducer, readRecordExport } from './protocol.ts'
+import type { EncryptedRecord } from './protocol.ts'
 import './App.css'
 
 function App() {
@@ -8,6 +9,11 @@ function App() {
   const [token, setToken] = useState('')
   const [state, dispatch] = useReducer(operationReducer, initialState)
   const [copyStatus, setCopyStatus] = useState('')
+  const [importedRecord, setImportedRecord] = useState<EncryptedRecord | null>(null)
+  const [importStatus, setImportStatus] = useState('')
+  const [importError, setImportError] = useState(false)
+  const importAttempt = useRef(0)
+  const fileInput = useRef<HTMLInputElement>(null)
   const pending = state.phase === 'Verwerkend'
   const bytes = new TextEncoder().encode(plaintext).length
   const validInput = plaintext.trim().length > 0 && bytes <= MAX_PLAINTEXT_BYTES
@@ -40,6 +46,24 @@ function App() {
       setCopyStatus(complete ? 'Volledig versleuteld record gekopieerd.' : 'Ciphertext gekopieerd.')
     } catch {
       setCopyStatus('Kopiëren mislukt. Selecteer en kopieer de ciphertext handmatig.')
+    }
+  }
+
+  async function inspectFile(file: File | undefined) {
+    const attempt = ++importAttempt.current
+    setImportedRecord(null)
+    setImportError(false)
+    setImportStatus(file ? 'Bestand wordt lokaal gelezen.' : '')
+    if (!file) return
+    try {
+      const record = await readRecordExport(file)
+      if (attempt !== importAttempt.current) return
+      setImportedRecord(record)
+      setImportStatus('Formaat herkend. Authenticiteit en opslag zijn niet gecontroleerd.')
+    } catch (error) {
+      if (attempt !== importAttempt.current) return
+      setImportError(true)
+      setImportStatus(error instanceof Error ? error.message : 'Het bestand kon niet worden gecontroleerd.')
     }
   }
 
@@ -101,11 +125,34 @@ function App() {
               <button className="secondary copy-button" type="button" onClick={() => copyResult(false)}>Ciphertext kopiëren</button>
               <button className="secondary copy-button" type="button" onClick={() => copyResult(true)}>Volledig record kopiëren (JSON)</button>
               <a className="secondary export-link" href={recordExport.href} download={recordExport.filename}>Versleuteld record downloaden</a>
-              <p className="hint">Bewaar het volledige record met ID en nonce voor later herstel. Deze export bevat geen plaintext, sessietoken of mastersleutel en vervangt geen sleutelback-up. Import en ontsleuteling zijn nog niet beschikbaar.</p>
+              <p className="hint">Bewaar het volledige record met ID en nonce voor later herstel. Deze export bevat geen plaintext, sessietoken of mastersleutel en vervangt geen sleutelback-up. Lokale formaatcontrole is hieronder beschikbaar; ontsleuteling en terugzetten in de vault niet.</p>
               <p className="hint" role="status" aria-live="polite">{copyStatus}</p>
             </div>
           )}
           <p className="privacy-note">Geen gesimuleerde voortgang. Geen externe verbindingen. Bewaar uw mastersleutel veilig: zonder deze sleutel zijn opgeslagen gegevens niet te ontsleutelen.</p>
+        </section>
+        <section className="result-panel" aria-labelledby="import-title">
+          <h2 id="import-title">Exportbestand inspecteren</h2>
+          <label htmlFor="record-file">AETHER-record (JSON, maximaal 64 KiB)</label>
+          <input ref={fileInput} id="record-file" type="file" accept=".json,application/json"
+            aria-describedby="import-help" onChange={(event) => { void inspectFile(event.target.files?.[0]) }} />
+          <p className="hint" id="import-help">Alleen lokale formaatcontrole, zonder upload of opslag. Een geldig formaat bewijst geen authenticiteit, succesvolle ontsleuteling of aanwezigheid in de vault. De waarde stored in het bestand is slechts aangeleverde metadata.</p>
+          <p className={importError ? 'error' : 'hint'} role={importError ? 'alert' : 'status'}>{importStatus}</p>
+          {importedRecord && (
+            <div>
+              <dl>
+                <dt>Record-ID uit bestand</dt><dd>{importedRecord.id}</dd>
+                <dt>Algoritme</dt><dd>{importedRecord.algorithm}</dd>
+                <dt>Nonce (base64)</dt><dd>{importedRecord.nonce}</dd>
+              </dl>
+              <label htmlFor="imported-ciphertext">Ciphertext uit bestand (niet geverifieerd)</label>
+              <textarea id="imported-ciphertext" value={importedRecord.ciphertext} readOnly rows={6} spellCheck={false} />
+            </div>
+          )}
+          <button className="secondary" type="button" onClick={() => {
+            void inspectFile(undefined)
+            if (fileInput.current) fileInput.current.value = ''
+          }}>Bestandsweergave wissen</button>
         </section>
       </div>
       </section>

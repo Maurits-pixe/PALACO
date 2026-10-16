@@ -90,6 +90,12 @@ of **Volledig record kopiëren (JSON)**. De versiegebonden export bevat ook het
 HKDF-/AAD-formaat, maar nooit plaintext, sessietoken of mastersleutel.
 Bewaar de masterkey afzonderlijk: de export is geen sleutelback-up en
 `status: stored` is geen cryptografisch opslagbewijs.
+Via **Exportbestand inspecteren** kun je een versie-1-JSON-export lokaal
+openen (maximaal 64 KiB). De controle weigert onbekende versies, afwijkende
+crypto-instellingen en extra velden. Het bestand wordt niet geüpload of in
+de vault teruggezet. Formaatcontrole bewijst geen authenticiteit,
+ontsleutelbaarheid of opslag; `stored` uit een bestand is slechts metadata.
+**Bestandsweergave wissen** verwijdert de selectie en weergave uit de interface.
 Deze eerste API biedt encryptie, geen import-/herstel-/decryptie-endpoint,
 sleutelbeheerplatform of onafhankelijke securitycertificering.
 Bij een netwerkfout kan het resultaat onbekend zijn; een foutmelding bewijst

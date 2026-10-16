@@ -1,4 +1,5 @@
 export const MAX_PLAINTEXT_BYTES = 32_768
+export const MAX_EXPORT_BYTES = 65_536
 
 export type EncryptedRecord = {
   id: string
@@ -72,6 +73,37 @@ export function createRecordExport(record: EncryptedRecord) {
     json,
     href: `data:application/json;charset=utf-8,${encodeURIComponent(json)}`,
   }
+}
+
+function hasExactKeys(value: unknown, keys: string[]): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    && Object.keys(value).sort().join(',') === [...keys].sort().join(',')
+}
+
+export function parseRecordExport(text: string): EncryptedRecord {
+  if (text.length > MAX_EXPORT_BYTES || new TextEncoder().encode(text).length > MAX_EXPORT_BYTES) {
+    throw new Error('Het exportbestand is groter dan 64 KiB.')
+  }
+  let envelope: unknown
+  try { envelope = JSON.parse(text) } catch { throw new Error('Het bestand bevat geen geldige JSON.') }
+  if (!hasExactKeys(envelope, ['format', 'version', 'keyDerivation', 'additionalAuthenticatedData', 'record'])
+    || envelope.format !== 'palaco-aether-record' || envelope.version !== 1
+    || envelope.additionalAuthenticatedData !== 'record-id-utf8'
+    || !hasExactKeys(envelope.keyDerivation, ['algorithm', 'salt', 'info'])
+    || envelope.keyDerivation.algorithm !== 'HKDF-SHA256'
+    || envelope.keyDerivation.salt !== 'record-id-utf8'
+    || envelope.keyDerivation.info !== 'aether/record/aes-256-gcm/v1'
+    || !validateRecord(envelope.record)) {
+    throw new Error('Geen ondersteund AETHER versie-1-exportbestand.')
+  }
+  return envelope.record
+}
+
+export async function readRecordExport(file: Pick<File, 'size' | 'text'>): Promise<EncryptedRecord> {
+  if (file.size > MAX_EXPORT_BYTES) throw new Error('Het exportbestand is groter dan 64 KiB.')
+  let text: string
+  try { text = await file.text() } catch { throw new Error('Het bestand kon niet lokaal worden gelezen.') }
+  return parseRecordExport(text)
 }
 
 const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'

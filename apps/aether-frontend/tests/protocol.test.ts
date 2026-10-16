@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createRecordExport, encryptText, initialState, MAX_PLAINTEXT_BYTES, operationReducer, validateRecord } from '../src/protocol.ts'
+import { createRecordExport, encryptText, initialState, MAX_EXPORT_BYTES, MAX_PLAINTEXT_BYTES, operationReducer, parseRecordExport, readRecordExport, validateRecord } from '../src/protocol.ts'
 import type { EncryptedRecord } from '../src/protocol.ts'
 
 const record: EncryptedRecord = {
@@ -56,6 +56,52 @@ test('exports support the maximum ciphertext size without truncation', () => {
   assert.throws(() => createRecordExport({
     ...largest, ciphertext: btoa('x'.repeat(MAX_PLAINTEXT_BYTES + 17)),
   }), /Geen geldig/)
+})
+
+test('local inspection roundtrips exports including maximum-size ciphertext', () => {
+  for (const value of [record, { ...record, ciphertext: btoa('x'.repeat(MAX_PLAINTEXT_BYTES + 16)) }]) {
+    const { json } = createRecordExport(value)
+    assert.deepEqual(parseRecordExport(json), value)
+    assert.deepEqual(parseRecordExport(json.padEnd(MAX_EXPORT_BYTES, ' ')), value)
+  }
+})
+
+test('inspection rejects malformed, foreign, extended and unsupported envelopes', () => {
+  const envelope = JSON.parse(createRecordExport(record).json)
+  for (const value of [
+    null, [], record, { ...envelope, format: 'other' }, { ...envelope, version: '1' },
+    { ...envelope, version: 2 }, { ...envelope, extra: true },
+    { ...envelope, additionalAuthenticatedData: 'none' },
+    { ...envelope, keyDerivation: { ...envelope.keyDerivation, info: 'wrong-context' } },
+    { ...envelope, keyDerivation: { ...envelope.keyDerivation, salt: 'wrong-salt' } },
+    { ...envelope, keyDerivation: { ...envelope.keyDerivation, algorithm: 'SHA256' } },
+    { ...envelope, keyDerivation: { ...envelope.keyDerivation, extra: true } },
+    { ...envelope, record: { ...record, plaintext: 'unexpected' } },
+    { ...envelope, record: { ...record, nonce: 'invalid' } },
+  ]) assert.throws(() => parseRecordExport(JSON.stringify(value)), /Geen ondersteund/)
+  assert.throws(() => parseRecordExport('{'), /geldige JSON/)
+  assert.throws(() => parseRecordExport(' '.repeat(MAX_EXPORT_BYTES + 1)), /64 KiB/)
+  assert.throws(() => parseRecordExport('é'.repeat(MAX_EXPORT_BYTES / 2 + 1)), /64 KiB/)
+})
+
+test('file inspection is bounded before reading, handles read errors and performs no fetch', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async () => { assert.fail('Local inspection must not make network requests') }
+  try {
+    const { json } = createRecordExport(record)
+    assert.deepEqual(await readRecordExport({ size: json.length, text: async () => json }), record)
+    await assert.rejects(readRecordExport({
+      size: MAX_EXPORT_BYTES + 1,
+      text: async () => { assert.fail('Oversized files must not be read') },
+    }), /64 KiB/)
+    await assert.rejects(readRecordExport({
+      size: 1, text: async () => ' '.repeat(MAX_EXPORT_BYTES + 1),
+    }), /64 KiB/)
+    await assert.rejects(readRecordExport({
+      size: 1, text: async () => { throw new Error('read failed') },
+    }), /lokaal worden gelezen/)
+    await assert.rejects(readRecordExport({ size: 1, text: async () => '{' }), /geldige JSON/)
+  } finally { globalThis.fetch = original }
 })
 
 test('network errors and invalid successes explicitly leave storage outcome unknown', async () => {
