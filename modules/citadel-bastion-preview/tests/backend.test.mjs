@@ -27,6 +27,11 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
     stdio: ['ignore', 'pipe', 'pipe']
   });
   const baseUrl = `http://127.0.0.1:${probe}`;
+  const api = (route, options = {}) => fetch(`${baseUrl}${route}`, {
+    ...options,
+    headers: { Origin: baseUrl, ...options.headers }
+  });
+  const socketOptions = { transports: ['websocket'], reconnection: false, autoConnect: false, extraHeaders: { Origin: baseUrl } };
   let client, secondClient;
 
   t.after(async () => {
@@ -40,22 +45,22 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt += 1) {
     try {
-      const response = await fetch(`${baseUrl}/api/messages`);
+      const response = await api('/api/messages');
       if (response.ok) { ready = true; break; }
     } catch {}
     await wait(50);
   }
   assert.equal(ready, true, 'backend should start on its loopback port');
 
-  client = io(baseUrl, { transports: ['websocket'], reconnection: false, autoConnect: false });
+  client = io(baseUrl, socketOptions);
   const connected = once(client, 'connect');
   client.connect();
   await connected;
-  secondClient = io(baseUrl, { transports: ['websocket'], reconnection: false, autoConnect: false });
+  secondClient = io(baseUrl, socketOptions);
   const secondConnected = once(secondClient, 'connect');
   secondClient.connect();
   await secondConnected;
-  const initial = await (await fetch(`${baseUrl}/api/messages`)).json();
+  const initial = await (await api('/api/messages')).json();
   assert.deepEqual(initial, []);
 
   const newMessage = once(client, 'new_message');
@@ -69,7 +74,11 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(message.text, 'Realtime preview');
   assert.equal(broadcastMessage.id, message.id);
   assert.equal(message.expires_at, message.created_at + 30_000);
-  assert.deepEqual(await (await fetch(`${baseUrl}/api/messages`)).json(), [message]);
+  assert.deepEqual(await (await api('/api/messages')).json(), [message]);
+
+  const missingOrigin = await fetch(`${baseUrl}/api/messages`);
+  assert.equal(missingOrigin.status, 403);
+  assert.equal((await missingOrigin.json()).error, 'ORIGIN_NOT_ALLOWED');
 
   const deniedMutation = await fetch(`${baseUrl}/api/mutations/blocked`, {
     method: 'POST',
@@ -92,7 +101,16 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(hostileResult, 'rejected');
   hostileClient.disconnect();
 
-  const invalidMutation = await fetch(`${baseUrl}/api/mutations/blocked`, {
+  const originlessClient = io(baseUrl, { transports: ['websocket'], reconnection: false });
+  const originlessResult = await Promise.race([
+    once(originlessClient, 'connect').then(() => 'connected'),
+    once(originlessClient, 'connect_error').then(() => 'rejected'),
+    wait(1000).then(() => 'timeout')
+  ]);
+  assert.equal(originlessResult, 'rejected');
+  originlessClient.disconnect();
+
+  const invalidMutation = await api('/api/mutations/blocked', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'DELETE_ALL', taskId: -1, details: 'untrusted client detail' })
@@ -103,11 +121,11 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   const destroyEvent = once(secondClient, 'message_destroyed');
   const db = new Database(databasePath);
   db.prepare('UPDATE messages SET expires_at = ? WHERE id = ?').run(Date.now() - 1, message.id);
-  const messagesAfterExpiry = await (await fetch(`${baseUrl}/api/messages`)).json();
+  const messagesAfterExpiry = await (await api('/api/messages')).json();
   assert.deepEqual(messagesAfterExpiry, []);
   assert.deepEqual(await destroyEvent, [{ id: message.id }]);
 
-  const blocked = await fetch(`${baseUrl}/api/mutations/blocked`, {
+  const blocked = await api('/api/mutations/blocked', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'COMPLETE', taskId: 1 })
@@ -115,7 +133,7 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(blocked.status, 403);
   assert.equal((await blocked.json()).code, 'STORAGE_EFFECT_DEADLINE_UNSUPPORTED');
 
-  const invalidClient = io(baseUrl, { transports: ['websocket'], reconnection: false, autoConnect: false });
+  const invalidClient = io(baseUrl, socketOptions);
   const invalidConnected = once(invalidClient, 'connect');
   invalidClient.connect();
   await invalidConnected;
@@ -127,7 +145,7 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.deepEqual(await invalidAck, { ok: false, error: 'INVALID_MESSAGE' });
   invalidClient.disconnect();
 
-  const spamClient = io(baseUrl, { transports: ['websocket'], reconnection: false, autoConnect: false });
+  const spamClient = io(baseUrl, socketOptions);
   const spamConnected = once(spamClient, 'connect');
   spamClient.connect();
   await spamConnected;
@@ -145,7 +163,7 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   spamClient.disconnect();
   assert.equal(db.prepare("SELECT count(*) AS count FROM messages WHERE text LIKE 'Rate test %'").get().count, 5);
 
-  const audit = await (await fetch(`${baseUrl}/api/audit`)).json();
+  const audit = await (await api('/api/audit')).json();
   const actions = audit.map(entry => entry.action);
   assert.ok(actions.includes('MESSAGE_EXPIRED'));
   assert.ok(actions.includes('MESSAGE_SENT'));
@@ -185,7 +203,7 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   for (let index = 0; index < 1001; index += 1) {
     seedAudit.run('RETENTION_SEED', 'Test', 'retention seed', Date.now());
   }
-  const retentionAuditResponse = await fetch(`${baseUrl}/api/mutations/blocked`, {
+  const retentionAuditResponse = await api('/api/mutations/blocked', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'COMPLETE', taskId: 1 })

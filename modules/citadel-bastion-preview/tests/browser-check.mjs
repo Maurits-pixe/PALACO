@@ -33,19 +33,23 @@ run(['req','-new','-newkey','rsa:2048','-nodes','-keyout','localhost-key.pem','-
 fs.writeFileSync(path.join(certDir,'ext.cnf'),'subjectAltName=DNS:localhost,IP:127.0.0.1\nextendedKeyUsage=serverAuth\nbasicConstraints=critical,CA:FALSE\n');
 run(['x509','-req','-in','localhost.csr','-CA','ca.pem','-CAkey','ca-key.pem','-CAcreateserial','-out','localhost.pem','-days','1','-extfile','ext.cnf']);
 const child = spawn(process.execPath, ['node_modules/vite/bin/vite.js','preview','--configLoader','native'], { cwd: root, stdio: ['ignore','pipe','pipe'] });
-const backend = spawn(process.execPath, ['server.js'], { cwd: root, env: { ...process.env, BASTION_PORT: '3005', BASTION_DB_PATH: databasePath }, stdio: ['ignore','pipe','pipe'] });
+const backend = spawn(process.execPath, ['server.js'], { cwd: root, env: { ...process.env, BASTION_PORT: '3005', BASTION_DB_PATH: databasePath, BASTION_ALLOWED_ORIGINS: 'https://localhost:5175,https://127.0.0.1:5175' }, stdio: ['ignore','pipe','pipe'] });
 let log=''; child.stdout.on('data', d => { log += d; }); child.stderr.on('data', d => { log += d; });
+let backendLog=''; backend.stdout.on('data', d => { backendLog += d; }); backend.stderr.on('data', d => { backendLog += d; });
 const request = (url, opts={}) => new Promise((resolve,reject) => { const req=https.get(url,{ca:fs.readFileSync(path.join(certDir,'ca.pem')),...opts},res=>{const chunks=[];res.on('data',c=>chunks.push(c));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks).toString()}));});req.on('error',reject); });
 let pageBrowser;
 try {
   for (let i=0;i<100;i++) { try { const r=await request('https://127.0.0.1:5175/'); if(r.status===200) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
-  for (let i=0;i<100;i++) { try { const r=await fetch('http://127.0.0.1:3005/api/messages'); if(r.ok) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
+  for (let i=0;i<100;i++) { try { const r=await fetch('http://127.0.0.1:3005/api/messages',{headers:{Origin:'https://127.0.0.1:5175'}}); if(r.ok) break; } catch {} await new Promise(r=>setTimeout(r,100)); }
   const identity=await request('https://127.0.0.1:5175/.well-known/palaco-app.json'); assert.equal(identity.status,200); assert.equal(JSON.parse(identity.body).appId,'bastion');
   pageBrowser=await chromium.launch({headless:true,...(browserExecutable ? { executablePath: browserExecutable } : {})});
   const context=await pageBrowser.newContext({ignoreHTTPSErrors:true}); const page=await context.newPage(); const response=await page.goto('https://127.0.0.1:5175/'); assert.equal(response.status(),200);
+  page.on('console', message => { log += `PAGE ${message.type()}: ${message.text()}\n`; });
+  page.on('pageerror', error => { log += `PAGE ERROR: ${error.message}\n`; });
   const secondPage=await context.newPage(); await secondPage.goto('https://127.0.0.1:5175/');
   assert.match(await page.locator('.preview-banner').textContent(),/Taakmutaties blijven gesloten/); assert.match(response.headers()['content-security-policy'],/frame-ancestors 'none'/); assert.equal(response.headers()['x-content-type-options'],'nosniff');
-  await page.locator('.chat-input button:not([disabled])').waitFor();
+  try { await page.locator('.chat-input button:not([disabled])').waitFor({ timeout: 5000 }); }
+  catch { throw new Error(`Socket connection failed. Browser: ${log}\nBackend: ${backendLog}`); }
   await secondPage.locator('.chat-input button:not([disabled])').waitFor();
   const liveMessage=`Browser realtime ${Date.now()}`;
   await page.getByRole('textbox',{name:'Lokaal previewbericht'}).fill(liveMessage);

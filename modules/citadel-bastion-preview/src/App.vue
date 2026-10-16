@@ -79,7 +79,7 @@ function formatTime(timestamp) {
 }
 
 onMounted(() => {
-  socket = io({ path: '/socket.io' });
+  socket = io({ path: '/socket.io', transports: ['websocket'] });
   socket.on('connect', () => { backendConnected.value = true; });
   socket.on('disconnect', () => { backendConnected.value = false; });
   socket.on('connect_error', () => { backendConnected.value = false; });

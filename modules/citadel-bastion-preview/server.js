@@ -20,7 +20,7 @@ const allowedOrigins = new Set(
     .map(origin => origin.trim())
     .filter(Boolean)
 );
-const isAllowedOrigin = origin => !origin || allowedOrigins.has(origin);
+const isAllowedOrigin = origin => typeof origin === 'string' && allowedOrigins.has(origin);
 
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 const db = new Database(databasePath);
