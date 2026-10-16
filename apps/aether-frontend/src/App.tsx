@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createRecordExport, encryptText, fetchStoredRecord, initialState, isRecordId, MAX_PLAINTEXT_BYTES, operationReducer, readRecordExport } from './protocol.ts'
+import { compareEncryptedRecords, createRecordExport, encryptText, fetchStoredRecord, initialState, isRecordId, MAX_PLAINTEXT_BYTES, operationReducer, readRecordExport } from './protocol.ts'
 import type { EncryptedRecord } from './protocol.ts'
 import './App.css'
 
@@ -27,6 +27,8 @@ function App() {
   const result = state.phase === 'Voltooid' ? state.result : null
   const recordExport = result ? createRecordExport(result) : null
   const storedExport = storedResult ? createRecordExport(storedResult) : null
+  const comparison = importedRecord && storedResult
+    ? compareEncryptedRecords(importedRecord, storedResult) : null
 
   function clearReadback() {
     readAttempt.current += 1
@@ -215,8 +217,20 @@ function App() {
               </dl>
               <label htmlFor="imported-ciphertext">Ciphertext uit bestand (niet geverifieerd)</label>
               <textarea id="imported-ciphertext" value={importedRecord.ciphertext} readOnly rows={6} spellCheck={false} />
+              <button className="secondary copy-button" type="button" onClick={() => {
+                setRecordId(importedRecord.id)
+                clearReadback()
+              }}>Record-ID overnemen voor teruglezen</button>
+              <p className="hint">Dit vult alleen de UUID in en wist de vorige vaultweergave. Kies daarna Opgeslagen record ophalen om met uw sessietoken de vault te lezen. Het bestand wordt niet verstuurd.</p>
             </div>
           )}
+          <div role="status" aria-live="polite" aria-atomic="true">
+            {comparison === 'match' && <p>Export en opgehaald vaultrecord komen exact overeen in ID, algoritme, nonce, ciphertext en status.</p>}
+            {comparison === 'different-id' && <p>Niet vergelijkbaar als hetzelfde record: export en vaultweergave hebben verschillende record-ID’s.</p>}
+            {comparison === 'different-content' && <p>Afwijking: dezelfde record-ID, maar nonce of ciphertext verschilt. De export komt niet overeen met het opgehaalde vaultrecord.</p>}
+            {importedRecord && !storedResult && <p>Geen vergelijking beschikbaar. Haal eerst het bijbehorende vaultrecord expliciet op.</p>}
+          </div>
+          <p className="hint">De vergelijking gebruikt alleen de huidige bestandsweergave en het laatst opgehaalde record. Een overeenkomst bewijst geen authenticiteit, geldige AES-GCM-tag, ontsleutelbaarheid of blijvende opslag. Een afwijking verklaart niet welk exemplaar correct is.</p>
           <button className="secondary" type="button" onClick={() => {
             void inspectFile(undefined)
             if (fileInput.current) fileInput.current.value = ''

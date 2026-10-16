@@ -53,6 +53,20 @@ export function validateRecord(value: unknown): value is EncryptedRecord {
     && decodedLength(record.ciphertext) <= MAX_PLAINTEXT_BYTES + 16
 }
 
+export function compareEncryptedRecords(
+  exported: EncryptedRecord,
+  stored: EncryptedRecord,
+): 'match' | 'different-id' | 'different-content' {
+  if (!validateRecord(exported) || !validateRecord(stored)) {
+    throw new Error('Alleen geldige versleutelde records kunnen worden vergeleken.')
+  }
+  if (exported.id !== stored.id) return 'different-id'
+  return exported.algorithm === stored.algorithm
+    && exported.nonce === stored.nonce
+    && exported.ciphertext === stored.ciphertext
+    && exported.status === stored.status ? 'match' : 'different-content'
+}
+
 export function createRecordExport(record: EncryptedRecord) {
   if (!validateRecord(record)) throw new Error('Geen geldig bevestigd record om te exporteren.')
   const json = JSON.stringify({

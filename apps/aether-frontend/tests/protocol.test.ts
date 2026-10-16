@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { createRecordExport, encryptText, fetchStoredRecord, initialState, isRecordId, MAX_EXPORT_BYTES, MAX_PLAINTEXT_BYTES, operationReducer, parseRecordExport, readRecordExport, validateRecord } from '../src/protocol.ts'
+import { compareEncryptedRecords, createRecordExport, encryptText, fetchStoredRecord, initialState, isRecordId, MAX_EXPORT_BYTES, MAX_PLAINTEXT_BYTES, operationReducer, parseRecordExport, readRecordExport, validateRecord } from '../src/protocol.ts'
 import type { EncryptedRecord } from '../src/protocol.ts'
 
 const record: EncryptedRecord = {
@@ -32,6 +32,42 @@ test('response contract rejects incomplete, malformed and unconfirmed records', 
   for (const value of [null, {}, { ...record, status: 'pending' }, { ...record, nonce: 'invalid' },
     { ...record, ciphertext: '' }, { ...record, id: 'not-a-uuid' }, { ...record, plaintext: 'leak' },
     { ...record, algorithm: 'AES-128-GCM' }]) assert.equal(validateRecord(value), false)
+})
+
+test('comparison distinguishes exact equality, different IDs and altered encrypted content', () => {
+  const imported = parseRecordExport(createRecordExport(record).json)
+  assert.equal(compareEncryptedRecords(imported, { ...record }), 'match')
+  assert.equal(compareEncryptedRecords(imported, {
+    ...record, id: 'fab30b51-63ce-44bf-b694-161c9050944e',
+  }), 'different-id')
+  for (const changed of [
+    { ...record, nonce: btoa('c'.repeat(12)) },
+    { ...record, ciphertext: btoa('c'.repeat(32)) },
+  ]) {
+    assert.equal(compareEncryptedRecords(imported, changed), 'different-content')
+    assert.equal(compareEncryptedRecords(changed, imported), 'different-content')
+  }
+})
+
+test('comparison refuses malformed, extended or unconfirmed input on either side', () => {
+  for (const value of [
+    null, {}, { ...record, status: 'pending' }, { ...record, plaintext: 'unexpected' },
+    { ...record, nonce: 'invalid' }, { ...record, algorithm: 'AES-128-GCM' },
+  ]) {
+    assert.throws(() => compareEncryptedRecords(value as EncryptedRecord, record), /Alleen geldige/)
+    assert.throws(() => compareEncryptedRecords(record, value as EncryptedRecord), /Alleen geldige/)
+  }
+})
+
+test('comparison of largest exported records is local and does not alter inputs', () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async () => { assert.fail('Comparison must not perform network requests') }
+  try {
+    const largest = Object.freeze({ ...record, ciphertext: btoa('x'.repeat(MAX_PLAINTEXT_BYTES + 16)) })
+    const imported = Object.freeze(parseRecordExport(createRecordExport(largest).json))
+    assert.equal(compareEncryptedRecords(imported, largest), 'match')
+    assert.deepEqual(imported, largest)
+  } finally { globalThis.fetch = original }
 })
 
 test('versioned export preserves every encrypted record field and its derivation contract', () => {

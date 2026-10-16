@@ -111,6 +111,16 @@ functie die poging niet reconstrueren. Een 404 betekent alleen dat deze vault
 op dat moment geen record met die ID bevat. Een netwerk- of opslagfout bewijst
 geen afwezigheid. Tokenwijziging, een andere ID of wissen trekt de huidige
 weergave/poging in; een laat antwoord mag de oude weergave niet herstellen.
+Bij een geopend exportbestand kun je **Record-ID overnemen voor teruglezen**
+kiezen. Dit vult alleen de UUID in en wist een eerdere vaultweergave; het doet
+geen netwerkverzoek. Kies vervolgens **Opgeslagen record ophalen**.
+De interface vergelijkt de vijf recordvelden van het bestand met het expliciet
+opgehaalde record en onderscheidt een exacte overeenkomst, verschillende ID’s
+en afwijkende inhoud bij dezelfde ID. Het exportbestand wordt nooit meegestuurd.
+De vergelijking vervalt zodra een van de weergaven wordt gewist of vervangen.
+Een overeenkomst betreft alleen deze twee exemplaren: geen cryptografische
+verificatie, ontsleuteling of garantie van blijvende opslag. Bij een afwijking
+wordt niet vastgesteld welk exemplaar correct is.
 Deze eerste API biedt encryptie, geen import-/herstel-/decryptie-endpoint,
 sleutelbeheerplatform of onafhankelijke securitycertificering.
 Bij een netwerkfout kan het resultaat onbekend zijn; een foutmelding bewijst
