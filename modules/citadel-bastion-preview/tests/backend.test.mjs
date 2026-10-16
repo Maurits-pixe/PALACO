@@ -92,6 +92,14 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.equal(hostileResult, 'rejected');
   hostileClient.disconnect();
 
+  const invalidMutation = await fetch(`${baseUrl}/api/mutations/blocked`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'DELETE_ALL', taskId: -1, details: 'untrusted client detail' })
+  });
+  assert.equal(invalidMutation.status, 400);
+  assert.equal((await invalidMutation.json()).error, 'INVALID_PREVIEW_MUTATION');
+
   const destroyEvent = once(secondClient, 'message_destroyed');
   const db = new Database(databasePath);
   db.prepare('UPDATE messages SET expires_at = ? WHERE id = ?').run(Date.now() - 1, message.id);
@@ -112,6 +120,9 @@ test('local backend broadcasts persisted chat, expiration, and blocked mutation 
   assert.deepEqual(audit.map(entry => entry.action).sort(), [
     'MESSAGE_EXPIRED',
     'MESSAGE_SENT',
+    'MUTATION_BLOCKED_INVALID_REQUEST',
     'MUTATION_BLOCKED_NO_D013_BACKEND'
   ]);
+  const invalidAttempt = audit.find(entry => entry.action === 'MUTATION_BLOCKED_INVALID_REQUEST');
+  assert.equal(invalidAttempt.details, 'Invalid preview mutation request');
 });

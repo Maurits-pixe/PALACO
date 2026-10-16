@@ -84,6 +84,15 @@ const recordBlockedMutation = db.transaction(({ action, taskId }) => {
   );
 });
 
+const recordInvalidMutation = db.transaction(() => {
+  insertAudit.run(
+    'MUTATION_BLOCKED_INVALID_REQUEST',
+    'Preview',
+    'Invalid preview mutation request',
+    Date.now()
+  );
+});
+
 app.get('/api/messages', (_req, res) => {
   removeExpiredMessages();
   res.json(listMessages.all(Date.now()));
@@ -94,6 +103,8 @@ app.get('/api/audit', (_req, res) => res.json(listAudit.all()));
 app.post('/api/mutations/blocked', (req, res) => {
   const { action, taskId } = req.body ?? {};
   if (!['COMPLETE', 'ESCALATE'].includes(action) || !Number.isSafeInteger(taskId) || taskId < 1) {
+    recordInvalidMutation();
+    publishAudit();
     return res.status(400).json({ error: 'INVALID_PREVIEW_MUTATION' });
   }
 
