@@ -1,5 +1,6 @@
 export const MAX_PLAINTEXT_BYTES = 32_768
 export const MAX_EXPORT_BYTES = 65_536
+export const MAX_RECORD_RESPONSE_BYTES = 65_536
 
 export type EncryptedRecord = {
   id: string
@@ -126,6 +127,38 @@ export async function readRecordExport(file: Pick<File, 'size' | 'text'>): Promi
 
 const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'
 
+async function readRecordResponse(response: Response, signal?: AbortSignal): Promise<unknown> {
+  signal?.throwIfAborted()
+  if (!response.body) throw new Error('Leeg recordantwoord.')
+  const reader = response.body.getReader()
+  const cancel = () => { void reader.cancel().catch(() => {}) }
+  const buffer = new Uint8Array(MAX_RECORD_RESPONSE_BYTES)
+  let size = 0
+  let complete = false
+  signal?.addEventListener('abort', cancel, { once: true })
+  try {
+    signal?.throwIfAborted()
+    while (true) {
+      const { done, value } = await reader.read()
+      signal?.throwIfAborted()
+      if (done) {
+        complete = true
+        break
+      }
+      if (value.byteLength > MAX_RECORD_RESPONSE_BYTES - size) {
+        throw new Error('Recordantwoord groter dan 64 KiB.')
+      }
+      buffer.set(value, size)
+      size += value.byteLength
+    }
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, size)))
+  } finally {
+    signal?.removeEventListener('abort', cancel)
+    if (!complete) cancel()
+    reader.releaseLock()
+  }
+}
+
 export async function fetchStoredRecord(id: string, token: string, signal?: AbortSignal): Promise<EncryptedRecord> {
   signal?.throwIfAborted()
   if (!isRecordId(id)) throw new Error('Gebruik een canonieke v4-UUID met kleine letters.')
@@ -150,7 +183,7 @@ export async function fetchStoredRecord(id: string, token: string, signal?: Abor
   if (response.status === 404) throw new Error('Geen opgeslagen record met deze UUID gevonden.')
   if (response.status !== 200) throw new Error(failure)
   let record: unknown
-  try { record = await response.json() } catch {
+  try { record = await readRecordResponse(response, signal) } catch {
     signal?.throwIfAborted()
     throw new Error(failure)
   }

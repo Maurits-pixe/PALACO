@@ -259,27 +259,95 @@ test('late fetch responses cannot succeed or report 404 after cancellation', asy
   } finally { globalThis.fetch = original }
 })
 
-test('cancellation during response parsing rejects even if body ignores the abort', async () => {
+test('cancellation during body streaming cancels even a stream unrelated to the fetch signal', async () => {
   const original = globalThis.fetch
   try {
     for (const bodyFails of [false, true]) {
       const controller = new AbortController()
-      let finish!: () => void
+      let stream!: ReadableStreamDefaultController<Uint8Array>
+      let cancelled = false
       let started!: () => void
       const parsing = new Promise<void>(resolve => { started = resolve })
-      const response = new Response(null, { status: 200 })
-      response.json = () => new Promise((resolve, reject) => {
-        finish = () => bodyFails ? reject(new TypeError('body failed')) : resolve(record)
-        started()
-      })
+      const response = new Response(new ReadableStream<Uint8Array>({
+        start(value) { stream = value },
+        pull() { started() },
+        cancel() { cancelled = true },
+      }), { status: 200 })
       globalThis.fetch = async () => response
       const read = fetchStoredRecord(record.id, 'token', controller.signal)
       const rejected = assert.rejects(read, { name: 'AbortError' })
       await parsing
+      if (bodyFails) stream.error(new TypeError('body failed'))
       controller.abort()
-      finish()
       await rejected
+      if (!bodyFails) assert.equal(cancelled, true)
+      assert.equal(response.body?.locked, false)
     }
+  } finally { globalThis.fetch = original }
+})
+
+test('streamed readback enforces actual byte limits independently of Content-Length', async () => {
+  const original = globalThis.fetch
+  try {
+    const valid = JSON.stringify(record)
+    for (const length of [undefined, '1', '999999']) {
+      globalThis.fetch = async () => new Response(valid.padEnd(65_536, ' '), {
+        headers: length ? { 'Content-Length': length } : {},
+      })
+      assert.deepEqual(await fetchStoredRecord(record.id, 'token'), record)
+    }
+    for (const singleChunk of [true, false]) {
+      let cancelled = false
+      const response = new Response(new ReadableStream<Uint8Array>({
+        start(stream) {
+          const bytes = new TextEncoder().encode(valid.padEnd(65_537, ' '))
+          if (singleChunk) stream.enqueue(bytes)
+          else {
+            stream.enqueue(bytes.subarray(0, 65_536))
+            stream.enqueue(bytes.subarray(65_536))
+          }
+        },
+        cancel() { cancelled = true },
+      }), { headers: { 'Content-Length': '1' } })
+      globalThis.fetch = async () => response
+      await assert.rejects(fetchStoredRecord(record.id, 'token'), /Vault lezen mislukt/)
+      assert.equal(cancelled, true)
+      assert.equal(response.body?.locked, false)
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('streamed readback accepts split UTF-8 and maximum ciphertext, rejects invalid or broken streams', async () => {
+  const original = globalThis.fetch
+  try {
+    const largest = { ...record, ciphertext: btoa('x'.repeat(MAX_PLAINTEXT_BYTES + 16)) }
+    const bytes = new TextEncoder().encode(JSON.stringify(largest))
+    globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+      start(stream) {
+        for (let i = 0; i < bytes.length; i += 113) stream.enqueue(bytes.subarray(i, i + 113))
+        stream.close()
+      },
+    }))
+    assert.deepEqual(await fetchStoredRecord(record.id, 'token'), largest)
+    globalThis.fetch = async () => new Response(new ReadableStream<Uint8Array>({
+      start(stream) {
+        // A UTF-8 BOM can itself be split across network chunks.
+        stream.enqueue(new Uint8Array([0xef]))
+        stream.enqueue(new Uint8Array([0xbb]))
+        stream.enqueue(new Uint8Array([0xbf]))
+        stream.enqueue(new TextEncoder().encode(JSON.stringify(record)))
+        stream.close()
+      },
+    }))
+    assert.deepEqual(await fetchStoredRecord(record.id, 'token'), record)
+    for (const body of [new Uint8Array([0xff]), new TextEncoder().encode('{"id":'), new Uint8Array()]) {
+      globalThis.fetch = async () => new Response(body)
+      await assert.rejects(fetchStoredRecord(record.id, 'token'), /Vault lezen mislukt/)
+    }
+    globalThis.fetch = async () => new Response(new ReadableStream({
+      start(stream) { stream.error(new TypeError('interrupted stream')) },
+    }))
+    await assert.rejects(fetchStoredRecord(record.id, 'token'), /Vault lezen mislukt/)
   } finally { globalThis.fetch = original }
 })
 
@@ -308,8 +376,8 @@ test('native fetch aborts loopback readback before headers and during body strea
         const readingBody = new Promise<void>(resolve => { bodyStarted = resolve })
         globalThis.fetch = async (url, options) => {
           const response = await original(`http://127.0.0.1:${address.port}${url}`, options)
-          const json = response.json.bind(response)
-          response.json = () => { bodyStarted(); return json() }
+          const reader = response.body!.getReader.bind(response.body)
+          response.body!.getReader = (() => { bodyStarted(); return reader() }) as typeof response.body.getReader
           return response
         }
         const controller = new AbortController()
