@@ -14,7 +14,10 @@ Voor de HTTPS-devserver moeten tijdelijke `certs/localhost.pem` en `certs/localh
 npm ci
 npm test
 npm run build
+npm run test:browser
 npm run dev
 ```
+
+`npm run test:browser` bouwt de app en voert een Chromium-roundtrip uit voor versleuteling, ciphertext-only IndexedDB, back-up import/export en ontsleuteling. Installeer zo nodig Chromium met `npx playwright install chromium`; op Linux kan ook `PLAYWRIGHT_CHROMIUM_EXECUTABLE` naar een bestaande Chromium-binary wijzen. De test serveert alleen de lokale build op een tijdelijke loopback HTTP-server; gebruik voor de app zelf de HTTPS-devserver.
 
 De launcher verwacht lokaal `https://localhost:5174/.well-known/palaco-app.json`; de metadata staat alleen CORS-toegang toe voor de lokale launcher-origin `https://127.0.0.1:5173`. De tijdelijke Vercel-preview is geen toegestane launcher-origin. De statische build maakt `dist/`; stel voor een Vercel-preview de root in op `modules/aether-preview`.
