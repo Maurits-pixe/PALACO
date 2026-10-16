@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { webcrypto } from 'node:crypto';
-import { decryptBytes, encryptBytes, MIN_PASSPHRASE_LENGTH } from '../src/crypto.js';
+import { decryptBytes, encryptBytes, MIN_PASSPHRASE_LENGTH, validateEnvelope } from '../src/crypto.js';
 
 const root = new URL('../', import.meta.url);
 const passphrase = 'correct paard batterij';
@@ -44,6 +44,14 @@ test('rejects short passphrases and unknown envelope formats', async () => {
     decryptBytes({ schema: 'unknown' }, passphrase, webcrypto),
     /Onbekend of ongeldig/
   );
+});
+
+test('validates portable encrypted backup envelopes and rejects malformed data', async () => {
+  const envelope = await encryptBytes(new Uint8Array([10, 20, 30]), passphrase, webcrypto);
+  assert.equal(validateEnvelope(envelope), envelope);
+  assert.throws(() => validateEnvelope({ ...envelope, salt: 'not base64!' }));
+  assert.throws(() => validateEnvelope({ ...envelope, iterations: 1 }));
+  assert.throws(() => validateEnvelope({ ...envelope, ciphertext: '' }));
 });
 
 test('AETHER uses the launcher-configured local origin and no remote font', () => {

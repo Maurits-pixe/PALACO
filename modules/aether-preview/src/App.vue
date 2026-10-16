@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import { decryptBytes, encryptBytes, MAX_FILE_BYTES, MIN_PASSPHRASE_LENGTH } from './crypto.js';
+import { decryptBytes, encryptBytes, MAX_FILE_BYTES, MIN_PASSPHRASE_LENGTH, validateEnvelope } from './crypto.js';
 import { listVaultItems, removeVaultItem, saveVaultItem } from './vault.js';
 
 const selectedFile = ref(null);
@@ -113,6 +113,42 @@ async function decryptVaultItem(item) {
   }
 }
 
+function exportVaultItem(item) {
+  const blob = new Blob([JSON.stringify(item.envelope)], { type: 'application/json' });
+  const downloadUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = downloadUrl;
+  link.download = `aether-${item.id}.aether.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  message.value = 'Versleutelde back-up gedownload. Bewaar ook de wachtzin apart.';
+  errorMessage.value = '';
+}
+
+async function importEncryptedBackup(event) {
+  message.value = '';
+  errorMessage.value = '';
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+  if (file.size > MAX_FILE_BYTES * 1.4) {
+    errorMessage.value = 'Back-upbestand is groter dan toegestaan.';
+    return;
+  }
+  busy.value = true;
+  try {
+    const envelope = JSON.parse(await file.text());
+    validateEnvelope(envelope);
+    await saveVaultItem({ id: crypto.randomUUID(), envelope });
+    await refreshVault();
+    message.value = 'Versleutelde back-up geïmporteerd. Ontsleutelen vereist de oorspronkelijke wachtzin.';
+  } catch (error) {
+    errorMessage.value = error.message || 'Back-up importeren is mislukt.';
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function deleteVaultItem(id) {
   if (!window.confirm('Verwijder dit versleutelde bestand uit deze browser?')) return;
   try {
@@ -192,6 +228,15 @@ onMounted(async () => {
             <div><span class="section-index">03</span><h2 id="vault-title">Bestandskluis</h2></div>
             <span class="vault-count">{{ vaultItems.length }} ITEM{{ vaultItems.length === 1 ? '' : 'S' }}</span>
           </div>
+          <label class="backup-import">
+            <span>IMPORTEER VERSLEUTELDE BACK-UP</span>
+            <input
+              type="file"
+              accept=".json,application/json"
+              :disabled="busy || !systemReady"
+              @change="importEncryptedBackup"
+            />
+          </label>
           <label class="field-label" for="vault-passphrase">Wachtzin voor ontsleutelen</label>
           <input
             id="vault-passphrase"
@@ -207,6 +252,7 @@ onMounted(async () => {
             <li v-for="item in vaultItems" :key="item.id">
               <span><strong>VERSLEUTELD BESTAND</strong><small>ID {{ item.id.slice(0, 8) }}</small></span>
               <div class="item-actions">
+                <button class="text-button" type="button" :disabled="busy" @click="exportVaultItem(item)">BACK-UP</button>
                 <button class="text-button" type="button" :disabled="busy" @click="decryptVaultItem(item)">ONTGRENDEL</button>
                 <button class="delete-button" type="button" :disabled="busy" :aria-label="`Verwijder item ${item.id.slice(0, 8)}`" @click="deleteVaultItem(item.id)">×</button>
               </div>

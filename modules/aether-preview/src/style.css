@@ -47,6 +47,8 @@ h1 span { color: #40df98; }
 .algorithm, .vault-count { border: 0; padding: 0; color: #7d9e8d; font-size: .55rem; }
 .field-label { display: flex; justify-content: space-between; gap: .5rem; margin: 1.1rem 0 .45rem; color: #b1c8bb; font-size: .65rem; }
 .field-label small { color: #668776; font-size: .55rem; }
+.backup-import { display: grid; gap: .5rem; margin: .8rem 0 1rem; padding: .75rem; border: 1px dashed #356449; color: #83c9a2; font-size: .58rem; letter-spacing: .05em; }
+.backup-import input { max-width: 100%; color: #9eb9a9; font-size: .62rem; letter-spacing: 0; }
 input[type='file'], input[type='password'] { width: 100%; min-height: 2.8rem; border: 1px solid #2b5542; border-radius: 2px; background: #030907; color: #d9f7ea; padding: .65rem; font-size: .68rem; }
 input[type='file']::file-selector-button { margin-right: .65rem; padding: .35rem .5rem; border: 0; background: #153a29; color: #67e5a9; font: inherit; cursor: pointer; }
 input::placeholder { color: #597165; }

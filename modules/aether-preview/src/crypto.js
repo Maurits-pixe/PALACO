@@ -1,6 +1,7 @@
 export const MIN_PASSPHRASE_LENGTH = 12;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const KDF_ITERATIONS = 310_000;
+const MAX_ENVELOPE_BYTES = MAX_FILE_BYTES + 64 * 1024 + 16;
 const ENCODER = new TextEncoder();
 
 function requirePassphrase(passphrase) {
@@ -18,8 +19,45 @@ function toBase64(bytes) {
 }
 
 function fromBase64(value) {
+  if (
+    typeof value !== 'string' ||
+    value.length > Math.ceil(MAX_ENVELOPE_BYTES / 3) * 4 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)
+  ) {
+    throw new Error('Onvolledige of beschadigde AETHER-kluisdata.');
+  }
   const binary = atob(value);
-  return Uint8Array.from(binary, character => character.charCodeAt(0));
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  if (toBase64(bytes) !== value) {
+    throw new Error('Onvolledige of beschadigde AETHER-kluisdata.');
+  }
+  return bytes;
+}
+
+export function validateEnvelope(envelope) {
+  if (
+    !envelope ||
+    typeof envelope !== 'object' ||
+    Array.isArray(envelope) ||
+    envelope.schema !== 'aether.v1' ||
+    envelope.cipher !== 'AES-GCM-256' ||
+    envelope.kdf !== 'PBKDF2-SHA-256' ||
+    envelope.iterations !== KDF_ITERATIONS
+  ) {
+    throw new Error('Onbekend of ongeldig AETHER-kluisformaat.');
+  }
+  const salt = fromBase64(envelope.salt);
+  const iv = fromBase64(envelope.iv);
+  const ciphertext = fromBase64(envelope.ciphertext);
+  if (
+    salt.byteLength !== 16 ||
+    iv.byteLength !== 12 ||
+    ciphertext.byteLength < 16 ||
+    ciphertext.byteLength > MAX_ENVELOPE_BYTES
+  ) {
+    throw new Error('Onvolledige of beschadigde AETHER-kluisdata.');
+  }
+  return envelope;
 }
 
 async function deriveKey(passphrase, salt, cryptoImpl) {
@@ -68,21 +106,10 @@ export async function decryptBytes(envelope, passphrase, cryptoImpl = globalThis
   if (!cryptoImpl?.subtle) {
     throw new Error('Web Crypto is niet beschikbaar in deze browsercontext.');
   }
-  if (
-    envelope?.schema !== 'aether.v1' ||
-    envelope?.cipher !== 'AES-GCM-256' ||
-    envelope?.kdf !== 'PBKDF2-SHA-256' ||
-    envelope?.iterations !== KDF_ITERATIONS
-  ) {
-    throw new Error('Onbekend of ongeldig AETHER-kluisformaat.');
-  }
-
+  validateEnvelope(envelope);
   const salt = fromBase64(envelope.salt);
   const iv = fromBase64(envelope.iv);
   const ciphertext = fromBase64(envelope.ciphertext);
-  if (salt.byteLength !== 16 || iv.byteLength !== 12 || ciphertext.byteLength < 16) {
-    throw new Error('Onvolledige of beschadigde AETHER-kluisdata.');
-  }
   const key = await deriveKey(passphrase, salt, cryptoImpl);
   const plaintext = await cryptoImpl.subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
   return new Uint8Array(plaintext);
