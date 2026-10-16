@@ -135,6 +135,51 @@ fn concurrent_unique_keys_cannot_exceed_the_record_limit() {
 }
 
 #[test]
+fn identical_retries_share_the_last_record_slot() {
+    for limit in [1, 2] {
+        let gate = Arc::new(InMemoryCommitGate::with_record_limit(limit));
+        let authorized = boundary("evidence-1", AuthorityState::Authorized);
+        for index in 0..limit - 1 {
+            gate.commit(&key(&format!("prefill-{index}")), &authorized, b"payload")
+                .expect("prefill leaves one slot");
+        }
+        let barrier = Arc::new(Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let gate = Arc::clone(&gate);
+                let barrier = Arc::clone(&barrier);
+                let authorized = authorized.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    gate.commit_with_outcome(&key("last-slot"), &authorized, b"payload")
+                })
+            })
+            .collect();
+        let mut recorded = 0;
+        let mut replayed = 0;
+        for thread in threads {
+            let outcome = thread.join().expect("worker").expect("record or retry");
+            assert_eq!(outcome.receipt().sequence(), limit as u64);
+            match outcome {
+                CommitOutcome::Recorded(_) => recorded += 1,
+                CommitOutcome::Replayed(_) => replayed += 1,
+            }
+        }
+        assert_eq!((recorded, replayed), (1, 7));
+        assert_eq!(
+            gate.commit(&key("overflow"), &authorized, b"payload"),
+            Err(CommitGateError::RecordLimitReached)
+        );
+        assert_eq!(gate.revoke(), Ok(limit as u64 + 1));
+        let outcome = gate
+            .commit_with_outcome(&key("last-slot"), &authorized, b"payload")
+            .expect("full revoked gate preserves retry");
+        assert!(matches!(outcome, CommitOutcome::Replayed(_)));
+        assert_eq!(outcome.receipt().sequence(), limit as u64);
+    }
+}
+
+#[test]
 fn bounded_histories_match_an_independent_accepted_event_log() {
     let boundaries = [
         boundary("evidence-1", AuthorityState::Authorized),
@@ -163,12 +208,19 @@ fn bounded_histories_match_an_independent_accepted_event_log() {
     ];
     let revoke = requests.len();
     let alphabet = revoke + 1;
+    let histories_per_limit = alphabet.pow(5);
+    let limits = [None, Some(0), Some(1), Some(2)];
     // Event positions, not mutable gate counters, define expected sequences.
-    for history in 0..alphabet.pow(5) {
-        let explicit = InMemoryCommitGate::new();
-        let legacy = InMemoryCommitGate::new();
+    for history in 0..histories_per_limit * limits.len() {
+        let limit = limits[history / histories_per_limit];
+        let create_gate = || match limit {
+            Some(limit) => InMemoryCommitGate::with_record_limit(limit),
+            None => InMemoryCommitGate::new(),
+        };
+        let explicit = create_gate();
+        let legacy = create_gate();
         let mut accepted: Vec<usize> = Vec::new();
-        let mut remaining = history;
+        let mut remaining = history % histories_per_limit;
         for step in 0..5 {
             let operation = remaining % alphabet;
             remaining /= alphabet;
@@ -203,6 +255,8 @@ fn bounded_histories_match_an_independent_accepted_event_log() {
                 }
             } else if accepted.contains(&revoke) {
                 Err(CommitGateError::Revoked)
+            } else if limit.is_some_and(|limit| accepted.len() >= limit) {
+                Err(CommitGateError::RecordLimitReached)
             } else {
                 accepted.push(operation);
                 Ok((accepted.len() as u64, true))
@@ -252,6 +306,17 @@ fn bounded_histories_match_an_independent_accepted_event_log() {
                 .expect("accepted record must remain replayable after revocation");
             assert!(matches!(outcome, CommitOutcome::Replayed(_)));
             assert_eq!(outcome.receipt().sequence(), position as u64 + 1);
+            assert_eq!(
+                legacy
+                    .commit(
+                        &keys[key_index],
+                        &boundaries[boundary_index],
+                        payloads[payload_index],
+                    )
+                    .expect("legacy retry remains available after revocation")
+                    .sequence(),
+                position as u64 + 1
+            );
         }
     }
 }

@@ -2127,9 +2127,13 @@ Focused tests cover mixed-API retries, error precedence, post-revocation
 replays, and concurrent outcome classification.
 
 Additional tests compare both APIs against an independent accepted-event log for
-all 32,768 length-five histories over eight operations: two keys, conflicting
-payloads, changed evidence, each non-authorized authority state, and revocation.
+all 32,768 length-five histories over eight operations at each of four record
+limits (unlimited, zero, one, two): 131,072 history/configuration cases covering
+two keys, conflicting payloads, changed evidence, each non-authorized authority
+state, and revocation. Both APIs retain historical receipts after revocation.
 A separate concurrent test races four revokers with eight mixed-API committers.
+At limits one and two, eight identical requests racing for the final free slot
+must produce exactly one new record and seven historical replays.
 These are bounded local checks, not exhaustive concurrency exploration, formal
 verification, or security validation; they do not widen the model's guarantees.
 
