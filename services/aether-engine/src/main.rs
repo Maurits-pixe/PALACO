@@ -4,7 +4,7 @@ use ring::{
     aead, hkdf, hmac,
     rand::{SecureRandom, SystemRandom},
 };
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 #[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
@@ -168,6 +168,63 @@ fn persist(path: &Path, record: &EncryptedRecord) -> Result<(), rusqlite::Error>
     Ok(())
 }
 
+fn canonical_record_id(id: &str) -> bool {
+    Uuid::parse_str(id).is_ok_and(|uuid| {
+        uuid.get_version_num() == 4
+            && uuid.get_variant() == uuid::Variant::RFC4122
+            && uuid.to_string() == id
+    })
+}
+
+fn open_read_database(path: &Path) -> Result<Connection, rusqlite::Error> {
+    Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+}
+
+fn stored_record(path: &Path, id: &str) -> Result<Option<EncryptedRecord>, rusqlite::Error> {
+    let connection = open_read_database(path)?;
+    let record = connection
+        .query_row(
+            "SELECT id,
+                    CASE WHEN length(CAST(ciphertext AS BLOB)) <= 43712 THEN ciphertext END,
+                    CASE WHEN length(CAST(nonce AS BLOB)) <= 16 THEN nonce END,
+                    CASE WHEN length(CAST(algorithm AS BLOB)) <= 11 THEN algorithm END,
+                    CASE WHEN length(CAST(status AS BLOB)) <= 6 THEN status END
+             FROM records WHERE id = ?1",
+            [id],
+            |row| {
+                Ok(EncryptedRecord {
+                    id: row.get(0)?,
+                    ciphertext: row.get(1)?,
+                    nonce: row.get(2)?,
+                    algorithm: row.get(3)?,
+                    status: row.get(4)?,
+                })
+            },
+        )
+        .optional()?;
+    if let Some(record) = &record {
+        // Format checks only: readback does not authenticate or decrypt ciphertext.
+        if record.id != id
+            || record.algorithm != "AES-256-GCM"
+            || record.status != "stored"
+            || record.nonce.len() != 16
+            || !STANDARD
+                .decode(&record.nonce)
+                .is_ok_and(|bytes| bytes.len() == 12)
+            || record.ciphertext.len() > 43_712
+            || !STANDARD
+                .decode(&record.ciphertext)
+                .is_ok_and(|bytes| (17..=MAX_PLAINTEXT + 16).contains(&bytes.len()))
+        {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+    }
+    Ok(record)
+}
+
 fn error(status: actix_web::http::StatusCode, message: &str) -> HttpResponse {
     HttpResponse::build(status)
         .insert_header(("Cache-Control", "no-store"))
@@ -261,6 +318,30 @@ async fn health() -> HttpResponse {
         .json(serde_json::json!({ "status": "ready" }))
 }
 
+async fn record_handler(request: HttpRequest, state: web::Data<State>) -> HttpResponse {
+    if let Err((status, message)) = allowed_request(&request, &state) {
+        return error(status, message);
+    }
+    let id = request.match_info().get("id").unwrap_or_default();
+    if !canonical_record_id(id) {
+        return error(
+            actix_web::http::StatusCode::BAD_REQUEST,
+            "Provide a lowercase canonical v4 record UUID",
+        );
+    }
+    let id = id.to_owned();
+    match web::block(move || stored_record(&state.db_path, &id)).await {
+        Ok(Ok(Some(record))) => HttpResponse::Ok()
+            .insert_header(("Cache-Control", "no-store"))
+            .json(record),
+        Ok(Ok(None)) => error(actix_web::http::StatusCode::NOT_FOUND, "Record not found"),
+        _ => error(
+            actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Stored record could not be read",
+        ),
+    }
+}
+
 async fn metadata(request: HttpRequest) -> HttpResponse {
     let mut response = HttpResponse::Ok();
     response.insert_header(("Cache-Control", "no-store"));
@@ -279,6 +360,7 @@ async fn metadata(request: HttpRequest) -> HttpResponse {
 fn configure(cfg: &mut web::ServiceConfig) {
     cfg.app_data(web::PayloadConfig::new(MAX_BODY))
         .route("/api/encrypt", web::post().to(encrypt_handler))
+        .route("/api/records/{id}", web::get().to(record_handler))
         .route("/health", web::get().to(health))
         .route("/.well-known/palaco-app.json", web::get().to(metadata));
 }
@@ -373,6 +455,234 @@ mod tests {
             )
             .is_err()
         );
+        Ok(())
+    }
+
+    #[actix_web::test]
+    async fn authenticated_readback_is_read_only_and_validates_storage()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let path = PathBuf::from(format!("test-read-{}.sqlite3", Uuid::new_v4()));
+        let master = [21u8; 32];
+        initialize_database(&path, &master)?;
+        let record = encrypt(&master, "readback fixture")?;
+        persist(&path, &record)?;
+        let auth_key = hmac::Key::new(hmac::HMAC_SHA256, &master);
+        let session_token = "readback-test-session";
+        let authorization = ["Bearer", session_token].join(" ");
+        let wrong_authorization = ["Bearer", "incorrect-test-session"].join(" ");
+        let token_tag = hmac::sign(&auth_key, session_token.as_bytes());
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(State {
+                    master_key: master,
+                    auth_key,
+                    token_tag,
+                    db_path: path.clone(),
+                }))
+                .configure(configure),
+        )
+        .await;
+        let connection = open_database(&path)?;
+        let database_before = fs::read(&path)?;
+        let wal_path = PathBuf::from(format!("{}-wal", path.display()));
+        let wal_before = fs::read(&wal_path)?;
+        for (token, origin, id, expected) in [
+            (None, None, "invalid", StatusCode::UNAUTHORIZED),
+            (
+                Some(wrong_authorization.as_str()),
+                None,
+                "invalid",
+                StatusCode::UNAUTHORIZED,
+            ),
+            (
+                Some(authorization.as_str()),
+                Some("https://evil.example"),
+                "invalid",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                Some(authorization.as_str()),
+                Some("http://localhost:5174"),
+                "invalid",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                Some(authorization.as_str()),
+                Some("https://localhost:5174/"),
+                "invalid",
+                StatusCode::FORBIDDEN,
+            ),
+            (
+                Some(authorization.as_str()),
+                Some(NEO_ORIGINS[0]),
+                "invalid",
+                StatusCode::FORBIDDEN,
+            ),
+        ] {
+            let mut request = test::TestRequest::get().uri(&format!("/api/records/{id}"));
+            if let Some(token) = token {
+                request = request.insert_header(("Authorization", token));
+            }
+            if let Some(origin) = origin {
+                request = request.insert_header(("Origin", origin));
+            }
+            let response = test::call_service(&app, request.to_request()).await;
+            assert_eq!(response.status(), expected);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("Cache-Control")
+                    .and_then(|value| value.to_str().ok()),
+                Some("no-store")
+            );
+        }
+        for id in [
+            "invalid".to_owned(),
+            "FAB30B51-63CE-44BF-B694-161C9050944D".to_owned(),
+            record.id.replace('-', ""),
+            "fab30b51-63ce-14bf-b694-161c9050944d".to_owned(),
+            "fab30b51-63ce-44bf-7694-161c9050944d".to_owned(),
+            "00000000-0000-0000-0000-000000000000".to_owned(),
+        ] {
+            let response = test::call_service(
+                &app,
+                test::TestRequest::get()
+                    .uri(&format!("/api/records/{id}"))
+                    .insert_header(("Authorization", authorization.as_str()))
+                    .to_request(),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("Cache-Control")
+                    .and_then(|value| value.to_str().ok()),
+                Some("no-store")
+            );
+        }
+        for origin in [None, Some(FRONTEND_ORIGINS[0]), Some(FRONTEND_ORIGINS[1])] {
+            let mut request = test::TestRequest::get()
+                .uri(&format!("/api/records/{}", record.id))
+                .insert_header(("Authorization", authorization.as_str()));
+            if let Some(origin) = origin {
+                request = request.insert_header(("Origin", origin));
+            }
+            let response = test::call_service(&app, request.to_request()).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("Cache-Control")
+                    .and_then(|value| value.to_str().ok()),
+                Some("no-store")
+            );
+            let body: serde_json::Value = test::read_body_json(response).await;
+            assert_eq!(body, serde_json::to_value(&record)?);
+        }
+        let response = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(&format!("/api/records/{}", Uuid::new_v4()))
+                .insert_header(("Authorization", authorization.as_str()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response
+                .headers()
+                .get("Cache-Control")
+                .and_then(|value| value.to_str().ok()),
+            Some("no-store")
+        );
+        assert_eq!(fs::read(&path)?, database_before);
+        assert_eq!(fs::read(&wal_path)?, wal_before);
+        assert_eq!(
+            connection.query_row("SELECT COUNT(*) FROM records", [], |row| row
+                .get::<_, i64>(0))?,
+            1
+        );
+        assert_eq!(
+            serde_json::to_value(stored_record(&path, &record.id)?.ok_or("missing record")?)?,
+            serde_json::to_value(&record)?
+        );
+        let reader = open_read_database(&path)?;
+        assert!(reader.execute("DELETE FROM records", []).is_err());
+        drop(reader);
+        for (field, value) in [
+            ("nonce", "bad".to_owned()),
+            ("nonce", "x".repeat(65_536)),
+            ("ciphertext", "bad".to_owned()),
+            ("ciphertext", "AAAA\0".repeat(65_536)),
+            ("ciphertext", STANDARD.encode([0u8; 16])),
+            ("ciphertext", STANDARD.encode(vec![0u8; MAX_PLAINTEXT + 17])),
+            ("algorithm", "unsupported".to_owned()),
+            ("algorithm", "x".repeat(65_536)),
+        ] {
+            connection.execute(
+                &format!("UPDATE records SET {field} = ?1 WHERE id = ?2"),
+                params![value, record.id],
+            )?;
+            let response = test::call_service(
+                &app,
+                test::TestRequest::get()
+                    .uri(&format!("/api/records/{}", record.id))
+                    .insert_header(("Authorization", authorization.as_str()))
+                    .to_request(),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                response
+                    .headers()
+                    .get("Cache-Control")
+                    .and_then(|value| value.to_str().ok()),
+                Some("no-store")
+            );
+            let body: serde_json::Value = test::read_body_json(response).await;
+            assert_eq!(
+                body,
+                serde_json::json!({"error": "Stored record could not be read"})
+            );
+            connection.execute("DELETE FROM records", [])?;
+            persist(&path, &record)?;
+        }
+        connection.execute_batch("DROP TABLE records")?;
+        let response = test::call_service(
+            &app,
+            test::TestRequest::get()
+                .uri(&format!("/api/records/{}", record.id))
+                .insert_header(("Authorization", authorization.as_str()))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            response
+                .headers()
+                .get("Cache-Control")
+                .and_then(|value| value.to_str().ok()),
+            Some("no-store")
+        );
+        assert_eq!(
+            test::read_body_json::<serde_json::Value, _>(response).await,
+            serde_json::json!({"error": "Stored record could not be read"})
+        );
+        drop(connection);
+        drop(app);
+        fs::remove_file(&path)?;
+        assert!(stored_record(&path, &record.id).is_err());
+        assert!(
+            !path.exists(),
+            "Readback must never create a missing database"
+        );
+        for suffix in ["-wal", "-shm"] {
+            let sidecar = PathBuf::from(format!("{}{suffix}", path.display()));
+            if sidecar.exists() {
+                fs::remove_file(sidecar)?;
+            }
+        }
         Ok(())
     }
 

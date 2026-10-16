@@ -96,6 +96,21 @@ crypto-instellingen en extra velden. Het bestand wordt niet geüpload of in
 de vault teruggezet. Formaatcontrole bewijst geen authenticiteit,
 ontsleutelbaarheid of opslag; `stored` uit een bestand is slechts metadata.
 **Bestandsweergave wissen** verwijdert de selectie en weergave uit de interface.
+Via **Vaultrecord teruglezen** kun je met het sessietoken en een eerder bewaarde
+record-ID één versleuteld record ophalen en opnieuw als volledige JSON downloaden.
+Dit gebruikt `GET /api/records/{id}` met hetzelfde bearer-token en dezelfde
+origincontrole als encryptie. De ID moet een canonieke kleine-letter-UUID v4 zijn;
+er is geen endpoint dat alle records opsomt. Het token geeft toegang tot de
+gehele lokale vault, niet tot een afzonderlijk gebruikersaccount.
+
+Teruglezen schrijft geen records en ontsleutelt niets. Een gevonden record
+betekent dat de lokale API dat record op het leesmoment teruggeeft, niet dat
+de AES-GCM-tag cryptografisch is gecontroleerd of dat een eerdere onbekende
+encryptiepoging hiermee is opgelost. Zonder de oorspronkelijke ID kan deze
+functie die poging niet reconstrueren. Een 404 betekent alleen dat deze vault
+op dat moment geen record met die ID bevat. Een netwerk- of opslagfout bewijst
+geen afwezigheid. Tokenwijziging, een andere ID of wissen trekt de huidige
+weergave/poging in; een laat antwoord mag de oude weergave niet herstellen.
 Deze eerste API biedt encryptie, geen import-/herstel-/decryptie-endpoint,
 sleutelbeheerplatform of onafhankelijke securitycertificering.
 Bij een netwerkfout kan het resultaat onbekend zijn; een foutmelding bewijst

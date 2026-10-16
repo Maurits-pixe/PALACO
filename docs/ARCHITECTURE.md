@@ -58,6 +58,19 @@ ciphertext met nonce en metadata op. Een succesresponse volgt pas na opslag.
 Er is geen decryptie-endpoint of geïntegreerd sleutelherstel; verlies van de
 masterkey betekent verlies van toegang tot de opgeslagen gegevens.
 
+`GET /api/records/{id}` leest één versleuteld record via een read-only
+SQLite-verbinding. Authenticatie en browser-origincontrole gaan vooraf aan
+de UUID-controle en databaselezing. Een canonieke UUID v4 is verplicht;
+een onbekende ID geeft 404 en een opslagfout geeft een generieke foutmelding.
+Succes- en foutresponses gebruiken `Cache-Control: no-store`.
+Er is geen recordlijst, decryptie of database-import.
+
+De interface houdt teruglezen gescheiden van encryptiesucces en lokale
+bestandsinspectie. Een teruggelezen record kan opnieuw volledig worden
+geëxporteerd; het is geen cryptografisch verificatiebewijs of reconstructie van
+een onbekende eerdere mutatie. Het gedeelde API-token geeft toegang tot de
+lokale vault en implementeert geen eigenaarschap per gebruiker.
+
 De interface is monochroom en toont uitsluitend requeststatus. Er zijn geen
 nep-logs, tijdgestuurde percentages of vertraagde succesanimaties. Bij een
 verloren response kan de uitkomst onbekend zijn; dit wordt niet als rollback

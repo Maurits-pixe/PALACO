@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { createRecordExport, encryptText, initialState, MAX_EXPORT_BYTES, MAX_PLAINTEXT_BYTES, operationReducer, parseRecordExport, readRecordExport, validateRecord } from '../src/protocol.ts'
+import { createRecordExport, encryptText, fetchStoredRecord, initialState, isRecordId, MAX_EXPORT_BYTES, MAX_PLAINTEXT_BYTES, operationReducer, parseRecordExport, readRecordExport, validateRecord } from '../src/protocol.ts'
 import type { EncryptedRecord } from '../src/protocol.ts'
 
 const record: EncryptedRecord = {
@@ -10,6 +11,12 @@ const record: EncryptedRecord = {
   algorithm: 'AES-256-GCM',
   status: 'stored',
 }
+
+test('shared token controls retain the encryption lock without locking pending readback', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8')
+  assert.match(app, /<input id="session-token"[^>]*disabled=\{pending\}/)
+  assert.match(app, /<button[^>]*disabled=\{!token \|\| pending\}[\s\S]*?>Token vergeten<\/button>/)
+})
 
 test('completion requires a pending real operation', () => {
   assert.equal(operationReducer(initialState, { type: 'success', result: record }), initialState)
@@ -133,5 +140,61 @@ test('network errors and invalid successes explicitly leave storage outcome unkn
       return new Response(JSON.stringify(record), { status: 201 })
     }
     assert.deepEqual(await encryptText('input', 'token'), record)
+  } finally { globalThis.fetch = original }
+})
+
+test('readback validates canonical v4 UUID locally before any network request', async () => {
+  const original = globalThis.fetch
+  globalThis.fetch = async () => { assert.fail('Invalid UUID must not reach the network') }
+  try {
+    assert.equal(isRecordId(record.id), true)
+    for (const id of ['', '../encrypt', `${record.id} `, record.id.toUpperCase(), record.id.replaceAll('-', ''),
+      record.id.replace('-44bf-', '-14bf-'), record.id.replace('-b694-', '-7694-')]) {
+      assert.equal(isRecordId(id), false)
+      await assert.rejects(fetchStoredRecord(id, 'token'), /canonieke v4-UUID/)
+    }
+  } finally { globalThis.fetch = original }
+})
+
+test('readback uses a non-cached authenticated GET and preserves every record field', async () => {
+  const original = globalThis.fetch
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, `/api/records/${record.id}`)
+      assert.equal(options?.method, 'GET')
+      assert.equal(options?.credentials, 'omit')
+      assert.equal(options?.redirect, 'error')
+      assert.equal(options?.cache, 'no-store')
+      assert.deepEqual(options?.headers, { Authorization: ['Bearer', 'read-token'].join(' ') })
+      assert.equal(options?.body, undefined)
+      return new Response(JSON.stringify(record), { status: 200 })
+    }
+    assert.deepEqual(await fetchStoredRecord(record.id, 'read-token'), record)
+  } finally { globalThis.fetch = original }
+})
+
+test('readback distinguishes access and missing records, rejects wrong IDs and invalid successes without write uncertainty', async () => {
+  const original = globalThis.fetch
+  try {
+    for (const [status, message] of [[401, /sessietoken/], [403, /Origin niet toegestaan/], [404, /Geen opgeslagen record/]] as const) {
+      globalThis.fetch = async () => new Response('rejected', { status })
+      await assert.rejects(fetchStoredRecord(record.id, 'token'), message)
+    }
+    const failure = /Vault lezen mislukt.*leesverzoek wijzigt geen records/
+    for (const status of [201, 202, 204, 301, 400, 429, 500, 503]) {
+      globalThis.fetch = async () => new Response(null, { status })
+      await assert.rejects(fetchStoredRecord(record.id, 'token'), failure)
+    }
+    for (const value of [
+      null, {}, { ...record, id: 'fab30b51-63ce-44bf-b694-161c9050944e' },
+      { ...record, nonce: 'bad' }, { ...record, status: 'pending' }, { ...record, plaintext: 'leak' },
+    ]) {
+      globalThis.fetch = async () => new Response(JSON.stringify(value), { status: 200 })
+      await assert.rejects(fetchStoredRecord(record.id, 'token'), failure)
+    }
+    globalThis.fetch = async () => new Response('invalid json', { status: 200 })
+    await assert.rejects(fetchStoredRecord(record.id, 'token'), failure)
+    globalThis.fetch = async () => { throw new TypeError('network or redirect error') }
+    await assert.rejects(fetchStoredRecord(record.id, 'token'), failure)
   } finally { globalThis.fetch = original }
 })

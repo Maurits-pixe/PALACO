@@ -1,6 +1,6 @@
-import { useReducer, useRef, useState } from 'react'
+import { useEffect, useReducer, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createRecordExport, encryptText, initialState, MAX_PLAINTEXT_BYTES, operationReducer, readRecordExport } from './protocol.ts'
+import { createRecordExport, encryptText, fetchStoredRecord, initialState, isRecordId, MAX_PLAINTEXT_BYTES, operationReducer, readRecordExport } from './protocol.ts'
 import type { EncryptedRecord } from './protocol.ts'
 import './App.css'
 
@@ -14,11 +14,48 @@ function App() {
   const [importError, setImportError] = useState(false)
   const importAttempt = useRef(0)
   const fileInput = useRef<HTMLInputElement>(null)
+  const [recordId, setRecordId] = useState('')
+  const [storedResult, setStoredResult] = useState<EncryptedRecord | null>(null)
+  const [readStatus, setReadStatus] = useState('')
+  const [readError, setReadError] = useState(false)
+  const [readPending, setReadPending] = useState(false)
+  const readAttempt = useRef(0)
+  useEffect(() => () => { readAttempt.current += 1 }, [])
   const pending = state.phase === 'Verwerkend'
   const bytes = new TextEncoder().encode(plaintext).length
   const validInput = plaintext.trim().length > 0 && bytes <= MAX_PLAINTEXT_BYTES
   const result = state.phase === 'Voltooid' ? state.result : null
   const recordExport = result ? createRecordExport(result) : null
+  const storedExport = storedResult ? createRecordExport(storedResult) : null
+
+  function clearReadback() {
+    readAttempt.current += 1
+    setStoredResult(null)
+    setReadStatus('')
+    setReadError(false)
+    setReadPending(false)
+  }
+
+  async function fetchRecord(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (readPending || !isRecordId(recordId) || !token) return
+    clearReadback()
+    const attempt = readAttempt.current
+    setReadPending(true)
+    setReadStatus('Opgeslagen record wordt opgehaald.')
+    try {
+      const record = await fetchStoredRecord(recordId, token)
+      if (attempt !== readAttempt.current) return
+      setStoredResult(record)
+      setReadStatus('Record uit de vault opgehaald. Geen cryptografische verificatie of ontsleuteling uitgevoerd.')
+    } catch (error) {
+      if (attempt !== readAttempt.current) return
+      setReadError(true)
+      setReadStatus(error instanceof Error ? error.message : 'Vault lezen mislukt; dit leesverzoek wijzigt geen records.')
+    } finally {
+      if (attempt === readAttempt.current) setReadPending(false)
+    }
+  }
 
   function reset() {
     dispatch({ type: 'reset' })
@@ -75,14 +112,19 @@ function App() {
           <p className="lede">Lokale versleuteling met AES-256-GCM. Alleen ciphertext wordt opgeslagen.</p>
         </header>
       <div className="workspace">
+        <section className="input-panel" aria-labelledby="token-title">
+          <h2 id="token-title">Toegang tot de engine</h2>
+          <label htmlFor="session-token">Sessietoken</label>
+          <input id="session-token" type="password" value={token} autoComplete="off" spellCheck={false} disabled={pending}
+            aria-describedby="token-help" onChange={(event) => { setToken(event.target.value); reset(); clearReadback() }} />
+          <p className="hint" id="token-help">Gebruik het API-token van uw engine voor versleuteling en vault lezen. Alleen in het geheugen van dit tabblad; niet opgeslagen.</p>
+          <button className="secondary" type="button" disabled={!token || pending}
+            onClick={() => { setToken(''); reset(); clearReadback() }}>Token vergeten</button>
+        </section>
         <section className="input-panel" aria-labelledby="input-title">
           <h2 id="input-title">Tekst versleutelen</h2>
           <form onSubmit={submit} aria-busy={pending}>
             <fieldset disabled={pending}>
-              <label htmlFor="session-token">Sessietoken</label>
-              <input id="session-token" type="password" value={token} autoComplete="off" spellCheck={false}
-                aria-describedby="token-help" required onChange={(event) => { setToken(event.target.value); reset() }} />
-              <p className="hint" id="token-help">Gebruik het API-token van uw engine. Alleen in het geheugen van dit tabblad; niet opgeslagen.</p>
               <label htmlFor="plaintext">Vertrouwelijke tekst</label>
               <textarea id="plaintext" value={plaintext} rows={6} spellCheck={false} autoComplete="off"
                 aria-describedby="text-help byte-count" required onChange={(event) => { setPlaintext(event.target.value); reset() }} />
@@ -95,8 +137,6 @@ function App() {
                 <button className="primary" type="submit" disabled={!validInput || !token || pending}>
                   {pending ? 'Verzoek wordt verwerkt' : 'Versleutelen en opslaan'}
                 </button>
-                <button className="secondary" type="button" disabled={!token}
-                  onClick={() => { setToken(''); reset() }}>Token vergeten</button>
               </div>
             </fieldset>
           </form>
@@ -130,6 +170,34 @@ function App() {
             </div>
           )}
           <p className="privacy-note">Geen gesimuleerde voortgang. Geen externe verbindingen. Bewaar uw mastersleutel veilig: zonder deze sleutel zijn opgeslagen gegevens niet te ontsleutelen.</p>
+        </section>
+        <section className="result-panel" aria-labelledby="readback-title">
+          <h2 id="readback-title">Vaultrecord teruglezen</h2>
+          <p className="hint" id="readback-help">Haal één versleuteld record op met zijn UUID. Alleen lezen, zonder ontsleuteling of cryptografische verificatie.</p>
+          <form onSubmit={fetchRecord} aria-busy={readPending}>
+            <label htmlFor="record-id">Opgeslagen record-UUID</label>
+            <input id="record-id" value={recordId} autoComplete="off" spellCheck={false}
+              aria-describedby="readback-help" onChange={(event) => { setRecordId(event.target.value); clearReadback() }} />
+            <div className="actions">
+              <button className="primary" type="submit" disabled={readPending || !token || !isRecordId(recordId)}>
+                {readPending ? 'Record wordt opgehaald' : 'Opgeslagen record ophalen'}
+              </button>
+              <button className="secondary" type="button" onClick={clearReadback}>Vaultweergave wissen</button>
+            </div>
+          </form>
+          <p className={readError ? 'error' : 'hint'} role={readError ? 'alert' : 'status'}>{readStatus}</p>
+          {storedResult && storedExport && (
+            <div>
+              <dl>
+                <dt>Opgeslagen record-ID</dt><dd>{storedResult.id}</dd>
+                <dt>Algoritme</dt><dd>{storedResult.algorithm}</dd>
+                <dt>Nonce (base64)</dt><dd>{storedResult.nonce}</dd>
+              </dl>
+              <label htmlFor="stored-ciphertext">Ciphertext uit vault (niet cryptografisch geverifieerd)</label>
+              <textarea id="stored-ciphertext" value={storedResult.ciphertext} readOnly rows={6} spellCheck={false} />
+              <a className="secondary export-link" href={storedExport.href} download={storedExport.filename}>Opgehaald record downloaden (JSON)</a>
+            </div>
+          )}
         </section>
         <section className="result-panel" aria-labelledby="import-title">
           <h2 id="import-title">Exportbestand inspecteren</h2>

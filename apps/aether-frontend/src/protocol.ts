@@ -37,12 +37,16 @@ function decodedLength(value: unknown): number {
   try { return atob(value).length } catch { return -1 }
 }
 
+export function isRecordId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)
+}
+
 export function validateRecord(value: unknown): value is EncryptedRecord {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
   return Object.keys(record).sort().join(',') === 'algorithm,ciphertext,id,nonce,status'
     && typeof record.id === 'string'
-    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(record.id)
+    && isRecordId(record.id)
     && record.algorithm === 'AES-256-GCM' && record.status === 'stored'
     && decodedLength(record.nonce) === 12
     && decodedLength(record.ciphertext) >= 17
@@ -107,6 +111,31 @@ export async function readRecordExport(file: Pick<File, 'size' | 'text'>): Promi
 }
 
 const UNKNOWN_OUTCOME = 'Uitkomst onbekend: opslag kon niet worden bevestigd. Het verzoek kan wel zijn opgeslagen. Controleer de engine voordat u opnieuw verzendt.'
+
+export async function fetchStoredRecord(id: string, token: string): Promise<EncryptedRecord> {
+  if (!isRecordId(id)) throw new Error('Gebruik een canonieke v4-UUID met kleine letters.')
+  const failure = 'Vault lezen mislukt. Het record kon niet worden opgehaald; dit leesverzoek wijzigt geen records.'
+  let response: Response
+  try {
+    response = await fetch(`/api/records/${id}`, {
+      method: 'GET',
+      credentials: 'omit',
+      redirect: 'error',
+      cache: 'no-store',
+      headers: { Authorization: ['Bearer', token].join(' ') },
+    })
+  } catch {
+    throw new Error(failure)
+  }
+  if (response.status === 401) throw new Error('Toegang geweigerd. Controleer uw sessietoken.')
+  if (response.status === 403) throw new Error('Origin niet toegestaan. Controleer uw lokale configuratie.')
+  if (response.status === 404) throw new Error('Geen opgeslagen record met deze UUID gevonden.')
+  if (response.status !== 200) throw new Error(failure)
+  let record: unknown
+  try { record = await response.json() } catch { throw new Error(failure) }
+  if (!validateRecord(record) || record.id !== id) throw new Error(failure)
+  return record
+}
 
 export async function encryptText(plaintext: string, token: string): Promise<EncryptedRecord> {
   let response: Response
