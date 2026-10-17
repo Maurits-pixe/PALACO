@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Owned Linux-CI TLS storage/router/OIDC proofs with the local synthetic IdP.
+"""Owned Linux-CI TLS storage/bootstrap/router/OIDC proofs with the synthetic IdP.
 
 The test-only listener never changes the application launcher or enrolls accounts.
 """
@@ -23,10 +23,14 @@ RUNTIME = ROOT / ".tls-runtime"
 COMPOSE = ROOT / "tls-compose.yaml"
 MANIFEST = REPO / "services/rio-accounts/Cargo.toml"
 TEST = "storage::tests::postgres_tls_store_contract"
+BOOTSTRAP_TEST = "storage::bootstrap_tests::postgres_tls_bootstrap_contract"
+SERVICE_TEST = "tls_service_tests::postgres_tls_service_contract"
+OIDC_TEST = "tls_oidc_tests::postgres_tls_oidc_contract"
 TESTS = (
     (TEST, "test.log"),
-    ("tls_service_tests::postgres_tls_service_contract", "service-test.log"),
-    ("tls_oidc_tests::postgres_tls_oidc_contract", "oidc-test.log"),
+    (BOOTSTRAP_TEST, "bootstrap-test.log"),
+    (SERVICE_TEST, "service-test.log"),
+    (OIDC_TEST, "oidc-test.log"),
 )
 LIMIT = 1_048_576
 PROJECT = re.compile(r"rio-accounts-tls-[0-9a-f]{16}")
@@ -35,7 +39,7 @@ FILES = (
     "ca.key", "ca.pem", "ca.der", "other-ca.key", "other-ca.pem", "other-ca.der",
     "server.key", "server.csr", "server.pem", "server-extensions.cnf",
     "openssl.cnf", "pg_hba.conf", "plain-pg_hba.conf", "commands.log", "test.log",
-    "service-test.log", "oidc-test.log", "oidc-summary.json", "inventory.log",
+    "bootstrap-test.log", "service-test.log", "oidc-test.log", "oidc-summary.json", "inventory.log",
 )
 RUST_PROCESS_GRACE = 3
 RUST_PROCESS_REAP_TIMEOUT = 5
@@ -349,7 +353,7 @@ def _wait_ready(owner: Owner) -> None:
 def _run_rust_test(owner: Owner, test: str, log: str) -> None:
     if (test, log) not in TESTS or _read_owned(owner, log):
         raise FixtureFailure("RUST_TEST_FAILED")
-    if test == TESTS[2][0] and _read_owned(owner, "oidc-summary.json"):
+    if test == OIDC_TEST and _read_owned(owner, "oidc-summary.json"):
         raise FixtureFailure("RUST_TEST_FAILED")
     environment = _environment()
     password = _read_owned(owner, "password", 128).decode("ascii").strip()

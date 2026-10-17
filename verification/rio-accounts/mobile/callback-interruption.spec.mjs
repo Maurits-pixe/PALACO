@@ -65,6 +65,23 @@ test('[RIO-MOBILE-07] Interrupted provider submission cannot grant a session or 
           // original interrupted provider POST, not a delivered BFF callback.
           expect(observed?.providerSubmitRequests).toBe(1);
           expect(observed?.providerSubmitRequestFailed).toBe(true);
+          const providerFailures = observed.requestFailures.filter(item => item.endpoint === 'providerSubmit');
+          expect(providerFailures).toEqual([{
+            endpoint: 'providerSubmit', errorKind: 'connection-reset',
+            afterCallbackRedirect: false,
+          }]);
+          // The single initial anonymous read may also finish with ERR_ABORTED.
+          // These records do not identify the cause of that cancellation.
+          const otherFailures = observed.requestFailures.filter(item => item.endpoint !== 'providerSubmit');
+          expect(otherFailures.length).toBeLessThanOrEqual(1);
+          if (otherFailures.length) {
+            expect(otherFailures).toEqual([{
+              endpoint: 'me', errorKind: 'aborted', afterCallbackRedirect: false,
+            }]);
+            expect(observed.meStatuses).toEqual([401]);
+          }
+          expect(observed.meRequestFailed).toBe(otherFailures.length === 1);
+          expect(observed?.requestFailuresOverflow).toBe(false);
           expect(observed?.callbackRequests).toBe(0);
           expect(observed?.callbackStatuses).toEqual([]);
           expect(observed?.callbackRequestFailed).toBe(false);

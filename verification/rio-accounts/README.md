@@ -405,6 +405,7 @@ proof finishes. It creates its own disposable Docker Compose namespace,
 binds only loopback ports 8091 (TLS) and 8092 (plaintext control), generates short
 lived test CAs/certificates and private credentials, runs exactly
 `storage::tests::postgres_tls_store_contract` followed by
+`storage::bootstrap_tests::postgres_tls_bootstrap_contract`,
 `tls_service_tests::postgres_tls_service_contract` and
 `tls_oidc_tests::postgres_tls_oidc_contract` with separate private logs,
 then verifies its own containers,
@@ -420,7 +421,16 @@ plaintext control prevents a failed credential check from masquerading as a TLS
 negative case. Session issuance additionally checks the verified OIDC issuer and
 subject against the durable account binding inside the session transaction.
 
-The second proof calls the explicit `AppState::discover_tls_synthetic` library
+The second proof distinguishes initial bootstrap from reopening an existing
+namespace. It verifies two fixed bindings, preservation of disabled status,
+epochs and guard counters, then refuses a missing binding, missing guard or
+missing table without recreating it. Its independent TLS connection restores
+only the exact owned fixture data so subsequent proofs can run. A missing
+binding also denies session replacement without changing session, predecessor,
+audit or outbox rows. This does not promise automatic invalidation of issued
+cookies after an administrator deletes a binding.
+
+The third proof calls the explicit `AppState::discover_tls_synthetic` library
 constructor, which always retains the fixed loopback provider/browser bindings.
 It exercises login-fence refusal and the HTTP session/consent/logout boundary
 against real TLS storage, then verifies persistent actor-scoped denial through
@@ -428,7 +438,7 @@ a new application state and TLS connection. Sessions are seeded through the
 server binding API; this is not a successful OIDC token-exchange or browser-TLS
 proof.
 
-The third proof starts a test-only HTTPS listener on 127.0.0.1:8088, backed by
+The fourth proof starts a test-only HTTPS listener on 127.0.0.1:8088, backed by
 that real TLS store, and runs the unchanged five OIDC browser cases against real
 Keycloak. It uses actual authorization-code/PKCE callbacks and issued cookies,
 with no seeded sessions. The reporter requires five unique successful cases and
@@ -438,10 +448,10 @@ The loopback self-signed certificate exception remains test-only; this is not
 public certificate trust or staging acceptance. The standard development-profile
 OIDC/browser suite still runs separately after the TLS proofs.
 
-Evidence schema `RIO_TLS_FIXTURE_EVIDENCE_V2` reports all three exact test names and
-results; aggregate PASS requires all three and verified cleanup. Legacy `rustTest`
+Evidence schema `RIO_TLS_FIXTURE_EVIDENCE_V2` reports all four exact test names and
+results; aggregate PASS requires all four and verified cleanup. Legacy `rustTest`
 and `rustTestPassed` refer only to the first storage case. A first-case PASS can
-never substitute for either other case. Twenty-two fixture tests guard selection,
+never substitute for another case. Twenty-six fixture tests guard selection,
 private-log isolation, false PASS rejection, owned process groups and lifecycle.
 Cargo leaders remain unreaped while their owned groups receive bounded TERM/KILL
 cleanup. This does not by itself prove detached Chromium group cleanup; the
@@ -456,3 +466,21 @@ The explicit library constructor and its limits are documented in
 [T05 TLS service contract](../../specs/rio-accounts/T05-TLS-SERVICE.md).
 The complete browser/TLS test boundary is documented in
 [T05 real OIDC over TLS storage](../../specs/rio-accounts/T05-TLS-REAL-OIDC.md).
+Initialization and non-repairing reopen behavior are documented in
+[T05 bootstrap guard](../../specs/rio-accounts/T05-BINDING-BOOTSTRAP-GUARD.md).
+
+## Login request failure evidence
+
+The failure-only mobile login observation now retains at most eight request
+failure records. Each contains only a fixed endpoint category, an independently
+classified transport error and a boolean/null indicating whether the request
+started after an observed callback redirect. A helper timeout remains a separate
+field. Unknown start time stays null; duplicate events do not create new records.
+Overflow is explicit. No raw URL, query, body, error or cookie is retained.
+
+The annotation has a fixed 2048-character limit and exact nested-field checks.
+The existing controlled initial-navigation and provider-POST interruptions verify
+the request/error pairing in both browser projects; successful explicit recovery
+leaves no expected-fault annotation. These checks do not reproduce or explain
+spontaneous network changes. See the
+[request failure contract](../../specs/rio-accounts/T05-LOGIN-REQUEST-FAILURES.md).
