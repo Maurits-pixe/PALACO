@@ -28,6 +28,7 @@ SERVICE_TEST = "tls_service_tests::postgres_tls_service_contract"
 OIDC_TEST = "tls_oidc_tests::postgres_tls_oidc_contract"
 RESTORE_PREPARE_TEST = "storage::tls_restore_tests::postgres_tls_prepare_restore_contract"
 RESTORE_VERIFY_TEST = "storage::tls_restore_tests::postgres_tls_verify_restore_contract"
+RESTORE_OIDC_TEST = "tls_oidc_tests::postgres_tls_restore_oidc_contract"
 BASE_TESTS = (
     (TEST, "test.log"),
     (BOOTSTRAP_TEST, "bootstrap-test.log"),
@@ -37,6 +38,7 @@ BASE_TESTS = (
 TESTS = BASE_TESTS + (
     (RESTORE_PREPARE_TEST, "restore-prepare-test.log"),
     (RESTORE_VERIFY_TEST, "restore-verify-test.log"),
+    (RESTORE_OIDC_TEST, "restore-oidc-test.log"),
 )
 LIMIT = 1_048_576
 PROJECT = re.compile(r"rio-accounts-tls-[0-9a-f]{16}")
@@ -47,6 +49,7 @@ FILES = (
     "openssl.cnf", "pg_hba.conf", "plain-pg_hba.conf", "commands.log", "test.log",
     "bootstrap-test.log", "service-test.log", "oidc-test.log", "oidc-summary.json", "inventory.log",
     "restore-prepare-test.log", "restore-verify-test.log",
+    "restore-oidc-test.log", "restore-oidc-summary.json",
 )
 RUST_PROCESS_GRACE = 3
 RUST_PROCESS_REAP_TIMEOUT = 5
@@ -411,7 +414,10 @@ def _wait_ready(owner: Owner) -> None:
 def _run_rust_test(owner: Owner, test: str, log: str) -> None:
     if (test, log) not in TESTS or _read_owned(owner, log):
         raise FixtureFailure("RUST_TEST_FAILED")
-    if test == OIDC_TEST and _read_owned(owner, "oidc-summary.json"):
+    summary = {
+        OIDC_TEST: "oidc-summary.json", RESTORE_OIDC_TEST: "restore-oidc-summary.json",
+    }.get(test)
+    if summary is not None and _read_owned(owner, summary):
         raise FixtureFailure("RUST_TEST_FAILED")
     environment = _environment()
     password = _read_owned(owner, "password", 128).decode("ascii").strip()
@@ -548,6 +554,8 @@ def check() -> dict:
         phase = "RUST_TEST_FAILED"
         _run_rust_test(owner, *TESTS[5])
         test_results[5]["passed"] = True
+        _run_rust_test(owner, *TESTS[6])
+        test_results[6]["passed"] = True
     except FixtureFailure as failure:
         error = failure.code
     except KeyboardInterrupt:

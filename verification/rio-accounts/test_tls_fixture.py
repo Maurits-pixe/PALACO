@@ -47,6 +47,8 @@ def fake_commands(
     restore_prepare_case: str | None = None,
     restore_verify_code: int | None = None, restore_verify_selected: bool | None = None,
     restore_verify_case: str | None = None,
+    restore_oidc_code: int | None = None, restore_oidc_selected: bool | None = None,
+    restore_oidc_case: str | None = None,
     native_tls_code: int = 0, createdb_code: int = 0,
     backup_code: int = 0, restore_code: int = 0,
 ):
@@ -78,6 +80,9 @@ def fake_commands(
                 ),
                 fixture.RESTORE_VERIFY_TEST: (
                     restore_verify_selected, restore_verify_case, restore_verify_code,
+                ),
+                fixture.RESTORE_OIDC_TEST: (
+                    restore_oidc_selected, restore_oidc_case, restore_oidc_code,
                 ),
             }
             override_selected, override_case, override_code = overrides.get(selected_test, (None, None, None))
@@ -409,6 +414,7 @@ class TlsFixtureTests(unittest.TestCase):
             self.assertEqual(steps, [
                 *[test for test, _log in fixture.BASE_TESTS], "tls", "createdb",
                 fixture.RESTORE_PREPARE_TEST, "backup", "restore", fixture.RESTORE_VERIFY_TEST,
+                fixture.RESTORE_OIDC_TEST,
             ])
             self.assertTrue(result["rustTestsPassed"])
             self.assert_private_output(output, record, root)
@@ -443,6 +449,7 @@ class TlsFixtureTests(unittest.TestCase):
         for name, prefix, earlier_count in (
             (fixture.RESTORE_PREPARE_TEST, "restore_prepare", 4),
             (fixture.RESTORE_VERIFY_TEST, "restore_verify", 5),
+            (fixture.RESTORE_OIDC_TEST, "restore_oidc", 6),
         ):
             for option, value in (("code", 1), ("selected", False), ("case", fixture.TEST)):
                 with self.subTest(case=name, option=option), local_root() as root:
@@ -458,8 +465,8 @@ class TlsFixtureTests(unittest.TestCase):
                     self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
                     self.assert_private_output(output, record, root)
 
-    def test_stale_restore_prepare_or_verify_log_is_rejected_before_invocation(self):
-        for index in (4, 5):
+    def test_stale_restore_log_is_rejected_before_invocation(self):
+        for index in (4, 5, 6):
             with self.subTest(index=index), local_root() as root:
                 record = {}
                 execute = fake_commands(record)
@@ -481,6 +488,34 @@ class TlsFixtureTests(unittest.TestCase):
                 self.assertNotIn(name, record["rustTests"])
                 self.assertFalse(fixture.RUNTIME.exists())
                 self.assert_private_output(output, record, root)
+
+    def test_restore_oidc_summary_is_separate_and_must_start_empty(self):
+        for stale_restore in (False, True):
+            with self.subTest(stale_restore=stale_restore), local_root() as root:
+                record = {}
+                execute = fake_commands(record)
+                def prior_browser_output(arguments, **options):
+                    completed = execute(arguments, **options)
+                    if arguments[0] == "cargo":
+                        selected = arguments[arguments.index("--locked") + 1]
+                        if selected == fixture.OIDC_TEST:
+                            (fixture.RUNTIME / "oidc-summary.json").write_bytes(CANARY.encode())
+                        if stale_restore and selected == fixture.RESTORE_VERIFY_TEST:
+                            (fixture.RUNTIME / "restore-oidc-summary.json").write_bytes(CANARY.encode())
+                    return completed
+                with mock_commands(prior_browser_output):
+                    code, output, result = run_main()
+                self.assertEqual(code, int(stale_restore))
+                self.assert_rust_results(result, {
+                    test for test, _log in fixture.TESTS[:6 if stale_restore else 7]
+                })
+                self.assertEqual(
+                    fixture.RESTORE_OIDC_TEST in record["rustTests"], not stale_restore,
+                )
+                self.assertFalse(fixture.RUNTIME.exists())
+                self.assertEqual(result["cleanup"], {"namespaceClosed": True, "privateFilesRemoved": True})
+                self.assert_private_output(output, record, root)
+                self.assert_closed(result)
 
     def test_native_timeout_or_cancellation_always_cleans_without_exception_payload(self):
         for error, category in (

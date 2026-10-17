@@ -409,7 +409,7 @@ mod bootstrap_tests;
 
 #[cfg(test)]
 #[path = "storage_tls_restore_tests.rs"]
-mod tls_restore_tests;
+pub(crate) mod tls_restore_tests;
 
 impl PgStore {
     /// Connect only to fixed loopback PostgreSQL; initialize or validate atomically.

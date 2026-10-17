@@ -2,15 +2,30 @@
 //! These ignored tests operate only inside the owned disposable TLS fixture.
 use super::*;
 use crate::tls_database::{SyntheticTlsDbConfig, SyntheticTlsRestoreDbConfig, TlsConnectionParts};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode, header},
+};
 use std::net::{IpAddr, Ipv4Addr};
+use tower::ServiceExt;
 
-const ALPHA: Key = [0xa1; 32];
-const BETA: Key = [0xa2; 32];
-const REVOKED: Key = [0xa3; 32];
+const ALPHA_COOKIE: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const BETA_COOKIE: &str = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+const REVOKED_COOKIE: &str = "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
 const PENDING: Key = [0xa4; 32];
 const PENDING_STATE: Key = [0xa5; 32];
 const ALPHA_SUBJECT: &str = "11111111-1111-4111-8111-111111111111";
 const BETA_SUBJECT: &str = "22222222-2222-4222-8222-222222222222";
+
+fn alpha() -> Key {
+    crate::hash(ALPHA_COOKIE)
+}
+fn beta() -> Key {
+    crate::hash(BETA_COOKIE)
+}
+fn revoked() -> Key {
+    crate::hash(REVOKED_COOKIE)
+}
 
 struct RawConnection {
     client: Client,
@@ -64,7 +79,13 @@ async fn count(raw: &Client, sql: &str) -> Result<i64, StoreError> {
 
 // Complete rows stay in private test memory. No Debug implementation or row values in assertions.
 #[derive(PartialEq)]
-struct Snapshot(Vec<String>);
+pub(crate) struct Snapshot(Vec<String>);
+pub(crate) async fn primary_snapshot() -> Result<Snapshot, StoreError> {
+    let (primary_config, _) = configs()?;
+    let primary: RawConnection = primary_config.connect().await?.into();
+    snapshot(&primary.client).await
+}
+
 async fn snapshot(raw: &Client) -> Result<Snapshot, StoreError> {
     let mut rows = Vec::new();
     for (table, key) in [
@@ -126,7 +147,7 @@ async fn assert_live_input(raw: &Client) -> Result<(), StoreError> {
          AND NOT s.rotated AND s.version=a.version AND a.status='SYNTHETIC_ENABLED' \
          AND s.idle_expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint \
          AND s.absolute_expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint",
-        &[&ALPHA.to_vec(), &BETA.to_vec()],
+        &[&alpha().to_vec(), &beta().to_vec()],
     )).await?.try_get(0).map_err(|_| StoreError::Unavailable)?;
     assert_eq!(
         live, 2,
@@ -134,7 +155,7 @@ async fn assert_live_input(raw: &Client) -> Result<(), StoreError> {
     );
     let revoked: i64 = bounded(raw.query_one(
         "SELECT count(*) FROM rio_synthetic.sessions WHERE token_hash=$1",
-        &[&REVOKED.to_vec()],
+        &[&revoked().to_vec()],
     ))
     .await?
     .try_get(0)
@@ -149,7 +170,7 @@ async fn assert_live_input(raw: &Client) -> Result<(), StoreError> {
          AND t.predecessor_hash=$3 AND a.account_id='TST-alpha' AND b.account_id='TST-beta' \
          AND t.alpha_version=a.version AND t.beta_version=b.version \
          AND t.expires_ms>floor(extract(epoch FROM clock_timestamp())*1000)::bigint",
-        &[&PENDING.to_vec(), &PENDING_STATE.to_vec(), &ALPHA.to_vec()],
+        &[&PENDING.to_vec(), &PENDING_STATE.to_vec(), &alpha().to_vec()],
     )).await?.try_get(0).map_err(|_| StoreError::Unavailable)?;
     assert_eq!(
         pending, 1,
@@ -187,12 +208,18 @@ async fn postgres_tls_prepare_restore_contract() -> Result<(), StoreError> {
     );
     let source: RawConnection = primary_config.connect().await?.into();
     let unchanged = snapshot(&source.client).await?;
-    assert!(
-        matches!(
-            PgStore::connect_tls_synthetic_restore(&restore_config).await,
-            Err(StoreError::Unavailable)
-        ),
-        "restore constructor must reject an empty existing database"
+    let rejected = crate::AppState::discover_tls_synthetic_restore(
+        "SYNTHETIC_ONLY",
+        &"a".repeat(64),
+        &restore_config,
+    )
+    .await
+    .err()
+    .ok_or(StoreError::Invalid)?;
+    assert_eq!(
+        rejected.to_string(),
+        "synthetic TLS restore database unavailable",
+        "restore service constructor must reject an empty existing database"
     );
     assert_eq!(
         count(
@@ -210,20 +237,26 @@ async fn postgres_tls_prepare_restore_contract() -> Result<(), StoreError> {
     eprintln!("CASE T05_TLS_RESTORE_EMPTY_REJECTED");
     let store = PgStore::connect_tls_synthetic(&primary_config).await?;
     store.recover_after_restore().await?;
-    let alpha = issue(&store, ALPHA, "TST-alpha").await?;
-    issue(&store, BETA, "TST-beta").await?;
-    let revoked = issue(&store, REVOKED, "TST-alpha").await?;
-    store.logout(REVOKED, &revoked.csrf).await?;
-    let receipt = store.read_consent(ALPHA).await?;
+    let alpha_session = issue(&store, alpha(), "TST-alpha").await?;
+    issue(&store, beta(), "TST-beta").await?;
+    let revoked_session = issue(&store, revoked(), "TST-alpha").await?;
+    store.logout(revoked(), &revoked_session.csrf).await?;
+    let receipt = store.read_consent(alpha()).await?;
     let consent = store
-        .set_consent(ALPHA, &alpha.csrf, CONSENT_SCOPE, true, receipt.revision)
+        .set_consent(
+            alpha(),
+            &alpha_session.csrf,
+            CONSENT_SCOPE,
+            true,
+            receipt.revision,
+        )
         .await?;
     assert!(
         consent.granted,
         "prepare records actual alpha consent through the store API"
     );
     store
-        .begin_login(PENDING, PENDING_STATE, Some(ALPHA))
+        .begin_login(PENDING, PENDING_STATE, Some(alpha()))
         .await?;
     assert_live_input(&source.client).await?;
     eprintln!("CASE T05_TLS_NATIVE_BACKUP_INPUT_LIVE");
@@ -264,6 +297,28 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
     assert_eq!(revisions.len(), 2);
     eprintln!("CASE T05_TLS_NATIVE_RESTORED_INPUT_LIVE");
 
+    // Invalid service configuration must fail before touching this still-live clone.
+    // Discovery is public; this format-valid secret is not used for a token exchange.
+    let client_secret = "a".repeat(64);
+    for (mode, secret) in [
+        ("PRODUCTION", client_secret.as_str()),
+        ("SYNTHETIC_ONLY", "PRIVATE_CANARY"),
+    ] {
+        let rejected =
+            crate::AppState::discover_tls_synthetic_restore(mode, secret, &restore_config)
+                .await
+                .err()
+                .ok_or(StoreError::Invalid)?;
+        assert_eq!(
+            rejected.to_string(),
+            "invalid synthetic development configuration"
+        );
+        assert!(
+            snapshot(&clone.client).await? == clone_before,
+            "invalid service credentials cannot mutate or fence the clone"
+        );
+    }
+
     // Privileged fixture-only deletion: malformed identity state must be rejected
     // before the constructor can perform a recovery fence or repair a binding.
     let removed = bounded(clone.client.execute(
@@ -271,7 +326,14 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
         &[&crate::ISSUER, &ALPHA_SUBJECT],
     )).await?;
     let missing = snapshot(&clone.client).await?;
-    let rejected = PgStore::connect_tls_synthetic_restore(&restore_config).await;
+    let rejected = crate::AppState::discover_tls_synthetic_restore(
+        "SYNTHETIC_ONLY",
+        &client_secret,
+        &restore_config,
+    )
+    .await
+    .err()
+    .ok_or(StoreError::Invalid)?;
     let after_rejection = snapshot(&clone.client).await?;
     let restored = bounded(clone.client.execute(
         "INSERT INTO rio_synthetic.auth_bindings(account_id,issuer,subject) VALUES('TST-alpha',$1,$2)",
@@ -279,8 +341,9 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
     )).await?;
     assert_eq!(removed, 1);
     assert_eq!(restored, 1);
-    assert!(
-        matches!(rejected, Err(StoreError::Unavailable)),
+    assert_eq!(
+        rejected.to_string(),
+        "synthetic TLS restore database unavailable",
         "missing clone binding rejects recovery"
     );
     assert!(
@@ -294,11 +357,52 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
     assert_live_input(&clone.client).await?;
     eprintln!("CASE T05_TLS_RESTORE_MISSING_BINDING_REJECTED");
 
-    let recovered = PgStore::connect_tls_synthetic_restore(&restore_config).await?;
+    let state = crate::AppState::discover_tls_synthetic_restore(
+        "SYNTHETIC_ONLY",
+        &client_secret,
+        &restore_config,
+    )
+    .await
+    .map_err(|_| StoreError::Unavailable)?;
     // Observe deletion before any store method can purge rows or consume the old flow.
     assert_eq!(count(&clone.client,
         "SELECT (SELECT count(*) FROM rio_synthetic.sessions)+(SELECT count(*) FROM rio_synthetic.auth_transactions)").await?, 0);
-    for marker in [ALPHA, BETA, REVOKED] {
+    assert!(state.store.lock().await.sessions.is_empty());
+    assert!(state.store.lock().await.flows.is_empty());
+    assert_eq!(state.endpoints.origin(), crate::ORIGIN);
+    assert_eq!(state.endpoints.issuer(), crate::ISSUER);
+    let recovered = state.db.clone().ok_or(StoreError::Unavailable)?;
+    let app = crate::router(state);
+    for cookie in [ALPHA_COOKIE, BETA_COOKIE, REVOKED_COOKIE] {
+        for path in ["/api/me", "/api/consent"] {
+            let request = Request::builder()
+                .method("GET")
+                .uri(path)
+                .header("host", "localhost:8088")
+                .header(
+                    header::COOKIE,
+                    format!("{}={cookie}", crate::SESSION_COOKIE),
+                )
+                .body(Body::empty())
+                .map_err(|_| StoreError::Invalid)?;
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .map_err(|_| StoreError::Unavailable)?;
+            assert_eq!(
+                response.status(),
+                StatusCode::UNAUTHORIZED,
+                "the recovered service rejects every old cookie at the HTTP boundary"
+            );
+            assert!(
+                !response.headers().contains_key(header::SET_COOKIE),
+                "an old cookie cannot issue replacement credentials"
+            );
+        }
+    }
+    eprintln!("CASE T05_TLS_RESTORE_SERVICE_REJECTS_OLD_COOKIES");
+    for marker in [alpha(), beta(), revoked()] {
         assert_eq!(
             recovered.load_session(marker).await.err(),
             Some(StoreError::Revoked)
