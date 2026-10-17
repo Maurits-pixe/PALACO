@@ -208,9 +208,32 @@ test('[RIO-MOBILE-02] Real local draft downloads cannot become account authority
         await expect(page.locator('#studio-title')).toHaveValue(title);
         await expect(page.locator('#studio-note')).toHaveValue('Behoud deze notitie.');
       }
+      const previousTitle = await page.locator('#studio-title').inputValue();
+      const previousNote = await page.locator('#studio-note').inputValue();
+      const beforeMalformed = await downloadDraft(page, testInfo);
+      expect(beforeMalformed.value.draft).toEqual({ title: previousTitle, note: previousNote });
+      await expect(page.locator('#studio-feedback')).toHaveText(
+        'Het lokale conceptbestand is klaargezet. Het blijft niet geverifieerd en bevat geen account of toestemming.'
+      );
+      const malformed = Buffer.from(JSON.stringify(canonical), 'utf8');
+      const titleOffset = malformed.indexOf(Buffer.from('Verboden wijziging', 'utf8'));
+      expect(titleOffset).toBeGreaterThan(0);
+      malformed[titleOffset] = 0xff;
+      await page.locator('#studio-import').setInputFiles({
+        name: 'beschadigd-concept.json', mimeType: 'application/json', buffer: malformed,
+      });
+      await expect(page.locator('#studio-feedback')).toHaveText(IMPORT_ERROR);
+      await expect(page.locator('#studio-title')).toHaveValue(previousTitle);
+      await expect(page.locator('#studio-note')).toHaveValue(previousNote);
+      await expect(page.locator('#studio-preview-title')).toHaveJSProperty('textContent', previousTitle);
+      await expect(page.locator('#studio-preview-note')).toHaveJSProperty('textContent', previousNote);
+      await expect(page.locator('#studio-title-count')).toHaveText(`${previousTitle.length} / 80`);
+      await expect(page.locator('#studio-note-count')).toHaveText(`${previousNote.length} / 2000`);
+      await expect(page.locator('#studio-draft-state')).toHaveText('Alleen in deze pagina');
       const last = await downloadDraft(page, testInfo);
       expect(last.value.authority).toEqual(EMPTY_AUTHORITY);
       expect(last.value.verification).toBe('UNVERIFIED');
+      expect(last.value.draft).toEqual({ title: previousTitle, note: previousNote });
     });
     await test.step('mobile-studio-isolation', async () => {
       const after = receiptFrom(await consent(page));

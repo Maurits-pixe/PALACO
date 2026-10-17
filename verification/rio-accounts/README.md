@@ -257,6 +257,10 @@ runs separate presentation-only checks with actual web assets and a fixed 401
 stub, without credentials or real-provider evidence. The existing real mobile
 Studio case also verifies preview/export/isolation behavior. See
 [local Studio preview](../../specs/rio-accounts/T04-LOCAL-STUDIO-PREVIEW.md).
+Import reads bounded bytes and refuses malformed UTF-8 before changing the open
+draft. Correctly encoded replacement characters, emoji and optional UTF-8 BOMs
+remain supported. See
+[Studio UTF-8 import](../../specs/rio-accounts/T04-STUDIO-UTF8-IMPORT.md).
 
 The same BFF origin serves the mobile account page, `/app.js` and `/app.css`.
 It reads only the signed-in fictitious account and its own stored receipt. The
