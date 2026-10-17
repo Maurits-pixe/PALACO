@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
@@ -57,6 +57,7 @@ jobs:
           node --check verification/rio-accounts/login-observation.mjs
           node --test verification/rio-accounts/test_login_observation.mjs
           node --check verification/rio-accounts/mobile/login-observation.spec.mjs
+          node --check verification/rio-accounts/mobile/callback-interruption.spec.mjs
           node --check verification/rio-accounts/mobile/helpers.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
