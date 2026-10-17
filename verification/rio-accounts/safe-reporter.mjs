@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { safeMobileLoginObservation } from './login-observation.mjs';
+import { safePostConsentObservation } from './post-consent-observation.mjs';
 
 const CASES = new Map([
   ['RIO-E2E-01', 'Two real users have separate sessions and account data'],
@@ -209,6 +210,8 @@ export default class SafeReporter {
         ? { loginObservation: safeMobileLoginObservation(test.annotations) } : {}),
       ...(id === 'RIO-MOBILE-02' && result.status !== 'passed'
         ? { setupObservation: safeStudioSetup(test.annotations) } : {}),
+      ...(id === 'RIO-MOBILE-01' && result.status !== 'passed'
+        ? { postConsentObservation: safePostConsentObservation(test.annotations) } : {}),
       phases,
       failedLines: result.status === 'passed' ? [] : [...failedLines].sort((a, b) => a - b),
       ...(id === 'RIO-E2E-04' ? { logoutObservation: safeLogoutObservation(test.annotations) } : {}),
