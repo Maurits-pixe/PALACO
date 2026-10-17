@@ -1,19 +1,48 @@
 use axum_server::tls_rustls::RustlsConfig;
+use rio_accounts::endpoint_policy::{ENDPOINT_DOCUMENT_LIMIT, StagingEndpointPlan};
 use rio_accounts::{AppState, DevConfig, router};
-use std::net::SocketAddr;
+use std::{
+    ffi::OsString,
+    io::{self, Read, Write},
+    net::SocketAddr,
+};
 
-#[tokio::main]
-async fn main() {
-    if run().await.is_err() {
+fn main() {
+    let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    if arguments
+        .first()
+        .is_some_and(|argument| argument == "--check-staging-endpoints")
+    {
+        // Pure endpoint-component validation. Do not initialize the async runtime,
+        // environment configuration, TLS files, database, provider or listener.
+        if arguments.len() != 1 || check_staging_endpoints().is_err() {
+            eprintln!("RIO staging endpoint component rejected.");
+            std::process::exit(1);
+        }
+        return;
+    }
+    if run(arguments).is_err() {
         // Deliberately omit error details: provider responses and config can contain secrets.
         eprintln!("RIO synthetic development service could not start.");
         std::process::exit(1);
     }
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn check_staging_endpoints() -> io::Result<()> {
+    let mut input = Vec::new();
+    io::stdin()
+        .lock()
+        .take((ENDPOINT_DOCUMENT_LIMIT + 1) as u64)
+        .read_to_end(&mut input)?;
+    let plan = StagingEndpointPlan::from_endpoint_json(&input).map_err(io::Error::other)?;
+    let mut output = io::stdout().lock();
+    serde_json::to_writer(&mut output, &plan.summary())?;
+    output.write_all(b"\n")
+}
+
+#[tokio::main]
+async fn run(arguments: Vec<OsString>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = DevConfig::from_env()?;
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
     if arguments == ["--recovery-fence"] {
         AppState::recovery_fence(&config).await?;
         println!("RIO synthetic restore fence committed; restored sessions stay closed.");
