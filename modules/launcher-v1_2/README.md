@@ -40,6 +40,8 @@ npm run preview
 3. Open de module na **Modulemetadata bevestigd**. De bevestiging geldt maximaal 60 seconden en vervalt bij terugkeer naar de pagina.
 4. Tijdens een check kun je **Annuleren**, of de origin wijzigen; een wijziging trekt de oude poging meteen in. Start daarna de nieuwe check.
 
+Met **Enter** in het originveld start je dezelfde controle als met **Opslaan & verifiëren**. Lege of ongeldige invoer en een al lopende controle blokkeren de formulieractie. Enter opent geen module; daarvoor blijft **Open module** een afzonderlijke actie na bevestigde metadata.
+
 Onder **Ingestelde bestemmingen** kun je de bestaande catalogus-origins bekijken en kiezen. Een keuze vult alleen het invoerveld in en trekt een eerdere of lopende verificatie in, ook bij dezelfde origin. Er wordt niets automatisch opgevraagd of geopend; kies daarna zelf **Opslaan & verifiëren**. De lijst is configuratie, geen bewijs van bereikbaarheid, eigendom of autorisatie.
 
 **Wissen** maakt de invoer van één module leeg, verwijdert de lokale checkdetails en trekt een lopende of bevestigde verificatie in. Andere modules blijven ongewijzigd. Dit sluit geen eerder geopende tabbladen, trekt geen serverrechten in en verwijdert geen gegevens bij de module. Voor opnieuw openen moet je een origin invoeren of kiezen en expliciet verifiëren.

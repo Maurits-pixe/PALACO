@@ -211,6 +211,42 @@ try {
     assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
     return { mode, label, detail: await card('aether').locator('.error-msg').textContent() };
   }, 'native browser Fetch/Worker; actual local fixture response/CORS/redirect');
+  await report.check('BROWSER-ENTER-VERIFIES-WITHOUT-LAUNCH', async () => {
+    await fresh();
+    const before = fixture.requests.length;
+    const url = page.url();
+    const tabs = context.pages().length;
+    const input = card('aether').locator('input');
+    await input.fill('https://localhost:5174');
+    await input.press('Enter');
+    await status('aether', 'Modulemetadata bevestigd');
+    assert.equal(fixture.requests.length, before + 1);
+    assert.equal(page.url(), url);
+    assert.equal(context.pages().length, tabs);
+    await status('bastion', 'Niet ingesteld');
+    return { metadataRequests: 1, navigation: false, moduleOpened: false };
+  }, 'native Enter submits only the selected module form and verifies without navigation or launch');
+  await report.check('BROWSER-ENTER-INVALID-AND-PENDING', async () => {
+    await fresh();
+    const input = card('aether').locator('input');
+    const before = fixture.requests.length;
+    for (const value of ['', 'https://localhost:5174/invalid']) {
+      await input.fill(value);
+      await input.press('Enter');
+      assert.equal(fixture.requests.length, before);
+      assert.equal(await card('aether').locator('[data-verify]').isDisabled(), true);
+    }
+    fixture.config.aether.mode = 'race';
+    await input.fill('https://localhost:5174');
+    const request = page.waitForRequest('https://localhost:5174/.well-known/palaco-app.json');
+    await input.press('Enter'); await request;
+    await status('aether', 'Controleren…');
+    await input.press('Enter');
+    await input.press('Enter');
+    await status('aether', 'Modulemetadata bevestigd');
+    assert.equal(fixture.requests.length, before + 1);
+    return { invalidInputRequests: 0, pendingCheckRequests: 1 };
+  }, 'native Enter rejects invalid input and does not restart or duplicate a pending check');
   await report.check('BROWSER-ORIGIN-PATH-NO-REQUEST', async () => {
     await fresh(); const before = fixture.requests.length;
     await card('aether').locator('input').fill('https://localhost:5174/somepath');

@@ -95,7 +95,8 @@ onUnmounted(() => {
           </div>
           <h2>{{ module.name }}</h2>
           <p class="description">{{ module.description }}</p>
-          <div class="config-section">
+          <form class="config-section" novalidate
+            @submit.prevent="module.isValid && !module.isVerifying && verifier.verify(module)">
             <label :for="`origin-${module.id}`">Toegestane HTTPS-origin</label>
             <input :id="`origin-${module.id}`" type="url" :value="module.inputUrl"
               :placeholder="module.placeholder" autocomplete="off" autocapitalize="off" spellcheck="false"
@@ -111,7 +112,7 @@ onUnmounted(() => {
               </ul>
             </details>
             <div class="config-actions">
-              <button type="button" data-verify :disabled="!module.isValid || module.isVerifying" @click="verifier.verify(module)">
+              <button type="submit" data-verify :disabled="!module.isValid || module.isVerifying">
                 {{ module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren' }}
               </button>
               <button v-if="module.isVerifying" type="button" class="cancel-btn" data-cancel @click="verifier.cancel(module)">Annuleren</button>
@@ -125,7 +126,7 @@ onUnmounted(() => {
               </div>
             </div>
             <p v-if="module.status === 'verified'" class="expiry-timer" data-countdown>Vervalt over {{ remaining(module) }}s</p>
-          </div>
+          </form>
           <button type="button" class="launch-btn" data-launch :disabled="module.status !== 'verified'" @click="verifier.open(module)">
             {{ module.status === 'verified' ? 'Open module' : 'Wacht op verificatie' }}
           </button>
