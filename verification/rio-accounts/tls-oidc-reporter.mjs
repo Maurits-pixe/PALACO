@@ -10,6 +10,25 @@ const CASES = new Set(CASE_IDS);
 const STATUSES = new Set(['passed', 'failed', 'timedOut', 'skipped', 'interrupted']);
 const MAX_SUITE_ERRORS = 1000;
 const RUNTIME = fileURLToPath(new URL('./.tls-runtime', import.meta.url));
+// Playwright 1.64 supplies these three command metadata fields to custom reporters.
+// Their values are ignored and cannot select an output path or proof target.
+const FRAMEWORK_OPTIONS = new Set(['configDir', '_mode', '_commandHash']);
+
+function proofTarget(options) {
+  try {
+    if (!options || typeof options !== 'object' || Array.isArray(options) ||
+        Object.getPrototypeOf(options) !== Object.prototype) throw new Error();
+    for (const key of Reflect.ownKeys(options)) {
+      if (key !== 'target' && !FRAMEWORK_OPTIONS.has(key)) throw new Error();
+      const property = Object.getOwnPropertyDescriptor(options, key);
+      if (!property || !Object.hasOwn(property, 'value')) throw new Error();
+    }
+    const target = Object.getOwnPropertyDescriptor(options, 'target');
+    if (!target) return 'primary';
+    if (target.value === 'restore') return 'restore';
+  } catch {}
+  throw new Error('RIO_TLS_OIDC_TARGET_REJECTED');
+}
 
 function ownValue(source, key) {
   if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
@@ -91,7 +110,7 @@ async function openOwnedFile(directory, name, flags) {
   }
 }
 
-async function writeOwnedSummary(summary) {
+async function writeOwnedSummary(summary, target) {
   // This proof runs on Linux CI. Other platforms make no POSIX ownership claim.
   if (process.platform !== 'linux' || typeof process.getuid !== 'function' ||
       !Number.isInteger(constants.O_NOFOLLOW) || !Number.isInteger(constants.O_DIRECTORY)) {
@@ -120,7 +139,8 @@ async function writeOwnedSummary(summary) {
         typeof owner.ownerToken !== 'string' || !/^[0-9a-f]{64}$/.test(owner.ownerToken)) {
       throw new Error('RIO_TLS_OIDC_OUTPUT_REJECTED');
     }
-    output = await openOwnedFile(directory, 'oidc-summary.json', constants.O_WRONLY);
+    const filename = target === 'restore' ? 'restore-oidc-summary.json' : 'oidc-summary.json';
+    output = await openOwnedFile(directory, filename, constants.O_WRONLY);
     // The fixture creates and owns this empty file. Never create or replace it.
     if ((await output.stat()).size !== 0) throw new Error('RIO_TLS_OIDC_OUTPUT_REJECTED');
     const current = await lstat(RUNTIME);
@@ -136,6 +156,13 @@ async function writeOwnedSummary(summary) {
 }
 
 export default class TlsOidcReporter extends SafeReporter {
+  #target;
+
+  constructor(options = {}) {
+    super();
+    this.#target = proofTarget(options);
+  }
+
   onTestEnd(test, result) {
     let id = 'UNKNOWN-CASE';
     let status = 'failed';
@@ -152,7 +179,7 @@ export default class TlsOidcReporter extends SafeReporter {
   async onEnd(result) {
     const summary = buildTlsOidcSummary(this.results, this.suiteErrors, result);
     try {
-      await writeOwnedSummary(summary);
+      await writeOwnedSummary(summary, this.#target);
       process.stdout.write('RIO_TLS_OIDC_BROWSER_SUMMARY ' + JSON.stringify(summary) + '\n');
       return { status: summary.status };
     } catch {

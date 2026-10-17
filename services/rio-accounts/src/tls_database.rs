@@ -45,6 +45,56 @@ pub struct SyntheticTlsDbConfig {
     tls: ClientConfig,
 }
 
+/// Immutable TLS transport for the one isolated synthetic restore database.
+/// Its destination cannot be used as an ordinary store configuration, and the
+/// restore store validates and fences an existing snapshot before returning.
+/// Credentials have no Debug implementation or public accessor.
+///
+/// ```compile_fail
+/// use rio_accounts::tls_database::SyntheticTlsRestoreDbConfig;
+/// fn reveal(config: SyntheticTlsRestoreDbConfig) {
+///     println!("{config:?}");
+/// }
+/// ```
+///
+/// ```compile_fail
+/// use rio_accounts::tls_database::{SyntheticTlsDbConfig, SyntheticTlsRestoreDbConfig};
+/// fn select_primary(restore: SyntheticTlsRestoreDbConfig) -> SyntheticTlsDbConfig {
+///     restore.into()
+/// }
+/// ```
+pub struct SyntheticTlsRestoreDbConfig {
+    transport: SyntheticTlsDbConfig,
+}
+
+impl SyntheticTlsRestoreDbConfig {
+    /// Validate the same strict DNS, hex password, DER CA and required TLS policy
+    /// as the primary transport. The role and restore database are fixed.
+    pub fn new(host: &str, password: &str, ca_der: &[u8]) -> Result<Self, StoreError> {
+        let mut transport = SyntheticTlsDbConfig::new(host, password, ca_der)?;
+        transport.postgres.dbname("rio_synthetic_tls_restore");
+        Ok(Self { transport })
+    }
+
+    /// Test-only restore addressing has exactly one loopback identity and socket.
+    #[cfg(test)]
+    pub(crate) fn for_test(password: &str, ca_der: &[u8]) -> Result<Self, StoreError> {
+        let mut transport = SyntheticTlsDbConfig::for_test(
+            "localhost",
+            IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+            8091,
+            password,
+            ca_der,
+        )?;
+        transport.postgres.dbname("rio_synthetic_tls_restore");
+        Ok(Self { transport })
+    }
+
+    pub(crate) async fn connect(&self) -> Result<TlsConnectionParts, StoreError> {
+        self.transport.connect().await
+    }
+}
+
 pub(crate) struct TlsConnectionParts {
     pub(crate) client: Client,
     pub(crate) healthy: Arc<AtomicBool>,
@@ -410,6 +460,100 @@ mod tests {
             parser_ca(Some(true), true),
         ] {
             assert!(matches!(tls_config(&invalid), Err(StoreError::Invalid)));
+        }
+    }
+
+    #[test]
+    fn restore_transport_has_a_separate_fixed_database_and_required_tls() {
+        let ca = parser_ca(Some(true), false);
+        let password = "a".repeat(64);
+        let primary = SyntheticTlsDbConfig::new("db.example.invalid", &password, &ca)
+            .expect("valid primary transport");
+        let restore = SyntheticTlsRestoreDbConfig::new("db.example.invalid", &password, &ca)
+            .expect("valid restore transport");
+        assert_eq!(primary.postgres.get_dbname(), Some("rio_synthetic_tls"));
+        let transport = &restore.transport;
+        assert_eq!(
+            transport.postgres.get_dbname(),
+            Some("rio_synthetic_tls_restore")
+        );
+        assert!(
+            matches!(transport.postgres.get_hosts(), [Host::Tcp(host)] if host == "db.example.invalid")
+        );
+        assert!(transport.postgres.get_hostaddrs().is_empty());
+        assert_eq!(transport.postgres.get_ports(), [5432]);
+        assert_eq!(transport.postgres.get_user(), Some("rio_dev"));
+        assert_eq!(transport.postgres.get_ssl_mode(), SslMode::Require);
+        assert_eq!(
+            transport.postgres.get_channel_binding(),
+            ChannelBinding::Require
+        );
+        assert_eq!(
+            transport.postgres.get_connect_timeout(),
+            Some(&CONNECT_TIMEOUT)
+        );
+        assert!(transport.postgres.get_options().is_none());
+        assert!(transport.postgres.get_application_name().is_none());
+        assert_eq!(
+            transport.tls.crypto_provider().cipher_suites,
+            rustls::crypto::ring::default_provider().cipher_suites
+        );
+        let fixture = SyntheticTlsRestoreDbConfig::for_test(&password, &ca)
+            .expect("fixed loopback restore transport");
+        assert_eq!(
+            fixture.transport.postgres.get_dbname(),
+            Some("rio_synthetic_tls_restore")
+        );
+        assert_eq!(fixture.transport.postgres.get_ports(), [8091]);
+        assert_eq!(
+            fixture.transport.postgres.get_hostaddrs(),
+            [IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)]
+        );
+        assert!(
+            matches!(fixture.transport.postgres.get_hosts(), [Host::Tcp(host)] if host == "localhost")
+        );
+    }
+
+    #[test]
+    fn restore_transport_rejects_invalid_input_without_network_io() {
+        let ca = parser_ca(Some(true), false);
+        let password = "a".repeat(64);
+        for host in [
+            "localhost",
+            "127.0.0.1",
+            "db.internal",
+            "DB.example.invalid",
+            "db.example.invalid:5432",
+            "db.example.invalid/other",
+        ] {
+            assert!(matches!(
+                SyntheticTlsRestoreDbConfig::new(host, &password, &ca),
+                Err(StoreError::Invalid)
+            ));
+        }
+        for invalid in ["a".repeat(63), "a".repeat(129), "g".repeat(64)] {
+            assert!(matches!(
+                SyntheticTlsRestoreDbConfig::new("db.example.invalid", &invalid, &ca),
+                Err(StoreError::Invalid)
+            ));
+            assert!(matches!(
+                SyntheticTlsRestoreDbConfig::for_test(&invalid, &ca),
+                Err(StoreError::Invalid)
+            ));
+        }
+        for invalid in [
+            Vec::new(),
+            parser_ca(Some(false), false),
+            vec![0; MAX_CA_BYTES + 1],
+        ] {
+            assert!(matches!(
+                SyntheticTlsRestoreDbConfig::new("db.example.invalid", &password, &invalid),
+                Err(StoreError::Invalid)
+            ));
+            assert!(matches!(
+                SyntheticTlsRestoreDbConfig::for_test(&password, &invalid),
+                Err(StoreError::Invalid)
+            ));
         }
     }
 

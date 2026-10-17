@@ -1,5 +1,8 @@
 //! Test-only HTTPS listener and real Keycloak browser login over TLS-backed storage.
-use crate::{AppState, router, tls_database::SyntheticTlsDbConfig};
+use crate::{
+    AppState, router,
+    tls_database::{SyntheticTlsDbConfig, SyntheticTlsRestoreDbConfig},
+};
 use axum_server::{Handle, tls_rustls::RustlsConfig};
 use serde_json::Value;
 use std::{
@@ -28,6 +31,26 @@ const IDS: [&str; 5] = [
     "RIO-E2E-04",
     "RIO-E2E-05",
 ];
+
+#[derive(Clone, Copy)]
+enum ProofTarget {
+    Primary,
+    Restore,
+}
+impl ProofTarget {
+    fn configuration(self) -> &'static str {
+        match self {
+            Self::Primary => "--config=playwright.tls-oidc.config.mjs",
+            Self::Restore => "--config=playwright.tls-restore-oidc.config.mjs",
+        }
+    }
+    fn summary(self) -> &'static str {
+        match self {
+            Self::Primary => "oidc-summary.json",
+            Self::Restore => "restore-oidc-summary.json",
+        }
+    }
+}
 
 fn rejected() -> io::Error {
     io::Error::other("TLS OIDC proof rejected")
@@ -218,14 +241,14 @@ async fn stop_browser(child: &mut Child) -> io::Result<()> {
     }
 }
 
-async fn browser(verification: &Path) -> io::Result<ExitStatus> {
+async fn browser(verification: &Path, target: ProofTarget) -> io::Result<ExitStatus> {
     let mut command = Command::new("node");
     command
         .current_dir(verification)
         .arg("node_modules/@playwright/test/cli.js")
         .args([
             "test",
-            "--config=playwright.tls-oidc.config.mjs",
+            target.configuration(),
             "--global-timeout=120000",
             "--retries=0",
             "--workers=1",
@@ -258,6 +281,31 @@ async fn browser(verification: &Path) -> io::Result<ExitStatus> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires owned TLS PostgreSQL, real synthetic Keycloak and installed Chromium"]
 async fn postgres_tls_oidc_contract() -> io::Result<()> {
+    oidc_contract(ProofTarget::Primary).await?;
+    eprintln!("CASE T05_TLS_REAL_OIDC_BROWSER");
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "requires owned restored TLS PostgreSQL, real synthetic Keycloak and installed Chromium"]
+async fn postgres_tls_restore_oidc_contract() -> io::Result<()> {
+    // Complete source rows remain opaque in test memory, without Debug or public diagnostics.
+    let before = crate::storage::tls_restore_tests::primary_snapshot()
+        .await
+        .map_err(|_| rejected())?;
+    let result = oidc_contract(ProofTarget::Restore).await;
+    let after = crate::storage::tls_restore_tests::primary_snapshot()
+        .await
+        .map_err(|_| rejected())?;
+    result?;
+    if before != after {
+        return Err(rejected());
+    }
+    eprintln!("CASE T05_TLS_RESTORE_REAL_OIDC_BROWSER");
+    Ok(())
+}
+
+async fn oidc_contract(target: ProofTarget) -> io::Result<()> {
     let verification: PathBuf = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../verification/rio-accounts")
         .canonicalize()
@@ -273,44 +321,57 @@ async fn postgres_tls_oidc_contract() -> io::Result<()> {
     let key = read_private(&runtime, "tls-key.pem", 16_384, &owner)?;
     // Verify the fixed credentials source ownership before the unchanged browser tests read it.
     let _ = read_private(&runtime, "test-credentials.json", 16_384, &owner)?;
-    if !read_private(&tls_root, "oidc-summary.json", 32_768, &owner)?.is_empty() {
+    if !read_private(&tls_root, target.summary(), 32_768, &owner)?.is_empty() {
         return Err(rejected());
     }
     let password = String::from_utf8(read_private(&tls_root, "password", 128, &owner)?)
         .map_err(|_| rejected())?;
     let ca = read_private(&tls_root, "ca.der", 16_384, &owner)?;
-    let database = SyntheticTlsDbConfig::for_test(
-        "localhost",
-        IpAddr::V4(Ipv4Addr::LOCALHOST),
-        8091,
-        password.trim(),
-        &ca,
-    )
-    .map_err(|_| rejected())?;
-    let state = AppState::discover_tls_synthetic("SYNTHETIC_ONLY", &secret, &database)
-        .await
-        .map_err(|_| rejected())?;
-    if state.db.is_none() || !state.store.lock().await.sessions.is_empty() {
-        return Err(rejected());
+    let state = match target {
+        ProofTarget::Primary => {
+            let database = SyntheticTlsDbConfig::for_test(
+                "localhost",
+                IpAddr::V4(Ipv4Addr::LOCALHOST),
+                8091,
+                password.trim(),
+                &ca,
+            )
+            .map_err(|_| rejected())?;
+            AppState::discover_tls_synthetic("SYNTHETIC_ONLY", &secret, &database).await
+        }
+        ProofTarget::Restore => {
+            let database = SyntheticTlsRestoreDbConfig::for_test(password.trim(), &ca)
+                .map_err(|_| rejected())?;
+            AppState::discover_tls_synthetic_restore("SYNTHETIC_ONLY", &secret, &database).await
+        }
     }
-    let server = Server::start(state.clone(), certificate, key).await?;
-    let result = browser(&verification).await;
-    let stopped = server.stop().await;
-    if !result?.success()
-        || stopped.is_err()
+    .map_err(|_| rejected())?;
+    if state.db.is_none()
         || !state.store.lock().await.sessions.is_empty()
-        || !valid_summary(&read_private(
-            &tls_root,
-            "oidc-summary.json",
-            32_768,
-            &owner,
-        )?)
+        || state.endpoints.issuer() != crate::ISSUER
+        || state.endpoints.client_id() != crate::CLIENT_ID
+        || state.endpoints.origin() != crate::ORIGIN
+        || state.endpoints.auth_url() != crate::AUTH_URL
+        || state.endpoints.token_url() != crate::TOKEN_URL
+        || state.endpoints.jwks_url() != crate::JWKS_URL
+        || state.endpoints.discovery_url() != crate::DISCOVERY_URL
+        || state.endpoints.callback() != crate::CALLBACK
     {
         return Err(rejected());
     }
-    // Successful shutdown plus exclusive rebinding verifies our HTTPS listener is gone.
-    drop(TcpListener::bind(ADDRESS).map_err(|_| rejected())?);
-    eprintln!("CASE T05_TLS_REAL_OIDC_BROWSER");
+    let server = Server::start(state.clone(), certificate, key).await?;
+    let result = browser(&verification, target).await;
+    let stopped = server.stop().await;
+    // Attempt exclusive rebinding before propagating any browser failure as well.
+    let rebound = TcpListener::bind(ADDRESS).map(drop);
+    if !result?.success()
+        || stopped.is_err()
+        || rebound.is_err()
+        || !state.store.lock().await.sessions.is_empty()
+        || !valid_summary(&read_private(&tls_root, target.summary(), 32_768, &owner)?)
+    {
+        return Err(rejected());
+    }
     Ok(())
 }
 

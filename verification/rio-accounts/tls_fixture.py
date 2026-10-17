@@ -26,11 +26,19 @@ TEST = "storage::tests::postgres_tls_store_contract"
 BOOTSTRAP_TEST = "storage::bootstrap_tests::postgres_tls_bootstrap_contract"
 SERVICE_TEST = "tls_service_tests::postgres_tls_service_contract"
 OIDC_TEST = "tls_oidc_tests::postgres_tls_oidc_contract"
-TESTS = (
+RESTORE_PREPARE_TEST = "storage::tls_restore_tests::postgres_tls_prepare_restore_contract"
+RESTORE_VERIFY_TEST = "storage::tls_restore_tests::postgres_tls_verify_restore_contract"
+RESTORE_OIDC_TEST = "tls_oidc_tests::postgres_tls_restore_oidc_contract"
+BASE_TESTS = (
     (TEST, "test.log"),
     (BOOTSTRAP_TEST, "bootstrap-test.log"),
     (SERVICE_TEST, "service-test.log"),
     (OIDC_TEST, "oidc-test.log"),
+)
+TESTS = BASE_TESTS + (
+    (RESTORE_PREPARE_TEST, "restore-prepare-test.log"),
+    (RESTORE_VERIFY_TEST, "restore-verify-test.log"),
+    (RESTORE_OIDC_TEST, "restore-oidc-test.log"),
 )
 LIMIT = 1_048_576
 PROJECT = re.compile(r"rio-accounts-tls-[0-9a-f]{16}")
@@ -40,6 +48,8 @@ FILES = (
     "server.key", "server.csr", "server.pem", "server-extensions.cnf",
     "openssl.cnf", "pg_hba.conf", "plain-pg_hba.conf", "commands.log", "test.log",
     "bootstrap-test.log", "service-test.log", "oidc-test.log", "oidc-summary.json", "inventory.log",
+    "restore-prepare-test.log", "restore-verify-test.log",
+    "restore-oidc-test.log", "restore-oidc-summary.json",
 )
 RUST_PROCESS_GRACE = 3
 RUST_PROCESS_REAP_TIMEOUT = 5
@@ -47,12 +57,63 @@ TLS_ENV = ("RIO_PG_TLS_PASSWORD", "RIO_PG_TLS_CA_DER", "RIO_PG_TLS_OTHER_CA_DER"
 FAILURES = frozenset({
     "PREPARATION_FAILED", "START_FAILED", "READINESS_FAILED",
     "RUST_TEST_FAILED", "CLEANUP_FAILED", "CANCELLED", "UNEXPECTED_FAILURE",
+    "CREATE_RESTORE_FAILED", "BACKUP_FAILED", "RESTORE_FAILED",
 })
 READY_SCRIPT = (
     'PGPASSWORD="$(cat /run/rio-proof/password)"; export PGPASSWORD; '
     'exec psql --no-password --host=/var/run/postgresql --username=rio_dev '
     '--dbname=rio_synthetic_tls --tuples-only --no-align --command="SELECT 1"'
 )
+
+# All paths and database names below are fixture constants. Commands run inside
+# the already owned TLS container, and their output remains in the private log.
+# Root can read the host-owned 0600 mounted CA; no client credential goes in argv.
+NATIVE_TLS_ENV = """\
+PGPASSWORD="$(cat /run/rio-proof/password)"; export PGPASSWORD
+export PGHOST=localhost PGHOSTADDR=127.0.0.1 PGPORT=5432 PGUSER=rio_dev
+export PGSSLMODE=verify-full PGSSLROOTCERT=/run/rio-proof-input/ca.pem
+export PGCHANNELBINDING=require PGGSSENCMODE=disable PGSSLMINPROTOCOLVERSION=TLSv1.2 PGCONNECT_TIMEOUT=8
+export PGPASSFILE=/dev/null
+"""
+NATIVE_TLS_CONTROL_SCRIPT = NATIVE_TLS_ENV + """\
+if PGSSLROOTCERT=/run/rio-proof-input/other-ca.pem psql --no-password --dbname=rio_synthetic_tls --tuples-only --no-align --command='SELECT 1'; then
+    exit 1
+fi
+test "$(psql --no-password --dbname=rio_synthetic_tls --tuples-only --no-align --command="SELECT CASE WHEN ssl AND version IN ('TLSv1.2', 'TLSv1.3') THEN 1 ELSE 0 END FROM pg_stat_ssl WHERE pid = pg_backend_pid()")" = 1
+"""
+CREATE_RESTORE_SCRIPT = NATIVE_TLS_ENV + """\
+exec createdb --no-password --maintenance-db=rio_synthetic_tls --template=template0 rio_synthetic_tls_restore
+"""
+ARCHIVE = "/run/rio-proof/tls-snapshot.dump"
+ARCHIVE_PARENT_CHECK = """\
+test -d /run/rio-proof && test ! -L /run/rio-proof
+test "$(stat -c '%a:%u' /run/rio-proof)" = "700:$(id -u postgres)"
+"""
+ARCHIVE_CHECK = """\
+test -f /run/rio-proof/tls-snapshot.dump && test ! -L /run/rio-proof/tls-snapshot.dump
+test "$(stat -c '%a:%u:%h' /run/rio-proof/tls-snapshot.dump)" = "600:$(id -u):1"
+size="$(stat -c '%s' /run/rio-proof/tls-snapshot.dump)"
+test "$size" -ge 5 && test "$size" -le 16777216
+"""
+BACKUP_SCRIPT = NATIVE_TLS_ENV + ARCHIVE_PARENT_CHECK + """\
+umask 077
+test ! -e /run/rio-proof/tls-snapshot.dump && test ! -L /run/rio-proof/tls-snapshot.dump
+set -C
+exec 3> /run/rio-proof/tls-snapshot.dump
+test "$(stat -Lc '%d:%i:%a:%u:%h' /proc/self/fd/3)" = "$(stat -c '%d:%i:%a:%u:%h' /run/rio-proof/tls-snapshot.dump)"
+pg_dump --no-password --dbname=rio_synthetic_tls --schema=rio_synthetic --format=custom >&3
+exec 3>&-
+""" + ARCHIVE_CHECK + """\
+test "$(head -c 5 /run/rio-proof/tls-snapshot.dump)" = PGDMP
+"""
+RESTORE_SCRIPT = NATIVE_TLS_ENV + ARCHIVE_PARENT_CHECK + ARCHIVE_CHECK + """\
+identity="$(stat -c '%d:%i:%a:%u:%h:%s' /run/rio-proof/tls-snapshot.dump)"
+exec 4< /run/rio-proof/tls-snapshot.dump
+test "$(stat -Lc '%d:%i:%a:%u:%h:%s' /proc/self/fd/4)" = "$identity"
+test "$(stat -c '%d:%i:%a:%u:%h:%s' /run/rio-proof/tls-snapshot.dump)" = "$identity"
+test "$(head -c 5 /proc/self/fd/4)" = PGDMP
+exec pg_restore --no-password --single-transaction --exit-on-error --no-owner --no-privileges --dbname=rio_synthetic_tls_restore <&4
+"""
 
 
 class FixtureFailure(Exception):
@@ -353,7 +414,10 @@ def _wait_ready(owner: Owner) -> None:
 def _run_rust_test(owner: Owner, test: str, log: str) -> None:
     if (test, log) not in TESTS or _read_owned(owner, log):
         raise FixtureFailure("RUST_TEST_FAILED")
-    if test == OIDC_TEST and _read_owned(owner, "oidc-summary.json"):
+    summary = {
+        OIDC_TEST: "oidc-summary.json", RESTORE_OIDC_TEST: "restore-oidc-summary.json",
+    }.get(test)
+    if summary is not None and _read_owned(owner, summary):
         raise FixtureFailure("RUST_TEST_FAILED")
     environment = _environment()
     password = _read_owned(owner, "password", 128).decode("ascii").strip()
@@ -378,6 +442,14 @@ def _run_rust_test(owner: Owner, test: str, log: str) -> None:
     )
     if result != 0 or passed is None or one_case is None:
         raise FixtureFailure("RUST_TEST_FAILED")
+
+
+def _run_native(owner: Owner, script: str, failure: str, timeout: int = 30) -> None:
+    if _run_private(
+        owner, _compose(owner, "exec", "-T", "postgres_tls", "sh", "-ceu", script),
+        timeout=timeout,
+    ) != 0:
+        raise FixtureFailure(failure)
 
 
 def _namespace_empty(owner: Owner) -> bool:
@@ -432,6 +504,10 @@ def check() -> dict:
     owner = None
     phase = "PREPARATION_FAILED"
     test_results = [{"name": test, "passed": False} for test, _log in TESTS]
+    backup_restore = {
+        "tlsVerified": False, "restoreDatabaseCreated": False,
+        "backupCreated": False, "restored": False,
+    }
     error = None
     namespace_closed = True
     private_files_removed = True
@@ -457,9 +533,29 @@ def check() -> dict:
         phase = "READINESS_FAILED"
         _wait_ready(owner)
         phase = "RUST_TEST_FAILED"
-        for result, (test, log) in zip(test_results, TESTS, strict=True):
+        for result, (test, log) in zip(test_results[:len(BASE_TESTS)], BASE_TESTS, strict=True):
             _run_rust_test(owner, test, log)
             result["passed"] = True
+        phase = "READINESS_FAILED"
+        _run_native(owner, NATIVE_TLS_CONTROL_SCRIPT, phase)
+        backup_restore["tlsVerified"] = True
+        phase = "CREATE_RESTORE_FAILED"
+        _run_native(owner, CREATE_RESTORE_SCRIPT, phase)
+        backup_restore["restoreDatabaseCreated"] = True
+        phase = "RUST_TEST_FAILED"
+        _run_rust_test(owner, *TESTS[4])
+        test_results[4]["passed"] = True
+        phase = "BACKUP_FAILED"
+        _run_native(owner, BACKUP_SCRIPT, phase, timeout=60)
+        backup_restore["backupCreated"] = True
+        phase = "RESTORE_FAILED"
+        _run_native(owner, RESTORE_SCRIPT, phase, timeout=60)
+        backup_restore["restored"] = True
+        phase = "RUST_TEST_FAILED"
+        _run_rust_test(owner, *TESTS[5])
+        test_results[5]["passed"] = True
+        _run_rust_test(owner, *TESTS[6])
+        test_results[6]["passed"] = True
     except FixtureFailure as failure:
         error = failure.code
     except KeyboardInterrupt:
@@ -474,13 +570,17 @@ def check() -> dict:
     return {
         "schemaVersion": "RIO_TLS_FIXTURE_EVIDENCE_V2",
         "scope": "LOCAL_SYNTHETIC_TLS_TEST",
-        "status": "PASS" if all(result["passed"] for result in test_results) and error is None else "FAIL",
+        "status": "PASS" if (
+            all(result["passed"] for result in test_results)
+            and all(backup_restore.values()) and error is None
+        ) else "FAIL",
         "error": error,
         "createdOwnedFixture": owner is not None,
         "rustTest": TEST,
         "rustTestPassed": test_results[0]["passed"],
         "rustTests": test_results,
         "rustTestsPassed": all(result["passed"] for result in test_results),
+        "backupRestore": backup_restore,
         "cleanup": {
             "namespaceClosed": namespace_closed, "privateFilesRemoved": private_files_removed,
         },

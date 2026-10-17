@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, copyFile, link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, link, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -116,7 +116,33 @@ test('reporter ignores raw output and records only fixed case/status fields', ()
 
 const linux = { skip: process.platform !== 'linux' };
 
-async function fixture(t) {
+test('only default primary or the literal restore target can select a fixed output', () => {
+  const framework = { configDir: CANARY, _mode: 'test', _commandHash: CANARY };
+  for (const options of [{}, { target: 'restore' }, framework, { ...framework, target: 'restore' }]) {
+    assert.ok(new TlsOidcReporter(options));
+  }
+  assert.ok(new TlsOidcReporter());
+  let getterRead = false;
+  const revoked = Proxy.revocable({}, {});
+  revoked.revoke();
+  for (const options of [
+    null, [], 'restore', 1, { target: 'primary' }, { target: undefined },
+    { target: '../oidc-summary.json' }, { target: '/tmp/restore-oidc-summary.json' },
+    { target: CANARY }, { outputPath: CANARY }, { target: 'restore', outputPath: CANARY },
+    { ...framework, target: CANARY }, { ...framework, outputPath: CANARY },
+    { get configDir() { getterRead = true; throw new Error(CANARY); } },
+    Object.create({ target: 'restore' }), { [Symbol('target')]: 'restore' },
+    { get target() { getterRead = true; throw new Error(CANARY); } }, revoked.proxy,
+  ]) {
+    assert.throws(() => new TlsOidcReporter(options), error => {
+      assert.equal(error.message, 'RIO_TLS_OIDC_TARGET_REJECTED');
+      return true;
+    });
+  }
+  assert.equal(getterRead, false);
+});
+
+async function fixture(t, target = 'primary') {
   const root = await mkdtemp(join(tmpdir(), 'rio-tls-oidc-reporter-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   for (const name of ['tls-oidc-reporter.mjs', 'safe-reporter.mjs', 'login-observation.mjs', 'post-consent-observation.mjs']) {
@@ -128,15 +154,18 @@ async function fixture(t) {
     schemaVersion: 'RIO_TLS_FIXTURE_OWNER_V1',
     project: 'rio-accounts-tls-' + 'a'.repeat(16), ownerToken: 'b'.repeat(64),
   }), { mode: 0o600 });
-  const output = join(runtime, 'oidc-summary.json');
-  await writeFile(output, '', { mode: 0o600 });
-  return { root, runtime, output, marker: join(runtime, '.owner.json') };
+  const primary = join(runtime, 'oidc-summary.json');
+  const restore = join(runtime, 'restore-oidc-summary.json');
+  await writeFile(primary, '', { mode: 0o600 });
+  await writeFile(restore, '', { mode: 0o600 });
+  return { root, runtime, output: target === 'restore' ? restore : primary,
+    otherOutput: target === 'restore' ? primary : restore, marker: join(runtime, '.owner.json') };
 }
 
-function runReporter(root) {
+function runReporter(root, target = 'primary') {
   return spawnSync(process.execPath, ['--input-type=module', '-e', `
     import Reporter from './tls-oidc-reporter.mjs';
-    const reporter = new Reporter();
+    const reporter = new Reporter(${target === 'restore' ? "{ target: 'restore' }" : '{}'});
     reporter.results = Array.from({ length: 5 }, (_, index) => ({ id: 'RIO-E2E-0' + (index + 1), status: 'passed' }));
     const result = await reporter.onEnd({ status: 'passed' });
     process.exitCode = result.status === 'passed' ? 0 : 1;
@@ -150,76 +179,106 @@ function assertRejected(result) {
   assert.equal(result.stdout.includes(CANARY), false);
 }
 
-test('writes only the existing private owned empty summary file', linux, async t => {
-  const { root, output } = await fixture(t);
-  const result = runReporter(root);
+test('primary and restore writes preserve the other completed proof and owner marker', linux, async t => {
+  const { root, runtime, output: primary, otherOutput: restore, marker } = await fixture(t);
+  const originalMarker = await readFile(marker, 'utf8');
+  const files = await readdir(runtime);
+  assert.equal(runReporter(root).status, 0);
+  const originalPrimary = await readFile(primary, 'utf8');
+  assert.equal(await readFile(restore, 'utf8'), '');
+  assert.equal(runReporter(root, 'restore').status, 0);
+  assert.equal(await readFile(primary, 'utf8'), originalPrimary);
+  assert.deepEqual(JSON.parse(await readFile(restore, 'utf8')), build());
+  assert.equal(await readFile(marker, 'utf8'), originalMarker);
+  assert.deepEqual(await readdir(runtime), files);
+  assertRejected(runReporter(root));
+  assertRejected(runReporter(root, 'restore'));
+  assert.equal(await readFile(primary, 'utf8'), originalPrimary);
+});
+
+for (const target of ['primary', 'restore']) {
+test(`${target}: writes only its existing private owned empty summary file`, linux, async t => {
+  const { root, runtime, output, otherOutput, marker } = await fixture(t, target);
+  const files = await readdir(runtime);
+  const owner = await readFile(marker, 'utf8');
+  const result = runReporter(root, target);
   assert.equal(result.status, 0);
   assert.equal(result.stderr, '');
   assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), build());
   assert.equal(result.stdout, 'RIO_TLS_OIDC_BROWSER_SUMMARY ' + JSON.stringify(build()) + '\n');
-  assertRejected(runReporter(root));
+  assert.equal(await readFile(otherOutput, 'utf8'), '');
+  assert.equal(await readFile(marker, 'utf8'), owner);
+  assert.deepEqual(await readdir(runtime), files);
+  assertRejected(runReporter(root, target));
+  assert.equal(await readFile(otherOutput, 'utf8'), '');
 });
 
-test('unsupported platforms refuse output without a global fallback', { skip: process.platform === 'linux' }, async t => {
-  const { root, output } = await fixture(t);
-  assertRejected(runReporter(root));
+test(`${target}: unsupported platforms refuse output without a global fallback`, { skip: process.platform === 'linux' }, async t => {
+  const { root, output, otherOutput } = await fixture(t, target);
+  assertRejected(runReporter(root, target));
   assert.equal(await readFile(output, 'utf8'), '');
+  assert.equal(await readFile(otherOutput, 'utf8'), '');
 });
 
-test('rejects missing runtime, missing output, unsafe modes and invalid owner marker', linux, async t => {
+test(`${target}: rejects missing runtime, missing output, unsafe modes and invalid owner marker`, linux, async t => {
   for (const kind of ['runtime-missing', 'output-missing', 'runtime-public', 'output-public', 'marker-public', 'marker-invalid']) {
-    const { root, runtime, output, marker } = await fixture(t);
+    const { root, runtime, output, otherOutput, marker } = await fixture(t, target);
     if (kind === 'runtime-missing') await rm(runtime, { recursive: true });
     if (kind === 'output-missing') await rm(output);
     if (kind === 'runtime-public') await chmod(runtime, 0o755);
     if (kind === 'output-public') await chmod(output, 0o644);
     if (kind === 'marker-public') await chmod(marker, 0o644);
     if (kind === 'marker-invalid') await writeFile(marker, JSON.stringify({ schemaVersion: CANARY }));
-    assertRejected(runReporter(root));
+    assertRejected(runReporter(root, target));
     if (kind === 'runtime-missing' || kind === 'output-missing') {
       await assert.rejects(readFile(output), { code: 'ENOENT' });
     } else assert.equal(await readFile(output, 'utf8'), '');
+    if (kind !== 'runtime-missing') assert.equal(await readFile(otherOutput, 'utf8'), '');
   }
 });
 
-test('rejects output symlinks, hard links, directories and nonempty files without touching targets', linux, async t => {
+test(`${target}: rejects output symlinks, hard links, directories and nonempty files without touching targets`, linux, async t => {
   for (const kind of ['symlink', 'hardlink', 'directory', 'nonempty']) {
-    const { root, output } = await fixture(t);
-    const target = join(root, 'must-remain-private');
+    const { root, output, otherOutput } = await fixture(t, target);
+    const protectedPath = join(root, 'must-remain-private');
     const original = ['symlink', 'hardlink'].includes(kind) ? '' : CANARY;
-    await writeFile(target, original, { mode: 0o600 });
+    await writeFile(protectedPath, original, { mode: 0o600 });
     if (kind === 'nonempty') await writeFile(output, CANARY);
     else {
       await rm(output);
-      if (kind === 'symlink') await symlink(target, output);
-      if (kind === 'hardlink') await link(target, output);
+      if (kind === 'symlink') await symlink(protectedPath, output);
+      if (kind === 'hardlink') await link(protectedPath, output);
       if (kind === 'directory') await mkdir(output, { mode: 0o700 });
     }
-    assertRejected(runReporter(root));
-    assert.equal(await readFile(target, 'utf8'), original);
+    assertRejected(runReporter(root, target));
+    assert.equal(await readFile(protectedPath, 'utf8'), original);
     if (kind === 'nonempty') assert.equal(await readFile(output, 'utf8'), CANARY);
+    assert.equal(await readFile(otherOutput, 'utf8'), '');
   }
 });
 
-test('rejects a symlinked runtime or owner marker without touching their targets', linux, async t => {
+test(`${target}: rejects a symlinked runtime or owner marker without touching their targets`, linux, async t => {
   for (const kind of ['runtime', 'marker']) {
-    const { root, runtime, marker, output } = await fixture(t);
+    const { root, runtime, marker, output, otherOutput } = await fixture(t, target);
     if (kind === 'runtime') {
       const moved = join(root, 'private-runtime');
       await mkdir(moved, { mode: 0o700 });
       await copyFile(marker, join(moved, '.owner.json'));
-      await writeFile(join(moved, 'oidc-summary.json'), '', { mode: 0o600 });
+      const filename = target === 'restore' ? 'restore-oidc-summary.json' : 'oidc-summary.json';
+      await writeFile(join(moved, filename), '', { mode: 0o600 });
       await rm(runtime, { recursive: true });
       await symlink(moved, runtime);
-      assertRejected(runReporter(root));
-      assert.equal(await readFile(join(moved, 'oidc-summary.json'), 'utf8'), '');
+      assertRejected(runReporter(root, target));
+      assert.equal(await readFile(join(moved, filename), 'utf8'), '');
     } else {
-      const target = join(root, 'private-owner');
-      await copyFile(marker, target);
+      const markerTarget = join(root, 'private-owner');
+      await copyFile(marker, markerTarget);
       await rm(marker);
-      await symlink(target, marker);
-      assertRejected(runReporter(root));
+      await symlink(markerTarget, marker);
+      assertRejected(runReporter(root, target));
       assert.equal(await readFile(output, 'utf8'), '');
+      assert.equal(await readFile(otherOutput, 'utf8'), '');
     }
   }
 });
+}
