@@ -3,5 +3,6 @@ export const securityHeaders = Object.freeze({
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-  'Cache-Control': 'no-store'
+  'Cache-Control': 'no-store',
+  'X-Robots-Tag': 'noindex, nofollow'
 });

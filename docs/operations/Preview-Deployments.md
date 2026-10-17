@@ -31,6 +31,8 @@ After authorizing the GitHub integration, keep `main` as the production branch a
 
 Open the deployed launcher and check its browser console and security headers. Metadata checks still require reachable allowlisted module origins with CORS allowing this exact preview origin; a deployed launcher alone does not deploy AETHER or BASTION. Do not broaden the module allowlist or disable CORS to make a preview appear operational.
 
+NEO's Vercel configuration and shared local/static-hosting headers include `X-Robots-Tag: noindex, nofollow`. This requests that cooperating search engines do not index the preview or follow its links. It is not authentication, does not prevent direct access or malicious crawlers, and does not guarantee removal of previously indexed content. Keep Deployment Protection enabled when access must be restricted. Verify the header on the actual deployed URL; a local test only checks configuration.
+
 The account authorization and assigned URL are external deployment steps, not outcomes guaranteed by committing this configuration.
 
 Vercel builds a new preview when a pull request is opened or updated. Its deployment URL is listed in the pull request's checks/deployment details and in the Vercel dashboard. Each app has a separate URL; use the URL for the app being reviewed. A later push creates a new deployment for that revision. These are preview deployments, not canonical production URLs.

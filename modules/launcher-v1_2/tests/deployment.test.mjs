@@ -25,3 +25,7 @@ test('Vercel serves exactly the shared security headers on every launcher path',
     securityHeaders
   );
 });
+
+test('launcher preview requests that crawlers neither index pages nor follow links', () => {
+  assert.equal(securityHeaders['X-Robots-Tag'], 'noindex, nofollow');
+});
