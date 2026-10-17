@@ -58,6 +58,10 @@ test('[RIO-MOBILE-06] Failed initial navigation stays closed until an explicit f
           documentRequestFailed: true, meRequestFailed: false, consentRequestFailed: false,
           providerSubmitRequestFailed: false, callbackRequestFailed: false,
           postCallbackMeRequestFailed: false,
+          requestFailures: [{
+            endpoint: 'document', errorKind: 'connection-refused',
+            afterCallbackRedirect: false,
+          }], requestFailuresOverflow: false,
           errorKind: 'connection-refused', feedbackBucket: 'unavailable',
         });
         // This expected observation has been checked. A later unexpected failure
