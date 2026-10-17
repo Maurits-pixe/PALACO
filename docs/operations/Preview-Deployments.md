@@ -25,7 +25,7 @@ For a NEO-only preview, import `Maurits-pixe/PALACO` as a single Vercel project 
 - Build: `npm test && npm run build`
 - Output: `dist`
 
-Do not supply local certificates, API tokens or encryption keys: this is a static launcher build. Its controller regression tests must pass before the bundle is built; TLS and browser suites remain separate checks.
+Do not supply local certificates, API tokens or encryption keys: this is a static launcher build. Its deployment-configuration and controller regression tests must pass before the bundle is built; TLS and browser suites remain separate checks. The deployment tests enforce lockfile installation, test-before-build ordering, disabled `main` Git deployments and exact parity with the launcher's shared security headers. These are local configuration checks, not evidence that Vercel has deployed or applied the headers.
 
 After authorizing the GitHub integration, keep `main` as the production branch and deploy the desired non-`main` branch to the **Preview** environment. The first repository import may attempt a production deployment; do not treat that as the requested preview. Confirm **Preview** in the deployment details and copy its actual HTTPS URL only after the deployment is **Ready**. No custom domain or production promotion is required. If review access should be restricted, configure Vercel Deployment Protection before sharing the URL.
 
