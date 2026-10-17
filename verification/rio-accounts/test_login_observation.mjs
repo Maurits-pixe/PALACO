@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifyLoginError, safeMobileLoginObservation } from './login-observation.mjs';
+import { EventEmitter } from 'node:events';
+import { classifyLoginEndpoint, classifyLoginError, observeMobileLogin, safeMobileLoginObservation } from './login-observation.mjs';
 
 const TYPE = 'rio-mobile-login-observation';
 const PRIVATE = 'PRIVATE_LOGIN_DIAGNOSTIC_CANARY';
@@ -8,7 +9,13 @@ const allowed = {
   actorCase: 'alpha', stage: 'waiting-for-account', pageKind: 'bff-home',
   accountVisible: false, loginButtonVisible: false,
   documentStatuses: [200], meStatuses: [401, 200], consentStatuses: [503],
+  providerSubmitStatuses: [302], callbackStatuses: [200],
+  providerSubmitRequests: 1, callbackRequests: 1,
+  postCallbackMeRequests: 1, postCallbackMeStatuses: [200],
+  sessionCookiePresentAtFailure: true,
   documentRequestFailed: false, meRequestFailed: false, consentRequestFailed: true,
+  providerSubmitRequestFailed: false, callbackRequestFailed: true,
+  postCallbackMeRequestFailed: false,
   errorKind: 'timeout', feedbackBucket: 'service_unavailable',
 };
 const annotate = (value, type = TYPE) => [{
@@ -24,7 +31,7 @@ test('preserves only the exact typed mobile login observation in independent cop
   const first = safeMobileLoginObservation(annotate(allowed));
   assert.deepEqual(first, allowed);
   assert.notEqual(first, allowed);
-  for (const key of ['documentStatuses', 'meStatuses', 'consentStatuses']) {
+  for (const key of ['documentStatuses', 'meStatuses', 'consentStatuses', 'providerSubmitStatuses', 'callbackStatuses', 'postCallbackMeStatuses']) {
     assert.notEqual(first[key], allowed[key]);
   }
   first.documentStatuses.push(599);
@@ -102,13 +109,14 @@ test('accepts only the enumerated stage, actor, page, feedback and error kinds w
     }
     for (const value of ['true', 0, PRIVATE, {}, []]) expectRejected({ ...allowed, [key]: value });
   }
-  for (const key of ['documentRequestFailed', 'meRequestFailed', 'consentRequestFailed']) {
+  for (const key of ['documentRequestFailed', 'meRequestFailed', 'consentRequestFailed',
+    'providerSubmitRequestFailed', 'callbackRequestFailed', 'postCallbackMeRequestFailed']) {
     for (const value of ['false', null, 0, PRIVATE, {}, []]) expectRejected({ ...allowed, [key]: value });
   }
 });
 
 test('endpoint observations admit only bounded integer HTTP statuses and never paths or bodies', () => {
-  for (const key of ['documentStatuses', 'meStatuses', 'consentStatuses']) {
+  for (const key of ['documentStatuses', 'meStatuses', 'consentStatuses', 'providerSubmitStatuses', 'callbackStatuses', 'postCallbackMeStatuses']) {
     for (const value of [[], [100, 599], Array(8).fill(200)]) {
       const candidate = { ...allowed, [key]: value };
       assert.deepEqual(safeMobileLoginObservation(annotate(candidate)), candidate);
@@ -167,4 +175,99 @@ test('unknown errors and lookalike codes cannot forge known transport classifica
     assert.equal(result, 'other');
     assert.equal(result.includes(PRIVATE), false);
   }
+});
+
+test('provider/callback request counters allow only bounded integers', () => {
+  for(const key of ['providerSubmitRequests','callbackRequests','postCallbackMeRequests']) {
+    for(const value of [0,1,8]) {
+      const candidate={...allowed,[key]:value};
+      assert.deepEqual(safeMobileLoginObservation(annotate(candidate)),candidate);
+    }
+    for(const value of [-1,9,0.5,'1',null,[],{},PRIVATE]) {
+      expectRejected({...allowed,[key]:value});
+    }
+  }
+});
+
+test('OIDC transport classification discards query tokens and rejects unrelated requests', () => {
+  const request=(method,url,navigation=false)=>({
+    method:()=>method,url:()=>url,isNavigationRequest:()=>navigation,
+  });
+  for (const [method,url,expected] of [
+    ['POST','http://127.0.0.1:8089/realms/rio-synthetic/login-actions/authenticate?execution='+PRIVATE,'providerSubmit'],
+    ['GET','https://localhost:8088/auth/callback?code='+PRIVATE+'&state='+PRIVATE,'callback'],
+    ['GET','https://localhost:8088/','document'],
+    ['GET','https://localhost:8088/api/me','me'],
+    ['GET','https://localhost:8088/api/consent','consent'],
+    ['GET','https://localhost:8088/api/me?token='+PRIVATE,null],
+    ['GET','https://other.invalid/auth/callback?code='+PRIVATE,null],
+    ['GET','http://127.0.0.1:8089/realms/rio-synthetic/login-actions/authenticate',null],
+    ['POST','https://localhost:8088/auth/callback?code='+PRIVATE,null],
+    ['POST','http://127.0.0.1:8089/realms/other/login-actions/authenticate',null],
+    ['GET','https://user:pass@localhost:8088/auth/callback?code='+PRIVATE,null],
+    ['GET','https://localhost:8088/auth/callback?code='+PRIVATE+'#secret',null],
+  ]) {
+    const result=classifyLoginEndpoint(request(method,url,url==='https://localhost:8088/'));
+    assert.equal(result,expected);
+    assert.equal(String(result).includes(PRIVATE),false);
+  }
+  assert.equal(classifyLoginEndpoint({method:()=>{throw new Error(PRIVATE)}}),null);
+});
+
+test('unknown callback-related fields and sensitive query text are rejected from CI evidence', () => {
+  const privateCanary='https://localhost:8088/auth/callback?code='+PRIVATE;
+  for (const extra of [
+    {callbackUrl:privateCanary},
+    {providerPostBody:'username='+PRIVATE},
+    {callbackError:'net::ERR_NETWORK_CHANGED '+PRIVATE},
+    {OIDCCode:PRIVATE},
+  ])expectRejected({...allowed,...extra});
+  for (const key of ['providerSubmitStatuses','callbackStatuses']) {
+    expectRejected({...allowed,[key]:[privateCanary]});
+  }
+});
+
+test('cookie presence admits only boolean/null, never a raw bearer', () => {
+  for(const value of [true,false,null]){
+    const candidate={...allowed,sessionCookiePresentAtFailure:value};
+    assert.deepEqual(safeMobileLoginObservation(annotate(candidate)),candidate);
+  }
+  for(const value of ['true',PRIVATE,1,[],{},undefined]){
+    expectRejected({...allowed,sessionCookiePresentAtFailure:value});
+  }
+});
+
+test('post-callback identity read begins after callback response, not initial 401', async () => {
+  const page=new EventEmitter();
+  page.url=()=> 'https://localhost:8088/';
+  page.context=()=>({cookies:async()=>[{name:'__Host-rio_session',value:PRIVATE}]});
+  page.evaluate=async()=>({accountVisible:false,loginButtonVisible:true,feedback:''});
+  const observe=observeMobileLogin(page,'alpha');
+  const request=(method,url,nav=false)=>({method:()=>method,url:()=>url,isNavigationRequest:()=>nav});
+  const respond=(req,status)=>{page.emit('request',req);page.emit('response',{request:()=>req,status:()=>status});};
+  const first=request('GET','https://localhost:8088/api/me');
+  respond(first,401); // This happens before authentication and is expected.
+  const provider=request('POST','http://127.0.0.1:8089/realms/rio-synthetic/login-actions/authenticate?session='+PRIVATE);
+  respond(provider,302);
+  const callback=request('GET','https://localhost:8088/auth/callback?code='+PRIVATE);
+  respond(callback,303);
+  const last=request('GET','https://localhost:8088/api/me');
+  page.emit('request',last);
+  page.emit('requestfailed',last);
+  const info={annotations:[]};
+  await observe.recordFailure(info,{name:'Error',message:'net::ERR_NETWORK_CHANGED '+PRIVATE});
+  observe.stop();
+  const result=safeMobileLoginObservation(info.annotations);
+  assert.equal(result?.providerSubmitRequests,1);
+  assert.deepEqual(result?.providerSubmitStatuses,[302]);
+  assert.equal(result?.callbackRequests,1);
+  assert.deepEqual(result?.callbackStatuses,[303]);
+  assert.deepEqual(result?.meStatuses,[401]);
+  assert.equal(result?.postCallbackMeRequests,1);
+  assert.deepEqual(result?.postCallbackMeStatuses,[]);
+  assert.equal(result?.postCallbackMeRequestFailed,true);
+  assert.equal(result?.sessionCookiePresentAtFailure,true);
+  assert.equal(result?.errorKind,'network-changed');
+  assert.equal(JSON.stringify(result).includes(PRIVATE),false);
+  assert.equal(page.listenerCount('request'),0);
 });
