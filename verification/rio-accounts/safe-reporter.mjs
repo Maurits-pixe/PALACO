@@ -1,4 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
+import { safeMobileLoginObservation } from './login-observation.mjs';
 
 const CASES = new Map([
   ['RIO-E2E-01', 'Two real users have separate sessions and account data'],
@@ -15,6 +16,7 @@ const CASES = new Map([
   ['RIO-MOBILE-03', 'Own consent uses session CSRF and a fresh choice after CAS conflict'],
   ['RIO-MOBILE-04', 'Real expiry closes consent while preserving the local draft'],
   ['RIO-MOBILE-05', 'Database uncertainty closes the UI until explicit recovery'],
+  ['RIO-MOBILE-06', 'A refused initial navigation stays closed until explicit login recovery'],
 ]);
 const PHASES = new Set([
   'initial-access', 'authorization-contract', 'real-idp-login',
@@ -27,6 +29,7 @@ const PHASES = new Set([
   'mobile-native-semantics', 'mobile-reflow', 'mobile-studio-setup', 'mobile-local-download',
   'mobile-import-rejection', 'mobile-studio-isolation', 'mobile-consent-isolation',
   'mobile-consent-cas', 'mobile-expiry-closure', 'mobile-database-closure', 'mobile-explicit-recovery',
+  'mobile-navigation-failure', 'mobile-explicit-login-recovery', 'mobile-login-route',
 ]);
 
 const MOBILE_SURFACES = new Set(['android-emulation', 'desktop-keyboard']);
@@ -90,7 +93,7 @@ const DURABLE_LOGIN_STAGES = new Set([
 ]);
 const DURABLE_PAGE_KINDS = new Set(['unavailable', 'bff-home', 'provider', 'other']);
 
-// Annotations are NOT trusted. Copy only fixed enums and booleans to CI output.
+// Annotations are NOT trusted. Copy only fixed enums, bounded statuses and booleans to CI output.
 // Never render a raw exception/URL, Keycloak message, account name or bearer.
 export function safeDurableLoginObservation(annotations) {
   if (!Array.isArray(annotations)) return undefined;
@@ -101,18 +104,29 @@ export function safeDurableLoginObservation(annotations) {
   try { source = JSON.parse(items[0].description); } catch { return undefined; }
   if (!source || typeof source !== 'object' || Array.isArray(source) ||
       Object.keys(source).sort().join('|') !==
-        'accountVisible|actorCase|loginButtonVisible|pageKind|stage' ||
+        'accountVisible|actorCase|consentRequestFailed|consentStatuses|feedbackBucket|loginButtonVisible|meRequestFailed|meStatuses|pageKind|stage' ||
       !['alpha', 'alphaPeer', 'beta'].includes(source.actorCase) ||
       !DURABLE_LOGIN_STAGES.has(source.stage) ||
       !DURABLE_PAGE_KINDS.has(source.pageKind) ||
       !(source.loginButtonVisible === null || typeof source.loginButtonVisible === 'boolean') ||
-      !(source.accountVisible === null || typeof source.accountVisible === 'boolean')) return undefined;
+      !(source.accountVisible === null || typeof source.accountVisible === 'boolean') ||
+      typeof source.meRequestFailed !== 'boolean' || typeof source.consentRequestFailed !== 'boolean' ||
+      !SETUP_FEEDBACK.has(source.feedbackBucket)) return undefined;
+  for (const key of ['meStatuses', 'consentStatuses']) {
+    if (!Array.isArray(source[key]) || source[key].length > 8 ||
+        source[key].some(value => !Number.isInteger(value) || value < 100 || value > 599)) return undefined;
+  }
   return {
     actorCase: source.actorCase,
     stage: source.stage,
     pageKind: source.pageKind,
     loginButtonVisible: source.loginButtonVisible,
     accountVisible: source.accountVisible,
+    meStatuses: [...source.meStatuses],
+    consentStatuses: [...source.consentStatuses],
+    meRequestFailed: source.meRequestFailed,
+    consentRequestFailed: source.consentRequestFailed,
+    feedbackBucket: source.feedbackBucket,
   };
 }
 
@@ -164,7 +178,7 @@ export default class SafeReporter {
   onError() { this.suiteErrors += 1; }
 
   onTestEnd(test, result) {
-    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-5])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
+    const id = /^\[(RIO-E2E-0[1-5]|RIO-DURABLE-0[1-4]|RIO-MOBILE-0[1-6])\]/.exec(test.title)?.[1] ?? 'UNKNOWN-CASE';
     const phases = [];
     const failedLines = new Set();
     const walk = steps => {
@@ -189,6 +203,8 @@ export default class SafeReporter {
       durationMs: Math.round(result.duration),
       ...(this.mobileVerification ? { surface } : {}),
       ...(errorLocations.length ? { errorLocations } : {}),
+      ...(id.startsWith('RIO-MOBILE-') && result.status !== 'passed'
+        ? { loginObservation: safeMobileLoginObservation(test.annotations) } : {}),
       ...(id === 'RIO-MOBILE-02' && result.status !== 'passed'
         ? { setupObservation: safeStudioSetup(test.annotations) } : {}),
       phases,
