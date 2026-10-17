@@ -378,6 +378,30 @@ class FixtureSecurityTests(unittest.TestCase):
     def database_password(self):
         return fixture.urlsplit(fixture.read_bff_environment()["RIO_DEV_DATABASE_URL"]).password
 
+    def test_restore_preparation_refuses_live_or_uncertain_bff_before_database_changes(self):
+        with patch.object(fixture, "run_database_test") as prepare:
+            with patch.object(fixture, "owned_bff", return_value=(321, {"startTicks": "19"})):
+                with self.assertRaisesRegex(RuntimeError, "Stop the owned BFF"):
+                    fixture.prepare_restore_proof()
+            for reason in ("ownership inaccessible", "ownership mismatch"):
+                with patch.object(fixture, "owned_bff", side_effect=RuntimeError(reason)):
+                    with self.assertRaisesRegex(RuntimeError, reason):
+                        fixture.prepare_restore_proof()
+            prepare.assert_not_called()
+
+    def test_restore_preparation_requires_stopped_bff_and_propagates_proof_failure(self):
+        with patch.object(fixture, "owned_bff", return_value=None):
+            with patch.object(fixture, "run_database_test") as prepare:
+                fixture.prepare_restore_proof()
+                prepare.assert_called_once_with("postgres_prepare_restore_proof")
+            output = io.StringIO()
+            with patch.object(fixture, "run_database_test", side_effect=RuntimeError("proof failed")) as prepare:
+                with redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, "proof failed"):
+                        fixture.prepare_restore_proof()
+                prepare.assert_called_once_with("postgres_prepare_restore_proof")
+            self.assertNotIn("PASSED", output.getvalue())
+
     def test_native_dump_is_private_bounded_and_never_contains_password_arguments(self):
         self.prepare()
         seen = []
@@ -472,6 +496,71 @@ class FixtureSecurityTests(unittest.TestCase):
                     fixture.down()
             stop.assert_called_once_with()
         self.assertEqual({path.name for path in fixture.RUNTIME.iterdir()}, {"unrelated-note.txt"})
+
+    @patch.object(fixture.sys, "platform", "linux")
+    def test_reused_pid_generation_is_checked_before_protected_proc_access(self):
+        # Stat startTicks can safely rule out a former BFF PID generation
+        # without attempting to inspect another process's protected environment.
+        fields = ["S"] + ["0"] * 18 + ["999"] + ["0"] * 32
+        fake_stat = "321 (new-process) " + " ".join(fields)
+        with patch.object(fixture.Path, "read_text", return_value=fake_stat):
+            with patch.object(fixture.os, "readlink", side_effect=PermissionError("PRIVATE")) as readlink:
+                with patch.object(fixture.Path, "read_bytes", side_effect=PermissionError("PRIVATE")) as read_env:
+                    identity = fixture.process_identity(321, expected_start_ticks="19")
+        self.assertEqual(identity, {"startTicks": "999", "binary": None, "environment": b""})
+        readlink.assert_not_called()
+        read_env.assert_not_called()
+
+    @patch.object(fixture.sys, "platform", "linux")
+    def test_unreadable_owned_proc_identity_refuses_control_without_leaking_error(self):
+        fields = ["S"] + ["0"] * 18 + ["19"] + ["0"] * 32
+        fake_stat = "321 (owned-candidate) " + " ".join(fields)
+        with patch.object(fixture.Path, "read_text", return_value=fake_stat):
+            with patch.object(fixture.os, "readlink", return_value="/synthetic/rio-accounts-dev"):
+                with patch.object(fixture.Path, "read_bytes", side_effect=PermissionError("PRIVATE")):
+                    with self.assertRaisesRegex(RuntimeError, "ownership inaccessible") as error:
+                        fixture.process_identity(321, expected_start_ticks="19")
+        self.assertNotIn("PRIVATE", str(error.exception))
+
+    def test_unreadable_proc_identity_does_not_open_pidfd_or_modify_metadata(self):
+        self.prepare()
+        token = "a" * 64
+        metadata = fixture.RUNTIME / "bff-process.json"
+        fixture.write_new("bff-process.json",
+                          json.dumps({"pid": 321, "processToken": token, "startTicks": "19"}))
+        with patch.object(fixture, "process_identity",
+                          side_effect=RuntimeError("BFF process ownership inaccessible; refusing process control.")):
+            with patch.object(fixture.os, "pidfd_open", create=True) as open_pidfd:
+                with self.assertRaisesRegex(RuntimeError, "ownership inaccessible"):
+                    fixture.stop_bff()
+                open_pidfd.assert_not_called()
+        self.assertTrue(metadata.is_file(), "Uncertain ownership must preserve evidence and HOLD.")
+
+    @patch.object(fixture.sys, "platform", "linux")
+    def test_reused_pid_refuses_control_and_preserves_metadata(self):
+        fixture.RUNTIME.mkdir()
+        metadata = fixture.RUNTIME / "bff-process.json"
+        original = json.dumps({"pid": 321, "processToken": "a" * 64, "startTicks": "19"})
+        metadata.write_text(original, encoding="utf-8")
+        fields = ["S"] + ["0"] * 18 + ["999"] + ["0"] * 32
+        read_text = fixture.Path.read_text
+
+        def read(path, *args, **kwargs):
+            if path == fixture.Path("/proc/321/stat"):
+                return "321 (foreign-process) " + " ".join(fields)
+            return read_text(path, *args, **kwargs)
+
+        with patch.object(fixture.Path, "read_text", read):
+            with patch.object(fixture, "bff_binary", return_value=self.root / "rio-accounts-dev"):
+                with patch.object(fixture.os, "readlink") as readlink:
+                    with patch.object(fixture.Path, "read_bytes") as read_env:
+                        with patch.object(fixture.os, "pidfd_open", create=True) as open_pidfd:
+                            with self.assertRaisesRegex(RuntimeError, "ownership mismatch"):
+                                fixture.stop_bff()
+                            open_pidfd.assert_not_called()
+                        read_env.assert_not_called()
+                    readlink.assert_not_called()
+        self.assertEqual(metadata.read_text(encoding="utf-8"), original)
 
     def test_process_ownership_mismatch_refuses_signals(self):
         self.prepare()

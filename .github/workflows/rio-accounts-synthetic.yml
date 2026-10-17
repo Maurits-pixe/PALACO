@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
@@ -62,6 +62,9 @@ jobs:
           node --check verification/rio-accounts/post-consent-observation.mjs
           node --check verification/rio-accounts/test_post_consent_observation.mjs
           node --test verification/rio-accounts/test_post_consent_observation.mjs
+          node --check verification/rio-accounts/post-consent-triage.mjs
+          node --check verification/rio-accounts/test_post_consent_triage.mjs
+          node --test verification/rio-accounts/test_post_consent_triage.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/post-consent-fault.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
@@ -126,6 +129,7 @@ jobs:
       - name: Restart after committed revocation
         run: python verification/rio-accounts/fixture.py restart-bff
       - name: Verify revocation survives another restart
+        id: durable_verify
         working-directory: verification/rio-accounts
         env:
           RIO_DURABLE_BROWSER_PHASE: verify
@@ -140,6 +144,9 @@ jobs:
         working-directory: verification/rio-accounts
         run: npx playwright test --config=mobile/playwright.config.mjs
       - name: Execute isolated database backup and restoration
+        # A later mobile failure must retain its FAIL while this independent
+        # proof runs only after verified revocation, never on cancellation.
+        if: ${{ !cancelled() && steps.durable_verify.outcome == 'success' }}
         run: |
           python verification/rio-accounts/fixture.py stop-bff
           python verification/rio-accounts/fixture.py prepare-restore-proof
