@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
@@ -43,8 +43,9 @@ jobs:
           python --version
       - name: Check fixture and browser sources
         run: |
-          python -m py_compile verification/rio-accounts/fixture.py verification/rio-accounts/ci-evidence.py
+          python -m py_compile verification/rio-accounts/fixture.py verification/rio-accounts/ci-evidence.py verification/rio-accounts/tls_fixture.py
           python -m unittest discover -s verification/rio-accounts -p test_fixture.py
+          python -m unittest discover -s verification/rio-accounts -p test_tls_fixture.py
           node --check verification/rio-accounts/tests/accounts.spec.mjs
           node --check verification/rio-accounts/safe-reporter.mjs
           node --check verification/rio-accounts/test_safe_reporter.mjs
@@ -56,6 +57,7 @@ jobs:
           node --check verification/rio-accounts/login-observation.mjs
           node --test verification/rio-accounts/test_login_observation.mjs
           node --check verification/rio-accounts/mobile/login-observation.spec.mjs
+          node --check verification/rio-accounts/mobile/callback-interruption.spec.mjs
           node --check verification/rio-accounts/mobile/helpers.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
@@ -80,6 +82,8 @@ jobs:
         run: |
           python verification/rio-accounts/fixture.py up
           python verification/rio-accounts/ci-evidence.py inputs
+      - name: Verify owned synthetic PostgreSQL TLS and bound session storage
+        run: python verification/rio-accounts/tls_fixture.py check
       - name: Verify actual durable storage and revocation
         run: python verification/rio-accounts/fixture.py run-storage-tests
       - name: Verify actual protected consent HTTP boundary

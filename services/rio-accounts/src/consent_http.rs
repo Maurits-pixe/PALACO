@@ -223,7 +223,12 @@ mod tests {
         db.begin_login(hash(&transaction), hash(&state), None)
             .await?;
         let permit = db.consume_login(hash(&transaction), hash(&state)).await?;
-        db.replace_session(permit, actor, hash(&token), csrf.clone())
+        let subject = match actor {
+            "TST-alpha" => "11111111-1111-4111-8111-111111111111",
+            "TST-beta" => "22222222-2222-4222-8222-222222222222",
+            _ => return Err(StoreError::Forbidden),
+        };
+        db.replace_session_bound(permit, actor, ISSUER, subject, hash(&token), csrf.clone())
             .await?;
         Ok((token, csrf))
     }

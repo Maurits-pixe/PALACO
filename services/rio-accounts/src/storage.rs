@@ -329,6 +329,23 @@ impl PgStore {
         Ok(store)
     }
 
+    /// Connect an explicitly configured TLS database with the existing closed synthetic schema.
+    /// This does not select a staging issuer or make the browser runtime available remotely.
+    pub async fn connect_tls_synthetic(
+        config: &crate::tls_database::SyntheticTlsDbConfig,
+    ) -> Result<Self, StoreError> {
+        let connection = config.connect().await?;
+        let store = Self {
+            inner: Arc::new(Inner {
+                client: Mutex::new(connection.client),
+                healthy: connection.healthy,
+                connection: connection.connection,
+            }),
+        };
+        store.migrate().await?;
+        Ok(store)
+    }
+
     async fn timed<T>(
         &self,
         work: impl Future<Output = Result<T, StoreError>>,
@@ -482,15 +499,19 @@ impl PgStore {
         .await
     }
 
-    /// Create a session only after current account epoch and predecessor are revalidated at commit.
-    pub async fn replace_session(
+    /// Resolve the exact issuer/subject binding and revalidate its account epoch at commit.
+    /// The account hint cannot substitute a database binding. Issuer and subject
+    /// are lookup inputs; this method does not itself verify an OIDC token.
+    pub async fn replace_session_bound(
         &self,
         permit: LoginPermit,
-        account_id: &str,
+        account_hint: &str,
+        issuer: &str,
+        subject: &str,
         token_hash: Key,
         csrf: String,
     ) -> Result<SessionRecord, StoreError> {
-        let (account_id, index) = actor(account_id)?;
+        let (account_hint, _) = actor(account_hint)?;
         if !valid_csrf(&csrf) {
             return Err(StoreError::Invalid);
         }
@@ -499,9 +520,25 @@ impl PgStore {
             let tx = client.transaction().await?;
             let now = locked(&tx).await?;
             if now >= permit.expires_ms { return reject_business(tx, StoreError::Revoked).await; }
-            let account = tx.query_one(
-                "SELECT owner_id,tenant_id,status,version FROM rio_synthetic.accounts WHERE account_id=$1",
-                &[&account_id]).await?;
+            // Both binding and account stay locked until the session commit.
+            // Derive ownership from the matching database row, never from the hint.
+            let account = tx.query_opt(
+                "SELECT a.account_id,a.owner_id,a.tenant_id,a.status,a.version \
+                 FROM rio_synthetic.auth_bindings b JOIN rio_synthetic.accounts a \
+                 ON a.account_id=b.account_id WHERE b.issuer=$1 AND b.subject=$2 \
+                 FOR SHARE OF b,a",
+                &[&issuer,&subject]).await?;
+            let Some(account) = account else {
+                return reject_business(tx, StoreError::Forbidden).await;
+            };
+            let bound_id: String = account.try_get("account_id")?;
+            if bound_id != account_hint {
+                return reject_business(tx, StoreError::Forbidden).await;
+            }
+            let (account_id, index) = match actor(&bound_id) {
+                Ok(actor) => actor,
+                Err(error) => return reject_business(tx, error).await,
+            };
             let version: i64 = account.try_get("version")?;
             if account.try_get::<_, String>("status")? != "SYNTHETIC_ENABLED" || version != permit.versions[index] {
                 return reject_business(tx, StoreError::Revoked).await;
@@ -711,6 +748,93 @@ mod tests {
         });
         Ok((client, task))
     }
+
+    // Test-only convenience: every existing fixture login supplies its exact
+    // declared issuer and subject. This does not manufacture token verification.
+    impl PgStore {
+        async fn replace_test_session(
+            &self,
+            permit: LoginPermit,
+            account_hint: &str,
+            token_hash: Key,
+            csrf: String,
+        ) -> Result<SessionRecord, StoreError> {
+            let subject = match account_hint {
+                "TST-alpha" => "11111111-1111-4111-8111-111111111111",
+                "TST-beta" => "22222222-2222-4222-8222-222222222222",
+                _ => return Err(StoreError::Forbidden),
+            };
+            self.replace_session_bound(
+                permit,
+                account_hint,
+                crate::ISSUER,
+                subject,
+                token_hash,
+                csrf,
+            )
+            .await
+        }
+    }
+
+    struct BindingSnapshot {
+        sessions: i64,
+        audits: i64,
+        outbox: i64,
+        rotated: bool,
+        family: Vec<u8>,
+    }
+
+    async fn binding_snapshot(
+        raw: &Client,
+        predecessor: Key,
+    ) -> Result<BindingSnapshot, StoreError> {
+        let counts = raw
+            .query_one(
+                "SELECT (SELECT count(*) FROM rio_synthetic.sessions) AS sessions, \
+             (SELECT count(*) FROM rio_synthetic.audit_events) AS audits, \
+             (SELECT count(*) FROM rio_synthetic.outbox) AS outbox",
+                &[],
+            )
+            .await?;
+        let parent = raw
+            .query_one(
+                "SELECT rotated,family_hash FROM rio_synthetic.sessions WHERE token_hash=$1",
+                &[&predecessor.to_vec()],
+            )
+            .await?;
+        Ok(BindingSnapshot {
+            sessions: counts.try_get("sessions")?,
+            audits: counts.try_get("audits")?,
+            outbox: counts.try_get("outbox")?,
+            rotated: parent.try_get("rotated")?,
+            family: parent.try_get("family_hash")?,
+        })
+    }
+
+    fn binding_denial_preserves(before: &BindingSnapshot, after: &BindingSnapshot) {
+        assert_eq!(
+            before.sessions, after.sessions,
+            "binding denial cannot create a session"
+        );
+        assert_eq!(
+            before.audits, after.audits,
+            "binding denial cannot audit a successful issue"
+        );
+        assert_eq!(
+            before.outbox, after.outbox,
+            "binding denial cannot enqueue a successful issue"
+        );
+        assert_eq!(
+            before.rotated, after.rotated,
+            "binding denial cannot rotate its predecessor"
+        );
+        // Never print private family material in assertion diagnostics.
+        assert!(
+            before.family == after.family,
+            "binding denial retains its predecessor family"
+        );
+    }
+
     async fn login(
         store: &PgStore,
         label: &str,
@@ -727,7 +851,7 @@ mod tests {
         let permit = store.consume_login(transaction, state).await?;
         eprintln!("CASE T03_LOGIN_REPLACE");
         store
-            .replace_session(permit, id, token, anti_forgery.clone())
+            .replace_test_session(permit, id, token, anti_forgery.clone())
             .await?;
         Ok((token, anti_forgery))
     }
@@ -765,7 +889,7 @@ mod tests {
         let url = test_url("RIO_PG_TEST_URL")?;
         let store = PgStore::connect_local(&url).await?;
         let other = PgStore::connect_local(&url).await?;
-        let (raw, task) = raw(&url).await?;
+        let (mut raw, task) = raw(&url).await?;
         store.recover_after_restore().await?;
         store.health().await?;
 
@@ -802,6 +926,55 @@ mod tests {
             Some(StoreError::Invalid)
         );
 
+        eprintln!("CASE T03_BINDING_DISABLED");
+        // An extant issuer/subject binding does not override account status.
+        // There are no live sessions for alpha at this point, so cleanup is
+        // distinguishable from rotating or issuing a predecessor session.
+        let disabled_tx = key("disabled-bound-login");
+        let disabled_state = key("disabled-bound-state");
+        store.begin_login(disabled_tx, disabled_state, None).await?;
+        let disabled_permit = store.consume_login(disabled_tx, disabled_state).await?;
+        let denied_counts_before = raw
+            .query_one(
+                "SELECT (SELECT count(*) FROM rio_synthetic.sessions) AS sessions, \
+             (SELECT count(*) FROM rio_synthetic.audit_events) AS audits, \
+             (SELECT count(*) FROM rio_synthetic.outbox) AS outbox",
+                &[],
+            )
+            .await?;
+        raw.execute(
+            "UPDATE rio_synthetic.accounts SET status='SYNTHETIC_DISABLED' WHERE account_id='TST-alpha'",
+            &[]).await?;
+        let disabled_result = store
+            .replace_session_bound(
+                disabled_permit,
+                "TST-alpha",
+                crate::ISSUER,
+                "11111111-1111-4111-8111-111111111111",
+                key("disabled-bound-session"),
+                csrf(b'd'),
+            )
+            .await;
+        raw.execute(
+            "UPDATE rio_synthetic.accounts SET status='SYNTHETIC_ENABLED' WHERE account_id='TST-alpha'",
+            &[]).await?;
+        assert_eq!(disabled_result.err(), Some(StoreError::Revoked));
+        let denied_counts_after = raw
+            .query_one(
+                "SELECT (SELECT count(*) FROM rio_synthetic.sessions) AS sessions, \
+             (SELECT count(*) FROM rio_synthetic.audit_events) AS audits, \
+             (SELECT count(*) FROM rio_synthetic.outbox) AS outbox",
+                &[],
+            )
+            .await?;
+        for field in ["sessions", "audits", "outbox"] {
+            assert_eq!(
+                denied_counts_before.try_get::<_, i64>(field)?,
+                denied_counts_after.try_get::<_, i64>(field)?,
+                "disabled binding cannot issue or audit a session"
+            );
+        }
+
         eprintln!("CASE T03_DURABILITY");
         // Durable own-tenant sessions and stable CSRF survive a fresh store/process connection.
         eprintln!("CASE T03_DURABILITY_ALPHA_LOGIN");
@@ -834,12 +1007,111 @@ mod tests {
         let alpha_peer = key("alpha-peer");
         let peer_csrf = csrf(b'b');
         store
-            .replace_session(permit, "TST-alpha", alpha_peer, peer_csrf.clone())
+            .replace_test_session(permit, "TST-alpha", alpha_peer, peer_csrf.clone())
             .await?;
         assert_eq!(
             store.logout(alpha, &peer_csrf).await.err(),
             Some(StoreError::Forbidden)
         );
+
+        eprintln!("CASE T03_BOUND_ISSUER_SUBJECT");
+        // Wrong issuer, unknown subject and account-hint substitution all deny
+        // before predecessor rotation, insertion or success audit/outbox writes.
+        for (label, hint, issuer, subject) in [
+            (
+                "binding-wrong-issuer",
+                "TST-alpha",
+                "https://idp.example.invalid/realms/rio-synthetic-staging",
+                "11111111-1111-4111-8111-111111111111",
+            ),
+            (
+                "binding-unknown-subject",
+                "TST-alpha",
+                crate::ISSUER,
+                "33333333-3333-4333-8333-333333333333",
+            ),
+            (
+                "binding-alpha-hint-beta-subject",
+                "TST-alpha",
+                crate::ISSUER,
+                "22222222-2222-4222-8222-222222222222",
+            ),
+            (
+                "binding-beta-hint-alpha-subject",
+                "TST-beta",
+                crate::ISSUER,
+                "11111111-1111-4111-8111-111111111111",
+            ),
+        ] {
+            let transaction = key(&format!("{label}:transaction"));
+            let state = key(&format!("{label}:state"));
+            store
+                .begin_login(transaction, state, Some(alpha_peer))
+                .await?;
+            let permit = store.consume_login(transaction, state).await?;
+            let before = binding_snapshot(&raw, alpha_peer).await?;
+            let result = store
+                .replace_session_bound(permit, hint, issuer, subject, key(label), csrf(b'q'))
+                .await;
+            assert_eq!(result.err(), Some(StoreError::Forbidden));
+            let after = binding_snapshot(&raw, alpha_peer).await?;
+            binding_denial_preserves(&before, &after);
+        }
+
+        eprintln!("CASE T03_BOUND_MISSING_RECORD");
+        let missing_tx = key("missing-binding-transaction");
+        let missing_state = key("missing-binding-state");
+        store
+            .begin_login(missing_tx, missing_state, Some(alpha_peer))
+            .await?;
+        let missing_permit = store.consume_login(missing_tx, missing_state).await?;
+        let before_missing = binding_snapshot(&raw, alpha_peer).await?;
+        // Commit a fixture-only deletion so the independent store connection
+        // actually observes a missing binding. Restore the exact constrained
+        // record in a separate transaction before checking the denial.
+        let deletion = raw.transaction().await?;
+        let removed = deletion
+            .execute(
+                "DELETE FROM rio_synthetic.auth_bindings WHERE account_id='TST-alpha' \
+             AND issuer=$1 AND subject=$2",
+                &[&crate::ISSUER, &"11111111-1111-4111-8111-111111111111"],
+            )
+            .await?;
+        deletion.commit().await?;
+        let missing_result = store
+            .replace_session_bound(
+                missing_permit,
+                "TST-alpha",
+                crate::ISSUER,
+                "11111111-1111-4111-8111-111111111111",
+                key("missing-binding-session"),
+                csrf(b'r'),
+            )
+            .await;
+        let after_missing = binding_snapshot(&raw, alpha_peer).await?;
+        let still_missing: i64 = raw
+            .query_one(
+                "SELECT count(*) FROM rio_synthetic.auth_bindings WHERE account_id='TST-alpha'",
+                &[],
+            )
+            .await?
+            .try_get(0)?;
+        let restoration = raw.transaction().await?;
+        restoration
+            .execute(
+                "INSERT INTO rio_synthetic.auth_bindings(account_id,issuer,subject) \
+             VALUES('TST-alpha',$1,$2)",
+                &[&crate::ISSUER, &"11111111-1111-4111-8111-111111111111"],
+            )
+            .await?;
+        restoration.commit().await?;
+        assert_eq!(removed, 1);
+        assert_eq!(
+            still_missing, 0,
+            "lookup cannot silently repair a missing binding"
+        );
+        assert_eq!(missing_result.err(), Some(StoreError::Forbidden));
+        binding_denial_preserves(&before_missing, &after_missing);
 
         eprintln!("CASE T03_TENANT");
         // Composite owner/tenant FK rejects a cross-tenant session even through trusted fixture SQL.
@@ -908,7 +1180,7 @@ mod tests {
         );
         assert_eq!(
             store
-                .replace_session(pending, "TST-alpha", key("stale-alpha"), csrf(b'c'))
+                .replace_test_session(pending, "TST-alpha", key("stale-alpha"), csrf(b'c'))
                 .await
                 .err(),
             Some(StoreError::Revoked)
@@ -928,7 +1200,7 @@ mod tests {
         let child = key("rotate-first-child");
         let child_csrf = csrf(b'd');
         store
-            .replace_session(rotate, "TST-alpha", child, child_csrf.clone())
+            .replace_test_session(rotate, "TST-alpha", child, child_csrf.clone())
             .await?;
         assert_eq!(
             store.load_session(fresh).await.err(),
@@ -951,7 +1223,7 @@ mod tests {
         store.logout_all(old, &old_csrf).await?;
         assert_eq!(
             store
-                .replace_session(rotate, "TST-alpha", key("revoke-first-child"), csrf(b'e'))
+                .replace_test_session(rotate, "TST-alpha", key("revoke-first-child"), csrf(b'e'))
                 .await
                 .err(),
             Some(StoreError::Revoked)
@@ -966,7 +1238,7 @@ mod tests {
         let concurrent_child = key("concurrent-child");
         let (revoked, rotated) = tokio::join!(
             store.logout_all(racing, &racing_csrf),
-            other.replace_session(rotate, "TST-alpha", concurrent_child, csrf(b'f'))
+            other.replace_test_session(rotate, "TST-alpha", concurrent_child, csrf(b'f'))
         );
         assert!(
             revoked.is_ok(),
@@ -988,7 +1260,7 @@ mod tests {
         let rotate = store.consume_login(key("family-child-tx"), state).await?;
         let family_child = key("family-child");
         store
-            .replace_session(rotate, "TST-alpha", family_child, csrf(b'g'))
+            .replace_test_session(rotate, "TST-alpha", family_child, csrf(b'g'))
             .await?;
         store.logout(family, &family_csrf).await?;
         assert_eq!(
@@ -1158,7 +1430,7 @@ mod tests {
             store.begin_login(transaction, state, None).await?;
             let permit = store.consume_login(transaction, state).await?;
             store
-                .replace_session(permit, id, marker, csrf(b'h'))
+                .replace_test_session(permit, id, marker, csrf(b'h'))
                 .await?;
         }
         store.logout([0x93; 32], &csrf(b'h')).await?;
@@ -1255,6 +1527,176 @@ mod tests {
             "controlled recovery advanced its durable fence"
         );
         task.abort();
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "requires the owned disposable PostgreSQL TLS fixture"]
+    async fn postgres_tls_store_contract() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use crate::tls_database::SyntheticTlsDbConfig;
+        use std::net::{IpAddr, Ipv4Addr};
+        use tokio_postgres::config::ChannelBinding;
+
+        let password = std::env::var("RIO_PG_TLS_PASSWORD").map_err(|_| StoreError::Invalid)?;
+        let ca_path = std::env::var("RIO_PG_TLS_CA_DER").map_err(|_| StoreError::Invalid)?;
+        let other_path =
+            std::env::var("RIO_PG_TLS_OTHER_CA_DER").map_err(|_| StoreError::Invalid)?;
+        let ca = std::fs::read(ca_path).map_err(|_| StoreError::Invalid)?;
+        let other_ca = std::fs::read(other_path).map_err(|_| StoreError::Invalid)?;
+        let address = IpAddr::V4(Ipv4Addr::LOCALHOST);
+
+        // Same credentials/database on a deliberately plain local control server:
+        // the no-TLS refusal below cannot pass merely because credentials were wrong.
+        let mut plain_config = Config::new();
+        plain_config
+            .host("127.0.0.1")
+            .port(8092)
+            .user("rio_dev")
+            .dbname("rio_synthetic_tls")
+            .password(&password)
+            .ssl_mode(SslMode::Disable)
+            .channel_binding(ChannelBinding::Disable)
+            .connect_timeout(Duration::from_secs(8));
+        let (plain, connection) = timeout(Duration::from_secs(8), plain_config.connect(NoTls))
+            .await
+            .map_err(|_| StoreError::Unavailable)?
+            .map_err(|_| StoreError::Unavailable)?;
+        let plain_task = tokio::spawn(async move {
+            let _ = connection.await;
+        });
+        let row = timeout(
+            Duration::from_secs(5),
+            plain.query_one(
+                "SELECT 1::int AS value,ssl FROM pg_stat_ssl WHERE pid=pg_backend_pid()",
+                &[],
+            ),
+        )
+        .await
+        .map_err(|_| StoreError::Unavailable)??;
+        assert_eq!(row.try_get::<_, i32>("value")?, 1);
+        assert!(!row.try_get::<_, bool>("ssl")?);
+        plain_task.abort();
+        eprintln!("CASE T05_TLS_PLAIN_CONTROL");
+
+        let config = SyntheticTlsDbConfig::for_test("localhost", address, 8091, &password, &ca)?;
+        let store = PgStore::connect_tls_synthetic(&config).await?;
+        store.health().await?;
+        {
+            let client = store.inner.client.lock().await;
+            let row = client
+                .query_one(
+                    "SELECT ssl,version FROM pg_stat_ssl WHERE pid=pg_backend_pid()",
+                    &[],
+                )
+                .await?;
+            assert!(row.try_get::<_, bool>("ssl")?);
+            assert!(matches!(
+                row.try_get::<_, String>("version")?.as_str(),
+                "TLSv1.2" | "TLSv1.3"
+            ));
+            let guard = client
+                .query_one(
+                    "SELECT mode,account_active FROM rio_synthetic.store_guard WHERE id=1",
+                    &[],
+                )
+                .await?;
+            assert_eq!(guard.try_get::<_, String>("mode")?, "SYNTHETIC_ONLY");
+            assert!(!guard.try_get::<_, bool>("account_active")?);
+        }
+        eprintln!("CASE T05_TLS_ENCRYPTED_CURRENT_CONNECTION");
+
+        let wrong_ca =
+            SyntheticTlsDbConfig::for_test("localhost", address, 8091, &password, &other_ca)?;
+        assert!(matches!(
+            PgStore::connect_tls_synthetic(&wrong_ca).await,
+            Err(StoreError::Unavailable)
+        ));
+        eprintln!("CASE T05_TLS_WRONG_CA");
+        let wrong_name =
+            SyntheticTlsDbConfig::for_test("wrong.example.invalid", address, 8091, &password, &ca)?;
+        assert!(matches!(
+            PgStore::connect_tls_synthetic(&wrong_name).await,
+            Err(StoreError::Unavailable)
+        ));
+        eprintln!("CASE T05_TLS_WRONG_HOSTNAME");
+        let without_tls =
+            SyntheticTlsDbConfig::for_test("localhost", address, 8092, &password, &ca)?;
+        assert!(matches!(
+            PgStore::connect_tls_synthetic(&without_tls).await,
+            Err(StoreError::Unavailable)
+        ));
+        eprintln!("CASE T05_TLS_NO_FALLBACK");
+
+        let mut forbidden_plain = Config::new();
+        forbidden_plain
+            .host("127.0.0.1")
+            .port(8091)
+            .user("rio_dev")
+            .dbname("rio_synthetic_tls")
+            .password(&password)
+            .ssl_mode(SslMode::Disable)
+            .channel_binding(ChannelBinding::Disable)
+            .connect_timeout(Duration::from_secs(8));
+        assert!(
+            timeout(Duration::from_secs(8), forbidden_plain.connect(NoTls))
+                .await
+                .map_err(|_| StoreError::Unavailable)?
+                .is_err()
+        );
+        eprintln!("CASE T05_TLS_PLAINTEXT_DENIED");
+
+        let transaction = key("tls-alpha-transaction");
+        let state = key("tls-alpha-state");
+        let token = key("tls-alpha-session");
+        store.begin_login(transaction, state, None).await?;
+        let permit = store.consume_login(transaction, state).await?;
+        let alpha = store
+            .replace_session_bound(
+                permit,
+                "TST-alpha",
+                crate::ISSUER,
+                "11111111-1111-4111-8111-111111111111",
+                token,
+                csrf(b't'),
+            )
+            .await?;
+        assert_eq!(alpha.account_id, "TST-alpha");
+        assert_eq!(alpha.tenant_id, "tenant-TST-alpha");
+        assert_eq!(store.load_session(token).await?.account_id, "TST-alpha");
+        {
+            let client = store.inner.client.lock().await;
+            let before = binding_snapshot(&client, token).await?;
+            drop(client);
+            let next = key("tls-wrong-issuer-transaction");
+            let next_state = key("tls-wrong-issuer-state");
+            store.begin_login(next, next_state, Some(token)).await?;
+            let permit = store.consume_login(next, next_state).await?;
+            assert!(matches!(
+                store
+                    .replace_session_bound(
+                        permit,
+                        "TST-alpha",
+                        "https://idp.example.invalid/realms/rio-synthetic-staging",
+                        "11111111-1111-4111-8111-111111111111",
+                        key("tls-forbidden-session"),
+                        csrf(b'u'),
+                    )
+                    .await,
+                Err(StoreError::Forbidden)
+            ));
+            let client = store.inner.client.lock().await;
+            let after = binding_snapshot(&client, token).await?;
+            binding_denial_preserves(&before, &after);
+        }
+        eprintln!("CASE T05_TLS_BOUND_SUBJECT");
+
+        store.logout(token, &alpha.csrf).await?;
+        assert!(matches!(
+            store.load_session(token).await,
+            Err(StoreError::Revoked)
+        ));
+        eprintln!("CASE T05_TLS_REVOKED_SESSION");
+        drop(store);
         Ok(())
     }
 }
