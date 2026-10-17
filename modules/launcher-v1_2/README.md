@@ -40,6 +40,8 @@ npm run preview
 3. Open de module na **Modulemetadata bevestigd**. De bevestiging geldt maximaal 60 seconden en vervalt bij terugkeer naar de pagina.
 4. Tijdens een check kun je **Annuleren**, of de origin wijzigen; een wijziging trekt de oude poging meteen in. Start daarna de nieuwe check.
 
+Onder **Ingestelde bestemmingen** kun je de bestaande catalogus-origins bekijken en kiezen. Een keuze vult alleen het invoerveld in en trekt een eerdere of lopende verificatie in, ook bij dezelfde origin. Er wordt niets automatisch opgevraagd of geopend; kies daarna zelf **Opslaan & verifiëren**. De lijst is configuratie, geen bewijs van bereikbaarheid, eigendom of autorisatie.
+
 De module moet HTTP 200 en een JSON-object van maximaal 64 KiB leveren, met stringvelden `appId` en `status`. De appId moet bij de module horen. Voorbeeldmetadata voor BASTION:
 
 ```json

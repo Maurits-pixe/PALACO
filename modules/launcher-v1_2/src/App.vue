@@ -1,10 +1,11 @@
 <script setup>
 import { reactive, ref, computed, onMounted, onUnmounted } from 'vue';
-import { createModuleStates } from './catalog.js';
+import { CATALOG, createModuleStates } from './catalog.js';
 import { createVerifier } from './verifier.js';
 import { parseInWorker } from './worker-parser.js';
 
 const modules = reactive(createModuleStates());
+const moduleOrigins = Object.fromEntries(CATALOG.map(({ id, origins }) => [id, origins]));
 const verifier = createVerifier({ modules, parseJson: parseInWorker });
 const clockTick = ref(0);
 const launcherOrigin = window.location.origin;
@@ -100,6 +101,15 @@ onUnmounted(() => {
               :placeholder="module.placeholder" autocomplete="off" autocapitalize="off" spellcheck="false"
               :aria-invalid="!!module.error" :aria-describedby="`detail-${module.id}`"
               @input="verifier.changeInput(module, $event.target.value)" />
+            <details class="origin-choices">
+              <summary>Ingestelde bestemmingen voor {{ module.name }}</summary>
+              <p>Catalogusconfiguratie, geen bewijs dat de app werkt. Kiezen vult alleen het veld in; verifieer daarna zelf.</p>
+              <ul>
+                <li v-for="origin in moduleOrigins[module.id]" :key="origin">
+                  <button type="button" data-origin-choice @click="verifier.changeInput(module, origin)">{{ origin }}</button>
+                </li>
+              </ul>
+            </details>
             <div class="config-actions">
               <button type="button" data-verify :disabled="!module.isValid || module.isVerifying" @click="verifier.verify(module)">
                 {{ module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren' }}

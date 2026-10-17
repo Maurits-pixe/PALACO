@@ -45,6 +45,12 @@ label { display: block; color: #b1bdce; font-size: .68rem; text-transform: upper
 input { width: 100%; min-width: 0; border: 1px solid #444; border-radius: 5px; padding: .75rem; background: #050505; color: #f8fafc; font: .78rem ui-monospace, SFMono-Regular, Consolas, monospace; min-height: 44px; }
 input[aria-invalid="true"] { border-color: #f87171; }
 input::placeholder { color: #7e8da4; }
+.origin-choices { margin-top: .75rem; font-size: .73rem; line-height: 1.6; color: #b1bdce; }
+.origin-choices summary { cursor: pointer; }
+.origin-choices p { margin: .5rem 0; }
+.origin-choices ul { list-style: none; padding: 0; margin: 0; }
+.origin-choices li + li { margin-top: .5rem; }
+.origin-choices button { width: 100%; text-align: left; overflow-wrap: anywhere; font-size: .73rem; }
 .config-actions { display: flex; gap: .5rem; margin-top: .75rem; flex-wrap: wrap; }
 .config-actions > button:first-child { flex: 1; }
 .cancel-btn { border-color: #64748b; }

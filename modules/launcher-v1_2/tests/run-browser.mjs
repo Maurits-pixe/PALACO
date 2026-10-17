@@ -4,6 +4,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { X509Certificate, createHash } from 'node:crypto';
 import { chromium } from 'playwright';
+import { CATALOG } from '../src/catalog.js';
 import { createReport, root } from './report.mjs';
 import { temporarySubject, certificates, metadataFixtures, viteProcess, waitForHttps } from './local-fixtures.mjs';
 
@@ -100,6 +101,59 @@ try {
     assert.match(headers['permissions-policy'], /microphone=\(\)/);
     return { scope: 'local built preview', headers };
   }, 'actual HTTPS document response inspected in Chromium');
+  await report.check('BROWSER-ORIGIN-CHOICES-NO-REQUEST', async () => {
+    await fresh();
+    const before = fixture.requests.length;
+    const metadataRequests = [];
+    const onRequest = request => {
+      if (new URL(request.url()).pathname === '/.well-known/palaco-app.json') metadataRequests.push(request.url());
+    };
+    page.on('request', onRequest);
+    try {
+      for (const { id, origins } of CATALOG) {
+        const choices = card(id).locator('[data-origin-choice]');
+        await card(id).locator('.origin-choices summary').click();
+        assert.deepEqual(await choices.allTextContents(), origins);
+        for (const [index, origin] of origins.entries()) {
+          await choices.nth(index).click();
+          assert.equal(await card(id).locator('input').inputValue(), origin);
+          await status(id, 'Niet ingesteld');
+          assert.equal(await card(id).locator('[data-launch]').isDisabled(), true);
+          assert.equal(await card(id).locator('[data-verify]').isEnabled(), true);
+        }
+      }
+      assert.equal(fixture.requests.length, before);
+      assert.deepEqual(metadataRequests, []);
+      return { modules: CATALOG.length, metadataRequests: 0, automaticVerification: false };
+    } finally { page.off('request', onRequest); }
+  }, 'native DOM clicks on every catalog origin; selection only, no metadata fetch');
+  await report.check('BROWSER-ORIGIN-CHOICE-REVOKES-VERIFICATION', async () => {
+    await fresh();
+    await verify();
+    await status('aether', 'Modulemetadata bevestigd');
+    const before = fixture.requests.length;
+    await card('aether').locator('.origin-choices summary').click();
+    await card('aether').locator('[data-origin-choice]').first().click();
+    await status('aether', 'Niet ingesteld');
+    assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
+    assert.equal(await card('aether').locator('.check-details').count(), 0);
+    assert.equal(fixture.requests.length, before);
+    return { reselectedSameOrigin: true, verificationRevoked: true, additionalRequests: 0 };
+  }, 'reselecting even the verified origin requires a new explicit verification');
+  await report.check('BROWSER-ORIGIN-CHOICE-CANCELS-PENDING', async () => {
+    await fresh(); fixture.config.aether.mode = 'race';
+    const request = page.waitForRequest('https://localhost:5174/.well-known/palaco-app.json');
+    await verify(); await request;
+    await card('aether').locator('.origin-choices summary').click();
+    await card('aether').locator('[data-origin-choice]').nth(1).click();
+    await status('aether', 'Niet ingesteld');
+    await page.waitForTimeout(1900);
+    await status('aether', 'Niet ingesteld');
+    assert.equal(await card('aether').locator('input').inputValue(), CATALOG[0].origins[1]);
+    assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
+    assert.equal(await card('aether').locator('[data-cancel]').count(), 0);
+    return { pendingCheckRevoked: true, staleResultAccepted: false };
+  }, 'native choice button cancels an active HTTPS check with a delayed fixture body');
   await report.check('BROWSER-ALL-THREE-METADATA-AND-WORKER', async () => {
     await fresh();
     for (const [id, port] of [['aether', 5174], ['bastion', 5175], ['5criptie', 5176]]) {
@@ -228,6 +282,7 @@ try {
   }, 'native window.open to the local verified fixture and actual null opener');
   await report.check('BROWSER-MOBILE-NO-OVERFLOW', async () => {
     await page.setViewportSize({ width: 390, height: 844 }); await fresh();
+    for (const { id } of CATALOG) await card(id).locator('.origin-choices summary').click();
     await card('aether').locator('input').fill('https://localhost:5174/long-invalid-path-for-error-layout');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await page.screenshot({ path: path.join(root, 'evidence/mobile-error.png'), fullPage: true });
