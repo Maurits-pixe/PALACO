@@ -89,6 +89,23 @@ h2 { margin: 0 0 .7rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.
 .studio-intro { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
 .studio-intro p { max-width: 55ch; }
 .draft-badge { background: var(--yellow); margin-bottom: 1.15rem; }
+.studio-workspace { display: grid; gap: 1rem; margin-block: 1rem 1.25rem; }
+.studio-editor, .studio-preview { min-width: 0; padding: 1rem; border-radius: 1rem; }
+.studio-editor { background: var(--cream); border: 1px solid var(--line); }
+.workspace-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.workspace-heading .small-label, .workspace-heading h3 { margin: 0; font-size: .82rem; font-weight: 750; }
+.local-indicator { display: inline-flex; align-items: center; gap: .4rem; color: var(--muted); font-size: .75rem; font-weight: 650; }
+.local-indicator::before { content: ""; width: .45rem; height: .45rem; border: 1px solid var(--navy); border-radius: 50%; background: var(--teal); }
+.field-meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: .25rem .75rem; margin-top: .45rem; }
+.field-meta .field-help { flex: 1 1 12rem; margin: 0 !important; }
+.field-count { color: var(--muted); font-size: .75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.studio-preview { background: var(--teal); border: 1px solid var(--navy); }
+.preview-state { padding: .2rem .5rem; border: 1px solid var(--navy); border-radius: 999px; background: var(--paper); font-size: .7rem; font-weight: 650; }
+.preview-paper { min-height: 16rem; max-height: 28rem; overflow: auto; padding: 1.2rem; background: var(--paper); border: 1px solid var(--line); border-radius: .25rem .9rem .9rem .9rem; box-shadow: .3rem .3rem 0 rgba(16, 44, 69, .1); }
+.preview-kicker { display: block; font-size: .65rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 750; color: var(--muted); }
+.card .preview-title { margin-block: 1rem .85rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.025em; font-weight: 800; white-space: pre-wrap; overflow-wrap: anywhere; }
+.card .preview-note { margin: 0; color: var(--muted); font-size: .93rem; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.card .preview-footnote { margin-block: .85rem 0; font-size: .75rem; line-height: 1.5; }
 .studio-fields { display: grid; gap: 1rem; }
 .field label, .file-field label { display: block; margin-bottom: .45rem; font-size: .95rem; font-weight: 750; }
 .field input, .field textarea { width: 100%; min-width: 0; border: 1.5px solid var(--navy); border-radius: .75rem; background: var(--paper); color: var(--navy); padding: .8rem; }
@@ -102,6 +119,12 @@ h2 { margin: 0 0 .7rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.
 .studio-feedback { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
 .site-footer { background: var(--navy); color: var(--cream); padding-block: 1.25rem; }
 .site-footer p { font-size: .85rem; }
+
+@media (min-width: 64rem) {
+  .studio-workspace { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; }
+  .studio-editor, .studio-preview { padding: 1.25rem; }
+  .preview-paper { min-height: 22rem; padding: 1.5rem; }
+}
 
 @media (min-width: 48rem) {
   .page { padding-top: 3.1rem; }
