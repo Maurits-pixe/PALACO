@@ -115,6 +115,7 @@ onUnmounted(() => {
                 {{ module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren' }}
               </button>
               <button v-if="module.isVerifying" type="button" class="cancel-btn" data-cancel @click="verifier.cancel(module)">Annuleren</button>
+              <button type="button" data-clear :disabled="!module.inputUrl" @click="verifier.changeInput(module, '')">Wissen</button>
             </div>
             <div :id="`detail-${module.id}`" class="details" aria-live="polite">
               <p v-if="module.error" class="error-msg">{{ module.error }}</p>

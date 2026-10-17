@@ -42,6 +42,8 @@ npm run preview
 
 Onder **Ingestelde bestemmingen** kun je de bestaande catalogus-origins bekijken en kiezen. Een keuze vult alleen het invoerveld in en trekt een eerdere of lopende verificatie in, ook bij dezelfde origin. Er wordt niets automatisch opgevraagd of geopend; kies daarna zelf **Opslaan & verifiëren**. De lijst is configuratie, geen bewijs van bereikbaarheid, eigendom of autorisatie.
 
+**Wissen** maakt de invoer van één module leeg, verwijdert de lokale checkdetails en trekt een lopende of bevestigde verificatie in. Andere modules blijven ongewijzigd. Dit sluit geen eerder geopende tabbladen, trekt geen serverrechten in en verwijdert geen gegevens bij de module. Voor opnieuw openen moet je een origin invoeren of kiezen en expliciet verifiëren.
+
 De module moet HTTP 200 en een JSON-object van maximaal 64 KiB leveren, met stringvelden `appId` en `status`. De appId moet bij de module horen. Voorbeeldmetadata voor BASTION:
 
 ```json

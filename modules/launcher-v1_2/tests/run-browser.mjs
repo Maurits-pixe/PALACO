@@ -154,6 +154,42 @@ try {
     assert.equal(await card('aether').locator('[data-cancel]').count(), 0);
     return { pendingCheckRevoked: true, staleResultAccepted: false };
   }, 'native choice button cancels an active HTTPS check with a delayed fixture body');
+  await report.check('BROWSER-CLEAR-MODULE-STATE', async () => {
+    await fresh();
+    assert.equal(await card('aether').locator('[data-clear]').isDisabled(), true);
+    await verify('bastion', 'https://localhost:5175');
+    await status('bastion', 'Modulemetadata bevestigd');
+    for (const mode of ['invalid-input', 'verified']) {
+      if (mode === 'invalid-input') await card('aether').locator('input').fill('http://invalid.example');
+      else { await verify(); await status('aether', 'Modulemetadata bevestigd'); }
+      const before = fixture.requests.length;
+      await card('aether').locator('[data-clear]').click();
+      await status('aether', 'Niet ingesteld');
+      assert.equal(await card('aether').locator('input').inputValue(), '');
+      assert.equal(await card('aether').locator('.error-msg, .check-details, [data-countdown]').count(), 0);
+      for (const control of ['clear', 'verify', 'launch']) {
+        assert.equal(await card('aether').locator(`[data-${control}]`).isDisabled(), true);
+      }
+      await status('bastion', 'Modulemetadata bevestigd');
+      assert.equal(fixture.requests.length, before);
+    }
+    return { clearedInputAndHistory: true, otherModulePreserved: true, additionalRequests: 0 };
+  }, 'actual clear button resets invalid and verified local state without fetching or changing another module');
+  await report.check('BROWSER-CLEAR-PENDING-CHECK', async () => {
+    await fresh(); fixture.config.aether.mode = 'race';
+    const request = page.waitForRequest('https://localhost:5174/.well-known/palaco-app.json');
+    await verify(); await request;
+    await card('aether').locator('[data-clear]').click();
+    await status('aether', 'Niet ingesteld');
+    await page.waitForTimeout(1900);
+    await status('aether', 'Niet ingesteld');
+    assert.equal(await card('aether').locator('input').inputValue(), '');
+    assert.equal(await card('aether').locator('[data-cancel], .check-details, .error-msg').count(), 0);
+    assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
+    fixture.config.aether.mode = 'ok';
+    await verify(); await status('aether', 'Modulemetadata bevestigd');
+    return { staleResultAccepted: false, explicitReverificationWorks: true };
+  }, 'clear cancels an active HTTPS check and ignores its late result; explicit subsequent check succeeds');
   await report.check('BROWSER-ALL-THREE-METADATA-AND-WORKER', async () => {
     await fresh();
     for (const [id, port] of [['aether', 5174], ['bastion', 5175], ['5criptie', 5176]]) {
