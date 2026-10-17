@@ -7,6 +7,7 @@ import { parseInWorker } from './worker-parser.js';
 const modules = reactive(createModuleStates());
 const verifier = createVerifier({ modules, parseJson: parseInWorker });
 const clockTick = ref(0);
+const launcherOrigin = window.location.origin;
 let tickTimer;
 const labels = Object.freeze({
   unconfigured: 'Niet ingesteld', not_approved: 'Bestemming niet goedgekeurd',
@@ -67,6 +68,8 @@ onUnmounted(() => {
         <strong>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</strong>
         <p>Dit is de launcher. AETHER, BASTION en 5CRIPTIE zijn nog niet als werkende apps overgedragen.</p>
         <p>Agenda-uitvoering is geblokkeerd. Deze preview verleent geen toestemming om afspraken te wijzigen.</p>
+        <p>Launcher-origin: <code data-launcher-origin>{{ launcherOrigin }}</code></p>
+        <p>Voor module-CORS gebruik je deze exacte origin. Dit is geen bewijs van domeineigendom of autorisatie.</p>
       </aside>
       <div class="intro">
         <h2>Controleer je bestemming.</h2>

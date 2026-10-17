@@ -20,6 +20,7 @@ main { flex: 1; }
 .preview-note { margin-top: 1.5rem; padding: 1rem 1.2rem; border: 1px solid #72531b; border-radius: 6px; background: #1c160b; color: #fde3a7; font-size: .8rem; line-height: 1.6; }
 .preview-note strong { letter-spacing: .06em; }
 .preview-note p { margin: .35rem 0 0; }
+.preview-note code { overflow-wrap: anywhere; user-select: all; }
 .intro { margin: 2.4rem 0 1.8rem; }
 .intro h2 { margin: 0 0 .5rem; font-size: 1.2rem; font-weight: 600; }
 .intro p { margin: 0; color: #94a3b8; font-size: .9rem; }

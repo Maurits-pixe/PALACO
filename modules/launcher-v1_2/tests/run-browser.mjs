@@ -81,6 +81,14 @@ try {
     await page.screenshot({ path: path.join(root, 'evidence/desktop-initial.png'), fullPage: true });
     return { cards: 3, horizontalOverflow: false, viewport: { width: 1360, height: 900 } };
   }, 'production-built Vue mount, native DOM, real HTTPS preview');
+  await report.check('BROWSER-LAUNCHER-ORIGIN', async () => {
+    await page.goto('https://127.0.0.1:5173/?review=local-only#preview');
+    const origin = page.locator('[data-launcher-origin]');
+    await origin.waitFor();
+    assert.equal(await origin.textContent(), 'https://127.0.0.1:5173');
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    return { displayedOrigin: await origin.textContent(), excludesPathQueryFragment: true };
+  }, 'production-built Vue renders the actual browser origin, not a configured deployment URL');
   await report.check('BROWSER-ACTUAL-PREVIEW-HEADERS', async () => {
     const response = await page.goto('https://127.0.0.1:5173');
     const headers = response.headers();
