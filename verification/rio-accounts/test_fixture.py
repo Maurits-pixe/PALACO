@@ -611,15 +611,19 @@ class FixtureSecurityTests(unittest.TestCase):
         with patch.object(fixture.subprocess, "run", return_value=result) as run:
             with redirect_stdout(output):
                 fixture.run_storage_tests()
-        arguments = run.call_args.args[0]
-        self.assertIn("postgres_storage_contract", arguments)
-        self.assertNotIn("postgres_prepare_restore_proof", arguments)
-        self.assertIn("--locked", arguments)
-        self.assertIn("--ignored", arguments)
-        self.assertTrue(secret not in " ".join(arguments))
+        self.assertEqual(run.call_count, 2)
+        for call, selected in zip(run.call_args_list,
+                                  ("postgres_storage_contract", "postgres_cmv_storage_contract")):
+            arguments = call.args[0]
+            self.assertIn(selected, arguments)
+            self.assertNotIn("postgres_prepare_restore_proof", arguments)
+            self.assertIn("--locked", arguments)
+            self.assertIn("--ignored", arguments)
+            self.assertTrue(secret not in " ".join(arguments))
         self.assertTrue(secret not in output.getvalue())
-        document = json.loads(output.getvalue().split(" ", 1)[1])
-        self.assertIs(document["success"], True)
+        for line in output.getvalue().splitlines():
+            document = json.loads(line.split(" ", 1)[1])
+            self.assertIs(document["success"], True)
 
     def test_database_test_runner_rejects_zero_tests_and_arbitrary_failure_lines(self):
         self.prepare()
