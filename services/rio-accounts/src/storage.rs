@@ -19,6 +19,8 @@ use tokio_postgres::{
 
 /// SHA-256 of an opaque cookie or state. Raw cookie credentials never enter this module.
 pub type Key = [u8; 32];
+/// Bounded synthetic RIO/CMV object storage using the same session and revocation fence.
+pub mod cmv;
 /// The only supported test consent; it confers no account activation or contact rights.
 pub const CONSENT_SCOPE: &str = "RIO_SYNTHETIC_SESSION_TEST_V1";
 const FLOW_MS: i64 = 300_000;
@@ -1024,6 +1026,208 @@ mod tests {
     /// Real PostgreSQL contract. CI must explicitly select this ignored test with the private URL.
     #[tokio::test]
     #[ignore = "requires isolated synthetic PostgreSQL; never a production database"]
+    async fn postgres_cmv_storage_contract() -> Result<(), StoreError> {
+        use cmv::{MAX_ACCOUNT_BYTES, MAX_OBJECT_BYTES};
+        let url = test_url("RIO_PG_TEST_URL")?;
+        let store = PgStore::connect_local(&url).await?;
+        store.initialize_cmv_storage().await?;
+        let peer = PgStore::connect_local(&url).await?;
+        let (raw, task) = raw(&url).await?;
+        // This proof requires a newly owned fixture; never erase retained audit to rerun it.
+        let count: i64 = raw
+            .query_one("SELECT count(*) FROM rio_synthetic.cmv_objects", &[])
+            .await?
+            .try_get(0)?;
+        assert_eq!(count, 0, "CMV proof needs a fresh synthetic fixture");
+        let (alpha, csrf_a) = login(&store, "cmv-alpha", "TST-alpha", None).await?;
+        let (beta, csrf_b) = login(&peer, "cmv-beta", "TST-beta", None).await?;
+        let object = key("cmv-object");
+        let bytes = vec![42; MAX_OBJECT_BYTES];
+        assert_eq!(
+            store
+                .put_cmv_object(alpha, "wrong", object, &bytes, 60_000)
+                .await,
+            Err(StoreError::Forbidden)
+        );
+        assert_eq!(store.cmv_usage(alpha).await?.retained_objects, 0);
+        let digest = store
+            .put_cmv_object(alpha, &csrf_a, object, &bytes, 60_000)
+            .await?;
+        assert_eq!(digest, Key::from(Sha256::digest(&bytes)));
+        assert_eq!(
+            peer.read_cmv_object(beta, object).await,
+            Err(StoreError::Forbidden)
+        );
+        assert_eq!(
+            peer.delete_cmv_object(beta, &csrf_b, object).await,
+            Err(StoreError::Forbidden)
+        );
+        peer.put_cmv_object(beta, &csrf_b, object, b"beta fixture", 60_000)
+            .await?;
+        assert_eq!(store.read_cmv_object(alpha, object).await?, bytes);
+        assert_eq!(
+            store
+                .put_cmv_object(alpha, &csrf_a, object, b"overwrite", 60_000)
+                .await,
+            Err(StoreError::Conflict)
+        );
+        eprintln!("CASE CMV_ISOLATION");
+
+        // Three remaining payload slots, competing through independent database connections.
+        let (a, b, c, d) = tokio::join!(
+            store.put_cmv_object(alpha, &csrf_a, key("cmv-a"), &bytes, 60_000),
+            peer.put_cmv_object(alpha, &csrf_a, key("cmv-b"), &bytes, 60_000),
+            store.put_cmv_object(alpha, &csrf_a, key("cmv-c"), &bytes, 60_000),
+            peer.put_cmv_object(alpha, &csrf_a, key("cmv-d"), &bytes, 60_000)
+        );
+        let results = [a, b, c, d];
+        assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 3);
+        assert_eq!(
+            results
+                .iter()
+                .filter(|r| **r == Err(StoreError::Capacity))
+                .count(),
+            1
+        );
+        assert_eq!(store.cmv_usage(alpha).await?.live_bytes, MAX_ACCOUNT_BYTES);
+        let reopened = PgStore::connect_local(&url).await?;
+        assert_eq!(reopened.read_cmv_object(alpha, object).await?, bytes);
+        store.delete_cmv_object(alpha, &csrf_a, object).await?;
+        assert_eq!(
+            store.cmv_usage(alpha).await?.live_bytes,
+            MAX_ACCOUNT_BYTES - MAX_OBJECT_BYTES as i64
+        );
+        assert_eq!(
+            store
+                .put_cmv_object(alpha, &csrf_a, object, b"reuse", 60_000)
+                .await,
+            Err(StoreError::Conflict)
+        );
+        assert_eq!(
+            store.read_cmv_object(alpha, object).await,
+            Err(StoreError::Forbidden)
+        );
+        eprintln!("CASE CMV_QUOTA_DURABILITY_DELETE");
+
+        let expiring = key("cmv-expiry");
+        store
+            .put_cmv_object(alpha, &csrf_a, expiring, b"expires", 1)
+            .await?;
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        assert_eq!(
+            store.read_cmv_object(alpha, expiring).await,
+            Err(StoreError::Forbidden)
+        );
+        let terminal = raw.query_one("SELECT state,octet_length(payload), \
+            (SELECT count(*) FROM rio_synthetic.cmv_events e WHERE e.account_id=o.account_id AND e.object_id=o.object_id) \
+            FROM rio_synthetic.cmv_objects o WHERE account_id='TST-alpha' AND object_id=$1",&[&expiring.to_vec()]).await?;
+        assert_eq!(terminal.try_get::<_, String>(0)?, "EXPIRED");
+        assert_eq!(terminal.try_get::<_, i32>(1)?, 0);
+        assert_eq!(terminal.try_get::<_, i64>(2)?, 2);
+        for statement in [
+            "UPDATE rio_synthetic.cmv_events SET at_ms=at_ms+1",
+            "DELETE FROM rio_synthetic.cmv_events",
+            "TRUNCATE rio_synthetic.cmv_events",
+        ] {
+            assert!(raw.batch_execute(statement).await.is_err());
+        }
+        eprintln!("CASE CMV_EXPIRY_APPEND_ONLY");
+
+        // Tombstones intentionally consume lifetime slots, bounding both metadata and audit.
+        for n in 5..64 {
+            let id = key(&format!("cmv-slot-{n}"));
+            store
+                .put_cmv_object(alpha, &csrf_a, id, b"slot", 60_000)
+                .await?;
+            store.delete_cmv_object(alpha, &csrf_a, id).await?;
+        }
+        assert_eq!(store.cmv_usage(alpha).await?.retained_objects, 64);
+        assert_eq!(
+            store
+                .put_cmv_object(alpha, &csrf_a, key("cmv-overflow"), b"slot", 60_000)
+                .await,
+            Err(StoreError::Capacity)
+        );
+        let events: i64 = raw
+            .query_one(
+                "SELECT count(*) FROM rio_synthetic.cmv_events WHERE account_id='TST-alpha'",
+                &[],
+            )
+            .await?
+            .try_get(0)?;
+        assert!(events <= 128);
+        store.logout_all(alpha, &csrf_a).await?;
+        assert_eq!(peer.cmv_usage(alpha).await, Err(StoreError::Revoked));
+        assert_eq!(peer.read_cmv_object(beta, object).await?, b"beta fixture");
+        store.recover_after_restore().await?;
+        assert_eq!(
+            peer.read_cmv_object(beta, object).await,
+            Err(StoreError::Revoked)
+        );
+        let (fresh, _) = login(&peer, "cmv-beta-after-recovery", "TST-beta", None).await?;
+        assert_eq!(peer.read_cmv_object(fresh, object).await?, b"beta fixture");
+        eprintln!("CASE CMV_REVOKE_RECOVERY");
+
+        let failing = PgStore::connect_local(&url).await?;
+        let fresh_csrf = failing.load_session(fresh).await?.csrf;
+        raw.batch_execute(
+            "CREATE FUNCTION rio_synthetic.cmv_test_failure() RETURNS trigger \
+            LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic fault'; END $$; \
+            CREATE TRIGGER cmv_test_failure BEFORE INSERT ON rio_synthetic.cmv_events \
+            FOR EACH ROW EXECUTE FUNCTION rio_synthetic.cmv_test_failure()",
+        )
+        .await?;
+        let failed_id = key("cmv-atomic-failure");
+        assert_eq!(
+            failing
+                .put_cmv_object(fresh, &fresh_csrf, failed_id, b"rollback", 60_000)
+                .await,
+            Err(StoreError::Unavailable)
+        );
+        raw.batch_execute(
+            "DROP TRIGGER cmv_test_failure ON rio_synthetic.cmv_events; \
+            DROP FUNCTION rio_synthetic.cmv_test_failure()",
+        )
+        .await?;
+        let leaked: i64 = raw
+            .query_one(
+                "SELECT count(*) FROM rio_synthetic.cmv_objects WHERE object_id=$1",
+                &[&failed_id.to_vec()],
+            )
+            .await?
+            .try_get(0)?;
+        assert_eq!(
+            leaked, 0,
+            "audit failure cannot leave acknowledged or orphaned bytes"
+        );
+        eprintln!("CASE CMV_ATOMIC_AUDIT_FAILURE");
+
+        // Privileged corruption is detected before payload release and poisons this handle.
+        raw.execute(
+            "UPDATE rio_synthetic.cmv_objects SET payload='damaged'::bytea \
+            WHERE account_id='TST-beta' AND object_id=$1",
+            &[&object.to_vec()],
+        )
+        .await?;
+        assert_eq!(
+            peer.read_cmv_object(fresh, object).await,
+            Err(StoreError::Unavailable)
+        );
+        assert_eq!(peer.health().await, Err(StoreError::Unavailable));
+        raw.execute(
+            "UPDATE rio_synthetic.cmv_objects SET payload=$2 \
+            WHERE account_id='TST-beta' AND object_id=$1",
+            &[&object.to_vec(), &&b"beta fixture"[..]],
+        )
+        .await?;
+        eprintln!("CASE CMV_INTEGRITY_FAIL_CLOSED");
+        task.abort();
+        Ok(())
+    }
+
+    /// Real PostgreSQL contract. CI must explicitly select this ignored test with the private URL.
+    #[tokio::test]
+    #[ignore = "requires isolated synthetic PostgreSQL; never a production database"]
     async fn postgres_storage_contract() -> Result<(), StoreError> {
         eprintln!("CASE T03_SETUP");
         let url = test_url("RIO_PG_TEST_URL")?;
@@ -1829,6 +2033,17 @@ mod tests {
             binding_denial_preserves(&before, &after);
         }
         eprintln!("CASE T05_TLS_BOUND_SUBJECT");
+
+        store.initialize_cmv_storage().await?;
+        let object = key("tls-cmv-object");
+        store
+            .put_cmv_object(token, &alpha.csrf, object, b"TLS CMV fixture", 60_000)
+            .await?;
+        assert_eq!(
+            store.read_cmv_object(token, object).await?,
+            b"TLS CMV fixture"
+        );
+        store.delete_cmv_object(token, &alpha.csrf, object).await?;
 
         store.logout(token, &alpha.csrf).await?;
         assert!(matches!(

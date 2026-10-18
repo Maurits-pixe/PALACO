@@ -770,6 +770,7 @@ def database_diagnostics() -> None:
         {"state": state, "portBindings": bindings, "startupIndicators": reasons}, separators=(",", ":")))
 
 DATABASE_TEST_FILTERS = {
+    "postgres_cmv_storage_contract",
     "postgres_storage_contract",
     "postgres_consent_http_contract",
     "postgres_prepare_restore_proof",
@@ -777,6 +778,10 @@ DATABASE_TEST_FILTERS = {
 }
 
 DATABASE_CASE_TAGS = frozenset((
+    "CASE CMV_ISOLATION", "CASE CMV_QUOTA_DURABILITY_DELETE",
+    "CASE CMV_EXPIRY_APPEND_ONLY", "CASE CMV_REVOKE_RECOVERY",
+    "CASE CMV_INTEGRITY_FAIL_CLOSED",
+    "CASE CMV_ATOMIC_AUDIT_FAILURE",
     "CASE T03_SETUP", "CASE T03_ATOMIC_FLOW", "CASE T03_DURABILITY",
     "CASE T03_TENANT", "CASE T03_CONSENT", "CASE T03_LOGOUT_ALL",
     "CASE T03_ROTATE_FIRST", "CASE T03_REVOKE_FIRST", "CASE T03_RACE",
@@ -850,6 +855,7 @@ def run_database_test(test_filter: str) -> None:
 
 def run_storage_tests() -> None:
     run_database_test("postgres_storage_contract")
+    run_database_test("postgres_cmv_storage_contract")
 
 def run_consent_http_tests() -> None:
     run_database_test("postgres_consent_http_contract")
