@@ -8,6 +8,17 @@ fn run(args: &[&str]) -> Output {
 }
 
 #[test]
+fn cli_and_embedded_reports_are_identical() -> std::io::Result<()> {
+    let mut text = Vec::new();
+    let mut json = Vec::new();
+    palaco_runtime::inspection::write_status(&mut text)?;
+    palaco_runtime::inspection::write_status_json(&mut json)?;
+    assert_eq!(run(&["status"]).stdout, text);
+    assert_eq!(run(&["status", "--json"]).stdout, json);
+    Ok(())
+}
+
+#[test]
 fn default_and_status_report_only_local_inspection() {
     let default = run(&[]);
     let status = run(&["status"]);

@@ -3,6 +3,7 @@
 
 //! Local inspection entry point, not an execution host or authorization provider.
 
+use palaco_runtime::inspection::{write_status, write_status_json};
 use std::{
     env,
     io::{self, Write},
@@ -44,13 +45,13 @@ fn run(output: &mut impl Write) -> io::Result<ExitCode> {
         return Ok(ExitCode::from(2));
     }
     if format.is_some() {
-        json_status(output)?;
+        write_status_json(output)?;
         output.flush()?;
         return Ok(ExitCode::SUCCESS);
     }
     match command.as_deref().and_then(|value| value.to_str()) {
-        None if command.is_none() => status(output)?,
-        Some("status") => status(output)?,
+        None if command.is_none() => write_status(output)?,
+        Some("status") => write_status(output)?,
         Some("--help" | "-h") => {
             writeln!(output, "{HELP}")?;
         }
@@ -64,30 +65,4 @@ fn run(output: &mut impl Write) -> io::Result<ExitCode> {
     }
     output.flush()?;
     Ok(ExitCode::SUCCESS)
-}
-
-fn json_status(output: &mut impl Write) -> io::Result<()> {
-    writeln!(
-        output,
-        concat!(
-            "{{\"schema_version\":1,\"runtime_version\":\"{}\",",
-            "\"mode\":\"local-inspection\",",
-            "\"execution_host\":\"unavailable\",",
-            "\"authority_provider\":\"unavailable\",",
-            "\"service_health\":\"not-checked\",",
-            "\"external_effects\":\"disabled\",",
-            "\"production_readiness\":\"not-assessed\"}}"
-        ),
-        env!("CARGO_PKG_VERSION")
-    )
-}
-
-fn status(output: &mut impl Write) -> io::Result<()> {
-    writeln!(output, "PALACO runtime {}", env!("CARGO_PKG_VERSION"))?;
-    writeln!(output, "mode=local-inspection")?;
-    writeln!(output, "execution_host=unavailable")?;
-    writeln!(output, "authority_provider=unavailable")?;
-    writeln!(output, "service_health=not-checked")?;
-    writeln!(output, "external_effects=disabled")?;
-    writeln!(output, "production_readiness=not-assessed")
 }

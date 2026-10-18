@@ -43,6 +43,14 @@ ongeldige argumenten blijven exitcode 2 geven als stderr onbeschikbaar is.
 Bij exitcode 1 kan stdout een gedeeltelijk rapport bevatten; verwerk dit niet
 als een compleet resultaat. Exitcode 0 bewijst geen duurzame bestandsopslag.
 
+Rust-integraties kunnen dezelfde rapportage zonder subprocess schrijven via
+`palaco_runtime::inspection::write_status` of `write_status_json`, met een
+eigen `std::io::Write`-bestemming. Beide formaten gebruiken dezelfde vaste
+capaciteitsvelden. De API retourneert schrijffouten, kan gedeeltelijke uitvoer
+achterlaten en flusht niet: buffering en duurzame opslag zijn verantwoordelijkheid
+van de aanroeper. Dit beschrijft de inspectie-interface, niet de capaciteiten
+of autoriteit van de hostapplicatie. Er wordt geen `RuntimePlan` uitgevoerd.
+
 **Commerciële richting:** bied een afgebakende, betaalde integratiepilot aan
 met installatie, reproduceerbare contracttests en een overdracht van bevindingen.
 Leg scope, prijs en acceptatiecriteria vooraf met de opdrachtgever vast.
