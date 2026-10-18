@@ -31,6 +31,13 @@ struct Put {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct RetryPut {
+    payload: String,
+    retention_ms: i64,
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Empty {}
 
@@ -80,7 +87,49 @@ pub(crate) fn routes() -> Router<AppState> {
                 .post(put)
                 .layer(DefaultBodyLimit::max(BODY_LIMIT)),
         )
-        .route("/api/storage/objects/{object_id}", get(read).delete(delete))
+        .route(
+            "/api/storage/objects/{object_id}",
+            get(read)
+                .delete(delete)
+                .merge(axum::routing::put(retry_put).layer(DefaultBodyLimit::max(BODY_LIMIT))),
+        )
+}
+
+async fn retry_put(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let csrf = mutation_headers(&headers, &state.endpoints)?;
+    let token = token(&headers)?;
+    let key = object_key(&id)?;
+    if body.len() > BODY_LIMIT {
+        return Err(ApiError(StatusCode::PAYLOAD_TOO_LARGE));
+    }
+    let request: RetryPut = json_object(&body)?;
+    let payload = decode(&request.payload, MAX_OBJECT_BYTES)?;
+    if payload.is_empty() || !(1..=MAX_RETENTION_MS).contains(&request.retention_ms) {
+        return Err(ApiError(StatusCode::BAD_REQUEST));
+    }
+    let db = state
+        .db
+        .as_ref()
+        .ok_or(ApiError(StatusCode::SERVICE_UNAVAILABLE))?;
+    let receipt = db
+        .put_cmv_object_retry(token, csrf, key, &payload, request.retention_ms)
+        .await
+        .map_err(storage_error)?;
+    let mut response = envelope();
+    response["object"] = json!({"objectId":id,"sha256":URL_SAFE_NO_PAD.encode(receipt.digest),"bytes":payload.len()});
+    Ok((
+        if receipt.created {
+            StatusCode::CREATED
+        } else {
+            StatusCode::OK
+        },
+        Json(response),
+    ))
 }
 
 async fn catalog(

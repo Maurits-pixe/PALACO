@@ -770,6 +770,7 @@ def database_diagnostics() -> None:
         {"state": state, "portBindings": bindings, "startupIndicators": reasons}, separators=(",", ":")))
 
 DATABASE_TEST_FILTERS = {
+    "postgres_cmv_retry_contract",
     "postgres_cmv_catalog_contract",
     "postgres_cmv_http_contract",
     "postgres_cmv_storage_contract",
@@ -860,6 +861,7 @@ def run_storage_tests() -> None:
     run_database_test("postgres_cmv_storage_contract")
     run_database_test("postgres_cmv_http_contract")
     run_database_test("postgres_cmv_catalog_contract")
+    run_database_test("postgres_cmv_retry_contract")
 
 def run_consent_http_tests() -> None:
     run_database_test("postgres_consent_http_contract")
