@@ -230,6 +230,25 @@ try {
     assert.equal(await card('aether').locator('[data-error-code]').count(), 0);
     return { staleCodeAfterEditClearCancelOrSuccess: false };
   }, 'visible diagnostic code follows the existing controller state without retaining a previous failure');
+  await report.check('BROWSER-METADATA-RESULT-TEXT', async () => {
+    await fresh();
+    const endpoint = 'https://localhost:5174/.well-known/palaco-app.json';
+    const reportedStatus = '<img src=x onerror="alert(1)"> & niet-operationeel';
+    await page.route(endpoint, route => route.fulfill({
+      status: 200, contentType: 'application/json',
+      headers: { 'access-control-allow-origin': 'https://127.0.0.1:5173' },
+      body: JSON.stringify({ appId: 'aether', status: reportedStatus })
+    }));
+    try {
+      await verify(); await status('aether', 'Modulemetadata bevestigd');
+      assert.equal(await card('aether').locator('[data-checked-origin] code').textContent(), 'https://localhost:5174');
+      assert.equal(await card('aether').locator('[data-reported-status] code').textContent(), JSON.stringify(reportedStatus));
+      assert.equal(await card('aether').locator('[data-reported-status] img').count(), 0);
+      await card('aether').locator('input').fill('https://aether.hoofdkantoor.info');
+      assert.equal(await card('aether').locator('[data-checked-origin], [data-reported-status]').count(), 0);
+      return { renderedAsText: true, statusInterpretedAsHealth: false, clearedOnEdit: true };
+    } finally { await page.unroute(endpoint); }
+  }, 'intercepted metadata fixture, not a real module; Vue text interpolation never renders received markup');
   await report.check('BROWSER-ENTER-VERIFIES-WITHOUT-LAUNCH', async () => {
     await fresh();
     const before = fixture.requests.length;
@@ -355,6 +374,7 @@ try {
       await page.clock.fastForward(1);
       await status('aether', 'Verificatie verlopen');
       assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
+      assert.equal(await card('aether').locator('[data-checked-origin], [data-reported-status]').count(), 0);
       return { simulatedElapsedMs: 60000, verifiedAt59999: true, expiredAt60000: true };
     } finally { await clockPage.close(); page = originalPage; }
   }, 'native Vue/browser with explicitly simulated Playwright timers/performance/wallclock');

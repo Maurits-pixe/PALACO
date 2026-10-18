@@ -56,6 +56,8 @@ De module moet HTTP 200 en een JSON-object van maximaal 64 KiB leveren, met stri
 
 Als de controller een foutcode levert, verschijnt die naast de foutmelding, bijvoorbeeld `SCHEMA_STATUS`, `IDENTITY`, `JSON_INVALID` of `TRANSPORT`. Geef bij previewproblemen de melding en code door. `TRANSPORT` onderscheidt netwerk, CORS, TLS en door de browser geweigerde redirects niet; de code is geen diagnose van één specifieke oorzaak. Een nieuwe invoer of controle verwijdert de vorige code; niet iedere invoerfout of annulering heeft een code.
 
+Bij een actuele verificatie toont NEO de gecontroleerde origin en de ontvangen modulestatus als geciteerde, onvertrouwde tekst. Ook een status zoals `niet-operationeel` kan het metadatacontract doorstaan: NEO bevestigt het formaat en de appId, niet de werking of veiligheid van de app. Deze extra details verdwijnen bij gewijzigde invoer of verlopen verificatie. Ontvangen tekst wordt niet als HTML uitgevoerd.
+
 De allowlist is ongewijzigd overgenomen uit de aangeleverde v1.1 en is configuratie, geen bewijs van domeineigendom of werkende apps. Er wordt niets automatisch geverifieerd of uit localStorage teruggezet.
 
 ## Herstelde grenzen

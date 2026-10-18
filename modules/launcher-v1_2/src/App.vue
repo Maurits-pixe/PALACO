@@ -124,6 +124,11 @@ onUnmounted(() => {
               <div v-if="module.lastCheck" class="check-details">
                 <span>Laatste check: {{ localTime(module.lastCheck.time) }}</span>
                 <span v-if="module.lastCheck.result === 'success'" class="success-detail">ID bevestigd: {{ module.lastCheck.receivedId }}</span>
+                <template v-if="module.status === 'verified'">
+                  <span data-checked-origin>Gecontroleerde origin: <code>{{ module.lastCheck.origin }}</code></span>
+                  <span data-reported-status>Gemelde modulestatus (onvertrouwde tekst): <code>{{ JSON.stringify(module.lastCheck.receivedStatus) }}</code></span>
+                  <span>Deze status is geen bewijs van bereikbaarheid van functies, veiligheid of autorisatie.</span>
+                </template>
               </div>
             </div>
             <p v-if="module.status === 'verified'" class="expiry-timer" data-countdown>Vervalt over {{ remaining(module) }}s</p>
