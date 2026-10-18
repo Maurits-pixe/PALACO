@@ -13,6 +13,32 @@ test('[RIO-MOBILE-01] Native consent controls preserve focus and reflow', async 
   const credentials = await users();
   await login(page, credentials.alpha, testInfo);
   const before = receiptFrom(await consent(page));
+  await test.step('mobile-login-route', async () => {
+    const route = page.locator('#login-route');
+    await expect(page.locator('#login-route-title')).toHaveText('Zo werkt de proef');
+    await expect(route.locator('li')).toHaveCount(3);
+    await expect(page.locator('#login-stage-detail')).toHaveText(
+      'Je eigen testsessie is zichtbaar. Bekijk nu jouw keuze voor deze oefensessie.'
+    );
+    await expect(page.locator('#start-login')).toHaveAttribute('aria-describedby', 'login-stage-detail');
+    const writes = observeWrites(page);
+    try {
+      for (const [index, target] of [[0, '#account-area'], [1, '#account-area'], [2, '#consent-area']]) {
+        const link = route.locator('a').nth(index);
+        await expect(link).toHaveAttribute('href', target);
+        const box = await link.boundingBox();
+        expect(Boolean(box && box.width >= 44 && box.height >= 44)).toBe(true);
+        await activate(page, link, testInfo);
+        expect(new URL(page.url()).hash).toBe(target);
+      }
+      expect(writes.record.count).toBe(0);
+      await noOverflow(page);
+      const stillOwn = await me(page);
+      expect(stillOwn.status).toBe(200);
+      expect(stillOwn.data.accountId).toBe('TST-alpha');
+      expect(stillOwn.data.accountActive || stillOwn.data.canOpenContact).toBe(false);
+    } finally { writes.stop(); }
+  });
   await test.step('mobile-native-semantics', async () => {
     await expect(page.locator('#feedback')).toHaveAttribute('role', 'status');
     await expect(page.locator('#feedback')).toHaveAttribute('aria-live', 'polite');
