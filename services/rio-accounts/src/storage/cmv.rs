@@ -20,6 +20,34 @@ pub struct Usage {
     pub retained_objects: i64,
 }
 
+/// An account-owned catalog entry; never contains object bytes or credentials.
+pub struct ObjectMetadata {
+    /// Immutable opaque identifier.
+    pub object_id: Key,
+    /// Verified live digest, or the retained digest when bytes have been cleared.
+    pub digest: Key,
+    /// Bytes currently retained in the live payload budget.
+    pub live_bytes: i64,
+    /// Database creation timestamp.
+    pub created_ms: i64,
+    /// Original retention deadline.
+    pub expires_ms: i64,
+    /// Attributable terminal event time; absent for live entries.
+    pub ended_ms: Option<i64>,
+    /// Exactly LIVE, DELETED or EXPIRED.
+    pub state: &'static str,
+}
+
+/// A bounded, transactionally consistent account inventory after lazy expiry.
+pub struct Catalog {
+    /// Database clock observation under the existing revocation/serialization fence.
+    pub observed_ms: i64,
+    /// All retained entries in ascending opaque-ID byte order, including tombstones.
+    pub objects: Vec<ObjectMetadata>,
+    /// Usage calculated from these exact entries; not a separate read.
+    pub usage: Usage,
+}
+
 fn valid_input(payload: &[u8], retention_ms: i64) -> bool {
     !payload.is_empty()
         && payload.len() <= MAX_OBJECT_BYTES
@@ -53,6 +81,66 @@ async fn expire(tx: &Transaction<'_>, session: &SessionRecord, now: i64) -> Resu
 }
 
 impl PgStore {
+    /// Recover the caller's complete catalog without releasing payload bytes.
+    /// Verify live hashes and lifecycle/audit consistency before releasing any entry.
+    /// Malformed or over-budget inventories close access instead of truncating data.
+    pub async fn cmv_catalog(&self, token_hash: Key) -> Result<Catalog, StoreError> {
+        self.timed(async {
+            let mut client = self.inner.client.lock().await;
+            let tx = client.transaction().await?;
+            let now = locked(&tx).await?;
+            let session = match current_session(&tx,&token_hash).await {
+                Ok(session) => session, Err(error) => return reject_business(tx,error).await,
+            };
+            expire(&tx,&session,now).await?;
+            // A single statement snapshot includes both object metadata and its audit.
+            // The extra row detects capacity violations; a partial catalog is never returned.
+            let rows=tx.query("SELECT o.object_id,o.payload,o.digest,o.created_ms,o.expires_ms,o.state, \
+                EXISTS(SELECT 1 FROM rio_synthetic.cmv_events e WHERE e.account_id=o.account_id \
+                    AND e.object_id=o.object_id AND e.phase=0 AND e.event_type='STORED' AND e.at_ms=o.created_ms) AS stored, \
+                (SELECT e.at_ms FROM rio_synthetic.cmv_events e WHERE e.account_id=o.account_id \
+                    AND e.object_id=o.object_id AND e.phase=1) AS ended_ms, \
+                EXISTS(SELECT 1 FROM rio_synthetic.cmv_events e WHERE e.account_id=o.account_id \
+                    AND e.object_id=o.object_id AND e.phase=1 AND e.event_type=o.state \
+                    AND e.at_ms BETWEEN o.created_ms AND $4 AND \
+                    ((o.state='EXPIRED' AND e.at_ms>=o.expires_ms) OR (o.state='DELETED' AND e.at_ms<o.expires_ms))) AS closed \
+                FROM rio_synthetic.cmv_objects o WHERE o.account_id=$1 AND o.tenant_id=$2 \
+                ORDER BY o.object_id LIMIT $3",
+                &[&session.account_id,&session.tenant_id,&(MAX_ACCOUNT_OBJECTS+1),&now]).await?;
+            if rows.len() as i64>MAX_ACCOUNT_OBJECTS { return Err(StoreError::Unavailable); }
+            let mut objects=Vec::with_capacity(rows.len());
+            let mut live_bytes=0_i64;
+            for row in rows {
+                let object_id:Vec<u8>=row.try_get("object_id")?;
+                let digest:Vec<u8>=row.try_get("digest")?;
+                let payload:Vec<u8>=row.try_get("payload")?;
+                let created_ms:i64=row.try_get("created_ms")?;
+                let expires_ms:i64=row.try_get("expires_ms")?;
+                let ended_ms:Option<i64>=row.try_get("ended_ms")?;
+                let state:String=row.try_get("state")?;
+                let state=match state.as_str() { "LIVE"=>"LIVE", "DELETED"=>"DELETED", "EXPIRED"=>"EXPIRED", _=>return Err(StoreError::Unavailable) };
+                let live=state=="LIVE";
+                if !row.try_get::<_,bool>("stored")? || created_ms<0 || created_ms>now
+                    || !expires_ms.checked_sub(created_ms).is_some_and(|ms|(1..=MAX_RETENTION_MS).contains(&ms))
+                    || (live && (ended_ms.is_some() || expires_ms<=now || payload.is_empty()
+                        || payload.len()>MAX_OBJECT_BYTES || Sha256::digest(&payload)[..]!=digest))
+                    || (!live && (!payload.is_empty() || ended_ms.is_none() || !row.try_get::<_,bool>("closed")?)) {
+                    return Err(StoreError::Unavailable);
+                }
+                live_bytes+=payload.len() as i64;
+                if live_bytes>MAX_ACCOUNT_BYTES { return Err(StoreError::Unavailable); }
+                objects.push(ObjectMetadata {
+                    object_id:object_id.try_into().map_err(|_|StoreError::Unavailable)?,
+                    digest:digest.try_into().map_err(|_|StoreError::Unavailable)?,
+                    live_bytes:payload.len() as i64,created_ms,expires_ms,ended_ms,state,
+                });
+            }
+            let catalog=Catalog {observed_ms:now,usage:Usage {live_bytes,retained_objects:objects.len() as i64},objects};
+            tx.commit().await?;
+            Ok(catalog)
+        }).await
+    }
+
     /// Explicit operator opt-in after the existing bootstrap/binding validation.
     /// The browser service never calls this automatically. Restore fencing must
     /// precede use, as with every other PgStore API. No identity rows are repaired.
@@ -226,3 +314,7 @@ mod tests {
         assert!(valid_input(&vec![0; MAX_OBJECT_BYTES], MAX_RETENTION_MS));
     }
 }
+
+#[cfg(test)]
+#[path = "../storage_cmv_catalog_tests.rs"]
+mod catalog_tests;

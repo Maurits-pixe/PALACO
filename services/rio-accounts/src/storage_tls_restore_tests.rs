@@ -16,6 +16,7 @@ const PENDING: Key = [0xa4; 32];
 const PENDING_STATE: Key = [0xa5; 32];
 const ALPHA_SUBJECT: &str = "11111111-1111-4111-8111-111111111111";
 const BETA_SUBJECT: &str = "22222222-2222-4222-8222-222222222222";
+const CMV_MARKER: Key = [0xc7; 32];
 
 fn alpha() -> Key {
     crate::hash(ALPHA_COOKIE)
@@ -99,6 +100,8 @@ async fn snapshot(raw: &Client) -> Result<Snapshot, StoreError> {
         ("consent_receipts", "account_id"),
         ("audit_events", "id"),
         ("outbox", "audit_id"),
+        ("cmv_objects", "account_id,t.object_id"),
+        ("cmv_events", "account_id,t.object_id,t.phase"),
     ] {
         // Both identifiers come exclusively from the fixed list above.
         let sql = format!(
@@ -238,6 +241,16 @@ async fn postgres_tls_prepare_restore_contract() -> Result<(), StoreError> {
     let store = PgStore::connect_tls_synthetic(&primary_config).await?;
     store.recover_after_restore().await?;
     let alpha_session = issue(&store, alpha(), "TST-alpha").await?;
+    store.initialize_cmv_storage().await?;
+    store
+        .put_cmv_object(
+            alpha(),
+            &alpha_session.csrf,
+            CMV_MARKER,
+            b"native snapshot object",
+            cmv::MAX_RETENTION_MS,
+        )
+        .await?;
     issue(&store, beta(), "TST-beta").await?;
     let revoked_session = issue(&store, revoked(), "TST-alpha").await?;
     store.logout(revoked(), &revoked_session.csrf).await?;
@@ -523,6 +536,25 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
 
     let fresh = [0xa6; 32];
     let session = issue(&recovered, fresh, "TST-alpha").await?;
+    assert_eq!(
+        recovered.cmv_catalog(alpha()).await.err(),
+        Some(StoreError::Revoked)
+    );
+    let catalog = recovered.cmv_catalog(fresh).await?;
+    let marker = catalog
+        .objects
+        .iter()
+        .find(|o| o.object_id == CMV_MARKER)
+        .ok_or(StoreError::Invalid)?;
+    assert_eq!(marker.state, "LIVE");
+    assert_eq!(
+        marker.digest,
+        Key::from(Sha256::digest(b"native snapshot object"))
+    );
+    assert_eq!(
+        recovered.read_cmv_object(fresh, CMV_MARKER).await?,
+        b"native snapshot object"
+    );
     assert_eq!(session.account_id, "TST-alpha");
     assert_eq!(recovered.load_session(fresh).await?.account_id, "TST-alpha");
     assert!(

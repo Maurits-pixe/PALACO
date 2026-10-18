@@ -260,19 +260,29 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
           const data = response.ok ? await response.json() : null;
           return {status:response.status, noStore:response.headers.get('cache-control')==='no-store',
             closed:data ? data.accountActive===false && data.canOpenContact===false && data.operativeAuthority==='NONE' : true,
-            payloadMatches:data?.object?.payload==='YnJvd3NlciBmaXh0dXJl'};
-        }, {method,path,csrf,body});
+            payloadMatches:data?.object?.payload==='YnJvd3NlciBmaXh0dXJl',
+            catalogHasObject:data?.objects?.some(item=>item.objectId===args.objectId) ?? false,
+            catalogState:data?.objects?.find(item=>item.objectId===args.objectId)?.state ?? null,
+            catalogNoPayload:Array.isArray(data?.objects) && data.objects.every(item=>!Object.hasOwn(item,'payload'))};
+        }, {method,path,csrf,body,objectId});
         const body={objectId,payload:'YnJvd3NlciBmaXh0dXJl',retentionMs:60000};
         const path='/api/storage/objects/'+objectId;
         expect((await request(alphaPage,'POST','/api/storage/objects',betaAccount.csrfToken,body)).status).toBe(403);
         const created=await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body);
         expect(created.status).toBe(201); expect(created.noStore && created.closed).toBe(true);
+        const ownCatalog=await request(alphaPage,'GET','/api/storage/objects',null,null);
+        expect(ownCatalog.status).toBe(200);expect(ownCatalog.catalogHasObject && ownCatalog.catalogNoPayload).toBe(true);
+        expect(ownCatalog.catalogState).toBe('LIVE');
+        const foreignCatalog=await request(betaPage,'GET','/api/storage/objects',null,null);
+        expect(foreignCatalog.status).toBe(200);expect(foreignCatalog.catalogHasObject).toBe(false);
         const own=await request(alphaPage,'GET',path,null,null);
         expect(own.status).toBe(200); expect(own.payloadMatches && own.noStore && own.closed).toBe(true);
         expect((await request(betaPage,'GET',path,null,null)).status).toBe(403);
         expect((await request(betaPage,'DELETE',path,betaAccount.csrfToken,{})).status).toBe(403);
         expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
         expect((await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,{})).status).toBe(200);
+        const deletedCatalog=await request(alphaPage,'GET','/api/storage/objects',null,null);
+        expect(deletedCatalog.catalogState).toBe('DELETED');expect(deletedCatalog.catalogNoPayload).toBe(true);
         expect((await request(alphaPage,'GET',path,null,null)).status).toBe(403);
         expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
         expect((await request(betaPage,'GET','/api/storage/usage',null,null)).status).toBe(200);

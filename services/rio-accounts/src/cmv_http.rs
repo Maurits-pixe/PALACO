@@ -12,7 +12,7 @@ use axum::{
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
-    routing::{get, post},
+    routing::get,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
@@ -76,9 +76,33 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/storage/usage", get(usage))
         .route(
             "/api/storage/objects",
-            post(put).layer(DefaultBodyLimit::max(BODY_LIMIT)),
+            get(catalog)
+                .post(put)
+                .layer(DefaultBodyLimit::max(BODY_LIMIT)),
         )
         .route("/api/storage/objects/{object_id}", get(read).delete(delete))
+}
+
+async fn catalog(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    let token = token(&headers)?;
+    let db = state
+        .db
+        .as_ref()
+        .ok_or(ApiError(StatusCode::SERVICE_UNAVAILABLE))?;
+    let catalog = db.cmv_catalog(token).await.map_err(storage_error)?;
+    let mut response = envelope();
+    response["schema"] = json!("RIO_CMV_SYNTHETIC_CATALOG_V1");
+    response["observedAt"] = json!(catalog.observed_ms);
+    response["objects"]=json!(catalog.objects.iter().map(|object|json!({
+        "objectId":URL_SAFE_NO_PAD.encode(object.object_id),"sha256":URL_SAFE_NO_PAD.encode(object.digest),
+        "liveBytes":object.live_bytes,"state":object.state,"createdAt":object.created_ms,
+        "expiresAt":object.expires_ms,"endedAt":object.ended_ms,"payloadVerified":object.state=="LIVE",
+    })).collect::<Vec<_>>());
+    response["usage"] = json!({"liveBytes":catalog.usage.live_bytes,"retainedObjects":catalog.usage.retained_objects});
+    Ok(Json(response))
 }
 
 async fn put(
