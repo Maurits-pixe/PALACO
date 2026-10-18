@@ -199,18 +199,37 @@ try {
     await page.screenshot({ path: path.join(root, 'evidence/desktop-verified.png'), fullPage: true });
     return { moduleIds: ['aether', 'bastion', '5criptie'], transport: 'native HTTPS Fetch, CORS, stream and emitted JSON Worker' };
   }, 'real browser Fetch/Worker with TLS fixtures and restrictive CORS headers');
-  for (const [id, mode, label] of [
-    ['BROWSER-SCHEMA-MISSING-STATUS', 'missing-status', 'Verificatie mislukt'],
-    ['BROWSER-IDENTITY-MISMATCH', 'wrong-id', 'Verificatie mislukt'],
-    ['BROWSER-JSON-MALFORMED', 'malformed', 'Verificatie mislukt'],
-    ['BROWSER-CORS-REFUSAL', 'no-cors', 'Controle niet mogelijk'],
-    ['BROWSER-REDIRECT-REFUSAL', 'redirect', 'Controle niet mogelijk']
+  for (const [id, mode, label, code] of [
+    ['BROWSER-SCHEMA-MISSING-STATUS', 'missing-status', 'Verificatie mislukt', 'SCHEMA_STATUS'],
+    ['BROWSER-IDENTITY-MISMATCH', 'wrong-id', 'Verificatie mislukt', 'IDENTITY'],
+    ['BROWSER-JSON-MALFORMED', 'malformed', 'Verificatie mislukt', 'JSON_INVALID'],
+    ['BROWSER-CORS-REFUSAL', 'no-cors', 'Controle niet mogelijk', 'TRANSPORT'],
+    ['BROWSER-REDIRECT-REFUSAL', 'redirect', 'Controle niet mogelijk', 'TRANSPORT']
   ]) await report.check(id, async () => {
     await fresh(); fixture.config.aether.mode = mode;
     await verify(); await status('aether', label);
     assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
+    assert.equal(await card('aether').locator('[data-error-code] code').textContent(), code);
     return { mode, label, detail: await card('aether').locator('.error-msg').textContent() };
   }, 'native browser Fetch/Worker; actual local fixture response/CORS/redirect');
+  await report.check('BROWSER-ERROR-CODE-LIFECYCLE', async () => {
+    await fresh(); fixture.config.aether.mode = 'wrong-id';
+    await verify(); await status('aether', 'Verificatie mislukt');
+    assert.equal(await card('aether').locator('[data-error-code] code').textContent(), 'IDENTITY');
+    await card('aether').locator('input').fill('https://localhost:5174/invalid');
+    assert.equal(await card('aether').locator('[data-error-code]').count(), 0);
+    await card('aether').locator('[data-clear]').click();
+    assert.equal(await card('aether').locator('[data-error-code]').count(), 0);
+    fixture.config.aether.mode = 'race';
+    await verify(); await status('aether', 'Controleren…');
+    assert.equal(await card('aether').locator('[data-error-code]').count(), 0);
+    await card('aether').locator('[data-cancel]').click();
+    assert.equal(await card('aether').locator('[data-error-code]').count(), 0);
+    fixture.config.aether.mode = 'ok';
+    await verify(); await status('aether', 'Modulemetadata bevestigd');
+    assert.equal(await card('aether').locator('[data-error-code]').count(), 0);
+    return { staleCodeAfterEditClearCancelOrSuccess: false };
+  }, 'visible diagnostic code follows the existing controller state without retaining a previous failure');
   await report.check('BROWSER-ENTER-VERIFIES-WITHOUT-LAUNCH', async () => {
     await fresh();
     const before = fixture.requests.length;

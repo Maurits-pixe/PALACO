@@ -54,6 +54,8 @@ De module moet HTTP 200 en een JSON-object van maximaal 64 KiB leveren, met stri
 
 `ready` is een voorbeeldwaarde, geen opgelegd contract-enum. Een cross-origin module moet een passende `Access-Control-Allow-Origin` voor de launcher teruggeven; voor bovenstaande lokale launcher is dat `https://127.0.0.1:5173`. Een transportfout bewijst niet welke van netwerk, CORS, TLS of redirect de oorzaak was.
 
+Als de controller een foutcode levert, verschijnt die naast de foutmelding, bijvoorbeeld `SCHEMA_STATUS`, `IDENTITY`, `JSON_INVALID` of `TRANSPORT`. Geef bij previewproblemen de melding en code door. `TRANSPORT` onderscheidt netwerk, CORS, TLS en door de browser geweigerde redirects niet; de code is geen diagnose van één specifieke oorzaak. Een nieuwe invoer of controle verwijdert de vorige code; niet iedere invoerfout of annulering heeft een code.
+
 De allowlist is ongewijzigd overgenomen uit de aangeleverde v1.1 en is configuratie, geen bewijs van domeineigendom of werkende apps. Er wordt niets automatisch geverifieerd of uit localStorage teruggezet.
 
 ## Herstelde grenzen

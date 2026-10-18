@@ -120,6 +120,7 @@ onUnmounted(() => {
             </div>
             <div :id="`detail-${module.id}`" class="details" aria-live="polite">
               <p v-if="module.error" class="error-msg">{{ module.error }}</p>
+              <p v-if="module.error && module.errorCode" data-error-code>Foutcode: <code>{{ module.errorCode }}</code></p>
               <div v-if="module.lastCheck" class="check-details">
                 <span>Laatste check: {{ localTime(module.lastCheck.time) }}</span>
                 <span v-if="module.lastCheck.result === 'success'" class="success-detail">ID bevestigd: {{ module.lastCheck.receivedId }}</span>
