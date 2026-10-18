@@ -59,3 +59,16 @@ stay denied, while fresh authentication recovers its catalog and verified bytes.
 
 No merge, deployment, live migration, personal-account activation or new contact
 permission is authorized by this candidate.
+
+## Logout ordering found during verification
+
+Investigation of an intermittent restored-browser logout failure found a
+reproducible UI race: a session read started before logout could return late
+and invalidate the pending logout result's UI generation. The logout action now
+supersedes those older reads before sending its request and cancels the next
+poll. Idle and absolute deadlines remain armed; the actual logout response still
+must pass its original checks. A failed logout remains closed and unavailable.
+The new browser ordering proof uses synthetic intercepted responses and a
+controlled clock. Two success-response cases fail before the fix and pass after
+it; the failed-logout case remains closed. This is a UI ordering proof, separate
+from the actual provider/database revocation and recovery contracts.

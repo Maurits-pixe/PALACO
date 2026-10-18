@@ -90,8 +90,10 @@ jobs:
           npm ci --prefix verification/rio-accounts --ignore-scripts --no-audit --no-fund
           cd verification/rio-accounts
           npx playwright install --with-deps chromium
-      - name: Verify local Studio presentation without account authority
-        run: node --test verification/rio-accounts/test_studio_presentation.mjs
+      - name: Verify local UI presentation and logout ordering without account authority
+        run: |
+          node --test verification/rio-accounts/test_studio_presentation.mjs
+          node --test verification/rio-accounts/test_logout_ordering.mjs
       - name: Start disposable real Keycloak and PostgreSQL
         run: |
           python verification/rio-accounts/fixture.py up
