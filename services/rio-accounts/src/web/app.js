@@ -5,7 +5,7 @@
     const MAX_DRAFT_BYTES = 12288;
     const $ = (id) => document.getElementById(id);
     const elements = {
-        account: $('account'), accountId: $('account-id'), login: $('start-login'),
+        account: $('account'), accountId: $('account-id'), login: $('start-login'), loginDetail: $('login-stage-detail'),
         loginInfo: $('login-info'), feedback: $('feedback'), retry: $('retry-session'),
         sessionState: $('session-state'), logout: $('logout'), logoutAll: $('logout-all'),
         consentPanel: $('consent-panel'), consentGuest: $('consent-guest'),
@@ -51,6 +51,13 @@
     }
 
     function renderControls() {
+        const nextStep = {
+            checking: 'Even wachten. Je testsessie wordt gecontroleerd.',
+            anonymous: 'Begin met aanmelden. Daarna zie je je eigen proefaccount.',
+            authenticated: 'Je eigen testsessie is zichtbaar. Bekijk nu jouw keuze voor deze oefensessie.',
+            unavailable: 'De controle is niet afgerond. Kies Opnieuw controleren zodra de verbinding terug is.'
+        };
+        if (elements.loginDetail) elements.loginDetail.textContent = nextStep[phase] || nextStep.checking;
         const authenticated = phase === 'authenticated' && typeof csrf === 'string';
         const locked = !authenticated || busy;
         elements.account.hidden = !authenticated;

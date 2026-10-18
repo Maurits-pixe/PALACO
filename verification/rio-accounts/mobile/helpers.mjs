@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { observeMobileLogin } from '../login-observation.mjs';
 
 export const BFF = 'https://localhost:8088';
 export const SCOPE = 'RIO_SYNTHETIC_SESSION_TEST_V1';
@@ -59,24 +60,41 @@ export async function chooseConsent(page, testInfo) {
 }
 
 export async function login(page, user, testInfo) {
-  await page.context().clearCookies({ domain: '127.0.0.1' });
-  await page.goto(BFF);
-  await expect(page.locator('#start-login')).toBeVisible();
-  await activate(page, page.locator('#start-login'), testInfo);
-  await page.waitForURL(url => url.origin === 'http://127.0.0.1:8089' &&
-    url.pathname === '/realms/rio-synthetic/protocol/openid-connect/auth');
-  const query = new URL(page.url()).searchParams;
-  expect(query.get('response_type')).toBe('code');
-  expect(query.get('redirect_uri')).toBe(BFF + '/auth/callback');
-  expect(query.get('client_id')).toBe('rio-bff');
-  expect(query.get('scope')).toBe('openid');
-  expect(query.get('code_challenge_method')).toBe('S256');
-  await page.locator('input[name="username"]').fill(user.username);
-  await page.locator('input[name="password"]').fill(user.password);
-  await activate(page, page.locator('#kc-login'), testInfo);
-  await page.waitForURL(url => url.origin === BFF && url.pathname === '/');
-  await expect(page.locator('#account-id')).toHaveText(user.username);
-  await expect(page.locator('#consent-refresh')).toBeEnabled();
+  const observation = observeMobileLogin(page, user.username === 'TST-alpha' ? 'alpha' : 'beta');
+  try {
+    await page.context().clearCookies({ domain: '127.0.0.1' });
+    observation.setStage('opening-bff');
+    await page.goto(BFF);
+    observation.setStage('landing');
+    await expect(page.locator('#start-login')).toBeVisible();
+    observation.setStage('starting-oidc');
+    await activate(page, page.locator('#start-login'), testInfo);
+    observation.setStage('waiting-for-provider');
+    await page.waitForURL(url => url.origin === 'http://127.0.0.1:8089' &&
+      url.pathname === '/realms/rio-synthetic/protocol/openid-connect/auth');
+    const query = new URL(page.url()).searchParams;
+    expect(query.get('response_type')).toBe('code');
+    expect(query.get('redirect_uri')).toBe(BFF + '/auth/callback');
+    expect(query.get('client_id')).toBe('rio-bff');
+    expect(query.get('scope')).toBe('openid');
+    expect(query.get('code_challenge_method')).toBe('S256');
+    observation.setStage('submitting-credentials');
+    await page.locator('input[name="username"]').fill(user.username);
+    await page.locator('input[name="password"]').fill(user.password);
+    observation.setStage('waiting-for-bff');
+    await activate(page, page.locator('#kc-login'), testInfo);
+    await page.waitForURL(url => url.origin === BFF && url.pathname === '/');
+    observation.setStage('waiting-for-account');
+    await expect(page.locator('#account-id')).toHaveText(user.username);
+    observation.setStage('waiting-for-consent');
+    await expect(page.locator('#consent-refresh')).toBeEnabled();
+    observation.setStage('ready');
+  } catch (error) {
+    await observation.recordFailure(testInfo, error);
+    throw error;
+  } finally {
+    observation.stop();
+  }
 }
 
 export async function me(page) {
