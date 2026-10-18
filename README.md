@@ -11,6 +11,31 @@ authenticatie, autorisatie of veiligheidscertificering.
 
 ## 🏗️ Architectuur en leveringsstatus
 
+### PALACO Runtime starten
+
+De Rust-runtime heeft een lokale inspectie-CLI (Rust 1.90+):
+
+```bash
+cargo run --locked -p palaco-runtime -- status
+cargo run --locked -p palaco-runtime -- --help
+```
+
+Zonder opdracht verschijnt dezelfde status. Exitcode 0 betekent alleen dat de
+inspectie is uitgevoerd, **niet** dat services gezond zijn of productie is
+vrijgegeven. Onbekende opdrachten en extra argumenten eindigen met exitcode 2.
+De CLI start geen server, opent geen poorten, bewaart niets en voert geen
+`RuntimePlan` uit. De bestaande bibliotheek blijft afzonderlijk beschikbaar:
+die draagt een Citadel-dispositie over; ze authenticeert zelf geen bewijs en
+levert geen uitvoeringshost. Er is geen autorisatie- of productievlag.
+
+**Commerciële richting:** bied een afgebakende, betaalde integratiepilot aan
+met installatie, reproduceerbare contracttests en een overdracht van bevindingen.
+Leg scope, prijs en acceptatiecriteria vooraf met de opdrachtgever vast.
+Deze CLI is een demonstratie-/inspectie-ingang, geen zelfstandig verkoopklaar
+runtimeplatform. Productiehosting, echte autorisatie en operationele garanties
+vereisen afzonderlijke implementatie en toetsing. Er zijn geen aangetoonde
+klantresultaten, omzet of rendementsgaranties.
+
 | Onderdeel | Bron | Status |
 | --- | --- | --- |
 | NEO-launcher (Vue) | [`apps/neo-launcher`](apps/neo-launcher) → `modules/launcher-v1_2` | Lokale HTTPS-preview; metadata via `/.well-known/palaco-app.json` |
