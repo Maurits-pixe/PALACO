@@ -55,6 +55,7 @@ onUnmounted(() => {
 
 <template>
   <div class="palaco-container">
+    <a class="skip-link" href="#launcher-content">Ga naar hoofdinhoud</a>
     <header class="palaco-header">
       <div class="brand">
         <p class="eyebrow">HOOFDKANTOOR</p>
@@ -67,7 +68,7 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <main>
+    <main id="launcher-content" tabindex="-1">
       <aside class="preview-note" aria-label="Previewstatus">
         <strong>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</strong>
         <p>Dit is de launcher. AETHER, BASTION en 5CRIPTIE zijn nog niet als werkende apps overgedragen.</p>

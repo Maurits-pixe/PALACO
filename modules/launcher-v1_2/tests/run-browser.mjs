@@ -82,6 +82,27 @@ try {
     await page.screenshot({ path: path.join(root, 'evidence/desktop-initial.png'), fullPage: true });
     return { cards: 3, horizontalOverflow: false, viewport: { width: 1360, height: 900 } };
   }, 'production-built Vue mount, native DOM, real HTTPS preview');
+  await report.check('BROWSER-SKIP-LINK-KEYBOARD', async () => {
+    await fresh();
+    const before = fixture.requests.length;
+    const link = page.getByRole('link', { name: 'Ga naar hoofdinhoud', exact: true });
+    assert.equal(await link.evaluate(element => element.getBoundingClientRect().bottom < 0), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await link.evaluate(element => element === document.activeElement), true);
+    assert.equal(await link.evaluate(element => element.getBoundingClientRect().top >= 0), true);
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('main').evaluate(element => element === document.activeElement), true);
+    await page.keyboard.press('Tab');
+    assert.equal(await card('aether').locator('input').evaluate(element => element === document.activeElement), true);
+    await page.keyboard.press('Tab');
+    const summary = card('aether').locator('summary');
+    assert.equal(await summary.evaluate(element => element === document.activeElement), true);
+    assert.equal(await summary.evaluate(element => getComputedStyle(element).outlineStyle), 'solid');
+    await page.keyboard.press('Enter');
+    assert.equal(await card('aether').locator('details').getAttribute('open'), '');
+    assert.equal(fixture.requests.length, before);
+    return { firstTabRevealsSkipLink: true, mainReceivesFocus: true, detailsKeyboardOperable: true, additionalRequests: 0 };
+  }, 'native Tab/Enter navigation and computed focus outline; no automated screen-reader conformance claim');
   await report.check('BROWSER-MODULE-ACCESSIBLE-CONTROLS', async () => {
     await fresh();
     for (const { name } of CATALOG) {

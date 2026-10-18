@@ -5,7 +5,9 @@ button, input { font: inherit; }
 button { border: 1px solid #3c3c3c; background: #262626; color: #f8fafc; padding: .7rem .85rem; border-radius: 5px; cursor: pointer; font-size: .8rem; font-weight: 650; min-height: 44px; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button:not(:disabled):hover { background: #383838; }
-button:focus-visible, input:focus-visible { outline: 2px solid #e2e8f0; outline-offset: 3px; }
+button:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible, main:focus-visible { outline: 2px solid #e2e8f0; outline-offset: 3px; }
+.skip-link { position: fixed; top: 1rem; left: 1rem; z-index: 10; transform: translateY(calc(-100% - 2rem)); padding: .75rem; background: #111; color: #f8fafc; max-width: calc(100vw - 2rem); }
+.skip-link:focus { transform: none; }
 .palaco-container { max-width: 1500px; min-height: 100vh; margin: auto; padding: clamp(1.2rem, 4vw, 3.5rem); display: flex; flex-direction: column; }
 .palaco-header { display: flex; gap: 1.5rem; align-items: center; justify-content: space-between; padding-bottom: 1.5rem; border-bottom: 1px solid #333; }
 .eyebrow { font-size: .7rem; letter-spacing: .24em; margin: 0 0 .6rem; color: #94a3b8; }
