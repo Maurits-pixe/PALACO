@@ -417,8 +417,11 @@ def safe_oidc_failure(output: str) -> dict:
                         "CMV_OIDC_PRIMARY_UNCHANGED", "CMV_OIDC_PRIMARY_CHANGED"))
     ids = frozenset(f"RIO-E2E-0{n}" for n in range(1, 6))
     statuses = frozenset(("passed", "failed", "timedOut", "skipped", "interrupted"))
-    result = {"stages": [], "browserCases": []}
+    result = {"stages": [], "browserCases": [], "failureLines": []}
     for line in output[:LIMIT].splitlines():
+        location = re.fullmatch(r"RIO_TLS_OIDC_FAILED_LINE (RIO-E2E-0[1-5]) ([1-9][0-9]{0,3})", line)
+        if location is not None and int(location[2]) <= 5000 and len(result["failureLines"]) < 64:
+            result["failureLines"].append({"id": location[1], "line": int(location[2])})
         if line.startswith("CASE ") and line[5:] in stages and line[5:] not in result["stages"]:
             result["stages"].append(line[5:])
         marker = "RIO_TLS_OIDC_BROWSER_SUMMARY "

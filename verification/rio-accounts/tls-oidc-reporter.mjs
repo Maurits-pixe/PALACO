@@ -14,6 +14,22 @@ const RUNTIME = fileURLToPath(new URL('./.tls-runtime', import.meta.url));
 // Their values are ignored and cannot select an output path or proof target.
 const FRAMEWORK_OPTIONS = new Set(['configDir', '_mode', '_commandHash']);
 
+export function failedSourceLines(steps) {
+  const lines=new Set();
+  const pending=Array.isArray(steps) ? steps.slice(0,256) : [];
+  for (let n=0;pending.length && n<256;n+=1) {
+    const step=pending.pop();
+    try {
+      const location=step?.location;
+      if (step?.error && typeof location?.file==='string' &&
+          /(?:^|[/\\])tests[/\\]accounts\.spec\.mjs$/.test(location.file) &&
+          Number.isInteger(location.line) && location.line>0 && location.line<=5000) lines.add(location.line);
+      if (Array.isArray(step?.steps)) pending.push(...step.steps.slice(0,Math.max(0,256-pending.length)));
+    } catch {}
+  }
+  return [...lines].sort((a,b)=>a-b);
+}
+
 function proofTarget(options) {
   try {
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
@@ -173,6 +189,11 @@ export default class TlsOidcReporter extends SafeReporter {
       const resultStatus = result?.status;
       if (STATUSES.has(resultStatus)) status = resultStatus;
     } catch {}
+    if (status!=='passed' && CASES.has(id)) {
+      for (const line of failedSourceLines(result?.steps)) {
+        process.stdout.write(`RIO_TLS_OIDC_FAILED_LINE ${id} ${line}\n`);
+      }
+    }
     this.results.push({ id, status });
   }
 
