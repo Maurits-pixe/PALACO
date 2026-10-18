@@ -26,7 +26,7 @@ const PHASES = new Set([
   'initial-access', 'authorization-contract', 'real-idp-login',
   'cookie-contract', 'own-account', 'context-isolation', 'invalid-session',
   'invalid-credentials', 'logout-csrf', 'logout', 'expired-session',
-  'no-browser-tokens', 'hold-status', 'session-rotation', 'provider-session-preserved',
+  'no-browser-tokens', 'hold-status', 'session-rotation', 'provider-session-preserved', 'cmv-objects',
   'durable-real-login', 'durable-private-state', 'durable-database-outage',
   'durable-database-recovery', 'durable-connection-stays-closed', 'durable-restart-access', 'durable-cross-actor-csrf',
   'durable-native-revocation', 'durable-revocation-after-restart', 'durable-unaffected-actor',

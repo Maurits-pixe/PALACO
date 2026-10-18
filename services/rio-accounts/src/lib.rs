@@ -41,6 +41,7 @@ use std::{
     time::{Duration, Instant},
 };
 use storage::{PgStore, StoreError};
+mod cmv_http;
 mod consent_http;
 #[cfg(test)]
 mod tls_oidc_tests;
@@ -450,7 +451,29 @@ fn set_cookie(response: &mut Response, name: &str, value: Option<&str>) -> Resul
 
 /// Serve the synthetic UI and OIDC/session boundary with strict Host and response headers.
 pub fn router(state: AppState) -> Router {
+    router_with_routes(state, Router::new())
+}
+
+/// Explicitly enable the bounded CMV HTTP API on the fixed synthetic origin.
+/// Requires durable storage and installs its additive schema before returning a router.
+/// Default `router` and existing TLS/restore constructors keep their previous routes.
+pub async fn router_with_cmv_storage(state: AppState) -> Result<Router, io::Error> {
+    if state.endpoints.origin() != ORIGIN {
+        return Err(io::Error::other("CMV requires the fixed synthetic origin"));
+    }
+    let db = state
+        .db
+        .as_ref()
+        .ok_or_else(|| io::Error::other("CMV requires durable storage"))?;
+    db.initialize_cmv_storage()
+        .await
+        .map_err(|_| io::Error::other("CMV storage unavailable"))?;
+    Ok(router_with_routes(state, cmv_http::routes()))
+}
+
+fn router_with_routes(state: AppState, extra: Router<AppState>) -> Router {
     Router::new()
+        .merge(extra)
         .route("/", get(|| async { Html(INDEX) }))
         .route(
             "/app.js",
@@ -892,7 +915,7 @@ mod tests {
     use tower::ServiceExt;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-    fn test_state() -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
+    pub(crate) fn test_state() -> Result<AppState, Box<dyn std::error::Error + Send + Sync>> {
         test_state_with_endpoints(RuntimeEndpoints::loopback())
     }
 

@@ -228,6 +228,69 @@ async fn postgres_tls_service_contract() -> TestResult {
     let (alpha, alpha_csrf) = seed(&db, "TST-alpha", alpha_subject).await?;
     let (peer, _) = seed(&db, "TST-alpha", alpha_subject).await?;
     let (beta, beta_csrf) = seed(&db, "TST-beta", "22222222-2222-4222-8222-222222222222").await?;
+    // The optional HTTP layer keeps the same verified TLS store and bound actors.
+    let cmv_app = crate::router_with_cmv_storage(state.clone()).await?;
+    let object = random_token();
+    let object_path = format!("/api/storage/objects/{object}");
+    let body =
+        json!({"objectId":object,"payload":"VExTIGZpeHR1cmU","retentionMs":60000}).to_string();
+    assert_eq!(
+        call(
+            &cmv_app,
+            "POST",
+            "/api/storage/objects",
+            session(&beta),
+            Some(&beta_csrf),
+            Some(ORIGIN),
+            body
+        )
+        .await?
+        .status(),
+        StatusCode::CREATED
+    );
+    let stored = read_json(
+        call(
+            &cmv_app,
+            "GET",
+            &object_path,
+            session(&beta),
+            None,
+            None,
+            String::new(),
+        )
+        .await?,
+    )
+    .await?;
+    closed(&stored);
+    assert_eq!(stored["object"]["payload"], "VExTIGZpeHR1cmU");
+    assert_eq!(
+        call(
+            &cmv_app,
+            "GET",
+            &object_path,
+            session(&alpha),
+            None,
+            None,
+            String::new()
+        )
+        .await?
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &cmv_app,
+            "DELETE",
+            &object_path,
+            session(&beta),
+            Some(&beta_csrf),
+            Some(ORIGIN),
+            "{}".to_owned()
+        )
+        .await?
+        .status(),
+        StatusCode::OK
+    );
     let account = read_json(
         call(
             &app,
