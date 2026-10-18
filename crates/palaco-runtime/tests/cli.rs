@@ -113,3 +113,62 @@ fn non_utf8_command_is_rejected() {
     assert_eq!(output.status.code(), Some(2));
     assert!(output.stdout.is_empty());
 }
+
+#[cfg(unix)]
+#[test]
+fn closed_output_pipe_returns_one_without_panic() {
+    use std::{os::fd::OwnedFd, os::unix::net::UnixStream, process::Stdio};
+
+    for args in [
+        vec![],
+        vec!["status"],
+        vec!["status", "--json"],
+        vec!["--help"],
+    ] {
+        let (writer, reader) = UnixStream::pair().expect("socket pair");
+        drop(reader);
+        let output = Command::new(env!("CARGO_BIN_EXE_palaco-runtime"))
+            .args(args)
+            .stdout(Stdio::from(OwnedFd::from(writer)))
+            .output()
+            .expect("runtime CLI must launch");
+        assert_eq!(output.status.code(), Some(1));
+        assert_eq!(output.stderr, b"Runtime output could not be written.\n");
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn full_output_device_returns_one_without_panic() {
+    for args in [vec!["status"], vec!["status", "--json"], vec!["--help"]] {
+        let full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .expect("Linux full device");
+        let output = Command::new(env!("CARGO_BIN_EXE_palaco-runtime"))
+            .args(args)
+            .stdout(full)
+            .output()
+            .expect("runtime CLI must launch");
+        assert_eq!(output.status.code(), Some(1));
+        assert_eq!(output.stderr, b"Runtime output could not be written.\n");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn unavailable_stderr_preserves_argument_error_exit_code() {
+    use std::{os::fd::OwnedFd, os::unix::net::UnixStream, process::Stdio};
+
+    for args in [vec!["execute"], vec!["status", "extra"]] {
+        let (writer, reader) = UnixStream::pair().expect("socket pair");
+        drop(reader);
+        let output = Command::new(env!("CARGO_BIN_EXE_palaco-runtime"))
+            .args(args)
+            .stderr(Stdio::from(OwnedFd::from(writer)))
+            .output()
+            .expect("runtime CLI must launch");
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+    }
+}

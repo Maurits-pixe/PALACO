@@ -37,6 +37,12 @@ het is geen live healthcheck of autorisatiebewijs. Alleen `status --json`
 accepteert de JSON-vlag; onbekende of extra opties geven exitcode 2 zonder
 statusrapport. Cargo kan eigen buildmeldingen op stderr schrijven.
 
+Een schrijffout op stdout (ook een gesloten pipe of volle bestemming) geeft
+exitcode 1 zonder panic. Eventuele foutuitleg op stderr is best-effort:
+ongeldige argumenten blijven exitcode 2 geven als stderr onbeschikbaar is.
+Bij exitcode 1 kan stdout een gedeeltelijk rapport bevatten; verwerk dit niet
+als een compleet resultaat. Exitcode 0 bewijst geen duurzame bestandsopslag.
+
 **Commerciële richting:** bied een afgebakende, betaalde integratiepilot aan
 met installatie, reproduceerbare contracttests en een overdracht van bevindingen.
 Leg scope, prijs en acceptatiecriteria vooraf met de opdrachtgever vast.
