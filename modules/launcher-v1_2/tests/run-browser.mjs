@@ -82,6 +82,33 @@ try {
     await page.screenshot({ path: path.join(root, 'evidence/desktop-initial.png'), fullPage: true });
     return { cards: 3, horizontalOverflow: false, viewport: { width: 1360, height: 900 } };
   }, 'production-built Vue mount, native DOM, real HTTPS preview');
+  await report.check('BROWSER-MODULE-ACCESSIBLE-CONTROLS', async () => {
+    await fresh();
+    for (const { name } of CATALOG) {
+      const form = page.getByRole('form', { name, exact: true });
+      assert.equal(await form.count(), 1);
+      assert.equal(await form.getByRole('textbox', { name: `Toegestane HTTPS-origin voor ${name}`, exact: true }).count(), 1);
+      assert.equal(await form.getByRole('button', { name: `Opslaan & verifiëren ${name}`, exact: true }).isDisabled(), true);
+      assert.equal(await form.getByRole('button', { name: `Wissen ${name}`, exact: true }).isDisabled(), true);
+      assert.equal(await page.getByRole('button', { name: `Wacht op verificatie ${name}`, exact: true }).isDisabled(), true);
+    }
+    const input = page.getByRole('textbox', { name: 'Toegestane HTTPS-origin voor AETHER', exact: true });
+    fixture.config.aether.mode = 'no-response';
+    await input.fill('https://localhost:5174');
+    await page.getByRole('button', { name: 'Opslaan & verifiëren AETHER', exact: true }).click();
+    await status('aether', 'Controleren…');
+    assert.equal(await page.getByRole('button', { name: 'Controleren… AETHER', exact: true }).isDisabled(), true);
+    await page.getByRole('button', { name: 'Annuleren AETHER', exact: true }).click();
+    await status('aether', 'Niet ingesteld');
+    fixture.config.aether.mode = 'ok';
+    await page.getByRole('button', { name: 'Opslaan & verifiëren AETHER', exact: true }).click();
+    await status('aether', 'Modulemetadata bevestigd');
+    assert.equal(await page.getByRole('button', { name: 'Open module AETHER', exact: true }).isEnabled(), true);
+    await page.getByRole('button', { name: 'Wissen AETHER', exact: true }).click();
+    assert.equal(await input.inputValue(), '');
+    await status('bastion', 'Niet ingesteld');
+    return { namedForms: 3, moduleSpecificActions: true, roleBasedInteraction: true };
+  }, 'Chromium role/name locators distinguish module controls through pending, cancelled and verified states; not a screen-reader audit');
   await report.check('BROWSER-LAUNCHER-ORIGIN', async () => {
     await page.goto('https://127.0.0.1:5173/?review=local-only#preview');
     const origin = page.locator('[data-launcher-origin]');

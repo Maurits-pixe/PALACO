@@ -93,11 +93,11 @@ onUnmounted(() => {
             </div>
             <span class="status-badge" :class="module.status" role="status" data-status>{{ labels[module.status] }}</span>
           </div>
-          <h2>{{ module.name }}</h2>
+          <h2 :id="`module-${module.id}`">{{ module.name }}</h2>
           <p class="description">{{ module.description }}</p>
-          <form class="config-section" novalidate
+          <form class="config-section" novalidate :aria-labelledby="`module-${module.id}`"
             @submit.prevent="module.isValid && !module.isVerifying && verifier.verify(module)">
-            <label :for="`origin-${module.id}`">Toegestane HTTPS-origin</label>
+            <label :for="`origin-${module.id}`">Toegestane HTTPS-origin voor {{ module.name }}</label>
             <input :id="`origin-${module.id}`" type="url" :value="module.inputUrl"
               :placeholder="module.placeholder" autocomplete="off" autocapitalize="off" spellcheck="false"
               :aria-invalid="!!module.error" :aria-describedby="`detail-${module.id}`"
@@ -112,11 +112,14 @@ onUnmounted(() => {
               </ul>
             </details>
             <div class="config-actions">
-              <button type="submit" data-verify :disabled="!module.isValid || module.isVerifying">
+              <button type="submit" data-verify :disabled="!module.isValid || module.isVerifying"
+                :aria-label="`${module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren'} ${module.name}`">
                 {{ module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren' }}
               </button>
-              <button v-if="module.isVerifying" type="button" class="cancel-btn" data-cancel @click="verifier.cancel(module)">Annuleren</button>
-              <button type="button" data-clear :disabled="!module.inputUrl" @click="verifier.changeInput(module, '')">Wissen</button>
+              <button v-if="module.isVerifying" type="button" class="cancel-btn" data-cancel
+                :aria-label="`Annuleren ${module.name}`" @click="verifier.cancel(module)">Annuleren</button>
+              <button type="button" data-clear :disabled="!module.inputUrl"
+                :aria-label="`Wissen ${module.name}`" @click="verifier.changeInput(module, '')">Wissen</button>
             </div>
             <div :id="`detail-${module.id}`" class="details" aria-live="polite">
               <p v-if="module.error" class="error-msg">{{ module.error }}</p>
@@ -133,7 +136,8 @@ onUnmounted(() => {
             </div>
             <p v-if="module.status === 'verified'" class="expiry-timer" data-countdown>Vervalt over {{ remaining(module) }}s</p>
           </form>
-          <button type="button" class="launch-btn" data-launch :disabled="module.status !== 'verified'" @click="verifier.open(module)">
+          <button type="button" class="launch-btn" data-launch :disabled="module.status !== 'verified'"
+            :aria-label="`${module.status === 'verified' ? 'Open module' : 'Wacht op verificatie'} ${module.name}`" @click="verifier.open(module)">
             {{ module.status === 'verified' ? 'Open module' : 'Wacht op verificatie' }}
           </button>
         </article>
