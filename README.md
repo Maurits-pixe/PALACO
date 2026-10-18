@@ -51,6 +51,14 @@ achterlaten en flusht niet: buffering en duurzame opslag zijn verantwoordelijkhe
 van de aanroeper. Dit beschrijft de inspectie-interface, niet de capaciteiten
 of autoriteit van de hostapplicatie. Er wordt geen `RuntimePlan` uitgevoerd.
 
+Zonder uitvoer te parsen kan Rust-code ook
+`palaco_runtime::inspection::status()` aanroepen. Dit retourneert een getypeerde
+`InspectionStatus` met schemaversie, runtimeversie en dezelfde vaste statusvelden,
+zonder I/O of hostinspectie. Beide schrijffuncties gebruiken deze snapshot.
+De openbare velden zijn beschrijvende gegevens, geen gevalideerd bewijs:
+een lokaal gewijzigde kopie verandert latere rapporten niet en verleent geen
+uitvoeringsrechten.
+
 **Commerciële richting:** bied een afgebakende, betaalde integratiepilot aan
 met installatie, reproduceerbare contracttests en een overdracht van bevindingen.
 Leg scope, prijs en acceptatiecriteria vooraf met de opdrachtgever vast.

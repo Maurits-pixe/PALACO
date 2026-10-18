@@ -1,5 +1,41 @@
-use palaco_runtime::inspection::{write_status, write_status_json};
+use palaco_runtime::inspection::{InspectionStatus, status, write_status, write_status_json};
 use std::io::{self, Write};
+
+#[test]
+fn typed_status_describes_only_the_inspection_interface() {
+    const REPORT: InspectionStatus = status();
+    assert_eq!(REPORT.schema_version, 1);
+    assert_eq!(REPORT.runtime_version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(REPORT.mode, "local-inspection");
+    assert_eq!(REPORT.execution_host, "unavailable");
+    assert_eq!(REPORT.authority_provider, "unavailable");
+    assert_eq!(REPORT.service_health, "not-checked");
+    assert_eq!(REPORT.external_effects, "disabled");
+    assert_eq!(REPORT.production_readiness, "not-assessed");
+}
+
+#[test]
+fn changing_a_snapshot_does_not_change_future_reports() -> io::Result<()> {
+    let original = status();
+    let mut text_before = Vec::new();
+    let mut json_before = Vec::new();
+    write_status(&mut text_before)?;
+    write_status_json(&mut json_before)?;
+
+    let mut local = original;
+    local.mode = "caller-modified";
+    local.schema_version = 99;
+    assert_ne!(local, original);
+    assert_eq!(status(), original);
+
+    let mut text_after = Vec::new();
+    let mut json_after = Vec::new();
+    write_status(&mut text_after)?;
+    write_status_json(&mut json_after)?;
+    assert_eq!(text_before, text_after);
+    assert_eq!(json_before, json_after);
+    Ok(())
+}
 
 struct Destination {
     bytes: Vec<u8>,
