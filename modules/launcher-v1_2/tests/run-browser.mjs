@@ -109,6 +109,29 @@ try {
     await status('bastion', 'Niet ingesteld');
     return { namedForms: 3, moduleSpecificActions: true, roleBasedInteraction: true };
   }, 'Chromium role/name locators distinguish module controls through pending, cancelled and verified states; not a screen-reader audit');
+  await report.check('BROWSER-CANCEL-CLEAR-KEYBOARD-FOCUS', async () => {
+    await fresh();
+    for (const { id, origins } of CATALOG) {
+      const input = card(id).locator('input');
+      fixture.config[id].mode = 'no-response';
+      await verify(id, origins[0]); await status(id, 'Controleren…');
+      const before = fixture.requests.length;
+      const cancel = card(id).locator('[data-cancel]');
+      await cancel.focus(); await cancel.press('Enter');
+      await status(id, 'Niet ingesteld');
+      assert.equal(await input.evaluate(element => element === document.activeElement), true);
+      assert.equal(await input.inputValue(), origins[0]);
+      assert.equal(await card(id).locator('[data-cancel]').count(), 0);
+      const clear = card(id).locator('[data-clear]');
+      await clear.focus(); await clear.press('Space');
+      assert.equal(await input.evaluate(element => element === document.activeElement), true);
+      assert.equal(await input.inputValue(), '');
+      assert.equal(await clear.isDisabled(), true);
+      assert.equal(fixture.requests.length, before);
+      fixture.config[id].mode = 'ok';
+    }
+    return { testedModules: CATALOG.length, focusTarget: 'same module origin input', additionalRequests: 0 };
+  }, 'native keyboard activation restores focus before cancel disappears or clear becomes disabled');
   await report.check('BROWSER-LAUNCHER-ORIGIN', async () => {
     await page.goto('https://127.0.0.1:5173/?review=local-only#preview');
     const origin = page.locator('[data-launcher-origin]');

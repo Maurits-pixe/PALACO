@@ -27,6 +27,9 @@ function remaining(module) {
 function localTime(time) {
   return new Date(time).toLocaleTimeString('nl-NL');
 }
+function focusOrigin(event) {
+  event.currentTarget.form.querySelector('input')?.focus();
+}
 function checkReturn() { verifier.suspend(); clockTick.value++; }
 function onVisibility() { checkReturn(); }
 function onPageShow(event) { if (event.persisted) checkReturn(); }
@@ -117,9 +120,9 @@ onUnmounted(() => {
                 {{ module.isVerifying ? 'Controleren…' : 'Opslaan & verifiëren' }}
               </button>
               <button v-if="module.isVerifying" type="button" class="cancel-btn" data-cancel
-                :aria-label="`Annuleren ${module.name}`" @click="verifier.cancel(module)">Annuleren</button>
+                :aria-label="`Annuleren ${module.name}`" @click="verifier.cancel(module); focusOrigin($event)">Annuleren</button>
               <button type="button" data-clear :disabled="!module.inputUrl"
-                :aria-label="`Wissen ${module.name}`" @click="verifier.changeInput(module, '')">Wissen</button>
+                :aria-label="`Wissen ${module.name}`" @click="verifier.changeInput(module, ''); focusOrigin($event)">Wissen</button>
             </div>
             <div :id="`detail-${module.id}`" class="details" aria-live="polite">
               <p v-if="module.error" class="error-msg">{{ module.error }}</p>
