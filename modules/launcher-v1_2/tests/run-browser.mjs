@@ -62,6 +62,30 @@ try {
       return { untrustedFixtureAccepted: false };
     } finally { await normal.close(); }
   }, 'native Chromium certificate enforcement; no TLS bypass');
+  for (const javaScriptEnabled of [false, true]) {
+    await report.check(javaScriptEnabled ? 'BROWSER-BLOCKED-BUNDLE-FALLBACK' : 'BROWSER-NO-JAVASCRIPT-FALLBACK', async () => {
+      const fallbackContext = await browser.newContext({ ignoreHTTPSErrors: true, javaScriptEnabled });
+      try {
+        const fallbackPage = await fallbackContext.newPage();
+        const requests = [];
+        fallbackPage.on('request', request => {
+          if (new URL(request.url()).pathname === '/.well-known/palaco-app.json') requests.push(request.url());
+        });
+        if (javaScriptEnabled) await fallbackPage.route('**/*.js', route => route.abort());
+        await fallbackPage.goto('https://127.0.0.1:5173');
+        const fallback = fallbackPage.locator('[data-startup-fallback]');
+        assert.equal(await fallback.isVisible(), true);
+        assert.match(await fallback.textContent(), /Er zijn geen modules geverifieerd of geopend/);
+        if (!javaScriptEnabled) {
+          assert.equal(await fallbackPage.locator('noscript p').isVisible(), true);
+          assert.match(await fallbackPage.locator('noscript p').textContent(), /JavaScript is uitgeschakeld/);
+        }
+        assert.equal(await fallbackPage.locator('button, input, [data-module]').count(), 0);
+        assert.deepEqual(requests, []);
+        return { javaScriptEnabled, fallbackVisible: true, moduleRequests: 0, launchControls: 0 };
+      } finally { await fallbackContext.close(); }
+    }, 'production HTML in isolated Chromium context; disabled JavaScript or deliberately blocked scripts, no hosting claim');
+  }
   context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1360, height: 900 } });
   await context.addInitScript(() => {
     const NativeWorker = window.Worker;
@@ -75,6 +99,7 @@ try {
   page.on('pageerror', error => pageErrors.push(error.message));
   await report.check('BROWSER-VUE-INITIAL-DESKTOP', async () => {
     await fresh(); assert.equal(await page.locator('[data-module]').count(), 3);
+    assert.equal(await page.locator('[data-startup-fallback]').count(), 0);
     for (const id of ['aether', 'bastion', '5criptie']) {
       await status(id, 'Niet ingesteld'); assert.equal(await card(id).locator('[data-launch]').isDisabled(), true);
     }
