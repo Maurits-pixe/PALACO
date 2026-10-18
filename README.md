@@ -19,6 +19,7 @@ De Rust-runtime heeft een lokale inspectie-CLI (Rust 1.90+):
 cargo run --locked -p palaco-runtime -- status
 cargo run --locked -p palaco-runtime -- status --json
 cargo run --locked -p palaco-runtime -- --help
+cargo run --locked -p palaco-runtime -- --version
 ```
 
 Zonder opdracht verschijnt dezelfde status. Exitcode 0 betekent alleen dat de
@@ -28,6 +29,11 @@ De CLI start geen server, opent geen poorten, bewaart niets en voert geen
 `RuntimePlan` uit. De bestaande bibliotheek blijft afzonderlijk beschikbaar:
 die draagt een Citadel-dispositie over; ze authenticeert zelf geen bewijs en
 levert geen uitvoeringshost. Er is geen autorisatie- of productievlag.
+
+`--version` (of `-V`) schrijft uitsluitend `PALACO runtime <pakketversie>`
+met een afsluitende newline. Deze standalone optie controleert geen services,
+autoriteit of productierijpheid. Extra argumenten, ook `--json`, geven exitcode 2
+zonder versie-uitvoer; schrijffouten geven net als bij status exitcode 1.
 
 Voor integraties levert `status --json` precies één JSON-object op stdout,
 met `schema_version: 1`, `runtime_version` en dezelfde capaciteitsvelden als

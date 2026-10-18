@@ -3,7 +3,7 @@
 
 //! Local inspection entry point, not an execution host or authorization provider.
 
-use palaco_runtime::inspection::{write_status, write_status_json};
+use palaco_runtime::inspection::{status, write_status, write_status_json};
 use std::{
     env,
     io::{self, Write},
@@ -12,11 +12,12 @@ use std::{
 
 const HELP: &str = "\
 PALACO runtime inspection
-Usage: palaco-runtime [status [--json] | --help]
+Usage: palaco-runtime [status [--json] | --help | --version]
 
 status   Show this binary's capabilities (default).
 --json   With status only: emit the versioned JSON report.
---help   Show this help.
+--help, -h      Show this help.
+--version, -V   Show the package version only, not service health or readiness.
 
 This command does not start services, authenticate evidence, grant authority,
 execute RuntimePlans, or report the health of NEO, AETHER or BASTION.";
@@ -54,6 +55,9 @@ fn run(output: &mut impl Write) -> io::Result<ExitCode> {
         Some("status") => write_status(output)?,
         Some("--help" | "-h") => {
             writeln!(output, "{HELP}")?;
+        }
+        Some("--version" | "-V") => {
+            writeln!(output, "PALACO runtime {}", status().runtime_version)?;
         }
         _ => {
             let _ = writeln!(

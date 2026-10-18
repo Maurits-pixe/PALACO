@@ -70,6 +70,20 @@ fn json_status_is_a_single_versioned_report_with_the_same_boundaries() {
 }
 
 #[test]
+fn version_flags_report_only_the_package_version() {
+    let expected = format!(
+        "PALACO runtime {}\n",
+        palaco_runtime::inspection::status().runtime_version
+    );
+    for flag in ["--version", "-V"] {
+        let output = run(&[flag]);
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        assert_eq!(output.stdout, expected.as_bytes());
+    }
+}
+
+#[test]
 fn help_explains_boundaries_without_reporting_service_health() {
     for flag in ["--help", "-h"] {
         let output = run(&[flag]);
@@ -79,6 +93,7 @@ fn help_explains_boundaries_without_reporting_service_health() {
         assert!(text.contains("Usage: palaco-runtime"));
         assert!(text.contains("does not start services"));
         assert!(text.contains("execute RuntimePlans"));
+        assert!(text.contains("--version, -V"));
     }
 }
 
@@ -97,6 +112,16 @@ fn unsupported_commands_and_extra_arguments_fail_without_status_output() {
         vec!["status", "--JSON"],
         vec!["status", "--json", "extra"],
         vec!["status", "--json", "--json"],
+        vec!["--version", "--json"],
+        vec!["-V", "--json"],
+        vec!["status", "--version"],
+        vec!["status", "-V"],
+        vec!["--version", "status"],
+        vec!["--version", "--version"],
+        vec!["-V", "extra"],
+        vec!["--version", "--json", "extra"],
+        vec!["--Version"],
+        vec!["-v"],
     ] {
         let output = run(&args);
         assert_eq!(output.status.code(), Some(2));
@@ -135,6 +160,8 @@ fn closed_output_pipe_returns_one_without_panic() {
         vec!["status"],
         vec!["status", "--json"],
         vec!["--help"],
+        vec!["--version"],
+        vec!["-V"],
     ] {
         let (writer, reader) = UnixStream::pair().expect("socket pair");
         drop(reader);
@@ -151,7 +178,13 @@ fn closed_output_pipe_returns_one_without_panic() {
 #[cfg(target_os = "linux")]
 #[test]
 fn full_output_device_returns_one_without_panic() {
-    for args in [vec!["status"], vec!["status", "--json"], vec!["--help"]] {
+    for args in [
+        vec!["status"],
+        vec!["status", "--json"],
+        vec!["--help"],
+        vec!["--version"],
+        vec!["-V"],
+    ] {
         let full = std::fs::OpenOptions::new()
             .write(true)
             .open("/dev/full")
@@ -171,7 +204,12 @@ fn full_output_device_returns_one_without_panic() {
 fn unavailable_stderr_preserves_argument_error_exit_code() {
     use std::{os::fd::OwnedFd, os::unix::net::UnixStream, process::Stdio};
 
-    for args in [vec!["execute"], vec!["status", "extra"]] {
+    for args in [
+        vec!["execute"],
+        vec!["status", "extra"],
+        vec!["--version", "--json"],
+        vec!["-V", "extra"],
+    ] {
         let (writer, reader) = UnixStream::pair().expect("socket pair");
         drop(reader);
         let output = Command::new(env!("CARGO_BIN_EXE_palaco-runtime"))
