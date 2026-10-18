@@ -48,6 +48,9 @@ exitcode 1 zonder panic. Eventuele foutuitleg op stderr is best-effort:
 ongeldige argumenten blijven exitcode 2 geven als stderr onbeschikbaar is.
 Bij exitcode 1 kan stdout een gedeeltelijk rapport bevatten; verwerk dit niet
 als een compleet resultaat. Exitcode 0 bewijst geen duurzame bestandsopslag.
+Ook als alle rapportbytes al geschreven zijn, leidt een fout bij de afsluitende
+flush tot exitcode 1. Een compleet ogend rapport is dus geen vervanging voor
+controle van de exitcode. Ongeldige argumenten schrijven en flushen stdout niet.
 
 Rust-integraties kunnen dezelfde rapportage zonder subprocess schrijven via
 `palaco_runtime::inspection::write_status` of `write_status_json`, met een
