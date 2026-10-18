@@ -17,6 +17,7 @@ De Rust-runtime heeft een lokale inspectie-CLI (Rust 1.90+):
 
 ```bash
 cargo run --locked -p palaco-runtime -- status
+cargo run --locked -p palaco-runtime -- status --json
 cargo run --locked -p palaco-runtime -- --help
 ```
 
@@ -27,6 +28,14 @@ De CLI start geen server, opent geen poorten, bewaart niets en voert geen
 `RuntimePlan` uit. De bestaande bibliotheek blijft afzonderlijk beschikbaar:
 die draagt een Citadel-dispositie over; ze authenticeert zelf geen bewijs en
 levert geen uitvoeringshost. Er is geen autorisatie- of productievlag.
+
+Voor integraties levert `status --json` precies één JSON-object op stdout,
+met `schema_version: 1`, `runtime_version` en dezelfde capaciteitsvelden als
+de tekststatus. `schema_version` versioneert het uitvoercontract, niet de
+productierijpheid. De gerapporteerde waarden beschrijven deze inspectie-CLI;
+het is geen live healthcheck of autorisatiebewijs. Alleen `status --json`
+accepteert de JSON-vlag; onbekende of extra opties geven exitcode 2 zonder
+statusrapport. Cargo kan eigen buildmeldingen op stderr schrijven.
 
 **Commerciële richting:** bied een afgebakende, betaalde integratiepilot aan
 met installatie, reproduceerbare contracttests en een overdracht van bevindingen.
