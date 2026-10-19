@@ -90,9 +90,10 @@ npm test
 npm run test:tls
 npx playwright install chromium
 npm run test:browser
+npm run test:5criptie-integration
 ```
 
-De TLS-/browsersuites vereisen OpenSSL en genereren disposable sleutels onder `.test-tmp/`. Ze wijzigen geen trust store en ruimen hun tijdelijke projectkopieën na afloop op. De browsertest duurt onder meer één echte minuut voor de 60-seconden-vervalcontrole. Positieve browserfixtures gebruiken `ignoreHTTPSErrors` uitsluitend binnen hun testcontext; een aparte normale context controleert weigering van de onbekende test-CA. CORS en redirectbeleid blijven ingeschakeld.
+De TLS-/browsersuites vereisen OpenSSL en genereren disposable sleutels onder `.test-tmp/`. Ze wijzigen geen trust store en ruimen hun tijdelijke projectkopieën na afloop op. De browsertest duurt onder meer één echte minuut voor de 60-seconden-vervalcontrole. Positieve browserfixtures gebruiken `ignoreHTTPSErrors` uitsluitend binnen hun testcontext; een aparte normale context controleert weigering van de onbekende test-CA. CORS en redirectbeleid blijven ingeschakeld. De aparte 5CRIPTIE-integratietest start de echte lokale NEO- en 5CRIPTIE-apps en controleert metadata, openen en statische dashboardinhoud; de browser accepteert testcertificaten alleen binnen die lokale testcontext.
 
 In deze omgeving is Chromium 138.0.7204.0 uit `@sparticuz/chromium@138.0.2` gebruikt, omdat de normale Playwright-browserdownload onbruikbaar was. Wie die exacte Linux-bundel wil gebruiken kan die buiten dit project installeren en een runtime-JSON opgeven via `PALACO_BROWSER_RUNTIME_CONFIG`. Dat JSON bevat `executablePath`, `args` en eventueel `bundleVersion`; de uitgevoerde args en executable-hash staan in de browser-evidence. De harness weigert flags die websecurity of globale certificaatcontrole uitschakelen. Een nieuwe run met een andere browser is afzonderlijk bewijs.
 
