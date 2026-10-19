@@ -1,11 +1,12 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { events, metrics, reviewBreakdown, reviewSummaryLabel, trafficSamples } from './telemetry.js';
+import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewSummaryLabel, trafficSamples } from './telemetry.js';
 
 const selectedSeverity = ref('Alles');
 const severities = ['Alles', 'Hoog', 'Middel', 'Laag'];
 const reviewTotal = reviewBreakdown.reduce((total, item) => total + item.count, 0);
 const reviewStateText = reviewSummaryLabel(reviewTotal);
+const reviewBreakdownText = reviewBreakdownLabel(reviewBreakdown, reviewTotal);
 const severityTones = { Hoog: 'high', Middel: 'medium', Laag: 'low' };
 const visibleEvents = computed(() => selectedSeverity.value === 'Alles'
   ? events
@@ -87,15 +88,17 @@ function reviewPercent(count) {
             <span>{{ reviewTotal === 1 ? 'voorbeeldsignaal' : 'voorbeeldsignalen' }}</span>
           </div>
           <p v-if="reviewTotal === 0" class="review-empty" role="status">Geen openstaande reviewmeldingen in deze fixtures.</p>
-          <template v-if="reviewTotal > 0">
-            <div v-for="item in reviewBreakdown" :key="item.severity" class="review-row">
-              <span class="review-label"><i class="severity" :class="severityTones[item.severity]"></i>{{ item.severity }}</span>
-              <strong>{{ String(item.count).padStart(2, '0') }}</strong>
-              <span class="review-track"><i :class="`${severityTones[item.severity]}-fill`"
-                :style="{ width: `${reviewPercent(item.count)}%` }"></i></span>
-              <span class="review-percent">{{ reviewPercent(item.count) }}%</span>
-            </div>
-          </template>
+          <div class="review-breakdown" role="img" :aria-label="reviewBreakdownText">
+            <template v-if="reviewTotal > 0">
+              <div v-for="item in reviewBreakdown" :key="item.severity" class="review-row">
+                <span class="review-label"><i class="severity" :class="severityTones[item.severity]"></i>{{ item.severity }}</span>
+                <strong>{{ String(item.count).padStart(2, '0') }}</strong>
+                <span class="review-track"><i :class="`${severityTones[item.severity]}-fill`"
+                  :style="{ width: `${reviewPercent(item.count)}%` }"></i></span>
+                <span class="review-percent">{{ reviewPercent(item.count) }}%</span>
+              </div>
+            </template>
+          </div>
           <p class="review-note">Categorisering is illustratief en niet gebaseerd op detectie.</p>
         </article>
       </section>

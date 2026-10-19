@@ -81,6 +81,8 @@ try {
   assert.equal(reviewState.total, '03');
   assert.equal(await popup.locator('.review-total').getAttribute('aria-label'), '3 reviewmeldingen');
   assert.equal(await popup.locator('.review-empty').count(), 0);
+  assert.equal(await popup.locator('.review-breakdown').getAttribute('aria-label'),
+    'Hoog: 2 reviewmeldingen, 67%. Middel: 1 reviewmelding, 33%. Laag: 0 reviewmeldingen, 0%');
   assert.deepEqual(reviewState.rows.map(({ severity, count, percent }) => ({ severity, count, percent })), [
     { severity: 'Hoog', count: '02', percent: '67%' },
     { severity: 'Middel', count: '01', percent: '33%' },

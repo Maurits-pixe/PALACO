@@ -21,6 +21,11 @@ export const reviewBreakdown = Object.freeze(
   }))
 );
 
+export function reviewBreakdownLabel(items, total) {
+  if (total === 0) return 'Geen openstaande reviewmeldingen.';
+  return items.map(item => `${item.severity}: ${item.count} ${item.count === 1 ? 'reviewmelding' : 'reviewmeldingen'}, ${Math.round(item.count / total * 100)}%`).join('. ');
+}
+
 export function reviewSummaryLabel(total) {
   if (total === 0) return 'Geen reviewmeldingen';
   return `${total} ${total === 1 ? 'reviewmelding' : 'reviewmeldingen'}`;
