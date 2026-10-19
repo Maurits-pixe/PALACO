@@ -128,6 +128,18 @@ try {
   assert.equal(restored.suggestedFilename(), originalName);
   const restoredPath = await restored.path();
   assert.equal(await fs.promises.readFile(restoredPath, 'utf8'), originalContent);
+  await page.locator('#passphrase').fill(passphrase);
+  await page.locator('#confirm-passphrase').fill(passphrase);
+  await page.locator('#vault-passphrase').fill(passphrase);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(() => [...document.querySelectorAll('input[type="password"]')]
+    .every(input => input.value === ''));
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' });
+  });
   page.once('dialog', dialog => dialog.dismiss());
   await page.getByRole('button', { name: 'WIS KLUIS' }).click();
   assert.equal(await page.locator('.vault-list li').count(), 1);

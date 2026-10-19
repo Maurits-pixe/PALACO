@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
   decryptBytes,
   encryptBytes,
@@ -22,6 +22,16 @@ const message = ref('');
 const errorMessage = ref('');
 
 const systemReady = computed(() => cryptoAvailable.value && vaultAvailable.value);
+
+function clearPassphrases() {
+  encryptPassphrase.value = '';
+  confirmPassphrase.value = '';
+  decryptPassphrase.value = '';
+}
+
+function clearPassphrasesWhenHidden() {
+  if (document.visibilityState === 'hidden') clearPassphrases();
+}
 
 function selectFile(event) {
   selectedFile.value = event.target.files?.[0] ?? null;
@@ -189,7 +199,13 @@ async function clearAllVaultItems() {
 
 onMounted(async () => {
   cryptoAvailable.value = Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues);
+  document.addEventListener('visibilitychange', clearPassphrasesWhenHidden);
   await refreshVault();
+});
+
+onUnmounted(() => {
+  document.removeEventListener('visibilitychange', clearPassphrasesWhenHidden);
+  clearPassphrases();
 });
 </script>
 
