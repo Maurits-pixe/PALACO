@@ -92,6 +92,21 @@ try {
   assert.equal(reviewState.rows[0].width, '67%');
   assert.equal(reviewState.rows[1].width, '33%');
   assert.equal(reviewState.rows[2].width, '0%');
+  const reviewDetails = popup.locator('.review-details');
+  assert.equal(await reviewDetails.locator('summary').textContent(), 'Toon reviewverdeling als tabel');
+  assert.equal(await reviewDetails.locator('table').isVisible(), false);
+  await reviewDetails.locator('summary').focus();
+  await popup.keyboard.press('Enter');
+  assert.equal(await reviewDetails.locator('table').isVisible(), true);
+  assert.deepEqual((await reviewDetails.locator('table tbody tr').evaluateAll(rows =>
+    rows.map(row => [...row.querySelectorAll('th, td')].map(cell => cell.textContent.trim())))), [
+    ['Hoog', '2', '67%'],
+    ['Middel', '1', '33%'],
+    ['Laag', '0', '0%'],
+    ['Totaal', '3', '100%']
+  ]);
+  await popup.keyboard.press('Space');
+  assert.equal(await reviewDetails.locator('table').isVisible(), false);
   const documentOrigin = new URL(popup.url()).origin;
   const remoteRequests = [];
   popup.on('request', request => {

@@ -100,6 +100,25 @@ function reviewPercent(count) {
             </template>
           </div>
           <p class="sr-only" role="status">{{ reviewBreakdownText }}</p>
+          <details class="review-details">
+            <summary>Toon reviewverdeling als tabel</summary>
+            <table>
+              <caption class="sr-only">Synthetische reviewmeldingen per ernstcategorie</caption>
+              <thead><tr><th scope="col">Ernst</th><th scope="col">Aantal</th><th scope="col">Percentage</th></tr></thead>
+              <tbody>
+                <tr v-for="item in reviewBreakdown" :key="item.severity">
+                  <th scope="row">{{ item.severity }}</th>
+                  <td>{{ item.count }}</td>
+                  <td>{{ reviewPercent(item.count) }}%</td>
+                </tr>
+                <tr>
+                  <th scope="row">Totaal</th>
+                  <td>{{ reviewTotal }}</td>
+                  <td>{{ reviewTotal ? '100%' : '0%' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </details>
           <p class="review-note">Categorisering is illustratief en niet gebaseerd op detectie.</p>
         </article>
       </section>
