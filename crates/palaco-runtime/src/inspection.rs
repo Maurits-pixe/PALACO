@@ -86,12 +86,26 @@ fn observation_counts(report: PlanInspection) -> PlanInspectionSummary {
 
 fn summarize_observations(
     reports: impl IntoIterator<Item = PlanInspection>,
-    mut summary: PlanInspectionSummary,
+    summary: PlanInspectionSummary,
 ) -> Option<PlanInspectionSummary> {
+    try_summarize_observations(
+        reports.into_iter().map(Ok::<_, std::convert::Infallible>),
+        summary,
+    )
+    .ok()
+}
+
+fn try_summarize_observations<E>(
+    reports: impl IntoIterator<Item = Result<PlanInspection, E>>,
+    mut summary: PlanInspectionSummary,
+) -> Result<PlanInspectionSummary, PlanInspectionSummaryError<E>> {
     for report in reports {
-        summary = summary.checked_add(observation_counts(report))?;
+        let report = report.map_err(PlanInspectionSummaryError::Source)?;
+        summary = summary
+            .checked_add(observation_counts(report))
+            .ok_or(PlanInspectionSummaryError::Overflow)?;
     }
-    Some(summary)
+    Ok(summary)
 }
 
 /// Summarizes a finite slice without modifying plans, allocating or performing I/O.
@@ -136,6 +150,58 @@ pub fn summarize_plan_iter<'a>(
 ) -> Option<PlanInspectionSummary> {
     summarize_observations(
         plans.into_iter().map(inspect_plan),
+        PlanInspectionSummary::default(),
+    )
+}
+
+/// Failure to produce a complete summary. No partial summary is returned.
+///
+/// `Display` omits source details; `Debug` and the error chain may expose them.
+#[derive(Debug)]
+pub enum PlanInspectionSummaryError<E> {
+    /// The original caller-owned source error.
+    Source(E),
+    /// An observation counter could not be incremented.
+    Overflow,
+}
+
+impl<E> std::fmt::Display for PlanInspectionSummaryError<E> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Source(_) => "plan inspection summary source failed",
+            Self::Overflow => "plan inspection summary counter overflow",
+        })
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for PlanInspectionSummaryError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Source(error) => Some(error),
+            Self::Overflow => None,
+        }
+    }
+}
+
+/// Summarizes a finite, fallible source of borrowed plans without collecting.
+///
+/// Uses the same observation counting as [`summarize_plan_iter`]. Empty input
+/// succeeds with zero counts; repeated plans count again. Source error types
+/// need not implement `Error`, `Debug`, `Clone` or `'static`.
+/// Iterator side effects belong to the caller. No execution, authentication or
+/// authority refresh is performed, and existing JSON contracts are unchanged.
+///
+/// # Errors
+///
+/// Stops at the first source error or counter overflow without requesting the
+/// next item. The failing item is consumed and no partial summary is returned.
+/// Earlier source effects are not rolled back. Caller-owned source I/O may
+/// occur; this function performs no output or persistence.
+pub fn try_summarize_plan_iter<'a, E>(
+    plans: impl IntoIterator<Item = Result<&'a RuntimePlan, E>>,
+) -> Result<PlanInspectionSummary, PlanInspectionSummaryError<E>> {
+    try_summarize_observations(
+        plans.into_iter().map(|plan| plan.map(inspect_plan)),
         PlanInspectionSummary::default(),
     )
 }
@@ -220,6 +286,13 @@ mod summary_tests {
             assert_eq!(requested.get(), 1);
             assert_eq!(reports.next(), Some(report));
             assert_eq!(requested.get(), 2);
+
+            let mut reports = [Ok(report), Err("later source failure")].into_iter();
+            assert!(matches!(
+                try_summarize_observations(&mut reports, initial),
+                Err(PlanInspectionSummaryError::Overflow)
+            ));
+            assert_eq!(reports.next(), Some(Err("later source failure")));
         }
     }
 }

@@ -5,7 +5,8 @@ use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
     inspection::{
-        PlanInspectionSummary, PlanInspectionWriteError, summarize_plan_iter, summarize_plans,
+        PlanInspectionSummary, PlanInspectionSummaryError, PlanInspectionWriteError,
+        summarize_plan_iter, summarize_plans, try_summarize_plan_iter,
         try_write_plan_inspections_jsonl, write_plan_inspection_json,
         write_plan_inspection_summary_json, write_plan_inspections_jsonl,
     },
@@ -27,6 +28,66 @@ fn plans() -> Result<Vec<RuntimePlan>, ContractError> {
         )))
     })
     .collect()
+}
+
+#[test]
+fn fallible_summaries_match_successful_sources_and_preserve_source_errors()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    assert_eq!(
+        try_summarize_plan_iter(plans.iter().map(Ok::<_, io::Error>))?,
+        summarize_plans(&plans)
+    );
+    assert_eq!(
+        try_summarize_plan_iter(std::iter::empty::<Result<&RuntimePlan, io::Error>>())?,
+        PlanInspectionSummary::default()
+    );
+    for completed in [0, 1, plans.len()] {
+        let mut input = plans[..completed].iter().map(Ok).chain([
+            Err(io::Error::new(io::ErrorKind::InvalidData, "PRIVATE-DETAIL")),
+            Ok(&plans[0]),
+        ]);
+        let error = try_summarize_plan_iter(&mut input).expect_err("source must fail");
+        assert_eq!(error.to_string(), "plan inspection summary source failed");
+        assert!(std::error::Error::source(&error).is_some());
+        match error {
+            PlanInspectionSummaryError::Source(error) => {
+                assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(error.to_string(), "PRIVATE-DETAIL");
+            }
+            PlanInspectionSummaryError::Overflow => panic!("small input cannot overflow"),
+        }
+        assert!(matches!(input.next(), Some(Ok(plan)) if std::ptr::eq(plan, &plans[0])));
+    }
+    let overflow = PlanInspectionSummaryError::<io::Error>::Overflow;
+    assert_eq!(
+        overflow.to_string(),
+        "plan inspection summary counter overflow"
+    );
+    assert!(std::error::Error::source(&overflow).is_none());
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn fallible_summaries_accept_borrowed_opaque_errors_without_read_ahead()
+-> Result<(), Box<dyn std::error::Error>> {
+    struct OpaqueFailure;
+    let failure = OpaqueFailure;
+    let plans = plans()?;
+    let mut input = [Ok(&plans[0]), Err(&failure), Ok(&plans[1])].into_iter();
+    let error = match try_summarize_plan_iter(&mut input) {
+        Err(error) => error,
+        Ok(_) => panic!("source must fail"),
+    };
+    assert_eq!(error.to_string(), "plan inspection summary source failed");
+    match error {
+        PlanInspectionSummaryError::Source(error) => assert!(std::ptr::eq(error, &failure)),
+        PlanInspectionSummaryError::Overflow => panic!("small input cannot overflow"),
+    }
+    assert!(matches!(input.next(), Some(Ok(plan)) if std::ptr::eq(plan, &plans[1])));
+    Ok(())
 }
 
 #[test]

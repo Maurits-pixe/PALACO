@@ -103,6 +103,14 @@ zonder gedeeltelijk resultaat of het volgende plan op te vragen; het falende
 element is al geconsumeerd. Bijwerkingen van de iterator worden niet teruggedraaid.
 Dit blijft uitsluitend observatie, geen uitvoering of autoriteitscontrole.
 
+Voor `Result<&RuntimePlan, E>`-bronnen is er `try_summarize_plan_iter`.
+Deze geeft uitsluitend een volledige samenvatting terug of
+`PlanInspectionSummaryError::Source(E)` / `Overflow`. Bij de eerste fout stopt
+verwerking zonder het volgende item op te vragen; het falende item is geconsumeerd.
+Eerdere bronbijwerkingen worden niet teruggedraaid. Ook geleende bronfouten
+zonder `Error`, `Debug` of `Clone` zijn toegestaan. `Display` bevat geen
+brondetails; `Debug` en de foutketen kunnen die wel blootleggen.
+
 Slice- en iteratorsamenvattingen delen dezelfde interne observatietelling.
 Unit-tests toetsen alle drie disposities met zowel succesvolle validatie als
 alle vier contractfouten, plus stoppen bij overflow zonder vooruit te lezen.
