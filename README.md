@@ -12,6 +12,62 @@ Thank you for your interest in contributing to PALACO! This document outlines th
 
 For Vercel preview deployment setup and URLs for PALACO's web apps, see [Web preview deployments](docs/operations/Preview-Deployments.md).
 
+## Isolated synthetic ERA verification
+
+**CONDITIONAL GO / ADVISORY HUMAN DECISION REQUIRED — human review/release gate: HOLD.**
+`verification/era-synthetic/` is an executable Python-stdlib fixture, not production
+runtime or real authorization. Only fixed synthetic WORLD, identity, evidence,
+action, authority and payload values are accepted. Nothing executes externally:
+no network, providers, federation, production release or operative authority.
+WCG/WIV/WFR/Notion source contracts are unavailable here; no conformance is claimed.
+
+Reproduce from this checkout using fresh caller-owned output paths:
+
+```bash
+SOURCE=$(git -C /home/runner/work/PALACO/PALACO rev-parse HEAD)
+python3 -m unittest discover -s /home/runner/work/PALACO/PALACO/verification/era-synthetic -p 'test_*.py' -v
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py demo --db /tmp/era-synthetic-demo.sqlite --envelope /tmp/era-synthetic-demo.envelope.json --source-commit "$SOURCE"
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py /tmp/era-synthetic-demo.envelope.json
+```
+
+The runner supplies a real 40-hex `git rev-parse HEAD`; the reviewer must compare
+the exported source binding against the checkout. The fixture checks its syntax
+and persistent binding, not Git authenticity or whether uncommitted edits exist.
+The demo atomically commits five linked records, revokes synthetic authority,
+then demonstrates an exact historical retry (never renewed permission).
+Export uses a consistent database snapshot. SHA256 binds the versioned envelope,
+repository/revision, ordered chain and no-execution flags; it supplies integrity,
+**not signatures, authenticity or external validation**. The readonly, database-free
+checker is a separate implementation, not independent human verification.
+
+The exactly sixteen `wf_t01`–`wf_t16` methods are **proposed local mappings only**,
+not official scenarios whose definitions are absent:
+
+| Local ID | Verification |
+|---|---|
+| T01 | Fixed vertical slice and durable receipt |
+| T02 | Identity denial |
+| T03 | Evidence denial |
+| T04 | Decision denial |
+| T05 | Authority denial |
+| T06 | World/action/payload/type/extra-field denial |
+| T07 | Changed idempotency-key conflicts |
+| T08 | Historical retry after revocation, no permission |
+| T09 | Ordered persistence, restart, revocation/source binding |
+| T10 | Duplicate commits across processes/connections |
+| T11 | Commit/revoke race accepts only valid serial orders |
+| T12 | Actual precommit process termination, rollback, bounded busy timeout |
+| T13 | Actual postcommit process termination, durable exact retry |
+| T14 | Tampering, strict JSON/schema/types/duplicate keys/bounds |
+| T15 | Missing/reordered links, recomputed malicious proofs, decision mismatch |
+| T16 | Demo CLI and separate readonly envelope-only checker CLI |
+
+These checks demonstrate local SQLite `BEGIN IMMEDIATE`, `synchronous=FULL`
+transaction behavior and process-crash recovery on the tested filesystem, not
+power-loss/hardware guarantees, production security, formal proof, or spec compliance.
+Authentic external validation, contract mapping, operational authorization and
+human release approval remain open; synthetic success does not clear **HOLD**.
+
 ---
 
 ## Code of Conduct
