@@ -118,6 +118,9 @@ try {
 
   const eventRows = popup.locator('.events-panel tbody tr');
   assert.equal(await eventRows.count(), 6);
+  assert.equal(await popup.getByRole('group', { name: 'Filter synthetische signalen' }).count(), 1);
+  assert.deepEqual(await popup.locator('.events-panel thead th').evaluateAll(headers =>
+    headers.map(header => header.getAttribute('scope'))), Array(7).fill('col'));
   const filterStatus = popup.locator('.events-panel [role="status"]');
   assert.equal((await filterStatus.textContent()).trim(), 'Toont 6 synthetische signalen.');
   for (const [severity, count, announcement] of [

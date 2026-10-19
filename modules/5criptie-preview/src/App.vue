@@ -131,7 +131,7 @@ function barHeight(value) {
       <section class="panel events-panel">
         <div class="panel-head event-header">
           <div><p class="eyebrow">GELOCALISEERDE VOORBEELDEN</p><h2>Signaalreview</h2></div>
-          <div class="filter-group" aria-label="Filter synthetische signalen">
+          <div class="filter-group" role="group" aria-label="Filter synthetische signalen">
             <button v-for="severity in severities" :key="severity" type="button"
               :class="{ selected: selectedSeverity === severity }" :aria-pressed="selectedSeverity === severity"
               @click="selectedSeverity = severity">{{ severity }}</button>
@@ -140,7 +140,7 @@ function barHeight(value) {
         <p class="sr-only" role="status">{{ filterStatusText }}</p>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Fixture ID</th><th>Tijd*</th><th>Bronfixture</th><th>Categorie</th><th>Prioriteit</th><th>Samenvatting</th><th>Label</th></tr></thead>
+            <thead><tr><th scope="col">Fixture ID</th><th scope="col">Tijd*</th><th scope="col">Bronfixture</th><th scope="col">Categorie</th><th scope="col">Prioriteit</th><th scope="col">Samenvatting</th><th scope="col">Label</th></tr></thead>
             <tbody>
               <tr v-for="event in visibleEvents" :key="event.id">
                 <td class="event-id">{{ event.id }}</td>
