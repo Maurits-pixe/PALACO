@@ -178,6 +178,12 @@ bestaande Eventbus → Quay → Citadel → Runtime-keten:
 cargo run --locked -p palaco-kernel --example synthetic_plan_inspection
 ```
 
+Voeg `-- --summary` toe om in plaats daarvan één JSON-samenvatting te schrijven:
+`total: 4`, `execute: 1`, `hold: 1`, `deny: 2`, `contract_valid: 4` en
+`contract_invalid: 0`. Ook deze modus voert niets uit en verifieert geen
+autoriteit. Onbekende of extra argumenten falen zonder rapport op stdout;
+beide modi flushen expliciet en geven write- en flush-fouten door.
+
 Dit schrijft vier JSON Lines-rapporten, in de vaste volgorde `Authorized`,
 `Revoked`, `Expired`, `InDoubt`: de disposities zijn `execute`, `deny`, `deny`,
 `hold`. Alle fixtures kunnen contractueel geldig zijn, maar

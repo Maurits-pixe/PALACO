@@ -89,6 +89,36 @@ jobs:
           ]
           if rows != expected or not demo.endswith(b"\n"):
               raise SystemExit("Unexpected synthetic plan reports")
+          summary = run(
+              "-p", "palaco-kernel", "--example", "synthetic_plan_inspection",
+              "--", "--summary"
+          )
+          expected_summary = {
+              "schema_version": 1,
+              "report_type": "plan-inspection-summary",
+              "total": len(rows),
+              "execute": sum(row["disposition"] == "execute" for row in rows),
+              "hold": sum(row["disposition"] == "hold" for row in rows),
+              "deny": sum(row["disposition"] == "deny" for row in rows),
+              "contract_valid": sum(row["contract_valid"] for row in rows),
+              "contract_invalid": sum(not row["contract_valid"] for row in rows),
+              "execution_performed": False,
+              "authority_verified": False,
+          }
+          if (
+              len(summary.splitlines()) != 1
+              or not summary.endswith(b"\n")
+              or json.loads(summary) != expected_summary
+          ):
+              raise SystemExit("Unexpected synthetic plan summary")
+          for args in [("--unknown",), ("--summary", "extra"), ("--summary", "--summary")]:
+              invalid = subprocess.run(
+                  ["cargo", "run", "--locked", "-p", "palaco-kernel",
+                   "--example", "synthetic_plan_inspection", "--", *args],
+                  capture_output=True
+              )
+              if invalid.returncode == 0 or invalid.stdout:
+                  raise SystemExit("Invalid example arguments must fail without a report")
           print("Inspection examples match their contracts")
       - name: PVS-002 dependency and contract audit
         run: python tools/pvs002_cross_crate_contracts.py
