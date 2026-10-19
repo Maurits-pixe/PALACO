@@ -118,11 +118,19 @@ try {
 
   const eventRows = popup.locator('.events-panel tbody tr');
   assert.equal(await eventRows.count(), 6);
-  for (const [severity, count] of [['Hoog', 2], ['Middel', 1], ['Laag', 3], ['Alles', 6]]) {
+  const filterStatus = popup.locator('.events-panel [role="status"]');
+  assert.equal((await filterStatus.textContent()).trim(), 'Toont 6 synthetische signalen.');
+  for (const [severity, count, announcement] of [
+    ['Hoog', 2, 'Toont 2 synthetische signalen met ernst Hoog.'],
+    ['Middel', 1, 'Toont 1 synthetisch signaal met ernst Middel.'],
+    ['Laag', 3, 'Toont 3 synthetische signalen met ernst Laag.'],
+    ['Alles', 6, 'Toont 6 synthetische signalen.']
+  ]) {
     const button = popup.getByRole('button', { name: severity, exact: true });
     await button.click();
     assert.equal(await eventRows.count(), count, `${severity} filter should show ${count} fixture rows`);
     assert.equal(await button.getAttribute('aria-pressed'), 'true');
+    assert.equal((await filterStatus.textContent()).trim(), announcement);
   }
 
   await popup.setViewportSize({ width: 390, height: 844 });

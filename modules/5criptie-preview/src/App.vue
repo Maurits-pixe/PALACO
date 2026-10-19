@@ -12,6 +12,13 @@ const severityTones = { Hoog: 'high', Middel: 'medium', Laag: 'low' };
 const visibleEvents = computed(() => selectedSeverity.value === 'Alles'
   ? events
   : events.filter(event => event.severity === selectedSeverity.value));
+const filterStatusText = computed(() => {
+  const count = visibleEvents.value.length;
+  const result = `${count} synthetisch${count === 1 ? ' signaal' : 'e signalen'}`;
+  return selectedSeverity.value === 'Alles'
+    ? `Toont ${result}.`
+    : `Toont ${result} met ernst ${selectedSeverity.value}.`;
+});
 
 function barHeight(value) {
   return `${Math.max(8, value)}%`;
@@ -130,6 +137,7 @@ function barHeight(value) {
               @click="selectedSeverity = severity">{{ severity }}</button>
           </div>
         </div>
+        <p class="sr-only" role="status">{{ filterStatusText }}</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Fixture ID</th><th>Tijd*</th><th>Bronfixture</th><th>Categorie</th><th>Prioriteit</th><th>Samenvatting</th><th>Label</th></tr></thead>
