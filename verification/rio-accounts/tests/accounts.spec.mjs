@@ -63,7 +63,7 @@ async function verifyVaultPage(browser, beta, packet) {
     await expect(betaView.locator('#vault-account')).toHaveText('TST-beta');
     await expect(betaView.locator(`#vault-list li[data-object-id="${id}"]`)).toHaveCount(0);
     const foreign=await betaView.evaluate(async id=>(await fetch('/api/storage/objects/'+id,{cache:'no-store',credentials:'same-origin'})).status,id);
-    expect(foreign).toBe(404);
+    expect(foreign).toBe(403);
     await page.bringToFront();await expect(page.locator('#vault-account')).toHaveText('TST-alpha');
     for(const width of [390,1280]) {
       await page.setViewportSize({width,height:844});
