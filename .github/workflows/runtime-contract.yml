@@ -44,15 +44,51 @@ jobs:
         run: |
           rustc --version
           cargo --version
-      - name: Runtime formatting
-        run: cargo fmt -p palaco-runtime -- --check
-      - name: Runtime clippy
-        run: cargo clippy --locked -p palaco-runtime --all-targets -- -D warnings
-      - name: Runtime build
-        run: cargo build --locked -p palaco-runtime
+      - name: Runtime and kernel formatting
+        run: cargo fmt -p palaco-runtime -p palaco-kernel -- --check
+      - name: Runtime and kernel clippy
+        run: cargo clippy --locked -p palaco-runtime -p palaco-kernel --all-targets -- -D warnings
+      - name: Runtime and kernel build including examples
+        run: cargo build --locked -p palaco-runtime -p palaco-kernel --all-targets
       - name: Runtime and downstream kernel tests
         run: cargo test --locked -p palaco-runtime -p palaco-kernel --all-targets
       - name: Runtime documentation tests
         run: cargo test --locked -p palaco-runtime --doc
+      - name: Execute and verify inspection examples
+        shell: python
+        run: |
+          import json
+          import subprocess
+
+          def run(*args):
+              return subprocess.run(
+                  ["cargo", "run", "--locked", *args],
+                  check=True, capture_output=True
+              ).stdout
+
+          embedded = run("-p", "palaco-runtime", "--example", "embedded_inspection")
+          status = run("-p", "palaco-runtime", "--", "status", "--json")
+          if embedded != status:
+              raise SystemExit("Embedded report differs from CLI status")
+          report = json.loads(embedded)
+          if report["schema_version"] != 1 or report["mode"] != "local-inspection":
+              raise SystemExit("Unexpected status contract")
+
+          demo = run("-p", "palaco-kernel", "--example", "synthetic_plan_inspection")
+          rows = [json.loads(line) for line in demo.splitlines()]
+          expected = [
+              {
+                  "schema_version": 1,
+                  "report_type": "plan-inspection",
+                  "disposition": disposition,
+                  "contract_valid": True,
+                  "execution_performed": False,
+                  "authority_verified": False,
+              }
+              for disposition in ["execute", "deny", "deny", "hold"]
+          ]
+          if rows != expected or not demo.endswith(b"\n"):
+              raise SystemExit("Unexpected synthetic plan reports")
+          print("Inspection examples match their contracts")
       - name: PVS-002 dependency and contract audit
         run: python tools/pvs002_cross_crate_contracts.py

@@ -130,7 +130,11 @@ bij fouten kunnen eerdere regels of een gedeeltelijke regel zijn geschreven.
 De GitHub Actions-workflow **Runtime Inspection Contract** controleert bij
 relevante pull requests en pushes naar `main` de runtime op Linux en Windows
 met Rust 1.90.0. Deze gerichte controle draait formatting, clippy, build,
-runtime-/kerneltests, doctests en PVS-002 zonder PostgreSQL. Unix-pipe- en
+runtime-/kerneltests, doctests en PVS-002 zonder PostgreSQL. Formatting, clippy
+en builds omvatten beide crates en hun voorbeelden. De workflow voert beide
+voorbeelden ook daadwerkelijk uit: het ingebedde statusrapport moet bytegelijk
+zijn aan CLI-JSON en de vier synthetische planrapporten moeten exact het
+gedocumenteerde JSON-contract volgen. Unix-pipe- en
 Linux-`/dev/full`-tests draaien alleen op hun ondersteunde platform.
 Dit is contractvalidatie, geen live healthcheck, deployment of productie-audit;
 de bestaande workspace-workflows blijven afzonderlijk bestaan.
