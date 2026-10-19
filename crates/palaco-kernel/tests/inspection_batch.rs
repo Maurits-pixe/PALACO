@@ -73,8 +73,11 @@ fn fallible_summaries_match_successful_sources_and_preserve_source_errors()
 #[test]
 fn fallible_summaries_accept_borrowed_opaque_errors_without_read_ahead()
 -> Result<(), Box<dyn std::error::Error>> {
-    struct OpaqueFailure;
-    let failure = OpaqueFailure;
+    struct OpaqueFailure<'a> {
+        detail: &'a str,
+    }
+    let detail = String::from("caller-owned source detail");
+    let failure = OpaqueFailure { detail: &detail };
     let plans = plans()?;
     let mut input = [Ok(&plans[0]), Err(&failure), Ok(&plans[1])].into_iter();
     let error = match try_summarize_plan_iter(&mut input) {
@@ -83,10 +86,80 @@ fn fallible_summaries_accept_borrowed_opaque_errors_without_read_ahead()
     };
     assert_eq!(error.to_string(), "plan inspection summary source failed");
     match error {
-        PlanInspectionSummaryError::Source(error) => assert!(std::ptr::eq(error, &failure)),
+        PlanInspectionSummaryError::Source(error) => {
+            assert!(std::ptr::eq(error, &failure));
+            assert_eq!(error.detail, detail);
+            assert!(std::ptr::eq(error.detail.as_ptr(), detail.as_ptr()));
+        }
         PlanInspectionSummaryError::Overflow => panic!("small input cannot overflow"),
     }
     assert!(matches!(input.next(), Some(Ok(plan)) if std::ptr::eq(plan, &plans[1])));
+    Ok(())
+}
+
+#[test]
+fn fallible_bounded_summaries_resume_and_combine_without_read_ahead()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    let requested = std::cell::Cell::new(0);
+    let mut source = plans.iter().cycle().map(Ok::<_, io::Error>).inspect(|_| {
+        requested.set(requested.get() + 1);
+    });
+    assert_eq!(
+        try_summarize_plan_iter(source.by_ref().take(0))?,
+        PlanInspectionSummary::default()
+    );
+    assert_eq!(requested.get(), 0);
+    let first = try_summarize_plan_iter(source.by_ref().take(3))?;
+    assert_eq!(first, summarize_plans(&plans[..3]));
+    assert_eq!(requested.get(), 3);
+    let second = try_summarize_plan_iter(source.by_ref().take(3))?;
+    assert_eq!(requested.get(), 6);
+    assert_eq!(
+        first.checked_add(second),
+        summarize_plans(&plans).checked_add(summarize_plans(&plans[..2]))
+    );
+    assert!(matches!(source.next(), Some(Ok(plan)) if std::ptr::eq(plan, &plans[2])));
+    assert_eq!(requested.get(), 7);
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn fallible_batch_limit_does_not_hide_or_consume_the_next_source_error()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let requested = std::cell::Cell::new(0);
+    let mut source = [
+        Ok(&plans[0]),
+        Ok(&plans[1]),
+        Ok(&plans[2]),
+        Err("source unavailable"),
+        Ok(&plans[3]),
+    ]
+    .into_iter()
+    .inspect(|_| requested.set(requested.get() + 1));
+    let first = try_summarize_plan_iter(source.by_ref().take(2))
+        .expect("source failure is outside the first batch");
+    assert_eq!(first, summarize_plans(&plans[..2]));
+    assert_eq!(requested.get(), 2);
+    let error = try_summarize_plan_iter(source.by_ref().take(2))
+        .expect_err("next batch includes the source failure");
+    assert!(matches!(
+        error,
+        PlanInspectionSummaryError::Source("source unavailable")
+    ));
+    assert_eq!(requested.get(), 4);
+    assert_eq!(first, summarize_plans(&plans[..2]));
+    let resumed = try_summarize_plan_iter(source.by_ref().take(1))
+        .expect("caller explicitly resumes after handling the error");
+    assert_eq!(resumed, summarize_plans(&plans[3..]));
+    assert_eq!(requested.get(), 5);
+    assert_eq!(
+        first.checked_add(resumed),
+        summarize_plan_iter([&plans[0], &plans[1], &plans[3]])
+    );
     Ok(())
 }
 

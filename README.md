@@ -111,6 +111,14 @@ Eerdere bronbijwerkingen worden niet teruggedraaid. Ook geleende bronfouten
 zonder `Error`, `Debug` of `Clone` zijn toegestaan. `Display` bevat geen
 brondetails; `Debug` en de foutketen kunnen die wel blootleggen.
 
+Met `source.by_ref().take(n)` geldt succes alleen voor die deelbatch: een
+bronfout direct na de grens blijft ongelezen en kan de volgende batch laten
+falen. Een gefaalde batch levert ook voor eerder gelezen plannen in die batch
+geen telling terug. Eerdere succesvolle samenvattingen blijven ongewijzigd;
+hervatten is een expliciete keuze van de aanroeper, geen automatische retry.
+Combineer alleen bewust gekozen succesvolle deelbatches met `checked_add`;
+dit bewijst geen volledigheid van de oorspronkelijke bron.
+
 Slice- en iteratorsamenvattingen delen dezelfde interne observatietelling.
 Unit-tests toetsen alle drie disposities met zowel succesvolle validatie als
 alle vier contractfouten, plus stoppen bij overflow zonder vooruit te lezen.
