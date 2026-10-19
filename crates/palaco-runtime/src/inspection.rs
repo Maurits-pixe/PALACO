@@ -77,6 +77,9 @@ pub fn write_plan_inspection_json(
 /// plan has already been consumed from the iterator. Output is not atomic:
 /// previous lines and a partial final line may remain, even on error.
 /// Success does not imply that a buffered destination was flushed.
+/// Standard `Interrupted` writes are retried; a zero-byte write becomes
+/// `WriteZero`. A buffer may accept all reports before an underlying error is
+/// detected during a later caller-owned flush, after all plans were consumed.
 pub fn write_plan_inspections_jsonl<'a>(
     plans: impl IntoIterator<Item = &'a RuntimePlan>,
     output: &mut (impl Write + ?Sized),

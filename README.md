@@ -107,6 +107,12 @@ levert een eindige iterator, bepaalt de omgang met gedeeltelijke uitvoer en
 blijft verantwoordelijk voor flushen en duurzame opslag. Plannen blijven
 ongewijzigd; er wordt niets uitgevoerd of geautoriseerd.
 
+Onderbroken writes (`Interrupted`) worden opnieuw geprobeerd zonder rapporten
+opnieuw te inspecteren; een nul-byte-write geeft `WriteZero`. Bij buffering kan
+de batchwriter alle plannen al hebben gelezen voordat een fout bij de
+afsluitende, door de aanroeper uitgevoerde flush zichtbaar wordt. Succes van de
+batchwriter betekent dus niet dat de bestemming de rapporten heeft ontvangen.
+
 Een uitvoerbaar integratievoorbeeld gebruikt de bibliotheek rechtstreeks en
 schrijft hetzelfde JSON-rapport via een eigen `BufWriter` naar stdout:
 
