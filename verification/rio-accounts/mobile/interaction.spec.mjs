@@ -3,6 +3,7 @@ import {
   BFF, users, login, activate, chooseConsent, nativeConsent, consent, receiptFrom,
   me, noOverflow, noPersistentState, observeWrites, downloadDraft, isAndroid,
 } from './helpers.mjs';
+import { postConsentOwnAccountRead } from '../post-consent-observation.mjs';
 
 const IMPORT_ERROR = 'Dit is geen geldig lokaal conceptbestand. Er is niets gewijzigd.';
 const EMPTY_AUTHORITY = {
@@ -63,8 +64,10 @@ test('[RIO-MOBILE-01] Native consent controls preserve focus and reflow', async 
     const stored = receiptFrom(await consent(page));
     expect(stored.revision).toBe(accepted.revision);
     expect(stored.granted).toBe(true);
-    const account = await me(page);
-    expect(account.status).toBe(200);
+    const account = await postConsentOwnAccountRead(page,testInfo,{
+      grantRevision:accepted.revision,storedRevision:stored.revision,
+    },me);
+    expect(account.status).toBe(200); // Existing strict invariant, never retried.
     expect(account.data.accountId).toBe('TST-alpha');
     expect(account.data.accountActive || account.data.canOpenContact).toBe(false);
     const revoked = receiptFrom(await nativeConsent(page, '#consent-revoke', testInfo));

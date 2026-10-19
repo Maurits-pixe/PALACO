@@ -7,7 +7,10 @@ const ERRORS = new Set(['aborted','connection-refused','connection-reset','conne
   'http2-protocol','tls-certificate','network-changed','timeout','target-closed','other']);
 const FEEDBACK = new Set(['unavailable','empty','confirmed','service_unavailable','expired','changed','invalid_response','other']);
 const FIELDS = ['actorCase','stage','pageKind','accountVisible','loginButtonVisible','documentStatuses',
-  'meStatuses','consentStatuses','documentRequestFailed','meRequestFailed','consentRequestFailed','errorKind','feedbackBucket'];
+  'meStatuses','consentStatuses','providerSubmitStatuses','callbackStatuses',
+  'providerSubmitRequests','callbackRequests','postCallbackMeRequests','postCallbackMeStatuses',
+  'sessionCookiePresentAtFailure','documentRequestFailed','meRequestFailed','consentRequestFailed',
+  'providerSubmitRequestFailed','callbackRequestFailed','postCallbackMeRequestFailed','errorKind','feedbackBucket'];
 const BFF = 'https://localhost:8088';
 const CODE_KIND = new Map([
   ['ERR_ABORTED','aborted'],['ERR_CONNECTION_REFUSED','connection-refused'],['ERR_CONNECTION_RESET','connection-reset'],
@@ -38,28 +41,46 @@ export function safeMobileLoginObservation(annotations) {
       || Object.keys(value).length!==FIELDS.length || !FIELDS.every(key=>Object.hasOwn(value,key))
       || !['alpha','beta'].includes(value.actorCase) || !STAGES.has(value.stage) || !KINDS.has(value.pageKind)
       || !ERRORS.has(value.errorKind) || !FEEDBACK.has(value.feedbackBucket)) return undefined;
-  for(const key of ['accountVisible','loginButtonVisible']) {
+  for(const key of ['accountVisible','loginButtonVisible','sessionCookiePresentAtFailure']) {
     if(value[key]!==null && typeof value[key]!=='boolean')return undefined;
   }
-  for(const key of ['documentRequestFailed','meRequestFailed','consentRequestFailed']) {
+  for(const key of ['providerSubmitRequests','callbackRequests','postCallbackMeRequests']) {
+    if(!Number.isInteger(value[key]) || value[key]<0 || value[key]>8)return undefined;
+  }
+  for(const key of ['documentRequestFailed','meRequestFailed','consentRequestFailed',
+    'providerSubmitRequestFailed','callbackRequestFailed','postCallbackMeRequestFailed']) {
     if(typeof value[key]!=='boolean')return undefined;
   }
-  for(const key of ['documentStatuses','meStatuses','consentStatuses']) {
+  for(const key of ['documentStatuses','meStatuses','consentStatuses',
+    'providerSubmitStatuses','callbackStatuses','postCallbackMeStatuses']) {
     if(!Array.isArray(value[key]) || value[key].length>8 ||
        value[key].some(n=>!Number.isInteger(n)||n<100||n>599))return undefined;
   }
   return {actorCase:value.actorCase,stage:value.stage,pageKind:value.pageKind,
     accountVisible:value.accountVisible,loginButtonVisible:value.loginButtonVisible,
     documentStatuses:[...value.documentStatuses],meStatuses:[...value.meStatuses],consentStatuses:[...value.consentStatuses],
+    providerSubmitStatuses:[...value.providerSubmitStatuses],callbackStatuses:[...value.callbackStatuses],
+    providerSubmitRequests:value.providerSubmitRequests,callbackRequests:value.callbackRequests,
+    postCallbackMeRequests:value.postCallbackMeRequests,
+    postCallbackMeStatuses:[...value.postCallbackMeStatuses],
+    sessionCookiePresentAtFailure:value.sessionCookiePresentAtFailure,
     documentRequestFailed:value.documentRequestFailed,meRequestFailed:value.meRequestFailed,
-    consentRequestFailed:value.consentRequestFailed,errorKind:value.errorKind,feedbackBucket:value.feedbackBucket};
+    consentRequestFailed:value.consentRequestFailed,
+    providerSubmitRequestFailed:value.providerSubmitRequestFailed,callbackRequestFailed:value.callbackRequestFailed,
+    postCallbackMeRequestFailed:value.postCallbackMeRequestFailed,
+    errorKind:value.errorKind,feedbackBucket:value.feedbackBucket};
 }
 
-function fixedEndpoint(request) {
+// Classify fixed origin/path/method only. Never emit or store the OAuth code,
+// callback query, credentials, request bodies, raw errors, or the URL itself.
+export function classifyLoginEndpoint(request) {
   try {
-    if(request.method()!=='GET')return null;
-    const url=new URL(request.url());
-    if(url.origin!==BFF || url.search || url.hash)return null;
+    const url=new URL(request.url()),method=request.method();
+    if(url.username || url.password || url.hash)return null;
+    if(method==='POST' && url.origin==='http://127.0.0.1:8089' &&
+       url.pathname==='/realms/rio-synthetic/login-actions/authenticate')return 'providerSubmit';
+    if(method==='GET' && url.origin===BFF && url.pathname==='/auth/callback')return 'callback';
+    if(method!=='GET' || url.origin!==BFF || url.search)return null;
     if(url.pathname==='/' && request.isNavigationRequest())return 'document';
     if(url.pathname==='/api/me')return 'me';
     if(url.pathname==='/api/consent')return 'consent';
@@ -79,30 +100,61 @@ const bucket=text=>{
 export function observeMobileLogin(page,actorCase) {
   if(!['alpha','beta'].includes(actorCase))throw new Error('Unsupported synthetic login actor');
   const state={actorCase,stage:'initial',pageKind:'unavailable',accountVisible:null,loginButtonVisible:null,
-    documentStatuses:[],meStatuses:[],consentStatuses:[],documentRequestFailed:false,meRequestFailed:false,
-    consentRequestFailed:false,errorKind:'other',feedbackBucket:'unavailable'};
-  let stopped=false, recorded=false;
+    documentStatuses:[],meStatuses:[],consentStatuses:[],
+    providerSubmitStatuses:[],callbackStatuses:[],postCallbackMeStatuses:[],
+    providerSubmitRequests:0,callbackRequests:0,postCallbackMeRequests:0,
+    sessionCookiePresentAtFailure:null,
+    documentRequestFailed:false,meRequestFailed:false,consentRequestFailed:false,
+    providerSubmitRequestFailed:false,callbackRequestFailed:false,
+    postCallbackMeRequestFailed:false,
+    errorKind:'other',feedbackBucket:'unavailable'};
+  let stopped=false, recorded=false, callbackRedirectObserved=false;
+  const afterCallbackMe=new WeakSet();
+  const onRequest=request=>{
+    if(stopped)return;
+    const endpoint=classifyLoginEndpoint(request);
+    if(endpoint==='providerSubmit' || endpoint==='callback') {
+      const key=endpoint+'Requests';
+      state[key]=Math.min(8,state[key]+1);
+    }
+    // Request must START after the successful callback redirect response,
+    // not merely finish later. Initial unauthenticated /api/me stays separate.
+    if(endpoint==='me' && callbackRedirectObserved) {
+      afterCallbackMe.add(request);
+      state.postCallbackMeRequests=Math.min(8,state.postCallbackMeRequests+1);
+    }
+  };
   const onResponse=response=>{
     if(stopped)return;
     try {
-      const endpoint=fixedEndpoint(response.request()), status=response.status();
+      const endpoint=classifyLoginEndpoint(response.request()), status=response.status();
       if(endpoint && Number.isInteger(status) && status>=100 && status<=599) {
         const values=state[endpoint+'Statuses'];if(values.length<8)values.push(status);
+        if(endpoint==='callback' && status>=300 && status<400)callbackRedirectObserved=true;
+        if(endpoint==='me' && afterCallbackMe.has(response.request()) &&
+           state.postCallbackMeStatuses.length<8)state.postCallbackMeStatuses.push(status);
       }
     } catch {}
   };
   const onFailed=request=>{
     if(stopped)return;
-    const endpoint=fixedEndpoint(request);
+    const endpoint=classifyLoginEndpoint(request);
     if(endpoint) state[endpoint+'RequestFailed']=true;
+    if(endpoint==='me' && afterCallbackMe.has(request))state.postCallbackMeRequestFailed=true;
   };
-  page.on('response',onResponse);page.on('requestfailed',onFailed);
+  page.on('request',onRequest);page.on('response',onResponse);page.on('requestfailed',onFailed);
   return {
     setStage(stage) { if(!STAGES.has(stage))throw new Error('Unsupported login observation stage');state.stage=stage; },
     async recordFailure(testInfo,error) {
       if(recorded || stopped)return;recorded=true;
       try {
         state.errorKind=classifyLoginError(error);
+        // The boolean contains no cookie value or bearer. If cookie access is
+        // unavailable, retain null rather than inventing a negative result.
+        try {
+          const jar=await page.context().cookies(BFF);
+          state.sessionCookiePresentAtFailure=jar.some(cookie=>cookie.name==='__Host-rio_session');
+        } catch {}
         try {
           const url=new URL(page.url());
           state.pageKind=url.origin===BFF && url.pathname==='/'?'bff-home':
@@ -129,6 +181,6 @@ export function observeMobileLogin(page,actorCase) {
         if(safe && Array.isArray(testInfo?.annotations))testInfo.annotations.push({type:TYPE,description:JSON.stringify(safe)});
       } catch {}
     },
-    stop() { stopped=true;page.off('response',onResponse);page.off('requestfailed',onFailed); }
+    stop() { stopped=true;page.off('request',onRequest);page.off('response',onResponse);page.off('requestfailed',onFailed); }
   };
 }

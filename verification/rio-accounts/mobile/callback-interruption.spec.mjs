@@ -61,6 +61,17 @@ test('[RIO-MOBILE-07] Interrupted provider submission cannot grant a session or 
           expect(observed?.actorCase).toBe('alpha');
           expect(observed?.stage).toBe('waiting-for-bff');
           expect(observed?.errorKind).toBe('connection-reset');
+          // Prove the private transport breadcrumb identifies exactly the
+          // original interrupted provider POST, not a delivered BFF callback.
+          expect(observed?.providerSubmitRequests).toBe(1);
+          expect(observed?.providerSubmitRequestFailed).toBe(true);
+          expect(observed?.callbackRequests).toBe(0);
+          expect(observed?.callbackStatuses).toEqual([]);
+          expect(observed?.callbackRequestFailed).toBe(false);
+          expect(observed?.postCallbackMeRequests).toBe(0);
+          expect(observed?.postCallbackMeStatuses).toEqual([]);
+          expect(observed?.postCallbackMeRequestFailed).toBe(false);
+          expect(observed?.sessionCookiePresentAtFailure).toBe(false);
           expect(observed?.accountVisible).not.toBe(true);
           // Context-bound read instead of page.evaluate on an error document.
           // A callback not delivered to BFF cannot mint a session.

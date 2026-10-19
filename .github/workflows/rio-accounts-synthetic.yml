@@ -2,10 +2,10 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence']
     paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
@@ -59,6 +59,9 @@ jobs:
           node --check verification/rio-accounts/mobile/login-observation.spec.mjs
           node --check verification/rio-accounts/mobile/callback-interruption.spec.mjs
           node --check verification/rio-accounts/mobile/helpers.mjs
+          node --check verification/rio-accounts/post-consent-observation.mjs
+          node --check verification/rio-accounts/test_post_consent_observation.mjs
+          node --test verification/rio-accounts/test_post_consent_observation.mjs
           node --check verification/rio-accounts/mobile/interaction.spec.mjs
           node --check verification/rio-accounts/mobile/consent.spec.mjs
       - name: Verify T04 human-review evidence remains non-authoritative
