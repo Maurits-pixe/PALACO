@@ -110,6 +110,23 @@ tekstbuffering en begrensde JSON-uitvoer: een te kleine bytebuffer geeft een
 schrijffout, geen compleet rapport. Controleer deze voorbeelden met
 `cargo test --locked -p palaco-runtime --doc`.
 
+Een tweede, uitsluitend synthetisch voorbeeld bouwt vier plannen op via de
+bestaande Eventbus → Quay → Citadel → Runtime-keten:
+
+```bash
+cargo run --locked -p palaco-kernel --example synthetic_plan_inspection
+```
+
+Dit schrijft vier JSON Lines-rapporten, in de vaste volgorde `Authorized`,
+`Revoked`, `Expired`, `InDoubt`: de disposities zijn `execute`, `deny`, `deny`,
+`hold`. Alle fixtures kunnen contractueel geldig zijn, maar
+`authority_verified` en `execution_performed` blijven altijd `false`.
+De autoriteitsstaten zijn hardgecodeerde testgegevens, geen ingelezen of
+geverifieerde toestemming. Het voorbeeld gebruikt alleen bestaande
+kernel-devdependencies, voert geen plan uit en propageert schrijf- en
+flushfouten. Beoordeel de volledige uitvoer pas na een succesvolle procesexit;
+bij fouten kunnen eerdere regels of een gedeeltelijke regel zijn geschreven.
+
 De GitHub Actions-workflow **Runtime Inspection Contract** controleert bij
 relevante pull requests en pushes naar `main` de runtime op Linux en Windows
 met Rust 1.90.0. Deze gerichte controle draait formatting, clippy, build,
