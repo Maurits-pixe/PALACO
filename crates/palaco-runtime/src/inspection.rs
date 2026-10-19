@@ -43,6 +43,20 @@ impl InspectionStatus {
 ///
 /// This value describes only the inspection interface. It does not validate a
 /// `RuntimePlan`, authenticate evidence or grant execution permission.
+///
+/// # Examples
+///
+/// Read descriptors directly without parsing a report or inspecting the host:
+///
+/// ```
+/// use palaco_runtime::inspection::{status, InspectionStatus};
+///
+/// const REPORT: InspectionStatus = status();
+/// assert_eq!(REPORT.schema_version, 1);
+/// assert_eq!(REPORT.mode, "local-inspection");
+/// assert_eq!(REPORT.execution_host, "unavailable");
+/// assert_eq!(REPORT.authority_provider, "unavailable");
+/// ```
 pub const fn status() -> InspectionStatus {
     InspectionStatus {
         schema_version: 1,
@@ -64,6 +78,26 @@ pub const fn status() -> InspectionStatus {
 /// # Errors
 ///
 /// Returns the destination's write error. Output may be partial on failure.
+///
+/// # Examples
+///
+/// Flush a caller-owned buffer explicitly and propagate both write and flush
+/// errors before consuming the complete result:
+///
+/// ```
+/// use palaco_runtime::inspection::write_status;
+/// use std::io::{self, BufWriter, Write};
+///
+/// let mut bytes = Vec::new();
+/// {
+///     let mut output = BufWriter::new(&mut bytes);
+///     write_status(&mut output)?;
+///     output.flush()?;
+/// }
+/// assert!(bytes.starts_with(b"PALACO runtime "));
+/// assert!(bytes.ends_with(b"production_readiness=not-assessed\n"));
+/// # Ok::<(), io::Error>(())
+/// ```
 pub fn write_status(output: &mut (impl Write + ?Sized)) -> io::Result<()> {
     let report = status();
     writeln!(output, "PALACO runtime {}", report.runtime_version)?;
@@ -81,6 +115,30 @@ pub fn write_status(output: &mut (impl Write + ?Sized)) -> io::Result<()> {
 /// # Errors
 ///
 /// Returns the destination's write error. Output may be partial on failure.
+///
+/// # Examples
+///
+/// A caller may use a fixed-size destination instead of allocating a buffer.
+/// An undersized slice fails with `WriteZero`; discard its partial report:
+///
+/// ```
+/// use palaco_runtime::inspection::write_status_json;
+/// use std::io;
+///
+/// let mut storage = [0_u8; 4096];
+/// let capacity = storage.len();
+/// let mut destination = &mut storage[..];
+/// write_status_json(&mut destination)?;
+/// let used = capacity - destination.len();
+/// assert!(storage[..used].starts_with(b"{\"schema_version\":1,"));
+/// assert!(storage[..used].ends_with(b"}\n"));
+///
+/// let mut too_small = [0_u8; 8];
+/// let error = write_status_json(&mut &mut too_small[..])
+///     .expect_err("a partial report must not be treated as success");
+/// assert_eq!(error.kind(), io::ErrorKind::WriteZero);
+/// # Ok::<(), io::Error>(())
+/// ```
 pub fn write_status_json(output: &mut (impl Write + ?Sized)) -> io::Result<()> {
     let report = status();
     write!(

@@ -68,6 +68,19 @@ De openbare velden zijn beschrijvende gegevens, geen gevalideerd bewijs:
 een lokaal gewijzigde kopie verandert latere rapporten niet en verleent geen
 uitvoeringsrechten.
 
+Een uitvoerbaar integratievoorbeeld gebruikt de bibliotheek rechtstreeks en
+schrijft hetzelfde JSON-rapport via een eigen `BufWriter` naar stdout:
+
+```bash
+cargo run --locked -p palaco-runtime --example embedded_inspection
+```
+
+Het voorbeeld propageert schrijf- én flushfouten en voert geen plan uit.
+De API-documentatie bevat uitvoerbare doctests voor getypeerde status,
+tekstbuffering en begrensde JSON-uitvoer: een te kleine bytebuffer geeft een
+schrijffout, geen compleet rapport. Controleer deze voorbeelden met
+`cargo test --locked -p palaco-runtime --doc`.
+
 De GitHub Actions-workflow **Runtime Inspection Contract** controleert bij
 relevante pull requests en pushes naar `main` de runtime op Linux en Windows
 met Rust 1.90.0. Deze gerichte controle draait formatting, clippy, build,
