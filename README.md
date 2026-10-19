@@ -68,6 +68,14 @@ De openbare velden zijn beschrijvende gegevens, geen gevalideerd bewijs:
 een lokaal gewijzigde kopie verandert latere rapporten niet en verleent geen
 uitvoeringsrechten.
 
+De GitHub Actions-workflow **Runtime Inspection Contract** controleert bij
+relevante pull requests en pushes naar `main` de runtime op Linux en Windows
+met Rust 1.90.0. Deze gerichte controle draait formatting, clippy, build,
+runtime-/kerneltests, doctests en PVS-002 zonder PostgreSQL. Unix-pipe- en
+Linux-`/dev/full`-tests draaien alleen op hun ondersteunde platform.
+Dit is contractvalidatie, geen live healthcheck, deployment of productie-audit;
+de bestaande workspace-workflows blijven afzonderlijk bestaan.
+
 **Commerciële richting:** bied een afgebakende, betaalde integratiepilot aan
 met installatie, reproduceerbare contracttests en een overdracht van bevindingen.
 Leg scope, prijs en acceptatiecriteria vooraf met de opdrachtgever vast.

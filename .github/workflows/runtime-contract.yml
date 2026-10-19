@@ -1,0 +1,58 @@
+name: Runtime Inspection Contract
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "tools/pvs002_cross_crate_contracts.py"
+      - ".github/workflows/runtime-contract.yml"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "tools/pvs002_cross_crate_contracts.py"
+      - ".github/workflows/runtime-contract.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-contract:
+    name: Runtime contract (${{ matrix.os }}, Rust 1.90)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install minimum supported Rust
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de
+        with:
+          toolchain: 1.90.0
+          components: rustfmt, clippy
+      - name: Toolchain versions
+        run: |
+          rustc --version
+          cargo --version
+      - name: Runtime formatting
+        run: cargo fmt -p palaco-runtime -- --check
+      - name: Runtime clippy
+        run: cargo clippy --locked -p palaco-runtime --all-targets -- -D warnings
+      - name: Runtime build
+        run: cargo build --locked -p palaco-runtime
+      - name: Runtime and downstream kernel tests
+        run: cargo test --locked -p palaco-runtime -p palaco-kernel --all-targets
+      - name: Runtime documentation tests
+        run: cargo test --locked -p palaco-runtime --doc
+      - name: PVS-002 dependency and contract audit
+        run: python tools/pvs002_cross_crate_contracts.py
