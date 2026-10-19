@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { events, metrics, trafficSamples } from '../src/telemetry.js';
+import { events, metrics, reviewBreakdown, trafficSamples } from '../src/telemetry.js';
 
 const manifest = JSON.parse(await readFile(new URL('../public/.well-known/palaco-app.json', import.meta.url), 'utf8'));
 const appSource = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
@@ -25,6 +25,12 @@ test('review metric agrees with the event fixture statuses and severity', () => 
   const reviewMetric = metrics.find(metric => metric.id === 'review');
   assert.equal(reviewMetric.value, String(reviewCount).padStart(2, '0'));
   assert.equal(reviewMetric.change, `${highReviewCount} hoog`);
+  assert.deepEqual(reviewBreakdown, [
+    { severity: 'Hoog', count: 2 },
+    { severity: 'Middel', count: 1 },
+    { severity: 'Laag', count: 0 }
+  ]);
+  assert.equal(reviewBreakdown.reduce((total, item) => total + item.count, 0), reviewCount);
 });
 
 test('dashboard contains no network collection or scan client', () => {

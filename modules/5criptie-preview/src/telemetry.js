@@ -14,6 +14,13 @@ export const events = Object.freeze([
   Object.freeze({ id: 'EVT-1037', time: '14:06:02', source: 'api-fixture-01', category: 'API', severity: 'Laag', summary: 'Voorbeeldrequest binnen de vaste fixtureset.', status: 'Gesloten' })
 ]);
 
+export const reviewBreakdown = Object.freeze(
+  ['Hoog', 'Middel', 'Laag'].map(severity => Object.freeze({
+    severity,
+    count: events.filter(event => event.status === 'Review' && event.severity === severity).length
+  }))
+);
+
 export const trafficSamples = Object.freeze([
   Object.freeze({ time: '14:00', value: 28 }),
   Object.freeze({ time: '14:05', value: 38 }),

@@ -69,6 +69,23 @@ try {
   assert.equal(new URL(popup.url()).origin, 'https://localhost:5176');
   await popup.getByText('Geen echte monitoring.').waitFor();
   await popup.getByText('Alle data is synthetisch · Geen sensoren · Geen scans · Geen acties').waitFor();
+  const reviewState = await popup.locator('.review-panel').evaluate(panel => ({
+    total: panel.querySelector('.review-total strong').textContent,
+    rows: [...panel.querySelectorAll('.review-row')].map(row => ({
+      severity: row.querySelector('.review-label').textContent.trim(),
+      count: row.querySelector('strong').textContent.trim(),
+      width: row.querySelector('.review-track i').style.width
+    }))
+  }));
+  assert.equal(reviewState.total, '03');
+  assert.deepEqual(reviewState.rows.map(({ severity, count }) => ({ severity, count })), [
+    { severity: 'Hoog', count: '02' },
+    { severity: 'Middel', count: '01' },
+    { severity: 'Laag', count: '00' }
+  ]);
+  assert.ok(Math.abs(parseFloat(reviewState.rows[0].width) - 2 / 3 * 100) < 0.01);
+  assert.ok(Math.abs(parseFloat(reviewState.rows[1].width) - 1 / 3 * 100) < 0.01);
+  assert.equal(reviewState.rows[2].width, '0%');
   const documentOrigin = new URL(popup.url()).origin;
   const remoteRequests = [];
   popup.on('request', request => {

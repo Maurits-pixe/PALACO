@@ -1,9 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { events, metrics, trafficSamples } from './telemetry.js';
+import { events, metrics, reviewBreakdown, trafficSamples } from './telemetry.js';
 
 const selectedSeverity = ref('Alles');
 const severities = ['Alles', 'Hoog', 'Middel', 'Laag'];
+const reviewTotal = events.filter(event => event.status === 'Review').length;
+const severityTones = { Hoog: 'high', Middel: 'medium', Laag: 'low' };
 const visibleEvents = computed(() => selectedSeverity.value === 'Alles'
   ? events
   : events.filter(event => event.severity === selectedSeverity.value));
@@ -75,10 +77,13 @@ function barHeight(value) {
             <div><p class="eyebrow">STATISCHE DEMO</p><h2>Reviewverdeling</h2></div>
             <span class="panel-tag">FIXTURES</span>
           </div>
-          <div class="review-total"><strong>06</strong><span>voorbeeldsignalen</span></div>
-          <div class="review-row"><span class="review-label"><i class="severity high"></i>Hoog</span><strong>02</strong><span class="review-track"><i class="high-fill"></i></span></div>
-          <div class="review-row"><span class="review-label"><i class="severity medium"></i>Middel</span><strong>01</strong><span class="review-track"><i class="medium-fill"></i></span></div>
-          <div class="review-row"><span class="review-label"><i class="severity low"></i>Laag</span><strong>03</strong><span class="review-track"><i class="low-fill"></i></span></div>
+          <div class="review-total"><strong>{{ String(reviewTotal).padStart(2, '0') }}</strong><span>voorbeeldsignalen</span></div>
+          <div v-for="item in reviewBreakdown" :key="item.severity" class="review-row">
+            <span class="review-label"><i class="severity" :class="severityTones[item.severity]"></i>{{ item.severity }}</span>
+            <strong>{{ String(item.count).padStart(2, '0') }}</strong>
+            <span class="review-track"><i :class="`${severityTones[item.severity]}-fill`"
+              :style="{ width: `${reviewTotal ? item.count / reviewTotal * 100 : 0}%` }"></i></span>
+          </div>
           <p class="review-note">Categorisering is illustratief en niet gebaseerd op detectie.</p>
         </article>
       </section>
