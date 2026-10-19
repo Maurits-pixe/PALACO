@@ -17,6 +17,114 @@ fn boundary(evidence: &str, authority: AuthorityState) -> ExecutionBoundary {
 }
 
 #[test]
+fn recorded_inputs_survive_caller_mutation_and_drop() {
+    let gate = InMemoryCommitGate::with_record_limit(1);
+    let receipt = {
+        let request_key = key("owned-request");
+        let mut supplied_boundary = boundary("original-evidence", AuthorityState::Authorized);
+        let mut payload = vec![0, 255, 128, 0];
+        let receipt = gate
+            .commit(&request_key, &supplied_boundary, &payload)
+            .expect("record original inputs");
+        payload[1] = 254;
+        assert_eq!(
+            gate.commit(&request_key, &supplied_boundary, &payload),
+            Err(CommitGateError::IdempotencyConflict)
+        );
+        supplied_boundary = boundary("replacement-evidence", AuthorityState::Authorized);
+        assert_eq!(
+            gate.commit_with_outcome(&request_key, &supplied_boundary, &[0, 255, 128, 0]),
+            Err(CommitGateError::IdempotencyConflict)
+        );
+        receipt
+    };
+    assert_eq!(receipt.sequence(), 1);
+    assert_eq!(gate.revoke(), Ok(2));
+    let reconstructed_key = key("owned-request");
+    let reconstructed_boundary = boundary("original-evidence", AuthorityState::Authorized);
+    let reconstructed_payload = vec![0, 255, 128, 0];
+    assert_eq!(
+        gate.commit_with_outcome(
+            &reconstructed_key,
+            &reconstructed_boundary,
+            &reconstructed_payload,
+        ),
+        Ok(CommitOutcome::Replayed(receipt))
+    );
+    assert_eq!(
+        gate.commit(
+            &reconstructed_key,
+            &reconstructed_boundary,
+            &reconstructed_payload
+        ),
+        Ok(receipt)
+    );
+}
+
+#[test]
+fn binary_payloads_are_compared_exactly_without_truncation_or_normalization() {
+    let gate = InMemoryCommitGate::new();
+    let authorized = boundary("evidence-1", AuthorityState::Authorized);
+    let request_key = key("binary");
+    let original = [0, 255, 128, 0];
+    let receipt = gate
+        .commit(&request_key, &authorized, &original)
+        .expect("record");
+    let alternatives: &[&[u8]] = &[
+        &[],
+        &[0],
+        &[0, 255, 128],
+        &[0, 255, 128, 0, 0],
+        &[0, 254, 128, 0],
+        &[0, 255, 129, 0],
+    ];
+    for revoked in [false, true] {
+        if revoked {
+            assert_eq!(gate.revoke(), Ok(2));
+        }
+        for payload in alternatives {
+            assert_eq!(
+                gate.commit(&request_key, &authorized, payload),
+                Err(CommitGateError::IdempotencyConflict)
+            );
+            assert_eq!(
+                gate.commit_with_outcome(&request_key, &authorized, payload),
+                Err(CommitGateError::IdempotencyConflict)
+            );
+        }
+        assert_eq!(
+            gate.commit_with_outcome(&request_key, &authorized, &original),
+            Ok(CommitOutcome::Replayed(receipt))
+        );
+    }
+    assert_eq!(gate.revoke(), Ok(2));
+}
+
+#[test]
+fn idempotency_keys_preserve_case_whitespace_and_unicode_encoding() {
+    let gate = InMemoryCommitGate::new();
+    let authorized = boundary("evidence-1", AuthorityState::Authorized);
+    let identifiers = [
+        "request", "Request", " request", "request ", "\u{e9}", "e\u{301}",
+    ];
+    let mut receipts = Vec::new();
+    for (index, identifier) in identifiers.iter().enumerate() {
+        let receipt = gate
+            .commit(&key(identifier), &authorized, b"payload")
+            .expect("distinct key");
+        assert_eq!(receipt.sequence(), index as u64 + 1);
+        receipts.push(receipt);
+    }
+    assert_eq!(gate.revoke(), Ok(identifiers.len() as u64 + 1));
+    for (identifier, receipt) in identifiers.iter().zip(receipts) {
+        assert_eq!(
+            gate.commit_with_outcome(&key(identifier), &authorized, b"payload"),
+            Ok(CommitOutcome::Replayed(receipt))
+        );
+    }
+}
+
+#[test]
 fn record_limit_preserves_retries_conflicts_and_revocation() {
     let gate = InMemoryCommitGate::with_record_limit(1);
     let authorized = boundary("evidence-1", AuthorityState::Authorized);

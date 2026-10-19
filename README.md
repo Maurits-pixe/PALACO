@@ -2131,6 +2131,12 @@ behavior and shares the same state. Neither outcome grants execution permission,
 including `Recorded`: revocation can occur before the caller receives it.
 Focused tests cover mixed-API retries, error precedence, post-revocation
 replays, and concurrent outcome classification.
+Input-isolation tests verify that records own copies of the key, boundary and
+payload: changing or dropping caller inputs does not replace historical data.
+Payloads are compared as exact bytes, including embedded zeroes and non-UTF-8
+bytes. Keys remain exact strings: case, surrounding whitespace and Unicode
+encoding differences are not normalized. Callers must choose stable keys and
+payload encodings; these checks do not authenticate or canonicalize inputs.
 
 The public `InMemoryCommitGate` Rustdoc includes a runnable synthetic example
 covering both APIs, capacity rejection, conflicting retries, idempotent
