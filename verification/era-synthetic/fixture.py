@@ -20,6 +20,7 @@ FIXED = {
 }
 MAX_RECORDS = 1000
 MAX_JSON_CHARS = 8192
+MAX_JSON_BYTES = MAX_JSON_CHARS
 
 
 def canonical(value):
@@ -107,8 +108,9 @@ class Store:
 
     def _records(self):
         rows = self.db.execute(
-            "SELECT seq,substr(body,1,?),typeof(body) FROM records ORDER BY seq LIMIT ?",
-            (MAX_JSON_CHARS + 1, MAX_RECORDS + 1)).fetchall()
+            "SELECT seq,CASE WHEN length(CAST(body AS BLOB)) <= ? THEN body END,"
+            "typeof(body) FROM records ORDER BY seq LIMIT ?",
+            (MAX_JSON_BYTES, MAX_RECORDS + 1)).fetchall()
         if len(rows) > MAX_RECORDS:
             raise ValueError("record bound exceeded")
         records = []
@@ -122,8 +124,9 @@ class Store:
 
     def _validate_state(self):
         metadata = self.db.execute(
-            "SELECT id,substr(source,1,?),typeof(source) FROM metadata LIMIT 2",
-            (MAX_JSON_CHARS + 1,)).fetchall()
+            "SELECT id,CASE WHEN length(CAST(source AS BLOB)) <= ? THEN source END,"
+            "typeof(source) FROM metadata LIMIT 2",
+            (MAX_JSON_BYTES,)).fetchall()
         if (len(metadata) != 1 or type(metadata[0][0]) is not int or
                 metadata[0][0] != 1 or
                 not same(load_persisted(*metadata[0][1:]), self.source)):
@@ -169,9 +172,11 @@ class Store:
                 "commit": commit, "request_hash": request_hash,
                 "historical_record_only": True, "execution": False})
         rows = self.db.execute(
-            "SELECT substr(key,1,?),substr(request_hash,1,?),substr(receipt,1,?),"
+            "SELECT CASE WHEN length(CAST(key AS BLOB)) <= ? THEN key END,"
+            "CASE WHEN length(CAST(request_hash AS BLOB)) <= ? THEN request_hash END,"
+            "CASE WHEN length(CAST(receipt AS BLOB)) <= ? THEN receipt END,"
             "typeof(key),typeof(request_hash),typeof(receipt) FROM requests LIMIT ?",
-            (MAX_JSON_CHARS + 1, MAX_JSON_CHARS + 1, MAX_JSON_CHARS + 1,
+            (MAX_JSON_BYTES, MAX_JSON_BYTES, MAX_JSON_BYTES,
              MAX_RECORDS + 1)).fetchall()
         if len(rows) != len(expected):
             raise ValueError("persisted request mapping mismatch")
@@ -186,8 +191,9 @@ class Store:
 
     def _append(self, kind, data):
         last = self.db.execute(
-            "SELECT seq,substr(body,1,?),typeof(body) FROM records ORDER BY seq DESC LIMIT 1",
-            (MAX_JSON_CHARS + 1,)).fetchone()
+            "SELECT seq,CASE WHEN length(CAST(body AS BLOB)) <= ? THEN body END,"
+            "typeof(body) FROM records ORDER BY seq DESC LIMIT 1",
+            (MAX_JSON_BYTES,)).fetchone()
         count = last[0] if last else 0
         if count >= MAX_RECORDS:
             raise ValueError("record bound exceeded")
