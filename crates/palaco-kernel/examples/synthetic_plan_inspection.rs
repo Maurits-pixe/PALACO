@@ -6,7 +6,7 @@ use palaco_foundation::{AuthorityState, ContractError, EvidenceRef};
 use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
-    inspection::{write_plan_inspection_summary_json, write_plan_inspections_jsonl},
+    inspection::{try_write_plan_inspection_summary_json, try_write_plan_inspections_jsonl},
 };
 use std::ffi::OsString;
 use std::io::{self, BufWriter, Write};
@@ -35,10 +35,18 @@ fn write_demo(output: &mut impl Write, summary: bool) -> Result<(), Box<dyn std:
         Ok(RuntimePlan::new(ExecutionBoundary::new(record)))
     })
     .collect::<Result<Vec<_>, ContractError>>()?;
+    write_reports(plans.iter().map(Ok), output, summary)
+}
+
+fn write_reports<'a>(
+    source: impl IntoIterator<Item = Result<&'a RuntimePlan, ContractError>>,
+    output: &mut impl Write,
+    summary: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
     if summary {
-        write_plan_inspection_summary_json(&plans, output)?;
+        try_write_plan_inspection_summary_json(source, output)?;
     } else {
-        write_plan_inspections_jsonl(&plans, output)?;
+        try_write_plan_inspections_jsonl(source, output)?;
     }
     output.flush()?;
     Ok(())
@@ -78,6 +86,64 @@ mod tests {
             output,
             b"{\"schema_version\":1,\"report_type\":\"plan-inspection-summary\",\"total\":4,\"execute\":1,\"hold\":1,\"deny\":2,\"contract_valid\":4,\"contract_invalid\":0,\"execution_performed\":false,\"authority_verified\":false}\n"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn source_failure_preserves_only_streamed_reports_without_flush_or_read_ahead()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use palaco_runtime::inspection::{
+            PlanInspectionSummaryWriteError, PlanInspectionWriteError, write_plan_inspection_json,
+        };
+
+        struct Destination(Vec<u8>);
+        impl Write for Destination {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.0.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                panic!("source failure must return before flush");
+            }
+        }
+
+        let event = EventEnvelope::new("synthetic.source.failure", EvidenceRef::new("SYNTHETIC")?);
+        let plan = RuntimePlan::new(ExecutionBoundary::new(ProvenanceRecord::new(
+            event,
+            AuthorityState::Authorized,
+        )));
+        let original = plan.clone();
+        for summary in [false, true] {
+            for completed in [0, 1] {
+                let mut source = std::iter::repeat_n(Ok(&plan), completed)
+                    .chain([Err(ContractError::MissingEvidence), Ok(&plan)]);
+                let mut output = Destination(Vec::new());
+                let error = write_reports(&mut source, &mut output, summary)
+                    .expect_err("synthetic source must fail");
+                if summary {
+                    assert!(matches!(
+                        error.downcast_ref::<PlanInspectionSummaryWriteError<ContractError>>(),
+                        Some(PlanInspectionSummaryWriteError::Source(
+                            ContractError::MissingEvidence
+                        ))
+                    ));
+                } else {
+                    assert!(matches!(
+                        error.downcast_ref::<PlanInspectionWriteError<ContractError>>(),
+                        Some(PlanInspectionWriteError::Source(
+                            ContractError::MissingEvidence
+                        ))
+                    ));
+                }
+                let mut expected = Vec::new();
+                if !summary && completed == 1 {
+                    write_plan_inspection_json(&plan, &mut expected)?;
+                }
+                assert_eq!(output.0, expected);
+                assert!(matches!(source.next(), Some(Ok(next)) if std::ptr::eq(next, &plan)));
+            }
+        }
+        assert_eq!(plan, original);
         Ok(())
     }
 

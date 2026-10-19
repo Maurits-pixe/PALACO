@@ -235,6 +235,11 @@ Voeg `-- --summary` toe om in plaats daarvan één JSON-samenvatting te schrijve
 `contract_invalid: 0`. Ook deze modus voert niets uit en verifieert geen
 autoriteit. Onbekende of extra argumenten falen zonder rapport op stdout;
 beide modi flushen expliciet en geven write- en flush-fouten door.
+De rapportage gebruikt in beide modi een bron met `Result<&RuntimePlan, E>`.
+Een synthetische bronuitval wordt in de voorbeeldtests geïnjecteerd, niet via
+een extra CLI-vlag: streaming kan eerdere regels behouden, terwijl de
+samenvatting de bestemming ongemoeid laat. Beide stoppen vóór het volgende
+bronitem en vóór flush. De normale CLI gebruikt uitsluitend de vier vaste fixtures.
 
 Dit schrijft vier JSON Lines-rapporten, in de vaste volgorde `Authorized`,
 `Revoked`, `Expired`, `InDoubt`: de disposities zijn `execute`, `deny`, `deny`,
