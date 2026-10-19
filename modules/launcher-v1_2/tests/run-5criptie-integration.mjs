@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { root } from './report.mjs';
 import { certificates, request, temporarySubject, viteProcess } from './local-fixtures.mjs';
 
+const runtimeConfig = process.env.PALACO_BROWSER_RUNTIME_CONFIG
+  ? JSON.parse(fs.readFileSync(process.env.PALACO_BROWSER_RUNTIME_CONFIG, 'utf8')) : {};
+const dangerous = ['--disable-web-security', '--allow-running-insecure-content', '--ignore-certificate-errors'];
+if ((runtimeConfig.args || []).some(arg => dangerous.some(flag => arg === flag || arg.startsWith(`${flag}=`)))) {
+  throw new Error('Browser harness rejects disabled web security, mixed-content or global certificate bypass flags.');
+}
 const launcherDirectory = temporarySubject('5criptie-integration-launcher');
 const launcherTls = certificates(launcherDirectory);
 const moduleSource = path.resolve(root, '../5criptie-preview');
@@ -42,7 +47,11 @@ try {
     status: 'preview-only'
   });
 
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    ...(runtimeConfig.executablePath ? { executablePath: runtimeConfig.executablePath } : {}),
+    args: runtimeConfig.args || []
+  });
   const context = await browser.newContext({ ignoreHTTPSErrors: true });
   const page = await context.newPage();
   await page.goto('https://127.0.0.1:5173');
