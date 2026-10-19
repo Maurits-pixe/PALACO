@@ -140,6 +140,7 @@ function barHeight(value) {
         <p class="sr-only" role="status">{{ filterStatusText }}</p>
         <div class="table-wrap">
           <table>
+            <caption class="sr-only">Vaste synthetische signalen, gefilterd op ernst</caption>
             <thead><tr><th scope="col">Fixture ID</th><th scope="col">Tijd*</th><th scope="col">Bronfixture</th><th scope="col">Categorie</th><th scope="col">Prioriteit</th><th scope="col">Samenvatting</th><th scope="col">Label</th></tr></thead>
             <tbody>
               <tr v-for="event in visibleEvents" :key="event.id">

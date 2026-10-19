@@ -119,6 +119,7 @@ try {
   const eventRows = popup.locator('.events-panel tbody tr');
   assert.equal(await eventRows.count(), 6);
   assert.equal(await popup.getByRole('group', { name: 'Filter synthetische signalen' }).count(), 1);
+  assert.equal(await popup.locator('.events-panel caption').textContent(), 'Vaste synthetische signalen, gefilterd op ernst');
   assert.deepEqual(await popup.locator('.events-panel thead th').evaluateAll(headers =>
     headers.map(header => header.getAttribute('scope'))), Array(7).fill('col'));
   const filterStatus = popup.locator('.events-panel [role="status"]');
