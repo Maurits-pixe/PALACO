@@ -2,11 +2,11 @@ name: RIO accounts synthetic development
 
 on:
   push:
-    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore', 'codex/rio-tls-restored-service', 'codex/rio-studio-recovery-polish', 'codex/rio-studio-strict-utf8', 'codex/rio-cmv-storage-slice', 'codex/rio-cmv-protected-http', 'codex/rio-cmv-catalog', 'codex/rio-cmv-idempotent-upload', 'codex/rio-cmv-verified-delete']
-    paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
+    branches: ['feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore', 'codex/rio-tls-restored-service', 'codex/rio-studio-recovery-polish', 'codex/rio-studio-strict-utf8', 'codex/rio-cmv-storage-slice', 'codex/rio-cmv-protected-http', 'codex/rio-cmv-catalog', 'codex/rio-cmv-idempotent-upload', 'codex/rio-cmv-verified-delete', 'codex/ecosystem-document-exchange']
+    paths: ['ecosystem/**', 'services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   pull_request:
-    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore', 'codex/rio-tls-restored-service', 'codex/rio-studio-recovery-polish', 'codex/rio-studio-strict-utf8', 'codex/rio-cmv-storage-slice', 'codex/rio-cmv-protected-http', 'codex/rio-cmv-catalog', 'codex/rio-cmv-idempotent-upload']
-    paths: ['services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
+    branches: [main, 'feature/rio-accounts-synthetic-dev', 'codex/rio-staging-endpoint-adapter', 'codex/rio-tls-subject-binding', 'codex/rio-callback-interruption-regression', 'codex/rio-oidc-transport-evidence', 'codex/rio-post-consent-account-read-evidence', 'codex/rio-post-consent-fault-reproduction', 'codex/rio-t05-evidence-triage', 'codex/rio-staging-endpoint-check-cli', 'codex/rio-tls-service-constructor', 'codex/rio-tls-real-oidc-proof', 'codex/rio-binding-bootstrap-guard', 'codex/rio-login-request-failure-evidence', 'codex/rio-tls-native-restore', 'codex/rio-tls-restored-service', 'codex/rio-studio-recovery-polish', 'codex/rio-studio-strict-utf8', 'codex/rio-cmv-storage-slice', 'codex/rio-cmv-protected-http', 'codex/rio-cmv-catalog', 'codex/rio-cmv-idempotent-upload', 'codex/rio-cmv-verified-delete', 'codex/ecosystem-document-exchange']
+    paths: ['ecosystem/**', 'services/rio-accounts/**', 'verification/rio-accounts/**', 'specs/rio-accounts/**', '.github/workflows/rio-accounts-synthetic.yml']
   workflow_dispatch:
 
 permissions:
@@ -46,6 +46,7 @@ jobs:
           python -m py_compile verification/rio-accounts/fixture.py verification/rio-accounts/ci-evidence.py verification/rio-accounts/tls_fixture.py
           python -m unittest discover -s verification/rio-accounts -p test_fixture.py
           python -m unittest discover -s verification/rio-accounts -p test_tls_fixture.py
+          node --test ecosystem/*.test.mjs
           node --check verification/rio-accounts/tests/accounts.spec.mjs
           node --check verification/rio-accounts/safe-reporter.mjs
           node --check verification/rio-accounts/test_safe_reporter.mjs

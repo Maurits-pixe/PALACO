@@ -1,0 +1,4 @@
+
+# Cross-repository source bytes are checked against pinned Git blobs.
+ecosystem/** text eol=lf
+verification/rio-accounts/ecosystem-document-fixture.json text eol=lf

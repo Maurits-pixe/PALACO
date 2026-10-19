@@ -120,6 +120,17 @@ async fn http_storage_is_opt_in_strict_bounded_and_never_uses_memory() -> TestRe
     let state = crate::tests::test_state()?;
     assert!(router_with_cmv_storage(state.clone()).await.is_err());
     let default = router(state.clone());
+    for path in [
+        "/api/storage/document-exchange.mjs",
+        "/api/storage/client.mjs",
+    ] {
+        assert_eq!(
+            call(&default, "GET", path, None, None, None, "")
+                .await?
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+    }
     assert_eq!(
         call(&default, "GET", "/api/storage/usage", None, None, None, "")
             .await?
@@ -127,6 +138,27 @@ async fn http_storage_is_opt_in_strict_bounded_and_never_uses_memory() -> TestRe
         StatusCode::NOT_FOUND
     );
     let app = crate::router_with_routes(state, routes());
+    for path in [
+        "/api/storage/document-exchange.mjs",
+        "/api/storage/client.mjs",
+    ] {
+        let response = call(&app, "GET", path, None, None, None, "").await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get("content-type")
+                .and_then(|v| v.to_str().ok()),
+            Some("text/javascript; charset=utf-8")
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get("cache-control")
+                .and_then(|v| v.to_str().ok()),
+            Some("no-store")
+        );
+    }
     let token = crate::random_token();
     let csrf = crate::random_token();
     assert_eq!(
