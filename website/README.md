@@ -16,6 +16,10 @@ Vercel PR previews are documented in [Web preview deployments](../docs/operation
 
 This release is a public content and navigation baseline. It does not issue identity, grant authority, establish provenance or connect to a live verification provider. Proof therefore returns `UNVERIFIED` when no authoritative provider is connected. No visible PALACO mark is treated as proof.
 
+## Consumer access and Industrie administration
+
+`#/account` and `#/industrie/admin` are static previews only. They do not collect credentials, authenticate users, show a live pioneer count, read account data or perform administration. Login and mutation controls remain disabled; `connect-src 'none'` remains in force. The required production design and release gates are documented in [`docs/security/consumer-accounts-industrie-admin.md`](../docs/security/consumer-accounts-industrie-admin.md). A real service requires a separately reviewed server-side identity/backend decision and must not be represented by these previews.
+
 ## Accessibility and performance
 
 The shell includes semantic headings, keyboard-visible focus, a skip link, accessible form labels, status announcements, responsive layout, active-navigation state and reduced-motion support. It uses no external runtime dependency, video, tracking script or remote asset.
