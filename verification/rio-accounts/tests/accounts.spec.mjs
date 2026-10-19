@@ -261,6 +261,9 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
           return {status:response.status, noStore:response.headers.get('cache-control')==='no-store',
             closed:data ? data.accountActive===false && data.canOpenContact===false && data.operativeAuthority==='NONE' : true,
             payloadMatches:data?.object?.payload==='YnJvd3NlciBmaXh0dXJl',
+            digest:data?.object?.sha256 ?? null, terminalState:data?.object?.state ?? null,
+            endedAt:data?.object?.endedAt ?? null,
+            erasedReceipt:data?.object?.liveBytes===0 && data?.object?.payloadVerified===false,
             catalogHasObject:data?.objects?.some(item=>item.objectId===args.objectId) ?? false,
             catalogState:data?.objects?.find(item=>item.objectId===args.objectId)?.state ?? null,
             catalogNoPayload:Array.isArray(data?.objects) && data.objects.every(item=>!Object.hasOwn(item,'payload'))};
@@ -285,7 +288,16 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
         expect((await request(betaPage,'GET',path,null,null)).status).toBe(403);
         expect((await request(betaPage,'DELETE',path,betaAccount.csrfToken,{})).status).toBe(403);
         expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
-        expect((await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,{})).status).toBe(200);
+        const deleteBody={sha256:created.digest};
+        expect((await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,{sha256:'A'.repeat(43)})).status).toBe(409);
+        expect((await request(betaPage,'DELETE',path,betaAccount.csrfToken,deleteBody)).status).toBe(403);
+        const erased=await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,deleteBody);
+        expect(erased.status).toBe(200);expect(erased.terminalState).toBe('DELETED');
+        expect(erased.erasedReceipt && erased.noStore && erased.closed).toBe(true);
+        const reconfirmed=await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,deleteBody);
+        expect(reconfirmed.status).toBe(200);expect(reconfirmed.endedAt).toBe(erased.endedAt);
+        expect(reconfirmed.terminalState).toBe('DELETED');expect(reconfirmed.erasedReceipt).toBe(true);
+        expect((await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,{})).status).toBe(403);
         const deletedCatalog=await request(alphaPage,'GET','/api/storage/objects',null,null);
         expect(deletedCatalog.catalogState).toBe('DELETED');expect(deletedCatalog.catalogNoPayload).toBe(true);
         expect((await request(alphaPage,'GET',path,null,null)).status).toBe(403);

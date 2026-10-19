@@ -39,7 +39,15 @@ struct RetryPut {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Empty {}
+struct Delete {
+    #[serde(default, deserialize_with = "supplied_digest")]
+    sha256: Option<String>,
+}
+
+fn supplied_digest<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Option<String>, D::Error> {
+    // Omission keeps the legacy contract; explicit null never becomes omission.
+    String::deserialize(de).map(Some)
+}
 
 fn json_object<T: DeserializeOwned>(body: &[u8]) -> Result<T, ApiError> {
     if body.iter().find(|byte| !byte.is_ascii_whitespace()) != Some(&b'{') {
@@ -213,16 +221,28 @@ async fn delete(
     let csrf = mutation_headers(&headers, &state.endpoints)?;
     let token = token(&headers)?;
     let key = object_key(&id)?;
-    let _: Empty = json_object(&body)?;
+    let request: Delete = json_object(&body)?;
+    let expected = request.sha256.as_deref().map(object_key).transpose()?;
     let db = state
         .db
         .as_ref()
         .ok_or(ApiError(StatusCode::SERVICE_UNAVAILABLE))?;
-    db.delete_cmv_object(token, csrf, key)
-        .await
-        .map_err(storage_error)?;
     let mut response = envelope();
-    response["object"] = json!({"objectId":id,"state":"DELETED"});
+    if let Some(expected) = expected {
+        let receipt = db
+            .delete_cmv_object_checked(token, csrf, key, expected)
+            .await
+            .map_err(storage_error)?;
+        response["object"] = json!({"objectId":id,"state":receipt.state,
+            "sha256":URL_SAFE_NO_PAD.encode(receipt.digest),"endedAt":receipt.ended_ms,
+            "liveBytes":0,"payloadVerified":false});
+        response["usage"] = json!({"liveBytes":receipt.usage.live_bytes,"retainedObjects":receipt.usage.retained_objects});
+    } else {
+        db.delete_cmv_object(token, csrf, key)
+            .await
+            .map_err(storage_error)?;
+        response["object"] = json!({"objectId":id,"state":"DELETED"});
+    }
     Ok(Json(response))
 }
 

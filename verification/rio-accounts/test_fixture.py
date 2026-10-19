@@ -611,9 +611,9 @@ class FixtureSecurityTests(unittest.TestCase):
         with patch.object(fixture.subprocess, "run", return_value=result) as run:
             with redirect_stdout(output):
                 fixture.run_storage_tests()
-        self.assertEqual(run.call_count, 5)
+        self.assertEqual(run.call_count, 6)
         for call, selected in zip(run.call_args_list,
-                                  ("postgres_storage_contract", "postgres_cmv_storage_contract", "postgres_cmv_http_contract", "postgres_cmv_catalog_contract", "postgres_cmv_retry_contract")):
+                                  ("postgres_storage_contract", "postgres_cmv_storage_contract", "postgres_cmv_http_contract", "postgres_cmv_catalog_contract", "postgres_cmv_delete_contract", "postgres_cmv_retry_contract")):
             arguments = call.args[0]
             self.assertIn(selected, arguments)
             self.assertNotIn("postgres_prepare_restore_proof", arguments)

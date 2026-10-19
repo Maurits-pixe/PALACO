@@ -57,24 +57,23 @@ pub struct WriteReceipt {
     pub created: bool,
 }
 
+/// Verified terminal state of an account-owned object, including an exact retry.
+#[derive(Debug, PartialEq, Eq)]
+pub struct DeleteReceipt {
+    /// Retained original SHA-256; erased bytes are not claimed to be verifiable.
+    pub digest: Key,
+    /// Exactly DELETED or EXPIRED, matching the attributable terminal event.
+    pub state: &'static str,
+    /// Original terminal event time, unchanged by subsequent confirmations.
+    pub ended_ms: i64,
+    /// Verified account usage after this operation, with the ID slot retained.
+    pub usage: Usage,
+}
+
 fn valid_input(payload: &[u8], retention_ms: i64) -> bool {
     !payload.is_empty()
         && payload.len() <= MAX_OBJECT_BYTES
         && (1..=MAX_RETENTION_MS).contains(&retention_ms)
-}
-
-async fn usage(tx: &Transaction<'_>, session: &SessionRecord) -> Result<Usage, StoreError> {
-    let row = tx
-        .query_one(
-            "SELECT count(*)::bigint,COALESCE(sum(octet_length(payload)),0)::bigint \
-         FROM rio_synthetic.cmv_objects WHERE account_id=$1 AND tenant_id=$2",
-            &[&session.account_id, &session.tenant_id],
-        )
-        .await?;
-    Ok(Usage {
-        retained_objects: row.try_get(0)?,
-        live_bytes: row.try_get(1)?,
-    })
 }
 
 // Lifecycle and attributable terminal events commit atomically. The guard lock
@@ -234,10 +233,11 @@ impl PgStore {
             };
             if !csrf_matches(&session.csrf,supplied_csrf) { return reject_business(tx,StoreError::Forbidden).await; }
             expire(&tx,&session,now).await?;
-            let exists = tx.query_opt("SELECT 1 FROM rio_synthetic.cmv_objects WHERE account_id=$1 AND object_id=$2",
-                &[&session.account_id,&&object_id[..]]).await?.is_some();
-            if exists { return reject_business(tx,StoreError::Conflict).await; }
-            let used = usage(&tx,&session).await?;
+            let catalog = catalog_snapshot(&tx, &session, now).await?;
+            if catalog.objects.iter().any(|item| item.object_id == object_id) {
+                return reject_business(tx,StoreError::Conflict).await;
+            }
+            let used = catalog.usage;
             if used.retained_objects>=MAX_ACCOUNT_OBJECTS || used.live_bytes+payload.len() as i64>MAX_ACCOUNT_BYTES {
                 return reject_business(tx,StoreError::Capacity).await;
             }
@@ -333,6 +333,7 @@ impl PgStore {
                 Err(error) => return reject_business(tx, error).await,
             };
             expire(&tx, &session, now).await?;
+            catalog_snapshot(&tx, &session, now).await?;
             let row = tx
                 .query_opt(
                     "SELECT payload,digest FROM rio_synthetic.cmv_objects \
@@ -375,6 +376,7 @@ impl PgStore {
                 return reject_business(tx, StoreError::Forbidden).await;
             }
             expire(&tx, &session, now).await?;
+            catalog_snapshot(&tx, &session, now).await?;
             let changed = tx
                 .execute(
                     "UPDATE rio_synthetic.cmv_objects SET payload=''::bytea,state='DELETED' \
@@ -397,9 +399,16 @@ impl PgStore {
         .await
     }
 
-    /// Sweep this authenticated account's expired bytes and return its usage.
-    /// Physical expiry is lazy; all reads deny expired bytes before releasing them.
-    pub async fn cmv_usage(&self, token_hash: Key) -> Result<Usage, StoreError> {
+    /// Delete only the expected immutable bytes, or confirm their verified terminal state.
+    /// Repeated confirmations append no event and never reuse the retained object slot.
+    /// Expiry remains EXPIRED rather than being relabelled as a user deletion.
+    pub async fn delete_cmv_object_checked(
+        &self,
+        token_hash: Key,
+        supplied_csrf: &str,
+        object_id: Key,
+        expected_digest: Key,
+    ) -> Result<DeleteReceipt, StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -408,12 +417,60 @@ impl PgStore {
                 Ok(session) => session,
                 Err(error) => return reject_business(tx, error).await,
             };
+            if !csrf_matches(&session.csrf, supplied_csrf) {
+                return reject_business(tx, StoreError::Forbidden).await;
+            }
             expire(&tx, &session, now).await?;
-            let used = usage(&tx, &session).await?;
+            let catalog = catalog_snapshot(&tx, &session, now).await?;
+            let Some(item) = catalog
+                .objects
+                .iter()
+                .find(|item| item.object_id == object_id)
+            else {
+                tx.commit().await?;
+                return Err(StoreError::Forbidden);
+            };
+            if item.digest != expected_digest {
+                return reject_business(tx, StoreError::Conflict).await;
+            }
+            let (state, ended_ms) =
+                if item.state == "LIVE" {
+                    let changed = tx.execute(
+                    "UPDATE rio_synthetic.cmv_objects SET payload=''::bytea,state='DELETED' \
+                    WHERE account_id=$1 AND tenant_id=$2 AND object_id=$3 AND state='LIVE'",
+                    &[&session.account_id, &session.tenant_id, &&object_id[..]],
+                ).await?;
+                    if changed != 1 {
+                        return Err(StoreError::Unavailable);
+                    }
+                    tx.execute(
+                        "INSERT INTO rio_synthetic.cmv_events VALUES($1,$2,1,'DELETED',$3)",
+                        &[&session.account_id, &&object_id[..], &now],
+                    )
+                    .await?;
+                    ("DELETED", now)
+                } else {
+                    (item.state, item.ended_ms.ok_or(StoreError::Unavailable)?)
+                };
+            let usage = Usage {
+                live_bytes: catalog.usage.live_bytes - item.live_bytes,
+                retained_objects: catalog.usage.retained_objects,
+            };
             tx.commit().await?;
-            Ok(used)
+            Ok(DeleteReceipt {
+                digest: expected_digest,
+                state,
+                ended_ms,
+                usage,
+            })
         })
         .await
+    }
+
+    /// Sweep expiry and return usage only from a completely verified catalog.
+    /// Physical expiry is lazy; every read validates content and attributable lifecycle.
+    pub async fn cmv_usage(&self, token_hash: Key) -> Result<Usage, StoreError> {
+        Ok(self.cmv_catalog(token_hash).await?.usage)
     }
 }
 
@@ -437,3 +494,7 @@ mod catalog_tests;
 #[cfg(test)]
 #[path = "../storage_cmv_retry_tests.rs"]
 mod retry_tests;
+
+#[cfg(test)]
+#[path = "../storage_cmv_delete_tests.rs"]
+mod delete_tests;

@@ -512,6 +512,138 @@ async fn retry_upload_has_strict_input_and_method_local_body_limits() -> TestRes
 }
 
 #[tokio::test]
+async fn checked_delete_requires_one_canonical_digest_and_keeps_small_body_limit() -> TestResult {
+    let state = crate::tests::test_state()?;
+    let token = crate::random_token();
+    let csrf = crate::random_token();
+    let digest = crate::random_token();
+    let path = format!("/api/storage/objects/{}", crate::random_token());
+    let valid = json!({"sha256":digest}).to_string();
+    assert_eq!(
+        call(
+            &router(state.clone()),
+            "DELETE",
+            &path,
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &valid
+        )
+        .await?
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    let app = crate::router_with_routes(state, routes());
+    for (cookie, csrf, origin, status) in [
+        (
+            None,
+            Some(csrf.as_str()),
+            Some(ORIGIN),
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            Some(token.as_str()),
+            None,
+            Some(ORIGIN),
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            Some(token.as_str()),
+            Some(csrf.as_str()),
+            None,
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            Some(token.as_str()),
+            Some(csrf.as_str()),
+            Some("https://attacker.example"),
+            StatusCode::FORBIDDEN,
+        ),
+    ] {
+        assert_eq!(
+            call(&app, "DELETE", &path, cookie, csrf, origin, &valid)
+                .await?
+                .status(),
+            status
+        );
+    }
+    for body in [
+        "[]".to_owned(),
+        "null".to_owned(),
+        json!({"sha256":null}).to_string(),
+        json!({"sha256":true}).to_string(),
+        json!({"sha256":[]}).to_string(),
+        json!({"sha256":{}}).to_string(),
+        json!({"sha256":""}).to_string(),
+        json!({"sha256":"short"}).to_string(),
+        json!({"sha256":format!("{digest}=")}).to_string(),
+        json!({"sha256":"A".repeat(42)+"B"}).to_string(),
+        json!({"sha256":digest,"accountId":"TST-beta"}).to_string(),
+        format!(r#"{{"sha256":"{digest}","sha256":"{digest}"}}"#),
+    ] {
+        assert_eq!(
+            call(
+                &app,
+                "DELETE",
+                &path,
+                Some(&token),
+                Some(&csrf),
+                Some(ORIGIN),
+                &body
+            )
+            .await?
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for body in [&valid, "{}"] {
+        assert_eq!(
+            call(
+                &app,
+                "DELETE",
+                &path,
+                Some(&token),
+                Some(&csrf),
+                Some(ORIGIN),
+                body
+            )
+            .await?
+            .status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &format!("{path}?accountId=TST-beta"),
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &valid
+        )
+        .await?
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &path,
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &" ".repeat(257)
+        )
+        .await?
+        .status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "requires owned disposable synthetic PostgreSQL"]
 async fn postgres_cmv_http_contract() -> TestResult {
     let db = Arc::new(PgStore::connect_local(&std::env::var("RIO_PG_TEST_URL")?).await?);
@@ -609,6 +741,7 @@ async fn postgres_cmv_http_contract() -> TestResult {
         StatusCode::FORBIDDEN
     );
     let new_path = format!("/api/storage/objects/{}", crate::random_token());
+    let delete_body = json!({"sha256":created["object"]["sha256"]}).to_string();
     document(
         call(
             &app,
@@ -623,7 +756,7 @@ async fn postgres_cmv_http_contract() -> TestResult {
         StatusCode::CREATED,
     )
     .await?;
-    document(
+    assert_eq!(
         call(
             &app,
             "DELETE",
@@ -631,12 +764,88 @@ async fn postgres_cmv_http_contract() -> TestResult {
             Some(&beta),
             Some(&csrf_b),
             Some(ORIGIN),
-            "{}",
+            &json!({"sha256":URL_SAFE_NO_PAD.encode([0;32])}).to_string()
+        )
+        .await?
+        .status(),
+        StatusCode::CONFLICT
+    );
+    let deleted = document(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &delete_body,
         )
         .await?,
         StatusCode::OK,
     )
     .await?;
+    assert_eq!(deleted["object"]["state"], "DELETED");
+    assert_eq!(deleted["object"]["sha256"], created["object"]["sha256"]);
+    assert_eq!(deleted["object"]["liveBytes"], 0);
+    assert_eq!(deleted["object"]["payloadVerified"], false);
+    assert!(deleted["object"]["endedAt"].is_i64());
+    let repeated = document(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &delete_body,
+        )
+        .await?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(deleted, repeated);
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            "{}"
+        )
+        .await?
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&alpha),
+            Some(&csrf_a),
+            Some(ORIGIN),
+            &delete_body
+        )
+        .await?
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_a),
+            Some(ORIGIN),
+            &delete_body
+        )
+        .await?
+        .status(),
+        StatusCode::FORBIDDEN
+    );
     let own = inventory(&app, &beta).await?;
     let item = own["objects"]
         .as_array()
@@ -822,6 +1031,20 @@ async fn postgres_cmv_http_contract() -> TestResult {
         StatusCode::FORBIDDEN
     );
     db.logout_all(hash(&beta), &csrf_b).await?;
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &delete_body
+        )
+        .await?
+        .status(),
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         call(
             &app,

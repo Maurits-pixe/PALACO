@@ -17,6 +17,7 @@ const PENDING_STATE: Key = [0xa5; 32];
 const ALPHA_SUBJECT: &str = "11111111-1111-4111-8111-111111111111";
 const BETA_SUBJECT: &str = "22222222-2222-4222-8222-222222222222";
 const CMV_MARKER: Key = [0xc7; 32];
+const CMV_TERMINAL_MARKER: Key = [0xc8; 32];
 
 fn alpha() -> Key {
     crate::hash(ALPHA_COOKIE)
@@ -249,6 +250,23 @@ async fn postgres_tls_prepare_restore_contract() -> Result<(), StoreError> {
             CMV_MARKER,
             b"native snapshot object",
             cmv::MAX_RETENTION_MS,
+        )
+        .await?;
+    let terminal_digest = store
+        .put_cmv_object(
+            alpha(),
+            &alpha_session.csrf,
+            CMV_TERMINAL_MARKER,
+            b"native deleted object",
+            cmv::MAX_RETENTION_MS,
+        )
+        .await?;
+    store
+        .delete_cmv_object_checked(
+            alpha(),
+            &alpha_session.csrf,
+            CMV_TERMINAL_MARKER,
+            terminal_digest,
         )
         .await?;
     issue(&store, beta(), "TST-beta").await?;
@@ -541,6 +559,35 @@ async fn postgres_tls_verify_restore_contract() -> Result<(), StoreError> {
         Some(StoreError::Revoked)
     );
     let catalog = recovered.cmv_catalog(fresh).await?;
+    let terminal = catalog
+        .objects
+        .iter()
+        .find(|o| o.object_id == CMV_TERMINAL_MARKER)
+        .ok_or(StoreError::Invalid)?;
+    assert_eq!(terminal.state, "DELETED");
+    assert_eq!(
+        terminal.digest,
+        Key::from(Sha256::digest(b"native deleted object"))
+    );
+    assert_eq!(
+        recovered
+            .delete_cmv_object_checked(
+                alpha(),
+                &"r".repeat(43),
+                CMV_TERMINAL_MARKER,
+                terminal.digest
+            )
+            .await
+            .err(),
+        Some(StoreError::Revoked)
+    );
+    let confirmed = recovered
+        .delete_cmv_object_checked(fresh, &session.csrf, CMV_TERMINAL_MARKER, terminal.digest)
+        .await?;
+    assert_eq!(confirmed.state, "DELETED");
+    assert_eq!(Some(confirmed.ended_ms), terminal.ended_ms);
+    assert_eq!(confirmed.digest, terminal.digest);
+    assert_eq!(count(&clone.client, "SELECT count(*) FROM rio_synthetic.cmv_events WHERE account_id='TST-alpha' AND object_id=decode(repeat('c8',32),'hex')").await?, 2);
     let marker = catalog
         .objects
         .iter()
