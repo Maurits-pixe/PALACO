@@ -2127,9 +2127,18 @@ That PostgreSQL 17 container configuration and connection URL were also exercise
 locally: all five database integration tests, 58 workspace tests and the Rustdoc
 example passed, with strict Clippy and full-workspace formatting clean. This
 checks the service wiring locally, not the pinned CI toolchain or a GitHub run.
-GO-08 still has a separate pre-existing PVS-001 blocker: its fixed seven-crate
-workspace list rejects the existing eighth member, `palaco-la`. PVS-002 passes
-locally; the database fix does not resolve or bypass that PVS-001 policy mismatch.
+The separate PVS-001 membership failure in GO-08
+[run 37801980240](https://github.com/Maurits-pixe/PALACO/actions/runs/37801980240)
+was reproduced locally. PVS-001 now explicitly includes `palaco-la` as an
+independently versioned workspace extension, without changing the seven
+Foundation crates' inheritance checks or PVS-002 dependency contracts.
+The extension must retain its package identity, matching edition and Rust
+minimum, disabled publication, forbidden unsafe code, manifest and library source.
+Unknown, duplicate and missing members remain rejected. Six Python regression
+tests and both PVS-001/PVS-002 pass locally; GO-07 and GO-08 run those regression
+tests before PVS-001. The 58 workspace tests, Rustdoc example, build, strict
+Clippy and formatting were also rerun successfully with Rust 1.99.0 and disposable
+PostgreSQL 17. A local pass is not evidence that GitHub GO-08 completed.
 The inspected PALACO L.A. run
 [39201803436](https://github.com/Maurits-pixe/PALACO/actions/runs/39201803436)
 has `action_required` with no executed jobs or job logs. A maintainer must

@@ -7,6 +7,7 @@ on:
       - "Cargo.toml"
       - "crates/**"
       - "tools/pvs001_workspace_integrity.py"
+      - "tools/test_pvs001_workspace_integrity.py"
       - "tools/pvs002_cross_crate_contracts.py"
       - ".github/workflows/go-08-pvs-002.yml"
   workflow_dispatch:
@@ -43,7 +44,9 @@ jobs:
           toolchain: 1.98.1
           components: rustfmt, clippy
       - name: PVS-001 regression
-        run: python3 tools/pvs001_workspace_integrity.py
+        run: |
+          python3 -m unittest discover -s tools -p 'test_pvs001_workspace_integrity.py'
+          python3 tools/pvs001_workspace_integrity.py
       - name: PVS-002 dependency and contract audit
         run: python3 tools/pvs002_cross_crate_contracts.py
       - name: Formatting regression

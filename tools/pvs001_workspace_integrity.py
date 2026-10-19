@@ -4,6 +4,7 @@
 from pathlib import Path
 import re
 import sys
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED = [
@@ -15,6 +16,7 @@ EXPECTED = [
     "palaco-citadel",
     "palaco-evolution",
 ]
+EXTENSIONS = ["palaco-la"]
 
 errors = []
 root_cargo = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
@@ -24,7 +26,7 @@ for token in ('version = "1.0.0"', 'edition = "2024"', 'unsafe_code = "forbid"',
         errors.append(f"root Cargo.toml missing invariant: {token}")
 
 members = re.findall(r'"crates/([^"]+)"', root_cargo)
-if members != EXPECTED:
+if members != EXPECTED + EXTENSIONS:
     errors.append(f"workspace members mismatch: {members!r}")
 
 for name in EXPECTED:
@@ -48,6 +50,28 @@ for name in EXPECTED:
     for token in required:
         if token not in text:
             errors.append(f"{cargo.relative_to(ROOT)} missing: {token}")
+
+for name in EXTENSIONS:
+    crate = ROOT / "crates" / name
+    cargo = crate / "Cargo.toml"
+    if not cargo.is_file():
+        errors.append(f"missing {cargo.relative_to(ROOT)}")
+        continue
+    if not (crate / "src" / "lib.rs").is_file():
+        errors.append(f"missing {(crate / 'src' / 'lib.rs').relative_to(ROOT)}")
+    data = tomllib.loads(cargo.read_text(encoding="utf-8"))
+    package = data.get("package", {})
+    workspace_package = tomllib.loads(root_cargo)["workspace"]["package"]
+    for field, value in {
+        "name": name,
+        "edition": workspace_package["edition"],
+        "rust-version": workspace_package["rust-version"],
+        "publish": False,
+    }.items():
+        if package.get(field) != value:
+            errors.append(f"{cargo.relative_to(ROOT)} invalid extension package {field}")
+    if data.get("lints", {}).get("rust", {}).get("unsafe_code") != "forbid":
+        errors.append(f"{cargo.relative_to(ROOT)} extension must forbid unsafe_code")
 
 required_dirs = [
     "docs/constitution/PCS",
@@ -78,4 +102,4 @@ if errors:
     sys.exit(1)
 
 print("PVS-001: PASS")
-print("Foundation workspace identity, membership, lints, crates, and required repository boundaries are structurally consistent.")
+print("Foundation identity and lints, explicit workspace extensions, and required repository boundaries are structurally consistent.")
