@@ -77,8 +77,31 @@ try {
   await popup.reload();
   await popup.getByRole('heading', { name: 'Signal overview' }).waitFor();
   assert.deepEqual(remoteRequests, []);
+
+  const eventRows = popup.locator('.events-panel tbody tr');
+  assert.equal(await eventRows.count(), 6);
+  for (const [severity, count] of [['Hoog', 2], ['Middel', 1], ['Laag', 3], ['Alles', 6]]) {
+    const button = popup.getByRole('button', { name: severity, exact: true });
+    await button.click();
+    assert.equal(await eventRows.count(), count, `${severity} filter should show ${count} fixture rows`);
+    assert.equal(await button.getAttribute('aria-pressed'), 'true');
+  }
+
+  await popup.setViewportSize({ width: 390, height: 844 });
+  const layout = await popup.evaluate(() => {
+    const table = document.querySelector('.table-wrap');
+    return {
+      viewportWidth: innerWidth,
+      pageWidth: document.documentElement.scrollWidth,
+      tableWidth: table.clientWidth,
+      tableContentWidth: table.scrollWidth
+    };
+  });
+  assert.ok(layout.pageWidth <= layout.viewportWidth, 'mobile dashboard must not overflow the page horizontally');
+  assert.ok(layout.tableContentWidth > layout.tableWidth, 'wide event table should scroll within its own container on mobile');
+  assert.equal(await popup.getByRole('button', { name: 'Alles', exact: true }).isVisible(), true);
   await context.close();
-  console.log('PASS: NEO verified and opened the real local 5CRIPTIE HTTPS preview; dashboard content remained synthetic.');
+  console.log('PASS: NEO verified and opened 5CRIPTIE; fixture filters, responsive table containment, and synthetic-only content passed.');
 } finally {
   await browser?.close();
   await scriptie?.stop();
