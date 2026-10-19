@@ -64,6 +64,29 @@ pub fn write_plan_inspection_json(
     )
 }
 
+/// Writes plan observations in iterator order as JSON Lines.
+///
+/// Delegates each borrowed plan to [`write_plan_inspection_json`] without
+/// collecting plans or reports. Empty input writes nothing. The caller supplies
+/// a finite iterator and owns flushing and persistence. Iterator side effects
+/// belong to the caller; this function does not execute plans or verify authority.
+///
+/// # Errors
+///
+/// Stops on the first write error without requesting the next plan. The failing
+/// plan has already been consumed from the iterator. Output is not atomic:
+/// previous lines and a partial final line may remain, even on error.
+/// Success does not imply that a buffered destination was flushed.
+pub fn write_plan_inspections_jsonl<'a>(
+    plans: impl IntoIterator<Item = &'a RuntimePlan>,
+    output: &mut (impl Write + ?Sized),
+) -> io::Result<()> {
+    for plan in plans {
+        write_plan_inspection_json(plan, output)?;
+    }
+    Ok(())
+}
+
 /// Descriptive inspection data, never evidence, permission or live host health.
 ///
 /// Changing a local copy does not change the interface or authorize execution.

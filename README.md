@@ -97,6 +97,16 @@ gedeeltelijke uitvoer moet worden verworpen. Validatiefouten staan als
 getypeerde API. Dit wijzigt de CLI of het bestaande status-JSON niet en is geen
 autorisatiebewijs.
 
+`write_plan_inspections_jsonl(plans.iter(), &mut destination)` schrijft meerdere
+bestaande plannen in iteratorvolgorde, één rapport per regel, zonder de
+rapporten vooraf te verzamelen. Lege invoer schrijft niets. Bij de eerste
+schrijffout stopt de writer zonder het volgende plan op te vragen; het falende
+plan is dan al uit de iterator gelezen. Dit is **geen atomaire batch**: eerdere
+regels en een gedeeltelijke laatste regel kunnen blijven staan. De aanroeper
+levert een eindige iterator, bepaalt de omgang met gedeeltelijke uitvoer en
+blijft verantwoordelijk voor flushen en duurzame opslag. Plannen blijven
+ongewijzigd; er wordt niets uitgevoerd of geautoriseerd.
+
 Een uitvoerbaar integratievoorbeeld gebruikt de bibliotheek rechtstreeks en
 schrijft hetzelfde JSON-rapport via een eigen `BufWriter` naar stdout:
 
