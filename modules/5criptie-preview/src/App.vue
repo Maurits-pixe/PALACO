@@ -88,7 +88,7 @@ function reviewPercent(count) {
             <span>{{ reviewTotal === 1 ? 'voorbeeldsignaal' : 'voorbeeldsignalen' }}</span>
           </div>
           <p v-if="reviewTotal === 0" class="review-empty" role="status">Geen openstaande reviewmeldingen in deze fixtures.</p>
-          <div class="review-breakdown" role="img" :aria-label="reviewBreakdownText">
+          <div class="review-breakdown" aria-hidden="true">
             <template v-if="reviewTotal > 0">
               <div v-for="item in reviewBreakdown" :key="item.severity" class="review-row">
                 <span class="review-label"><i class="severity" :class="severityTones[item.severity]"></i>{{ item.severity }}</span>
@@ -99,6 +99,7 @@ function reviewPercent(count) {
               </div>
             </template>
           </div>
+          <p class="sr-only" role="status">{{ reviewBreakdownText }}</p>
           <p class="review-note">Categorisering is illustratief en niet gebaseerd op detectie.</p>
         </article>
       </section>
