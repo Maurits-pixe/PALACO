@@ -31,6 +31,55 @@ pub fn inspect_plan(plan: &RuntimePlan) -> PlanInspection {
     }
 }
 
+/// Counts of plan observations, never execution or authorization statistics.
+///
+/// Validation and disposition are independent. A valid contract may still have
+/// Hold or Deny disposition. Public copies are descriptive data only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PlanInspectionSummary {
+    /// Number of slice entries observed, including repeated plans.
+    pub total: usize,
+    /// Entries carrying Execute, not a count of executed or authenticated plans.
+    pub execute: usize,
+    /// Entries carrying Hold.
+    pub hold: usize,
+    /// Entries carrying Deny.
+    pub deny: usize,
+    /// Entries whose existing contract validation succeeded.
+    pub contract_valid: usize,
+    /// Entries whose existing contract validation failed.
+    pub contract_invalid: usize,
+}
+
+/// Summarizes a finite slice without modifying plans, allocating or performing I/O.
+///
+/// Each entry is inspected once using [`inspect_plan`]. Repeated entries count
+/// separately. All counters are bounded by the slice length. No evidence is
+/// authenticated, authority refreshed or execution performed. This is not an
+/// atomic observation of external authority and grants no permission.
+#[must_use]
+pub fn summarize_plans(plans: &[RuntimePlan]) -> PlanInspectionSummary {
+    let mut summary = PlanInspectionSummary {
+        total: plans.len(),
+        ..PlanInspectionSummary::default()
+    };
+    for plan in plans {
+        let report = inspect_plan(plan);
+        match report.disposition {
+            ContractDisposition::Execute => summary.execute += 1,
+            ContractDisposition::Hold => summary.hold += 1,
+            ContractDisposition::Deny => summary.deny += 1,
+        }
+        if report.validation.is_ok() {
+            summary.contract_valid += 1;
+        } else {
+            summary.contract_invalid += 1;
+        }
+    }
+    summary
+}
+
 /// Writes one schema-version-1 plan-inspection JSON object and a newline.
 ///
 /// Observes the supplied plan directly, never a caller-modified report copy.

@@ -5,8 +5,8 @@ use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
     inspection::{
-        PlanInspectionWriteError, try_write_plan_inspections_jsonl, write_plan_inspection_json,
-        write_plan_inspections_jsonl,
+        PlanInspectionSummary, PlanInspectionWriteError, summarize_plans,
+        try_write_plan_inspections_jsonl, write_plan_inspection_json, write_plan_inspections_jsonl,
     },
 };
 use std::io::{self, BufWriter, Write};
@@ -26,6 +26,62 @@ fn plans() -> Result<Vec<RuntimePlan>, ContractError> {
         )))
     })
     .collect()
+}
+
+#[test]
+fn summaries_keep_disposition_and_validation_counts_separate()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    assert_eq!(summarize_plans(&[]), PlanInspectionSummary::default());
+    let summary = summarize_plans(&plans);
+    assert_eq!(summary.total, 4);
+    assert_eq!(summary.execute, 1);
+    assert_eq!(summary.hold, 1);
+    assert_eq!(summary.deny, 2);
+    assert_eq!(summary.contract_valid, 4);
+    assert_eq!(summary.contract_invalid, 0);
+    assert_eq!(summary.execute + summary.hold + summary.deny, summary.total);
+    assert_eq!(
+        summary.contract_valid + summary.contract_invalid,
+        summary.total
+    );
+
+    for (index, plan) in plans.iter().enumerate() {
+        let single = summarize_plans(std::slice::from_ref(plan));
+        let prefix = summarize_plans(&plans[..index]);
+        let suffix = summarize_plans(&plans[index + 1..]);
+        assert_eq!(prefix.total + single.total + suffix.total, summary.total);
+        assert_eq!(
+            prefix.execute + single.execute + suffix.execute,
+            summary.execute
+        );
+        assert_eq!(prefix.hold + single.hold + suffix.hold, summary.hold);
+        assert_eq!(prefix.deny + single.deny + suffix.deny, summary.deny);
+    }
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn repeated_plans_count_per_entry_and_local_summary_edits_are_isolated()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let repeated = [plans[1].clone(), plans[1].clone(), plans[0].clone()];
+    let original = repeated.clone();
+    let summary = summarize_plans(&repeated);
+    assert_eq!(summary.total, 3);
+    assert_eq!(summary.deny, 2);
+    assert_eq!(summary.execute, 1);
+    assert_eq!(summary.hold, 0);
+    assert_eq!(summary.contract_valid, 3);
+    let mut local = summary;
+    local.execute = 999;
+    local.contract_invalid = 999;
+    assert_ne!(local, summarize_plans(&repeated));
+    assert_eq!(summarize_plans(&repeated), summary);
+    assert_eq!(repeated, original);
+    Ok(())
 }
 
 #[test]

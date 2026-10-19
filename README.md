@@ -78,6 +78,16 @@ geen bewijs, ververst geen autoriteit en controleert geen actuele intrekking;
 ook `Execute` is geen nieuw autorisatiebewijs of beschikbare uitvoeringshost.
 Een lokaal gewijzigde rapportkopie verandert het oorspronkelijke plan niet.
 
+`summarize_plans(&plans)` retourneert een `PlanInspectionSummary` voor een
+eindige planslice, zonder allocatie of I/O. De velden zijn `total`, `execute`,
+`hold`, `deny`, `contract_valid` en `contract_invalid`. Dispositietellingen en
+validatietellingen blijven gescheiden: vier geldige contracten kunnen nog
+steeds twee geweigerde en één aangehouden plan omvatten. Herhaalde plannen
+tellen per slice-element; een lege slice geeft uitsluitend nullen.
+Dit zijn observaties van de bestaande contracten, geen uitvoeringsstatistieken,
+geverifieerde autoriteit of toestemming. Plannen en bestaande JSON-contracten
+blijven ongewijzigd.
+
 `RuntimePlan` implementeert ook het bestaande
 `palaco_foundation::FailClosed`-contract. `plan.fail_closed()` retourneert altijd
 `ContractDisposition::Deny`, net als de Citadel-boundary en de kernel, ook bij
