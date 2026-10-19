@@ -19,6 +19,39 @@ fn cycle(authority: AuthorityState) -> Result<KernelCycle, ContractError> {
 }
 
 #[test]
+fn fail_closed_is_deny_at_every_boundary_without_mutating_the_plan()
+-> Result<(), Box<dyn std::error::Error>> {
+    for authority in [
+        AuthorityState::Authorized,
+        AuthorityState::Revoked,
+        AuthorityState::Expired,
+        AuthorityState::InDoubt,
+    ] {
+        let cycle = cycle(authority)?;
+        let plan = cycle.plan();
+        let original = plan.clone();
+        let inspection_before = inspect_plan(plan);
+        let mut json_before = Vec::new();
+        write_plan_inspection_json(plan, &mut json_before)?;
+
+        let fallback: &dyn FailClosed<Output = ContractDisposition> = plan;
+        assert_eq!(fallback.fail_closed(), ContractDisposition::Deny);
+        assert_eq!(plan.fail_closed(), plan.boundary().fail_closed());
+        assert_eq!(plan.fail_closed(), cycle.fail_closed());
+        assert_eq!(plan, &original);
+        assert_eq!(inspect_plan(plan), inspection_before);
+        assert_eq!(
+            plan.can_execute(),
+            inspection_before.disposition == ContractDisposition::Execute
+        );
+        let mut json_after = Vec::new();
+        write_plan_inspection_json(plan, &mut json_after)?;
+        assert_eq!(json_after, json_before);
+    }
+    Ok(())
+}
+
+#[test]
 fn authorized_evidence_path_reaches_execute_without_widening_authority() -> Result<(), ContractError>
 {
     let cycle = cycle(AuthorityState::Authorized)?;

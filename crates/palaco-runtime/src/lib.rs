@@ -6,7 +6,7 @@
 pub mod inspection;
 
 use palaco_citadel::ExecutionBoundary;
-use palaco_foundation::{ContractDisposition, ContractError, Validatable};
+use palaco_foundation::{ContractDisposition, ContractError, FailClosed, Validatable};
 
 /// Runtime plan derived exclusively from a validated Citadel boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,5 +48,17 @@ impl RuntimePlan {
 impl Validatable for RuntimePlan {
     fn validate(&self) -> Result<(), ContractError> {
         self.boundary.validate()
+    }
+}
+
+impl FailClosed for RuntimePlan {
+    type Output = ContractDisposition;
+
+    /// Returns Deny for callers that cannot justify proceeding.
+    ///
+    /// This fallback is a decision value, not a mutation, authority revocation or
+    /// cancellation of ongoing work. The caller must enforce the returned Deny.
+    fn fail_closed(&self) -> Self::Output {
+        ContractDisposition::Deny
     }
 }

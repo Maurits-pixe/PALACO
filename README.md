@@ -78,6 +78,14 @@ geen bewijs, ververst geen autoriteit en controleert geen actuele intrekking;
 ook `Execute` is geen nieuw autorisatiebewijs of beschikbare uitvoeringshost.
 Een lokaal gewijzigde rapportkopie verandert het oorspronkelijke plan niet.
 
+`RuntimePlan` implementeert ook het bestaande
+`palaco_foundation::FailClosed`-contract. `plan.fail_closed()` retourneert altijd
+`ContractDisposition::Deny`, net als de Citadel-boundary en de kernel, ook bij
+een oorspronkelijk `Execute`-plan. Dit is uitsluitend een fallbackwaarde die de
+aanroeper moet afdwingen: de methode wijzigt het plan niet, trekt geen autoriteit
+in en annuleert geen lopende werkzaamheden. `disposition()`, `can_execute()` en
+inspectierapporten blijven de oorspronkelijke plandispositie beschrijven.
+
 `write_plan_inspection_json(&plan, &mut destination)` schrijft die observatie als
 één JSON-object plus newline. Het afzonderlijke contract heeft `schema_version: 1`,
 `report_type: "plan-inspection"`, `disposition` (`execute`, `hold` of `deny`) en
