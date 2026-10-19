@@ -1,0 +1,135 @@
+{
+  "registry_version": "0.1.0",
+  "objects": [
+    {
+      "object_type": "FE",
+      "metadata": {
+        "id": "FE-00001",
+        "name": "Example accountable registry",
+        "domain": "Governance",
+        "version": "0.1.0",
+        "description": "Synthetic root; this fixture grants no authority."
+      },
+      "ownership": {
+        "business": "Example governance team",
+        "architecture": "Example architecture team",
+        "technical": "Example platform team",
+        "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": {
+        "status": "Draft",
+        "created": "2026-10-15",
+        "next_review": "2027-01-15"
+      },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High",
+        "confidentiality": "Public",
+        "integrity": "High",
+        "availability": "Medium"
+      },
+      "traceability": { "upstream": [], "relationships": [] },
+      "verification": {
+        "method": "Peer review",
+        "frequency": "On change",
+        "status": "Pending"
+      },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z",
+        "updated_by": "Example registry team",
+        "audit_refs": []
+      }
+    },
+    {
+      "object_type": "CAP",
+      "metadata": {
+        "id": "CAP-00001",
+        "name": "Example registry validation capability",
+        "domain": "Registry",
+        "version": "0.1.0"
+      },
+      "ownership": {
+        "business": "Example governance team",
+        "architecture": "Example architecture team",
+        "technical": "Example platform team",
+        "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": {
+        "status": "Draft",
+        "created": "2026-10-15",
+        "next_review": "2027-01-15"
+      },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High",
+        "confidentiality": "Internal",
+        "integrity": "High",
+        "availability": "Medium"
+      },
+      "traceability": {
+        "upstream": ["FE-00001"],
+        "relationships": [
+          { "source": "CAP-00001", "relation": "DEPENDS_ON", "target": "FE-00001" }
+        ]
+      },
+      "verification": {
+        "method": "Peer review",
+        "frequency": "On change",
+        "status": "Pending"
+      },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z",
+        "updated_by": "Example registry team",
+        "audit_refs": []
+      }
+    },
+    {
+      "object_type": "REQ",
+      "metadata": {
+        "id": "REQ-00001",
+        "name": "Example closed registry requirement",
+        "domain": "Registry",
+        "version": "0.1.0"
+      },
+      "ownership": {
+        "business": "Example governance team",
+        "architecture": "Example architecture team",
+        "technical": "Example platform team",
+        "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": {
+        "status": "Draft",
+        "created": "2026-10-15",
+        "next_review": "2027-01-15"
+      },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High",
+        "confidentiality": "Internal",
+        "integrity": "High",
+        "availability": "Medium"
+      },
+      "traceability": {
+        "upstream": ["CAP-00001"],
+        "relationships": [
+          { "source": "REQ-00001", "relation": "DEPENDS_ON", "target": "CAP-00001" }
+        ]
+      },
+      "verification": {
+        "method": "Conformance tests",
+        "frequency": "On change",
+        "status": "Pending"
+      },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z",
+        "updated_by": "Example registry team",
+        "audit_refs": []
+      },
+      "capability_ref": "CAP-00001",
+      "acceptance_criteria": ["Reject dangling object references in closed registry snapshots."]
+    }
+  ]
+}

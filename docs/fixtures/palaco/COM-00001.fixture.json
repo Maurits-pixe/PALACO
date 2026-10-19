@@ -1,0 +1,48 @@
+{
+  "object_type": "COM",
+  "metadata": {
+    "id": "COM-00001",
+    "name": "Require schema conformance",
+    "domain": "Assurance",
+    "version": "0.1.0"
+  },
+  "ownership": {
+    "business": "Example governance team",
+    "architecture": "Example architecture team",
+    "technical": "Example platform team",
+    "verification": "Example assurance team",
+    "custodian": "Example registry team"
+  },
+  "lifecycle": {
+    "status": "Draft",
+    "created": "2026-10-15",
+    "next_review": "2027-01-15"
+  },
+  "approval": { "status": "Pending" },
+  "classification": {
+    "criticality": "High",
+    "confidentiality": "Internal",
+    "integrity": "High",
+    "availability": "Medium"
+  },
+  "traceability": {
+    "upstream": ["REQ-00001"],
+    "relationships": [
+      { "source": "COM-00001", "relation": "VERIFIED_BY", "target": "VER-00001" }
+    ]
+  },
+  "verification": {
+    "method": "Automated conformance gate",
+    "frequency": "On change",
+    "status": "Pending",
+    "verification_ref": "VER-00001"
+  },
+  "audit": {
+    "updated_at": "2026-10-15T12:00:00Z",
+    "updated_by": "Example registry team",
+    "audit_refs": []
+  },
+  "control_type": "Preventive",
+  "risk": "RSK-00001",
+  "evidence": ["EVD-00001"]
+}

@@ -2091,6 +2091,225 @@ MBvanGeen/palaco-foundation # PALACO
 
 
 ```
+### PALACO canonical registry schemas (MVP)
+
+The Draft 2020-12 [PMS-001 canonical metaschema](docs/schemas/palaco/PMS-001.schema.json)
+provides shared metadata, ownership, lifecycle, approval, classification,
+traceability, verification and audit blocks for all 30 PALACO object families.
+Repository, runtime, service-level and evidence blocks are reusable; ADR, SVC,
+COM and REQ have additional required fields. AUD requires evidence references.
+Identifiers use an object-type prefix and exactly five digits (`REQ-00001`);
+the prefix must match `object_type`.
+
+[PMS-002](docs/schemas/palaco/PMS-002.schema.json) defines directed, typed
+relationships. `IMPLEMENTS` accepts APP/SVC → REQ; `DEFINED_BY` accepts
+APP/SVC/ADR → ARC. Other relation endpoint types are declared in the schema,
+with `DEPENDS_ON` available between any canonical object families.
+[Synthetic example fixtures](docs/fixtures/palaco/) cover FE, ADR, SVC, COM and REQ.
+Those individual examples intentionally reference illustrative IDs, not a complete
+registry. The separate [closed registry fixture](docs/fixtures/palaco/registry.fixture.json)
+contains a self-contained FE → CAP → REQ example.
+
+Run the existing conformance gate (also run by GO-13 CI):
+
+```sh
+python -m pip install "jsonschema[format]==4.23.0"
+python scripts/standards_conformance.py
+```
+
+The gate resolves all three schemas locally, checks formats, and exercises positive
+and negative cases alongside the unchanged RIO/VisitCard checks. Other validators
+must register the schema `$id` values and enable format assertions.
+
+[PCR-000](docs/schemas/palaco/PCR-000.schema.json) adds a closed registry envelope:
+`registry_version` is `0.1.0` and `objects` contains at least one PMS-001 record.
+Validate a snapshot independently of the full conformance gate:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json
+```
+
+The CLI exits 0 for a valid snapshot and nonzero for malformed JSON, schema errors
+or registry-integrity failures. It uses strict JSON parsing and local schemas only;
+input cannot select schemas or trigger remote reference retrieval.
+
+Registry validation enforces unique object IDs, resolution of every explicit
+canonical object reference within the snapshot, no self-references, and embedded
+edge sources matching their owning object. Free-text ownership, approval authority,
+approval references and URLs are not canonical object references. When a dedicated
+field exists, corresponding edges must target one of its values:
+`IMPLEMENTS` → `requirement_refs`, `REALIZES` → `capability_ref`,
+`DEFINED_BY` → `architecture_ref`, `APPROVED_BY` → `approved_by`,
+`VERIFIED_BY` → `verification.verification_ref`, `PROVEN_BY` → `evidence`,
+`AUDITED_BY` → `audit.audit_refs`, `DEPENDS_ON` → `dependencies`.
+Absent fields impose no such edge constraint; empty arrays permit no corresponding
+edges. Dedicated references need not be duplicated as edges. An upstream list is
+not a dependency list. Partial snapshots and external object references are not
+supported by this closed profile; record-only PMS-001 validation stays unchanged.
+
+The closed registry validator rejects cycles in two separate directed graphs:
+the union of `dependencies` and embedded `DEPENDS_ON` edges, and
+`traceability.upstream`. Duplicate representations of an edge count once.
+Diagnostics identify the graph and the object-ID path closing the cycle.
+Traversal is iterative, so deep chains do not depend on Python's recursion limit.
+The two graphs are not merged: opposite edges across the graphs are allowed.
+Other references and relation types are not cycle-checked; reciprocal evidence
+and audit references remain valid. Standalone PMS-001/PMS-002 schema validation
+does not perform these graph checks.
+
+Closed snapshots also enforce lifecycle consistency:
+
+- `created` ≤ `next_review`; if `approved` is present, `created` ≤ `approved` ≤ `next_review`.
+- `audit.updated_at` must not precede creation or an approval date. Calendar dates
+  are interpreted at midnight UTC; audit timestamps are compared as instants,
+  respecting their timezone offsets.
+- `approval.status: Approved` requires `lifecycle.approved`.
+- Lifecycle states Approved, Active, Deprecated, Retired and Archived require
+  approved approval metadata (including the authority and reference required by PMS-001).
+
+Proposed, Draft and Review may have pending or rejected approval. A historical
+approval date may be retained during a new review. Same-day dates are valid;
+overdue reviews and future dates are not compared to the current clock. Audit
+updates after `next_review` remain valid. These snapshot rules do not validate
+transition history, prove an approval or change standalone PMS-001 acceptance.
+
+To compare **consecutive** registry snapshots, add `--previous-registry`:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --previous-registry /tmp/previous-registry.json \
+  --registry /tmp/current-registry.json
+```
+
+Both inputs must independently pass closed registry validation. For existing IDs,
+the state may remain unchanged or advance one step along
+Proposed → Draft → Review → Approved → Active → Deprecated → Retired → Archived.
+Skipped states, backward transitions and reactivation are rejected by this MVP
+profile. Archived is terminal except for same-state metadata updates.
+The creation date cannot change. Audit timestamps cannot move backwards; any
+record change requires a strictly later audit instant, including lifecycle changes.
+Object ordering within the registry does not matter.
+
+All previous IDs must remain present: use retirement/archival instead of deletion.
+New IDs may be imported in any valid snapshot state; no prior history is inferred
+for them. `--previous-registry` requires `--registry`. Without the option, the
+existing single-snapshot behavior remains unchanged. This comparison checks only
+the supplied pair; it does not authenticate a baseline, establish an immutable
+history, verify intermediate events or authorize transitions.
+
+Read-only trace queries return the transitive upstream or downstream object IDs:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --trace REQ-00001 --direction upstream
+```
+
+`--trace` first validates the entire closed snapshot, then emits only a JSON object
+containing `object_id`, `direction`, `graph`, sorted unique `reachable_ids` and a
+scope disclaimer. The default direction is upstream; downstream traverses the
+same graph in reverse. The starting ID is excluded, and no reachable nodes yields
+an empty array. Unknown IDs and invalid registries fail nonzero without results.
+Only `traceability.upstream` is traversed: dependency fields, embedded relationship
+edges and other references are not merged into the trace graph. Results describe
+reachability in the supplied snapshot, not verified completeness or authority.
+Queries do not modify records or write files. `--trace` requires `--registry`;
+`--direction` requires `--trace`; trace and previous-registry comparison modes
+cannot be combined.
+
+Read-only object-type queries filter records by the exact canonical family:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-type REQ
+```
+
+`--find-type` accepts the case-sensitive object types declared by PMS-001, not
+display names or domains. After validating the entire snapshot, it emits only
+JSON containing `object_type`, sorted `object_ids` and a scope disclaimer.
+A recognized family with no matches returns an empty array and exit 0.
+Unknown types or invalid registries fail nonzero without query results, including
+invalid records outside the requested family. Results contain IDs, not record
+contents, and make no completeness, authorization or canonical-status claim.
+The query is read-only and requires `--registry`; it cannot be combined with
+`--trace`, `--direction` or `--previous-registry`.
+
+Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-orphans
+```
+
+After whole-snapshot validation, the query emits JSON containing `graph`,
+`definition`, sorted `object_ids` and a scope disclaimer. Here an orphan means
+**no incoming and no outgoing `traceability.upstream` edges**. Roots with
+downstream records and leaves with upstream records are not orphans. A standalone
+root is reported as isolated, but is not thereby invalid. Disconnected components
+with multiple linked records are not reported: this is not a root-reachability or
+foundation-completeness check. Dependency fields, embedded relationship edges and
+other references do not affect isolation in this particular graph.
+
+Orphans are diagnostic findings, not conformance failures: successful queries
+exit 0 whether the array is empty or populated. Invalid snapshots fail nonzero
+without results. The query neither writes files nor changes canonical status or
+authority. `--find-orphans` requires `--registry` and cannot be combined with
+`--find-type`, `--trace`, `--direction` or `--previous-registry`.
+
+Read-only control verification-status diagnostics:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /tmp/closed-registry.json --find-unverified-controls
+```
+
+After validating the entire snapshot, this query emits JSON with `definition`,
+sorted `object_ids` and a scope disclaimer. A COM is reported when its own
+`verification.status` **or** the referenced VER record's `verification.status`
+is not `Passed`. Pending, Failed and NotApplicable are all reported; only two
+`Passed` statuses suppress the finding. Each control is evaluated against its
+own `verification.verification_ref`; an embedded VERIFIED_BY edge is not
+required. Missing or unresolved mandatory references are validation errors, not
+partial diagnostic findings. A snapshot without controls returns an empty array.
+
+Findings are status metadata, not authenticated proof of verification, current
+evidence, compliance or canonical status. Query success exits 0 for empty and
+populated results; invalid registries fail nonzero without results. The query
+does not modify files. `--find-unverified-controls` requires `--registry` and
+cannot be combined with other query modes, `--direction` or `--previous-registry`.
+
+Read-only evidence audit-link diagnostics:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /tmp/closed-registry.json --find-unaudited-evidence
+```
+
+After full snapshot validation, the query returns JSON with `definition`, sorted
+`object_ids` and a scope disclaimer. An EVD is reported only when both its
+`audit.audit_refs` is empty **and** no AUD record lists its ID in `evidence`.
+Either direction establishes a recorded audit association; reciprocal links are
+not required. An optional AUDITED_BY edge must still agree with `audit.audit_refs`
+under existing registry consistency rules. Evidence referenced by a non-AUD
+record, generic dependencies and upstream links do not establish an audit
+association. Invalid or dangling references fail validation before results.
+
+The name describes missing links, not whether an audit was actually performed:
+associations do not prove audit completion, evidence authenticity, freshness or
+compliance. Findings are diagnostic and do not change canonical status. Successful
+queries exit 0 with an empty or populated array; invalid input exits nonzero.
+The query is read-only, requires `--registry`, and cannot be combined with other
+query modes, `--direction` or `--previous-registry`.
+
+This MVP does not enforce upstream completeness, root reachability,
+authenticated lifecycle history, approval authority or evidence authenticity.
+Empty upstream lists are allowed for roots; draft records can have pending
+approval. Validation alone never grants authority or establishes PCC-001
+`CANONICAL` status.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*
