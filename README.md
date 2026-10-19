@@ -68,6 +68,16 @@ De openbare velden zijn beschrijvende gegevens, geen gevalideerd bewijs:
 een lokaal gewijzigde kopie verandert latere rapporten niet en verleent geen
 uitvoeringsrechten.
 
+Voor een bestaand `RuntimePlan` levert
+`palaco_runtime::inspection::inspect_plan(&plan)` een `PlanInspection` met
+de overgenomen `disposition` en het resultaat van de bestaande contractvalidatie.
+Dit wijzigt of executeert het plan niet en bevat geen bewijsidentificatoren.
+`validation: Ok(())` betekent **niet** dat uitvoering is toegestaan: ook een
+`Deny`- of `Hold`-plan kan contractueel geldig zijn. De inspectie authenticeert
+geen bewijs, ververst geen autoriteit en controleert geen actuele intrekking;
+ook `Execute` is geen nieuw autorisatiebewijs of beschikbare uitvoeringshost.
+Een lokaal gewijzigde rapportkopie verandert het oorspronkelijke plan niet.
+
 Een uitvoerbaar integratievoorbeeld gebruikt de bibliotheek rechtstreeks en
 schrijft hetzelfde JSON-rapport via een eigen `BufWriter` naar stdout:
 

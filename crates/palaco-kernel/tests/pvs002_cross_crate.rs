@@ -7,6 +7,7 @@ use palaco_foundation::{
 use palaco_kernel::KernelCycle;
 use palaco_quay::ProvenanceRecord;
 use palaco_runtime::RuntimePlan;
+use palaco_runtime::inspection::inspect_plan;
 
 fn cycle(authority: AuthorityState) -> Result<KernelCycle, ContractError> {
     let evidence = EvidenceRef::new("PVS-002-EVIDENCE-001")?;
@@ -64,5 +65,36 @@ fn evolution_proposal_cannot_self_authorize_execution() -> Result<(), ContractEr
     proposal.validate()?;
     assert_eq!(proposal.requested_disposition(), ContractDisposition::Hold);
 
+    Ok(())
+}
+
+#[test]
+fn plan_inspection_preserves_all_authority_dispositions_without_execution()
+-> Result<(), ContractError> {
+    for (authority, disposition) in [
+        (AuthorityState::Authorized, ContractDisposition::Execute),
+        (AuthorityState::Revoked, ContractDisposition::Deny),
+        (AuthorityState::Expired, ContractDisposition::Deny),
+        (AuthorityState::InDoubt, ContractDisposition::Hold),
+    ] {
+        let evidence = EvidenceRef::new("SYNTHETIC-PLAN-INSPECTION")?;
+        let event = EventEnvelope::new("inspection.only", evidence);
+        let record = ProvenanceRecord::new(event, authority);
+        let plan = RuntimePlan::new(ExecutionBoundary::new(record));
+        let original = plan.clone();
+        let report = inspect_plan(&plan);
+
+        assert_eq!(report.disposition, disposition);
+        assert_eq!(report.validation, plan.validate());
+        assert_eq!(report.validation, Ok(()));
+        assert_eq!(plan, original);
+        assert_eq!(inspect_plan(&plan), report);
+
+        let mut local_report = report;
+        local_report.disposition = ContractDisposition::Execute;
+        local_report.validation = Err(ContractError::MissingEvidence);
+        assert_ne!(local_report, inspect_plan(&plan));
+        assert_eq!(plan, original);
+    }
     Ok(())
 }

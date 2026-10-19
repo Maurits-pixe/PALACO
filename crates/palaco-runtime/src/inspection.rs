@@ -1,6 +1,35 @@
-//! Static inspection-interface capabilities, not host health or execution permission.
+//! Read-only plan inspection and static interface descriptors, never execution permission.
 
+use crate::RuntimePlan;
+use palaco_foundation::{ContractDisposition, ContractError, Validatable};
 use std::io::{self, Write};
+
+/// Observation of an existing plan, not an authorization receipt.
+///
+/// Contract validity and disposition are separate: a denied or held plan may
+/// validate successfully. Neither field authenticates evidence or host authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PlanInspection {
+    /// Disposition already carried by the supplied plan.
+    pub disposition: ContractDisposition,
+    /// Result of the plan's existing `Validatable` implementation.
+    pub validation: Result<(), ContractError>,
+}
+
+/// Observes a plan without changing it, executing it or performing I/O.
+///
+/// Validation delegates to the existing contract chain; it is not independent
+/// evidence authentication, authority refresh or a live revocation check.
+/// Even `Execute` plus `Ok(())` does not supply an execution host or a new
+/// permission. The report contains no evidence identifiers.
+#[must_use]
+pub fn inspect_plan(plan: &RuntimePlan) -> PlanInspection {
+    PlanInspection {
+        disposition: plan.disposition(),
+        validation: plan.validate(),
+    }
+}
 
 /// Descriptive inspection data, never evidence, permission or live host health.
 ///
