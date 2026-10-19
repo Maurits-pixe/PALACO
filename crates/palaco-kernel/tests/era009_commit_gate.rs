@@ -17,6 +17,64 @@ fn boundary(evidence: &str, authority: AuthorityState) -> ExecutionBoundary {
 }
 
 #[test]
+fn completed_revocation_is_visible_to_preexisting_workers() {
+    for limit in [None, Some(1)] {
+        let gate = Arc::new(match limit {
+            Some(limit) => InMemoryCommitGate::with_record_limit(limit),
+            None => InMemoryCommitGate::new(),
+        });
+        let authorized = boundary("evidence-1", AuthorityState::Authorized);
+        let receipt = gate
+            .commit(&key("historical"), &authorized, b"payload")
+            .expect("initial commit");
+        let release = Arc::new(Barrier::new(9));
+        let workers: Vec<_> = (0..8)
+            .map(|index| {
+                let gate = Arc::clone(&gate);
+                let release = Arc::clone(&release);
+                let stale_boundary = authorized.clone();
+                std::thread::spawn(move || {
+                    // No worker may enter either commit API until revoke returns.
+                    release.wait();
+                    let new_key = key(&format!("new-{index}"));
+                    assert_eq!(
+                        gate.commit(&new_key, &stale_boundary, b"payload"),
+                        Err(CommitGateError::Revoked)
+                    );
+                    assert_eq!(
+                        gate.commit_with_outcome(&new_key, &stale_boundary, b"payload"),
+                        Err(CommitGateError::Revoked)
+                    );
+                    assert_eq!(
+                        gate.commit(&key("historical"), &stale_boundary, b"payload"),
+                        Ok(receipt)
+                    );
+                    assert_eq!(
+                        gate.commit_with_outcome(&key("historical"), &stale_boundary, b"payload"),
+                        Ok(CommitOutcome::Replayed(receipt))
+                    );
+                    assert_eq!(
+                        gate.commit(&key("historical"), &stale_boundary, b"changed"),
+                        Err(CommitGateError::IdempotencyConflict)
+                    );
+                    assert_eq!(
+                        gate.commit_with_outcome(&key("historical"), &stale_boundary, b"changed"),
+                        Err(CommitGateError::IdempotencyConflict)
+                    );
+                    assert_eq!(gate.revoke(), Ok(2));
+                })
+            })
+            .collect();
+        assert_eq!(gate.revoke(), Ok(2));
+        release.wait();
+        for worker in workers {
+            worker.join().expect("post-revocation worker");
+        }
+        assert_eq!(gate.revoke(), Ok(2));
+    }
+}
+
+#[test]
 fn recorded_inputs_survive_caller_mutation_and_drop() {
     let gate = InMemoryCommitGate::with_record_limit(1);
     let receipt = {

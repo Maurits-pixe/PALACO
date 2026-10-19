@@ -2152,6 +2152,11 @@ limits (unlimited, zero, one, two): 131,072 history/configuration cases covering
 two keys, conflicting payloads, changed evidence, each non-authorized authority
 state, and revocation. Both APIs retain historical receipts after revocation.
 A separate concurrent test races four revokers with eight mixed-API committers.
+An ordered cross-thread test holds eight workers behind a barrier until
+revocation returns, then checks that both APIs reject fresh keys with stale
+authorized boundaries while preserving exact historical retries and conflicts,
+for both unlimited and full gates. It uses no timing sleeps or assumed scheduler
+order.
 At limits one and two, eight identical requests racing for the final free slot
 must produce exactly one new record and seven historical replays.
 These are bounded local checks, not exhaustive concurrency exploration, formal
