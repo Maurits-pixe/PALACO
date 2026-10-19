@@ -4,7 +4,7 @@ import { events, metrics, reviewBreakdown, trafficSamples } from './telemetry.js
 
 const selectedSeverity = ref('Alles');
 const severities = ['Alles', 'Hoog', 'Middel', 'Laag'];
-const reviewTotal = events.filter(event => event.status === 'Review').length;
+const reviewTotal = reviewBreakdown.reduce((total, item) => total + item.count, 0);
 const severityTones = { Hoog: 'high', Middel: 'medium', Laag: 'low' };
 const visibleEvents = computed(() => selectedSeverity.value === 'Alles'
   ? events
