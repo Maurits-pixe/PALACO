@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewSummaryLabel, trafficSamples } from '../src/telemetry.js';
+import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages, reviewSummaryLabel, trafficSamples } from '../src/telemetry.js';
 
 const manifest = JSON.parse(await readFile(new URL('../public/.well-known/palaco-app.json', import.meta.url), 'utf8'));
 const appSource = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
@@ -40,6 +40,17 @@ test('review summary label handles empty and singular states', () => {
   assert.equal(reviewSummaryLabel(1), '1 reviewmelding');
   assert.equal(reviewBreakdownLabel(reviewBreakdown.map(item => ({ ...item, count: 0 })), 0), 'Geen openstaande reviewmeldingen.');
   assert.equal(reviewBreakdownLabel([{ severity: 'Hoog', count: 1 }], 1), 'Hoog: 1 reviewmelding, 100%');
+});
+
+test('review percentages reconcile to the total using stable largest-remainder rounding', () => {
+  const thirds = [
+    { severity: 'Hoog', count: 1 },
+    { severity: 'Middel', count: 1 },
+    { severity: 'Laag', count: 1 }
+  ];
+  assert.deepEqual(reviewPercentages(thirds, 3), [34, 33, 33]);
+  assert.equal(reviewPercentages(thirds, 3).reduce((sum, percent) => sum + percent, 0), 100);
+  assert.deepEqual(reviewPercentages(thirds.map(item => ({ ...item, count: 0 })), 0), [0, 0, 0]);
 });
 
 test('dashboard contains no network collection or scan client', () => {

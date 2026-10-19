@@ -1,10 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue';
-import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewSummaryLabel, trafficSamples } from './telemetry.js';
+import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages as calculateReviewPercentages, reviewSummaryLabel, trafficSamples } from './telemetry.js';
 
 const selectedSeverity = ref('Alles');
 const severities = ['Alles', 'Hoog', 'Middel', 'Laag'];
 const reviewTotal = reviewBreakdown.reduce((total, item) => total + item.count, 0);
+const reviewPercentages = calculateReviewPercentages(reviewBreakdown, reviewTotal);
 const reviewStateText = reviewSummaryLabel(reviewTotal);
 const reviewBreakdownText = reviewBreakdownLabel(reviewBreakdown, reviewTotal);
 const severityTones = { Hoog: 'high', Middel: 'medium', Laag: 'low' };
@@ -16,9 +17,6 @@ function barHeight(value) {
   return `${Math.max(8, value)}%`;
 }
 
-function reviewPercent(count) {
-  return reviewTotal ? Math.round(count / reviewTotal * 100) : 0;
-}
 </script>
 
 <template>
@@ -90,12 +88,12 @@ function reviewPercent(count) {
           <p v-if="reviewTotal === 0" class="review-empty" role="status">Geen openstaande reviewmeldingen in deze fixtures.</p>
           <div class="review-breakdown" aria-hidden="true">
             <template v-if="reviewTotal > 0">
-              <div v-for="item in reviewBreakdown" :key="item.severity" class="review-row">
+              <div v-for="(item, index) in reviewBreakdown" :key="item.severity" class="review-row">
                 <span class="review-label"><i class="severity" :class="severityTones[item.severity]"></i>{{ item.severity }}</span>
                 <strong>{{ String(item.count).padStart(2, '0') }}</strong>
                 <span class="review-track"><i :class="`${severityTones[item.severity]}-fill`"
-                  :style="{ width: `${reviewPercent(item.count)}%` }"></i></span>
-                <span class="review-percent">{{ reviewPercent(item.count) }}%</span>
+                  :style="{ width: `${reviewPercentages[index]}%` }"></i></span>
+                <span class="review-percent">{{ reviewPercentages[index] }}%</span>
               </div>
             </template>
           </div>
@@ -106,10 +104,10 @@ function reviewPercent(count) {
               <caption class="sr-only">Synthetische reviewmeldingen per ernstcategorie</caption>
               <thead><tr><th scope="col">Ernst</th><th scope="col">Aantal</th><th scope="col">Percentage</th></tr></thead>
               <tbody>
-                <tr v-for="item in reviewBreakdown" :key="item.severity">
+                <tr v-for="(item, index) in reviewBreakdown" :key="item.severity">
                   <th scope="row">{{ item.severity }}</th>
                   <td>{{ item.count }}</td>
-                  <td>{{ reviewPercent(item.count) }}%</td>
+                  <td>{{ reviewPercentages[index] }}%</td>
                 </tr>
                 <tr>
                   <th scope="row">Totaal</th>

@@ -21,9 +21,25 @@ export const reviewBreakdown = Object.freeze(
   }))
 );
 
+export function reviewPercentages(items, total) {
+  if (total === 0) return items.map(() => 0);
+  const exact = items.map(item => item.count / total * 100);
+  const roundedDown = exact.map(Math.floor);
+  let remaining = 100 - roundedDown.reduce((sum, value) => sum + value, 0);
+  const order = exact.map((value, index) => ({ index, remainder: value - roundedDown[index] }))
+    .sort((left, right) => right.remainder - left.remainder);
+  for (const { index } of order) {
+    if (remaining <= 0) break;
+    roundedDown[index]++;
+    remaining--;
+  }
+  return roundedDown;
+}
+
 export function reviewBreakdownLabel(items, total) {
   if (total === 0) return 'Geen openstaande reviewmeldingen.';
-  return items.map(item => `${item.severity}: ${item.count} ${item.count === 1 ? 'reviewmelding' : 'reviewmeldingen'}, ${Math.round(item.count / total * 100)}%`).join('. ');
+  const percentages = reviewPercentages(items, total);
+  return items.map((item, index) => `${item.severity}: ${item.count} ${item.count === 1 ? 'reviewmelding' : 'reviewmeldingen'}, ${percentages[index]}%`).join('. ');
 }
 
 export function reviewSummaryLabel(total) {
