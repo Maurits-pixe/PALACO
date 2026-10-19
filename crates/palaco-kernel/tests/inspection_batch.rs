@@ -30,6 +30,34 @@ struct Destination {
     remaining: usize,
 }
 
+#[test]
+fn bounded_batches_preserve_duplicates_and_resume_without_read_ahead()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let sequence = [&plans[2], &plans[0], &plans[2], &plans[3]];
+    let mut input = sequence.into_iter().cycle();
+    let mut output = Vec::new();
+
+    write_plan_inspections_jsonl(input.by_ref().take(0), &mut output)?;
+    assert!(output.is_empty());
+    write_plan_inspections_jsonl(input.by_ref().take(3), &mut output)?;
+    write_plan_inspections_jsonl(input.by_ref().take(2), &mut output)?;
+
+    let mut expected = Vec::new();
+    for plan in [
+        sequence[0],
+        sequence[1],
+        sequence[2],
+        sequence[3],
+        sequence[0],
+    ] {
+        write_plan_inspection_json(plan, &mut expected)?;
+    }
+    assert_eq!(output, expected);
+    assert_eq!(input.next(), Some(sequence[1]));
+    Ok(())
+}
+
 impl Write for Destination {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if self.remaining == 0 {

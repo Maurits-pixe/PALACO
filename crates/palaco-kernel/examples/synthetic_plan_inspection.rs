@@ -2,24 +2,27 @@
 
 use palaco_citadel::ExecutionBoundary;
 use palaco_eventbus::EventEnvelope;
-use palaco_foundation::{AuthorityState, EvidenceRef};
+use palaco_foundation::{AuthorityState, ContractError, EvidenceRef};
 use palaco_quay::ProvenanceRecord;
-use palaco_runtime::{RuntimePlan, inspection::write_plan_inspection_json};
+use palaco_runtime::{RuntimePlan, inspection::write_plan_inspections_jsonl};
 use std::io::{self, BufWriter, Write};
 
 fn write_demo(output: &mut impl Write) -> Result<(), Box<dyn std::error::Error>> {
-    for authority in [
+    let plans = [
         AuthorityState::Authorized,
         AuthorityState::Revoked,
         AuthorityState::Expired,
         AuthorityState::InDoubt,
-    ] {
+    ]
+    .into_iter()
+    .map(|authority| {
         let evidence = EvidenceRef::new("SYNTHETIC-DEMO-NOT-AUTHENTICATED")?;
         let event = EventEnvelope::new("synthetic.inspection.only", evidence);
         let record = ProvenanceRecord::new(event, authority);
-        let plan = RuntimePlan::new(ExecutionBoundary::new(record));
-        write_plan_inspection_json(&plan, output)?;
-    }
+        Ok(RuntimePlan::new(ExecutionBoundary::new(record)))
+    })
+    .collect::<Result<Vec<_>, ContractError>>()?;
+    write_plan_inspections_jsonl(&plans, output)?;
     output.flush()?;
     Ok(())
 }

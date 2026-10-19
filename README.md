@@ -113,6 +113,14 @@ de batchwriter alle plannen al hebben gelezen voordat een fout bij de
 afsluitende, door de aanroeper uitgevoerde flush zichtbaar wordt. Succes van de
 batchwriter betekent dus niet dat de bestemming de rapporten heeft ontvangen.
 
+Een lange of doorlopende bron kan begrensd worden met
+`write_plan_inspections_jsonl(input.by_ref().take(n), &mut destination)`.
+De volgende aanroep kan dezelfde iterator vervolgen: de writer leest niet
+vooruit buiten de limiet. `n = 0` schrijft niets en verbruikt geen plannen;
+herhaalde planreferenties leveren afzonderlijke rapportregels op. Dit is geen
+checkpoint- of retryprotocol: na een schrijffout is ook het falende plan al
+gelezen en een flushfout kan pas na de volledige batch ontstaan.
+
 Een uitvoerbaar integratievoorbeeld gebruikt de bibliotheek rechtstreeks en
 schrijft hetzelfde JSON-rapport via een eigen `BufWriter` naar stdout:
 
@@ -139,7 +147,8 @@ Dit schrijft vier JSON Lines-rapporten, in de vaste volgorde `Authorized`,
 `authority_verified` en `execution_performed` blijven altijd `false`.
 De autoriteitsstaten zijn hardgecodeerde testgegevens, geen ingelezen of
 geverifieerde toestemming. Het voorbeeld gebruikt alleen bestaande
-kernel-devdependencies, voert geen plan uit en propageert schrijf- en
+kernel-devdependencies en geeft de vier fixtures aan de batchwriter door.
+Het voert geen plan uit en propageert schrijf- en
 flushfouten. Beoordeel de volledige uitvoer pas na een succesvolle procesexit;
 bij fouten kunnen eerdere regels of een gedeeltelijke regel zijn geschreven.
 
