@@ -171,6 +171,25 @@ class PersistedRecovery(unittest.TestCase):
             with self.subTest(field=field, value=value):
                 self.reject(mutate)
 
+    def test_embedded_nul_key_retry_cannot_append_duplicate_records(self):
+        def mutate(db):
+            db.execute("UPDATE requests SET key=?", ("demo-1\0suffix",))
+            self.assertEqual(db.execute(
+                "SELECT count(*) FROM requests WHERE key=?", ("demo-1",)).fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT count(*) FROM records").fetchone()[0], 5)
+        self.reject(mutate)
+
+    def test_embedded_nul_request_hash_suffix_is_rejected(self):
+        self.reject(lambda db: db.execute(
+            "UPDATE requests SET request_hash=request_hash || ?", ("\0suffix",)))
+
+    def test_embedded_nul_suffix_in_every_persisted_json_column_is_rejected(self):
+        for table, column in (("metadata", "source"), ("records", "body"),
+                              ("requests", "receipt")):
+            with self.subTest(table=table, column=column):
+                self.reject(lambda db: db.execute(
+                    f"UPDATE {table} SET {column}={column} || ?", ("\0suffix",)))
+
     def test_sql_sequence_gap_and_json_divergence(self):
         self.reject(lambda db: db.execute("UPDATE records SET seq=9 WHERE seq=5"))
         for value in (2, True, 1.0, "1"):
