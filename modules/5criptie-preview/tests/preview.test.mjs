@@ -19,6 +19,14 @@ test('dashboard fixtures are static and labeled as synthetic', () => {
   assert.ok(Object.isFrozen(metrics) && Object.isFrozen(events) && Object.isFrozen(trafficSamples));
 });
 
+test('review metric agrees with the event fixture statuses and severity', () => {
+  const reviewCount = events.filter(event => event.status === 'Review').length;
+  const highReviewCount = events.filter(event => event.status === 'Review' && event.severity === 'Hoog').length;
+  const reviewMetric = metrics.find(metric => metric.id === 'review');
+  assert.equal(reviewMetric.value, String(reviewCount).padStart(2, '0'));
+  assert.equal(reviewMetric.change, `${highReviewCount} hoog`);
+});
+
 test('dashboard contains no network collection or scan client', () => {
   assert.doesNotMatch(appSource, /\bfetch\s*\(|\bWebSocket\b|\bXMLHttpRequest\b|sendBeacon/);
 });

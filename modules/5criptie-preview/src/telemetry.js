@@ -1,6 +1,6 @@
 export const metrics = Object.freeze([
   Object.freeze({ id: 'events', label: 'Signalen', value: '1.284', change: '+4,2%', tone: 'cyan' }),
-  Object.freeze({ id: 'review', label: 'In beoordeling', value: '08', change: '3 hoog', tone: 'amber' }),
+  Object.freeze({ id: 'review', label: 'In beoordeling', value: '03', change: '2 hoog', tone: 'amber' }),
   Object.freeze({ id: 'sources', label: 'Bronnen', value: '12', change: 'fixtures', tone: 'violet' }),
   Object.freeze({ id: 'coverage', label: 'Dekking', value: '96,4%', change: 'demo-indicator', tone: 'green' })
 ]);
