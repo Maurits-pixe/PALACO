@@ -4,7 +4,7 @@ use palaco_foundation::{AuthorityState, ContractError, EvidenceRef};
 use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
-    scheduling::{AdmissionError, RuntimeQueue},
+    scheduling::{AdmissionError, QueueState, RuntimeQueue},
 };
 
 fn plan(id: &str, authority: AuthorityState) -> Result<RuntimePlan, ContractError> {
@@ -121,5 +121,77 @@ fn repeated_plans_are_distinct_pending_entries() -> Result<(), ContractError> {
     assert_eq!(queue.next_plan(), Some(original.clone()));
     assert_eq!(queue.next_plan(), Some(original));
     assert_eq!(queue.next_plan(), None);
+    Ok(())
+}
+
+#[test]
+fn graceful_drain_closes_admission_and_transfers_fifo_before_stopping() -> Result<(), ContractError>
+{
+    let first = plan("FIRST-DRAIN", AuthorityState::Authorized)?;
+    let second = plan("SECOND-DRAIN", AuthorityState::Authorized)?;
+    let mut queue = RuntimeQueue::new(2);
+    assert_eq!(queue.state(), QueueState::Running);
+    queue.submit(first.clone()).expect("first");
+    queue.submit(second.clone()).expect("second");
+    queue.begin_drain();
+    queue.begin_drain();
+    assert_eq!(queue.state(), QueueState::Draining);
+    assert!(!queue.is_stopped());
+    for authority in [
+        AuthorityState::Authorized,
+        AuthorityState::Revoked,
+        AuthorityState::Expired,
+        AuthorityState::InDoubt,
+    ] {
+        let original = plan("CLOSED", authority)?;
+        let rejected = queue
+            .submit(original.clone())
+            .expect_err("admission closed");
+        assert_eq!(rejected.reason(), AdmissionError::Draining);
+        assert_eq!(rejected.into_plan(), original);
+        assert_eq!(queue.len(), 2);
+    }
+    assert_eq!(queue.next_plan(), Some(first));
+    assert_eq!(queue.state(), QueueState::Draining);
+    let rejected = queue
+        .submit(second.clone())
+        .expect_err("freed slot remains closed");
+    assert_eq!(rejected.reason(), AdmissionError::Draining);
+    assert_eq!(queue.next_plan(), Some(second));
+    assert_eq!(queue.state(), QueueState::Stopped);
+    assert!(queue.is_stopped());
+    assert!(queue.is_empty());
+    queue.begin_drain();
+    assert_eq!(queue.next_plan(), None);
+    assert_eq!(queue.stop(), 0);
+    assert_eq!(queue.state(), QueueState::Stopped);
+    let rejected = queue
+        .submit(rejected.into_plan())
+        .expect_err("cannot restart");
+    assert_eq!(rejected.reason(), AdmissionError::Stopped);
+    Ok(())
+}
+
+#[test]
+fn empty_drain_stops_immediately_and_stop_can_interrupt_drain() -> Result<(), ContractError> {
+    for capacity in [0, 2] {
+        let mut queue = RuntimeQueue::new(capacity);
+        queue.begin_drain();
+        assert!(queue.is_stopped());
+        assert_eq!(queue.state(), QueueState::Stopped);
+        assert_eq!(queue.next_plan(), None);
+        assert_eq!(queue.stop(), 0);
+    }
+    let mut queue = RuntimeQueue::new(2);
+    queue
+        .submit(plan("DISCARD", AuthorityState::Authorized)?)
+        .expect("admit");
+    queue.begin_drain();
+    assert_eq!(queue.state(), QueueState::Draining);
+    assert_eq!(queue.stop(), 1);
+    queue.begin_drain();
+    assert_eq!(queue.state(), QueueState::Stopped);
+    assert_eq!(queue.next_plan(), None);
+    assert_eq!(queue.stop(), 0);
     Ok(())
 }

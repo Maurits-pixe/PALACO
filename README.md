@@ -77,6 +77,13 @@ toelatingsfouten; `RejectedPlan::into_plan()` geeft het oorspronkelijke plan ter
 capaciteit kan opnieuw worden gebruikt; dubbele inzendingen tellen afzonderlijk.
 `stop()` stopt definitief, verwijdert wachtende lokale plannen en retourneert
 hun aantal. Reeds overgedragen plannen worden niet geannuleerd of gewijzigd.
+`begin_drain()` sluit toelating definitief maar bewaart wachtende plannen:
+`state()` gaat van `Running` naar `Draining` en bij de laatste overdracht naar
+`Stopped`. Een lege wachtrij stopt meteen. Tijdens drain geeft `submit`
+`Draining` terug, ook als capaciteit vrijkomt; na voltooiing volgt `Stopped`.
+Herhaalde drainverzoeken heropenen niets. `stop()` kan een drain onderbreken en
+verwijdert dan de resterende plannen. Drainvoltooiing betekent uitsluitend dat
+alle plannen zijn overgedragen, **niet** dat externe uitvoering voltooid is.
 De wachtrij is proceslokaal, niet duurzaam en niet vooraf op maximale grootte
 gealloceerd. Ze authenticeert geen bewijs, ververst geen autoriteit en start
 geen callbacks, processen of externe acties. Een eerdere toelating is **geen**

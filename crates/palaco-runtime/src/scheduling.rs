@@ -13,6 +13,8 @@ use std::collections::VecDeque;
 pub enum AdmissionError {
     /// The queue has been permanently stopped.
     Stopped,
+    /// Admission is closed while pending plans await transfer.
+    Draining,
     /// The supplied plan carries Hold.
     Held,
     /// The supplied plan carries Deny.
@@ -46,6 +48,17 @@ impl RejectedPlan {
     }
 }
 
+/// Process-local queue lifecycle, not the state of external work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueueState {
+    /// New plans may be admitted.
+    Running,
+    /// Admission is closed; pending plans may still be transferred.
+    Draining,
+    /// Admission is permanently closed and no plans remain pending.
+    Stopped,
+}
+
 /// Single-owner FIFO with a fixed maximum number of pending plans.
 ///
 /// The limit counts plans, not bytes. Storage grows only on admission; it is
@@ -56,7 +69,7 @@ impl RejectedPlan {
 pub struct RuntimeQueue {
     pending: VecDeque<RuntimePlan>,
     capacity: usize,
-    stopped: bool,
+    state: QueueState,
 }
 
 impl RuntimeQueue {
@@ -66,7 +79,7 @@ impl RuntimeQueue {
         Self {
             pending: VecDeque::new(),
             capacity,
-            stopped: false,
+            state: QueueState::Running,
         }
     }
 
@@ -91,7 +104,28 @@ impl RuntimeQueue {
     /// Whether this queue has been permanently stopped.
     #[must_use]
     pub fn is_stopped(&self) -> bool {
-        self.stopped
+        self.state == QueueState::Stopped
+    }
+
+    /// Returns the local queue lifecycle, not execution completion.
+    #[must_use]
+    pub fn state(&self) -> QueueState {
+        self.state
+    }
+
+    /// Permanently closes admission while retaining pending plans for transfer.
+    ///
+    /// Empty queues stop immediately. Otherwise the queue stops when the final
+    /// pending plan is transferred by [`Self::next_plan`]. Repeated calls do
+    /// nothing, including after stop. No external work is executed or awaited.
+    pub fn begin_drain(&mut self) {
+        if self.state == QueueState::Running {
+            self.state = if self.pending.is_empty() {
+                QueueState::Stopped
+            } else {
+                QueueState::Draining
+            };
+        }
     }
 
     /// Admits a plan only if running, carrying Execute, valid and below capacity.
@@ -99,10 +133,10 @@ impl RuntimeQueue {
     /// On rejection, the queue is unchanged and the caller recovers the plan.
     /// No source or output I/O, execution or live authority check is performed.
     pub fn submit(&mut self, plan: RuntimePlan) -> Result<(), RejectedPlan> {
-        let reason = if self.stopped {
-            Some(AdmissionError::Stopped)
-        } else {
-            match plan.disposition() {
+        let reason = match self.state {
+            QueueState::Stopped => Some(AdmissionError::Stopped),
+            QueueState::Draining => Some(AdmissionError::Draining),
+            QueueState::Running => match plan.disposition() {
                 ContractDisposition::Hold => Some(AdmissionError::Held),
                 ContractDisposition::Deny => Some(AdmissionError::Denied),
                 ContractDisposition::Execute => match plan.validate() {
@@ -110,7 +144,7 @@ impl RuntimeQueue {
                     Ok(()) if self.pending.len() == self.capacity => Some(AdmissionError::Full),
                     Ok(()) => None,
                 },
-            }
+            },
         };
         if let Some(reason) = reason {
             return Err(RejectedPlan { reason, plan });
@@ -124,7 +158,11 @@ impl RuntimeQueue {
     /// This does not refresh authority. The caller must enforce current policy
     /// before any execution; a previous admission grants no execution permission.
     pub fn next_plan(&mut self) -> Option<RuntimePlan> {
-        self.pending.pop_front()
+        let plan = self.pending.pop_front();
+        if self.state == QueueState::Draining && self.pending.is_empty() {
+            self.state = QueueState::Stopped;
+        }
+        plan
     }
 
     /// Permanently stops admission and discards pending local plans.
@@ -133,7 +171,7 @@ impl RuntimeQueue {
     /// transferred plans are outside this queue: no work is cancelled externally
     /// and no authority is revoked. There is deliberately no restart operation.
     pub fn stop(&mut self) -> usize {
-        self.stopped = true;
+        self.state = QueueState::Stopped;
         let discarded = self.pending.len();
         self.pending.clear();
         discarded
