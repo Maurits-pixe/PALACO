@@ -11,6 +11,8 @@
 body { margin: 0; min-width: 320px; }
 button { font: inherit; }
 button:focus-visible, a:focus-visible { outline: 2px solid #39d6ce; outline-offset: 3px; }
+.print-action { padding: .45rem .65rem; border: 1px solid #315564; border-radius: 4px; background: #142932; color: #8edbd4; cursor: pointer; font-size: .62rem; }
+.print-action:hover { border-color: #4a8b91; color: #e1f8f5; }
 .dashboard { min-height: 100vh; background: radial-gradient(ellipse at 48% -25%, #183047 0%, #0b111b 42%, #080b12 78%); }
 .topbar { min-height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(1rem, 4vw, 3.5rem); border-bottom: 1px solid #202b38; background: rgba(8, 12, 19, .88); }
 .brand { display: flex; align-items: center; gap: .75rem; color: #f0f5fb; text-decoration: none; font-size: .95rem; font-weight: 750; letter-spacing: .12em; }
@@ -82,12 +84,44 @@ tr:last-child td { border-bottom: 0; }.event-id { color: #6cbab9; font: .64rem u
 @media (max-width: 900px) { .content-grid { grid-template-columns: 1fr; } }
 @media (max-width: 680px) {
   .topbar { align-items: flex-start; flex-direction: column; gap: .75rem; padding-top: .9rem; padding-bottom: .9rem; }
-  .topbar-meta { width: 100%; justify-content: space-between; gap: .4rem; font-size: .55rem; }
+  .topbar-meta { width: 100%; justify-content: space-between; flex-wrap: wrap; gap: .4rem; font-size: .55rem; }
   .intro { align-items: flex-start; flex-direction: column; }.time-window { padding: 0; }
   .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .55rem; }.metric-card { min-height: 108px; padding: .8rem; }
   .metric-value { font-size: 1.4rem; }.panel { padding: .85rem; }.chart { gap: 0; }
   .bars { gap: .25rem; padding: 0 .15rem; }.bar-label { font-size: .46rem; }
   .event-header { align-items: flex-start; flex-direction: column; }.filter-group { width: 100%; }.filter-group button { flex: 1; }
   .footer { flex-direction: column; }
+}
+@page { size: A4 landscape; margin: 12mm; }
+@media print {
+  :root { color-scheme: light; background: #fff; color: #172536; print-color-adjust: exact; }
+  body, .dashboard { min-width: 0; background: #fff !important; color: #172536; }
+  .topbar, .footer { padding-right: 0; padding-left: 0; border-color: #cbd5df; background: #fff; color: #526174; }
+  .topbar { min-height: 0; padding-top: 0; padding-bottom: 6mm; }
+  .brand { color: #172536; }
+  .brand-caption, .workspace, .intro-copy, .chart-y-axis, .bar-label, .chart-caption, .caption-note,
+  .metric-head, .metric-foot, .review-total span, .review-note, .table-footnote { color: #526174; }
+  .mode-pill { border-color: #a98a3c; color: #795c13; }
+  .print-action, .filter-group, .review-details > summary { display: none !important; }
+  main { width: auto; padding: 7mm 0; }
+  h1, .panel h2, .metric-value, .review-total strong { color: #172536; }
+  .eyebrow { color: #426879; }
+  .preview-warning { border-color: #b9a66e; background: #fbf8ed; color: #514729; }
+  .preview-warning strong { color: #40340f; }
+  .metric-card, .panel { break-inside: avoid; border-color: #cbd5df; background: #fff; box-shadow: none; }
+  .metric-card { border-top-color: #668394; }
+  .metric-card.amber { border-top-color: #a9822c; }.metric-card.violet { border-top-color: #7760aa; }.metric-card.green { border-top-color: #39846b; }
+  .content-grid { grid-template-columns: minmax(0, 1.65fr) minmax(270px, .85fr); }
+  .chart-grid span { border-color: #d9e0e7; }
+  .review-row, .review-percent, .review-row strong { color: #344357; }
+  .review-track { background: #e8edf1; }
+  .table-wrap { overflow: visible; }
+  .events-panel table { width: 100%; min-width: 0; table-layout: fixed; }
+  .events-panel th, .events-panel td { padding: 2mm 1.5mm; border-color: #d6dee6; color: #344357; font-size: 7pt; white-space: normal; overflow-wrap: anywhere; }
+  .events-panel th { color: #526174; }
+  .event-summary { max-width: none; overflow: visible; text-overflow: clip; }
+  .review-details > table { display: table !important; }
+  .review-details th, .review-details td { border-color: #d6dee6; color: #344357; }
+  .footer { break-inside: avoid; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

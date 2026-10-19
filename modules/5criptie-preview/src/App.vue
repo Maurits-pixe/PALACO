@@ -24,6 +24,14 @@ function barHeight(value) {
   return `${Math.max(8, value)}%`;
 }
 
+function printReport() {
+  const reviewDetails = document.querySelector('.review-details');
+  const wasOpen = reviewDetails.open;
+  reviewDetails.open = true;
+  window.print();
+  reviewDetails.open = wasOpen;
+}
+
 </script>
 
 <template>
@@ -36,6 +44,7 @@ function barHeight(value) {
       <div class="topbar-meta">
         <span class="mode-pill"><span class="mode-dot"></span> SYNTHETISCHE PREVIEW</span>
         <span class="workspace">PALACO · LOKALE DEMO</span>
+        <button class="print-action" type="button" @click="printReport">Afdrukken / opslaan als PDF</button>
       </div>
     </header>
 

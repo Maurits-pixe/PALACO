@@ -107,6 +107,20 @@ try {
   ]);
   await popup.keyboard.press('Space');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
+  await popup.evaluate(() => {
+    window.print = () => {
+      window.__reviewTableWasOpenForPrint = document.querySelector('.review-details').open;
+    };
+  });
+  await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).click();
+  assert.equal(await popup.evaluate(() => window.__reviewTableWasOpenForPrint), true);
+  assert.equal(await reviewDetails.locator('table').isVisible(), false);
+  await popup.emulateMedia({ media: 'print' });
+  assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);
+  assert.equal(await popup.locator('.filter-group').evaluate(group => getComputedStyle(group).display), 'none');
+  assert.equal(await reviewDetails.locator('table').isVisible(), true);
+  assert.equal(await popup.locator('.table-wrap').evaluate(table => getComputedStyle(table).overflowX), 'visible');
+  await popup.emulateMedia({ media: 'screen' });
   const documentOrigin = new URL(popup.url()).origin;
   const remoteRequests = [];
   popup.on('request', request => {
