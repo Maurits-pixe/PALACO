@@ -4,7 +4,10 @@ use palaco_foundation::{AuthorityState, ContractError, EvidenceRef};
 use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
-    inspection::{write_plan_inspection_json, write_plan_inspections_jsonl},
+    inspection::{
+        PlanInspectionWriteError, try_write_plan_inspections_jsonl, write_plan_inspection_json,
+        write_plan_inspections_jsonl,
+    },
 };
 use std::io::{self, BufWriter, Write};
 
@@ -28,6 +31,97 @@ fn plans() -> Result<Vec<RuntimePlan>, ContractError> {
 struct Destination {
     bytes: Vec<u8>,
     remaining: usize,
+}
+
+#[test]
+fn fallible_success_and_empty_input_match_infallible_writer()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let mut expected = Vec::new();
+    write_plan_inspections_jsonl(&plans, &mut expected)?;
+    let mut destination = Destination {
+        bytes: Vec::new(),
+        remaining: usize::MAX,
+    };
+    try_write_plan_inspections_jsonl(
+        plans.iter().map(Ok::<_, io::Error>),
+        &mut destination as &mut dyn Write,
+    )?;
+    assert_eq!(destination.bytes, expected);
+    let mut empty = Destination {
+        bytes: Vec::new(),
+        remaining: 0,
+    };
+    try_write_plan_inspections_jsonl(
+        std::iter::empty::<Result<&RuntimePlan, io::Error>>(),
+        &mut empty,
+    )?;
+    assert!(empty.bytes.is_empty());
+    Ok(())
+}
+
+#[test]
+fn source_failure_stops_without_writing_error_details_or_reading_ahead()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    for completed in [0, 1] {
+        let mut input = plans[..completed]
+            .iter()
+            .map(Ok)
+            .chain(std::iter::once(Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "PRIVATE-SOURCE-DETAIL",
+            ))))
+            .chain(std::iter::once(Ok(&plans[2])));
+        let mut output = Vec::new();
+        let error = try_write_plan_inspections_jsonl(&mut input, &mut output)
+            .expect_err("source must fail");
+        assert_eq!(error.to_string(), "plan inspection source failed");
+        assert!(std::error::Error::source(&error).is_some());
+        match error {
+            PlanInspectionWriteError::Source(error) => {
+                assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+                assert_eq!(error.to_string(), "PRIVATE-SOURCE-DETAIL");
+            }
+            PlanInspectionWriteError::Output(_) => panic!("expected source error"),
+        }
+        let mut expected = Vec::new();
+        write_plan_inspections_jsonl(&plans[..completed], &mut expected)?;
+        assert_eq!(output, expected);
+        assert_eq!(input.next().expect("next item retained")?, &plans[2]);
+    }
+    Ok(())
+}
+
+#[test]
+fn output_failure_precedes_unread_source_errors() -> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let mut first = Vec::new();
+    write_plan_inspection_json(&plans[0], &mut first)?;
+    let mut expected = first.clone();
+    write_plan_inspection_json(&plans[1], &mut expected)?;
+    for capacity in [0, 10, first.len(), first.len() + 10] {
+        let mut input = [Ok(&plans[0]), Ok(&plans[1]), Err("unread source error")].into_iter();
+        let mut destination = Destination {
+            bytes: Vec::new(),
+            remaining: capacity,
+        };
+        let error = try_write_plan_inspections_jsonl(&mut input, &mut destination)
+            .expect_err("output must fail first");
+        assert_eq!(error.to_string(), "plan inspection output failed");
+        match error {
+            PlanInspectionWriteError::Output(error) => {
+                assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+            }
+            PlanInspectionWriteError::Source(_) => panic!("source error read too early"),
+        }
+        assert_eq!(destination.bytes, expected[..capacity]);
+        if capacity < first.len() {
+            assert_eq!(input.next().expect("second plan retained"), Ok(&plans[1]));
+        }
+        assert_eq!(input.next(), Some(Err("unread source error")));
+    }
+    Ok(())
 }
 
 #[test]

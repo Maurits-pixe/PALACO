@@ -90,6 +90,59 @@ pub fn write_plan_inspections_jsonl<'a>(
     Ok(())
 }
 
+/// Failure of a fallible plan source or its report destination.
+///
+/// The original errors remain available to the caller; neither is serialized.
+#[derive(Debug)]
+pub enum PlanInspectionWriteError<E> {
+    /// The source could not supply a plan.
+    Source(E),
+    /// Writing the current plan's report failed.
+    Output(io::Error),
+}
+
+impl<E> std::fmt::Display for PlanInspectionWriteError<E> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Source(_) => "plan inspection source failed",
+            Self::Output(_) => "plan inspection output failed",
+        })
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for PlanInspectionWriteError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Source(error) => Some(error),
+            Self::Output(error) => Some(error),
+        }
+    }
+}
+
+/// Writes JSON Lines from a finite, fallible source without skipping errors.
+///
+/// Like [`write_plan_inspections_jsonl`], this neither collects nor flushes.
+/// The iterator may perform caller-owned I/O; no plan is executed or authorized.
+///
+/// # Errors
+///
+/// Returns the first source or output error without requesting the next item.
+/// The failing item is consumed. Source errors write no report for that item;
+/// output errors may leave a partial line. Earlier lines are not rolled back.
+/// Errors are returned, never serialized into the report stream. Their `Debug`
+/// representation and error chain may contain caller-provided sensitive data.
+/// Success still requires a caller-owned flush for buffered destinations.
+pub fn try_write_plan_inspections_jsonl<'a, E>(
+    plans: impl IntoIterator<Item = Result<&'a RuntimePlan, E>>,
+    output: &mut (impl Write + ?Sized),
+) -> Result<(), PlanInspectionWriteError<E>> {
+    for plan in plans {
+        let plan = plan.map_err(PlanInspectionWriteError::Source)?;
+        write_plan_inspection_json(plan, output).map_err(PlanInspectionWriteError::Output)?;
+    }
+    Ok(())
+}
+
 /// Descriptive inspection data, never evidence, permission or live host health.
 ///
 /// Changing a local copy does not change the interface or authorize execution.

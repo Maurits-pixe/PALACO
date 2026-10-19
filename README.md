@@ -113,6 +113,15 @@ de batchwriter alle plannen al hebben gelezen voordat een fout bij de
 afsluitende, door de aanroeper uitgevoerde flush zichtbaar wordt. Succes van de
 batchwriter betekent dus niet dat de bestemming de rapporten heeft ontvangen.
 
+Voor een bron met items van het type `Result<&RuntimePlan, E>` is er
+`try_write_plan_inspections_jsonl`. Deze stopt bij de eerste fout en retourneert
+`PlanInspectionWriteError::Source(E)` of `Output(io::Error)`, zonder volgende
+items op te vragen. Bronfouten worden niet overgeslagen of als JSON gepubliceerd.
+De foutmelding zelf is generiek; `Debug` en de foutketen kunnen wel gevoelige
+broninformatie bevatten en zijn niet automatisch geschikt voor logging.
+Eerdere regels blijven staan; een schrijffout kan een gedeeltelijke laatste
+regel achterlaten. Deze API flusht niet en biedt geen rollback of retrygarantie.
+
 Een lange of doorlopende bron kan begrensd worden met
 `write_plan_inspections_jsonl(input.by_ref().take(n), &mut destination)`.
 De volgende aanroep kan dezelfde iterator vervolgen: de writer leest niet
