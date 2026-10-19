@@ -4,6 +4,7 @@
 //! Runtime orchestration constrained by the Citadel boundary.
 
 pub mod inspection;
+pub mod scheduling;
 
 use palaco_citadel::ExecutionBoundary;
 use palaco_foundation::{ContractDisposition, ContractError, FailClosed, Validatable};

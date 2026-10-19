@@ -68,7 +68,21 @@ De openbare velden zijn beschrijvende gegevens, geen gevalideerd bewijs:
 een lokaal gewijzigde kopie verandert latere rapporten niet en verleent geen
 uitvoeringsrechten.
 
-Voor een bestaand `RuntimePlan` levert
+De module `palaco_runtime::scheduling` biedt lokale planning via `RuntimeQueue`.
+De vaste limiet begrenst het aantal wachtende plannen, niet hun bytegrootte.
+`submit` accepteert alleen plannen met `Execute` en geslaagde bestaande
+contractvalidatie. `Held`, `Denied`, `Invalid`, `Full` en `Stopped` zijn expliciete
+toelatingsfouten; `RejectedPlan::into_plan()` geeft het oorspronkelijke plan terug.
+`next_plan()` draagt het oudste plan over zonder het uit te voeren. Vrijgekomen
+capaciteit kan opnieuw worden gebruikt; dubbele inzendingen tellen afzonderlijk.
+`stop()` stopt definitief, verwijdert wachtende lokale plannen en retourneert
+hun aantal. Reeds overgedragen plannen worden niet geannuleerd of gewijzigd.
+De wachtrij is proceslokaal, niet duurzaam en niet vooraf op maximale grootte
+gealloceerd. Ze authenticeert geen bewijs, ververst geen autoriteit en start
+geen callbacks, processen of externe acties. Een eerdere toelating is **geen**
+uitvoeringsrecht: de consument moet actuele toestemming onafhankelijk afdwingen.
+
+Voor inspectie van een bestaand `RuntimePlan` levert
 `palaco_runtime::inspection::inspect_plan(&plan)` een `PlanInspection` met
 de overgenomen `disposition` en het resultaat van de bestaande contractvalidatie.
 Dit wijzigt of executeert het plan niet en bevat geen bewijsidentificatoren.
