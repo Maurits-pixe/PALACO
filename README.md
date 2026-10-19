@@ -95,6 +95,14 @@ gewijzigde invoer of een gedeeltelijk resultaat. Overlappende batches tellen
 observaties opnieuw. De methode valideert geen samenhang van publiek gewijzigde
 velden, authenticeert niets en verleent geen uitvoeringsrechten.
 
+`summarize_plan_iter(plans.iter().filter(...))` telt geleende plannen zonder
+ze te klonen of te verzamelen. De aanroeper levert een eindige iterator, of
+begrenst een langere bron met `by_ref().take(n)`. Lege invoer geeft `Some` met
+nultellingen; herhaalde plannen tellen opnieuw. Bij teller-overflow volgt `None`
+zonder gedeeltelijk resultaat of het volgende plan op te vragen; het falende
+element is al geconsumeerd. Bijwerkingen van de iterator worden niet teruggedraaid.
+Dit blijft uitsluitend observatie, geen uitvoering of autoriteitscontrole.
+
 `write_plan_inspection_summary_json(&plans, &mut output)` schrijft deze tellingen
 als één apart `plan-inspection-summary`-JSON-object (`schema_version: 1`) met
 afsluitende newline, `execution_performed: false` en `authority_verified: false`.

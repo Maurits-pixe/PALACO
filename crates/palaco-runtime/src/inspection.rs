@@ -38,7 +38,7 @@ pub fn inspect_plan(plan: &RuntimePlan) -> PlanInspection {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct PlanInspectionSummary {
-    /// Number of slice entries observed, including repeated plans.
+    /// Number of entries observed, including repeated plans.
     pub total: usize,
     /// Entries carrying Execute, not a count of executed or authenticated plans.
     pub execute: usize,
@@ -99,6 +99,30 @@ pub fn summarize_plans(plans: &[RuntimePlan]) -> PlanInspectionSummary {
         }
     }
     summary
+}
+
+/// Summarizes borrowed plans without collecting, cloning or performing I/O.
+///
+/// The caller supplies a finite iterator, optionally using `by_ref().take(n)`
+/// to bound a longer source. Each yielded plan is inspected once, and repeated
+/// plans count separately. Empty input returns a zero summary.
+///
+/// Returns `None` on counter overflow, discarding the partial summary and
+/// stopping before requesting another plan. The overflowing entry has already
+/// been consumed. Iterator side effects belong to the caller and are not rolled
+/// back. An unbounded source need not terminate in a practical amount of time.
+///
+/// Like [`summarize_plans`], this neither executes plans nor authenticates or
+/// refreshes authority. Existing JSON writers still inspect slices directly.
+#[must_use]
+pub fn summarize_plan_iter<'a>(
+    plans: impl IntoIterator<Item = &'a RuntimePlan>,
+) -> Option<PlanInspectionSummary> {
+    let mut summary = PlanInspectionSummary::default();
+    for plan in plans {
+        summary = summary.checked_add(summarize_plans(std::slice::from_ref(plan)))?;
+    }
+    Some(summary)
 }
 
 /// Writes one schema-version-1 plan-inspection-summary JSON object and a newline.

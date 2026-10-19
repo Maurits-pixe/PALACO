@@ -5,7 +5,7 @@ use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
     inspection::{
-        PlanInspectionSummary, PlanInspectionWriteError, summarize_plans,
+        PlanInspectionSummary, PlanInspectionWriteError, summarize_plan_iter, summarize_plans,
         try_write_plan_inspections_jsonl, write_plan_inspection_json,
         write_plan_inspection_summary_json, write_plan_inspections_jsonl,
     },
@@ -119,6 +119,65 @@ fn checked_summary_addition_checks_every_public_counter_without_mutation() {
         assert_eq!(one.checked_add(maximum), None);
         assert_eq!(maximum, original);
     }
+}
+
+#[test]
+fn iterator_summaries_match_slices_and_filtered_borrowed_plans()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    assert_eq!(
+        summarize_plan_iter(std::iter::empty()),
+        Some(PlanInspectionSummary::default())
+    );
+    assert_eq!(summarize_plan_iter(&plans), Some(summarize_plans(&plans)));
+    for split in 0..=plans.len() {
+        assert_eq!(
+            summarize_plan_iter(plans[..split].iter()),
+            Some(summarize_plans(&plans[..split]))
+        );
+    }
+    let denied = summarize_plan_iter(
+        plans
+            .iter()
+            .filter(|plan| plan.disposition() == palaco_foundation::ContractDisposition::Deny),
+    )
+    .expect("small filtered input cannot overflow");
+    assert_eq!(denied.total, 2);
+    assert_eq!(denied.deny, 2);
+    assert_eq!(denied.hold, 0);
+    assert_eq!(denied.execute, 0);
+    assert_eq!(denied.contract_valid, 2);
+    assert_eq!(denied.contract_invalid, 0);
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn bounded_iterator_summaries_count_duplicates_without_read_ahead()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    let requested = std::cell::Cell::new(0);
+    let mut source = plans.iter().cycle().inspect(|_| {
+        requested.set(requested.get() + 1);
+    });
+    assert_eq!(
+        summarize_plan_iter(source.by_ref().take(0)),
+        Some(PlanInspectionSummary::default())
+    );
+    assert_eq!(requested.get(), 0);
+    let summary =
+        summarize_plan_iter(source.by_ref().take(6)).expect("bounded input cannot overflow");
+    let expected = summarize_plans(&plans)
+        .checked_add(summarize_plans(&plans[..2]))
+        .expect("small summaries cannot overflow");
+    assert_eq!(summary, expected);
+    assert_eq!(requested.get(), 6);
+    assert_eq!(source.next(), Some(&plans[2]));
+    assert_eq!(requested.get(), 7);
+    assert_eq!(plans, original);
+    Ok(())
 }
 
 #[test]
