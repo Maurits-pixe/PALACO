@@ -305,6 +305,11 @@ async fn postgres_tls_restore_oidc_contract() -> io::Result<()> {
     let after = crate::storage::tls_restore_tests::primary_snapshot()
         .await
         .map_err(|_| rejected())?;
+    if before == after {
+        eprintln!("CASE CMV_OIDC_PRIMARY_UNCHANGED");
+    } else {
+        eprintln!("CASE CMV_OIDC_PRIMARY_CHANGED");
+    }
     result?;
     if before != after {
         return Err(rejected());
@@ -367,8 +372,14 @@ async fn oidc_contract(target: ProofTarget) -> io::Result<()> {
     {
         return Err(rejected());
     }
+    eprintln!("CASE CMV_OIDC_CONFIGURED");
     let server = Server::start(state.clone(), certificate, key).await?;
+    eprintln!("CASE CMV_OIDC_SERVER_OPEN");
     let result = browser(&verification, target).await;
+    eprintln!("CASE CMV_OIDC_BROWSER_COMPLETED");
+    if result.as_ref().is_ok_and(|status| status.success()) {
+        eprintln!("CASE CMV_OIDC_BROWSER_PASSED");
+    }
     let stopped = server.stop().await;
     // Attempt exclusive rebinding before propagating any browser failure as well.
     let rebound = TcpListener::bind(ADDRESS).map(drop);
@@ -380,6 +391,7 @@ async fn oidc_contract(target: ProofTarget) -> io::Result<()> {
     {
         return Err(rejected());
     }
+    eprintln!("CASE CMV_OIDC_SUMMARY_VALID");
     Ok(())
 }
 

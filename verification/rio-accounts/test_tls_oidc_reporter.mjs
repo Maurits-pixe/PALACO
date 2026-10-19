@@ -4,7 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import TlsOidcReporter, { buildTlsOidcSummary } from './tls-oidc-reporter.mjs';
+import TlsOidcReporter, { buildTlsOidcSummary, failedSourceLines } from './tls-oidc-reporter.mjs';
+
+test('failure locations are bounded source numbers without paths or error details',()=>{
+  const step=(file,line)=>({error:CANARY,location:{file,line},steps:[]});
+  const result=failedSourceLines([
+    step('/work/tests/accounts.spec.mjs',398),step('C:\\work\\tests\\accounts.spec.mjs',83),
+    step(CANARY,55),step('/work/tests/accounts.spec.mjs',9000),step('/work/tests/accounts.spec.mjs',-1),
+  ]);
+  assert.deepEqual(result,[83,398]);
+  assert.equal(JSON.stringify(result).includes(CANARY),false);
+});
 
 const CANARY = 'PRIVATE-CANARY-token-cookie-password=https://secret.invalid/?code=secret';
 const passed = () => Array.from({ length: 5 }, (_, index) => ({

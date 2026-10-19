@@ -80,6 +80,41 @@ async fn document(
     Ok(data)
 }
 
+async fn inventory(
+    app: &Router,
+    token: &str,
+) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
+    let data = document(
+        call(
+            app,
+            "GET",
+            "/api/storage/objects",
+            Some(token),
+            None,
+            None,
+            "",
+        )
+        .await?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(data["schema"], "RIO_CMV_SYNTHETIC_CATALOG_V1");
+    let items = data["objects"].as_array().ok_or("catalog missing")?;
+    assert!(items.len() <= MAX_ACCOUNT_OBJECTS as usize);
+    assert_eq!(data["usage"]["retainedObjects"], items.len());
+    let mut bytes = 0;
+    for item in items {
+        assert!(item.get("payload").is_none());
+        assert!(item.get("accountId").is_none());
+        assert!(item.get("ownerId").is_none());
+        bytes += item["liveBytes"]
+            .as_u64()
+            .ok_or("invalid catalog byte count")?;
+    }
+    assert_eq!(data["usage"]["liveBytes"], bytes);
+    Ok(data)
+}
+
 #[tokio::test]
 async fn http_storage_is_opt_in_strict_bounded_and_never_uses_memory() -> TestResult {
     let state = crate::tests::test_state()?;
@@ -94,6 +129,40 @@ async fn http_storage_is_opt_in_strict_bounded_and_never_uses_memory() -> TestRe
     let app = crate::router_with_routes(state, routes());
     let token = crate::random_token();
     let csrf = crate::random_token();
+    assert_eq!(
+        call(&app, "GET", "/api/storage/objects", None, None, None, "")
+            .await?
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        call(
+            &app,
+            "GET",
+            "/api/storage/objects",
+            Some(&token),
+            None,
+            None,
+            ""
+        )
+        .await?
+        .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        call(
+            &app,
+            "GET",
+            "/api/storage/objects?accountId=TST-beta",
+            Some(&token),
+            None,
+            None,
+            ""
+        )
+        .await?
+        .status(),
+        StatusCode::BAD_REQUEST
+    );
     let id = URL_SAFE_NO_PAD.encode([7; 32]);
     let valid = put_body(&id, b"fixture", 60_000);
     assert_eq!(
@@ -331,6 +400,22 @@ async fn postgres_cmv_http_contract() -> TestResult {
     )
     .await?;
     assert_eq!(created["object"]["bytes"], MAX_OBJECT_BYTES);
+    let own = inventory(&app, &beta).await?;
+    let item = own["objects"]
+        .as_array()
+        .ok_or("catalog missing")?
+        .iter()
+        .find(|o| o["objectId"] == id)
+        .ok_or("object missing")?;
+    assert_eq!(item["state"], "LIVE");
+    assert_eq!(item["payloadVerified"], true);
+    assert!(
+        inventory(&app, &alpha).await?["objects"]
+            .as_array()
+            .ok_or("catalog missing")?
+            .iter()
+            .all(|o| o["objectId"] != id)
+    );
     let read = document(
         call(&app, "GET", &path, Some(&beta), None, None, "").await?,
         StatusCode::OK,
@@ -486,6 +571,28 @@ async fn postgres_cmv_http_contract() -> TestResult {
         StatusCode::FORBIDDEN
     );
     db.logout_all(hash(&beta), &csrf_b).await?;
+    assert_eq!(
+        call(
+            &app,
+            "GET",
+            "/api/storage/objects",
+            Some(&beta),
+            None,
+            None,
+            ""
+        )
+        .await?
+        .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let catalog = inventory(&app, &alpha).await?;
+    assert!(
+        catalog["objects"]
+            .as_array()
+            .ok_or("catalog missing")?
+            .iter()
+            .all(|o| o["objectId"] != id)
+    );
     assert_eq!(
         call(
             &app,

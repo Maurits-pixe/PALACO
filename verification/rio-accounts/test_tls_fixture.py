@@ -20,6 +20,23 @@ import tls_fixture as fixture
 CANARY = "PRIVATE_FIXTURE_CANARY_MUST_NOT_PRINT"
 
 
+class OidcFailureSummaryTests(unittest.TestCase):
+    def test_only_fixed_case_states_and_stages_survive(self):
+        rows = [{"id": f"RIO-E2E-0{n}", "status": "failed" if n == 1 else "passed", "secret": CANARY} for n in range(1, 6)]
+        output = "CASE CMV_OIDC_SERVER_OPEN\nCASE " + CANARY + "\nRIO_TLS_OIDC_BROWSER_SUMMARY " + json.dumps({"tests": rows, "error": CANARY})
+        result = fixture.safe_oidc_failure(output)
+        self.assertEqual(result["stages"], ["CMV_OIDC_SERVER_OPEN"])
+        self.assertEqual(len(result["browserCases"]), 5)
+        self.assertNotIn(CANARY, json.dumps(result))
+
+    def test_malformed_duplicate_and_secret_statuses_are_not_published(self):
+        for rows in (None, [], [{"id":"RIO-E2E-01","status":"passed"}]*5,
+                     [{"id":f"RIO-E2E-0{n}","status":CANARY} for n in range(1,6)]):
+            result = fixture.safe_oidc_failure("RIO_TLS_OIDC_BROWSER_SUMMARY " + json.dumps({"tests":rows}))
+            self.assertEqual(result["browserCases"], [])
+            self.assertNotIn(CANARY, json.dumps(result))
+
+
 @contextmanager
 def local_root():
     with tempfile.TemporaryDirectory() as temporary:

@@ -411,6 +411,40 @@ def _wait_ready(owner: Owner) -> None:
         raise FixtureFailure("READINESS_FAILED")
 
 
+def safe_oidc_failure(output: str) -> dict:
+    stages = frozenset(("CMV_OIDC_CONFIGURED", "CMV_OIDC_SERVER_OPEN", "CMV_OIDC_BROWSER_COMPLETED",
+                        "CMV_OIDC_BROWSER_PASSED", "CMV_OIDC_SUMMARY_VALID",
+                        "CMV_OIDC_PRIMARY_UNCHANGED", "CMV_OIDC_PRIMARY_CHANGED"))
+    ids = frozenset(f"RIO-E2E-0{n}" for n in range(1, 6))
+    statuses = frozenset(("passed", "failed", "timedOut", "skipped", "interrupted"))
+    result = {"stages": [], "browserCases": [], "failureLines": []}
+    for line in output[:LIMIT].splitlines():
+        location = re.fullmatch(r"RIO_TLS_OIDC_FAILED_LINE (RIO-E2E-0[1-5]) ([1-9][0-9]{0,3})", line)
+        if location is not None and int(location[2]) <= 5000 and len(result["failureLines"]) < 64:
+            result["failureLines"].append({"id": location[1], "line": int(location[2])})
+        if line.startswith("CASE ") and line[5:] in stages and line[5:] not in result["stages"]:
+            result["stages"].append(line[5:])
+        marker = "RIO_TLS_OIDC_BROWSER_SUMMARY "
+        if not line.startswith(marker) or len(line) > 32768:
+            continue
+        try:
+            summary = json.loads(line[len(marker):])
+            rows = summary.get("tests") if isinstance(summary, dict) else None
+            if not isinstance(rows, list) or len(rows) != 5:
+                continue
+            cases = []
+            for row in rows:
+                if (not isinstance(row, dict) or row.get("id") not in ids or row.get("status") not in statuses
+                        or any(case["id"] == row["id"] for case in cases)):
+                    break
+                cases.append({"id": row["id"], "status": row["status"]})
+            if len(cases) == 5:
+                result["browserCases"] = cases
+        except (ValueError, TypeError):
+            continue
+    return result
+
+
 def _run_rust_test(owner: Owner, test: str, log: str) -> None:
     if (test, log) not in TESTS or _read_owned(owner, log):
         raise FixtureFailure("RUST_TEST_FAILED")
@@ -441,6 +475,8 @@ def _run_rust_test(owner: Owner, test: str, log: str) -> None:
         r"^test result: ok\. 1 passed; 0 failed; 0 ignored;", output, re.MULTILINE
     )
     if result != 0 or passed is None or one_case is None:
+        if test in (OIDC_TEST, RESTORE_OIDC_TEST):
+            print("RIO_TLS_OIDC_FAILURE " + json.dumps({"test": test, **safe_oidc_failure(output)}, separators=(",", ":")))
         raise FixtureFailure("RUST_TEST_FAILED")
 
 

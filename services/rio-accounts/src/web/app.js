@@ -363,7 +363,10 @@
 
     async function logout(all, forceFocus = false) {
         if (phase !== 'authenticated' || busy) return;
-        const stamp = epoch;
+        // Supersede reads begun before this explicit action. Their late failure
+        // must not cancel the logout result. Existing expiry deadlines still run.
+        const stamp = ++epoch;
+        clearTimeout(pollTimer);
         busy = true;
         renderControls();
         try {
