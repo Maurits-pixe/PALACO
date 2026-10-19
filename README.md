@@ -2116,6 +2116,20 @@ both toolchains. The CI format step now checks only, rather than silently
 formatting files and continuing.
 
 These are local results, not evidence that GitHub CI or CodeQL completed.
+The GO-06 workspace-test failure in
+[run 37801980437](https://github.com/Maurits-pixe/PALACO/actions/runs/37801980437)
+reported missing `DATABASE_URL` in all five PostgreSQL integration tests.
+GO-06 and GO-08 now provision disposable PostgreSQL 17 services with readiness
+checks and a job-level connection URL; no database tests are skipped. Their
+passwordless trust configuration is for ephemeral CI data only, with published
+ports bound to runner loopback, not a deployment configuration.
+That PostgreSQL 17 container configuration and connection URL were also exercised
+locally: all five database integration tests, 58 workspace tests and the Rustdoc
+example passed, with strict Clippy and full-workspace formatting clean. This
+checks the service wiring locally, not the pinned CI toolchain or a GitHub run.
+GO-08 still has a separate pre-existing PVS-001 blocker: its fixed seven-crate
+workspace list rejects the existing eighth member, `palaco-la`. PVS-002 passes
+locally; the database fix does not resolve or bypass that PVS-001 policy mismatch.
 The inspected PALACO L.A. run
 [39201803436](https://github.com/Maurits-pixe/PALACO/actions/runs/39201803436)
 has `action_required` with no executed jobs or job logs. A maintainer must
