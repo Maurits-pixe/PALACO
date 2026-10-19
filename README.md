@@ -2116,6 +2116,18 @@ both toolchains. The CI format step now checks only, rather than silently
 formatting files and continuing.
 
 These are local results, not evidence that GitHub CI or CodeQL completed.
+Separately verified GitHub CI evidence (2026-10-19): GO-06
+[run 39221651343, attempt 2](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651343/attempts/2)
+completed successfully for commit `7d235e9685b556d7cdbb10342117c22e65fb07c2`.
+Its job logs confirm 58 workspace tests (including all five PostgreSQL integration
+tests) and the ERA-009 Rustdoc example passed. This is commit-specific test
+evidence, not an all-checks pass or security validation.
+At that inspection, [GO-07](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651418),
+[GO-08](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651429) and
+[PALACO L.A.](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651381)
+for the same commit still reported `action_required`. Their separate approval
+and execution remain pending; the GO-06 success does not cover their checks or
+automatically validate later documentation commits.
 Additional local validation (2026-10-19) also passed on GO-06/GO-08's pinned
 Rust 1.98.1 with disposable PostgreSQL 17: workspace check, build, all 58 tests,
 the Rustdoc example, strict Clippy and formatting. Six Python regression tests
@@ -2124,7 +2136,7 @@ and PVS-001/PVS-002 also pass locally. GO-06/07/08 now include path-scoped
 triggers; GO-06 explicitly runs Rustdoc examples as well as all-target tests.
 These ordinary PR checks retain read-only permissions and GitHub's execution
 approval requirements; they do not use privileged `pull_request_target`.
-The latest inspected PALACO L.A. run
+The previously inspected PALACO L.A. run
 [39214144567](https://github.com/Maurits-pixe/PALACO/actions/runs/39214144567)
 still has `action_required` with zero jobs, not a test result.
 The GO-06 workspace-test failure in
