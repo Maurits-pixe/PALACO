@@ -34,8 +34,7 @@ jobs:
           toolchain: 1.90.0
           components: rustfmt, clippy
       - name: Format
-        run: |
-          cargo fmt --all -- --check || cargo fmt --all
+        run: cargo fmt --all -- --check
       - name: Check
         run: cargo check --workspace
       - name: Test

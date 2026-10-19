@@ -9,6 +9,14 @@ on:
       - "crates/**"
       - "tests/**"
       - ".github/workflows/go-06-rust-tests.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "tests/**"
+      - ".github/workflows/go-06-rust-tests.yml"
   workflow_dispatch:
 
 permissions:
@@ -17,6 +25,23 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: palaco
+          # Disposable CI database, reachable only via runner loopback.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d palaco"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres@localhost:5432/palaco
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -30,3 +55,5 @@ jobs:
           cargo --version
       - name: Test workspace all targets
         run: cargo test --workspace --all-targets
+      - name: Test workspace documentation examples
+        run: cargo test --workspace --doc

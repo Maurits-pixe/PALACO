@@ -172,13 +172,19 @@ async fn postgres_rejects_direct_event_mutation() {
         .bind(first.event_id.value())
         .execute(store.pool())
         .await;
-    assert!(update.is_err(), "UPDATE must be rejected by the append-only trigger");
+    assert!(
+        update.is_err(),
+        "UPDATE must be rejected by the append-only trigger"
+    );
 
     let delete = sqlx::query("DELETE FROM la.events WHERE event_id = $1")
         .bind(first.event_id.value())
         .execute(store.pool())
         .await;
-    assert!(delete.is_err(), "DELETE must be rejected by the append-only trigger");
+    assert!(
+        delete.is_err(),
+        "DELETE must be rejected by the append-only trigger"
+    );
 }
 
 #[tokio::test]
@@ -195,7 +201,12 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() {
     let left_store = PgEventStore::new(pool.clone());
     let right_store = PgEventStore::new(pool);
     let left = event(aggregate_id, Sequence(2), Some(first.payload_hash), b"left");
-    let right = event(aggregate_id, Sequence(2), Some(first.payload_hash), b"right");
+    let right = event(
+        aggregate_id,
+        Sequence(2),
+        Some(first.payload_hash),
+        b"right",
+    );
 
     let (left_result, right_result) = tokio::join!(
         left_store.append(aggregate_id, Sequence(2), Some(first.payload_hash), left),
@@ -206,7 +217,10 @@ async fn postgres_serializes_concurrent_appends_per_aggregate() {
         .into_iter()
         .filter(|result| result.is_ok())
         .count();
-    assert_eq!(successes, 1, "exactly one concurrent append may claim sequence 2");
+    assert_eq!(
+        successes, 1,
+        "exactly one concurrent append may claim sequence 2"
+    );
 
     let events = store.load(aggregate_id).await.expect("load must succeed");
     assert_eq!(events.len(), 2);

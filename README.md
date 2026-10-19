@@ -2091,6 +2091,164 @@ MBvanGeen/palaco-foundation # PALACO
 
 
 ```
+### ERA-009 — process-local reference model
+
+ERA-009 is isolated in `palaco-citadel::InMemoryCommitGate`. It is not wired
+into runtime execution and does not change `ExecutionBoundary` or `RuntimePlan`.
+It is separate from the release registry's ERA-008 draft interval checker and
+does not revalidate time freshness.
+
+| Evidence level | Scope |
+|---|---|
+| Conceptually specified | Local commit/revocation ordering and exact idempotent retries; wider ERA architecture, including ERA-010–033, is not implemented or verified by this model. |
+| Locally implemented | One mutex-protected in-memory gate per caller-defined authority context, with checked sequence numbers and terminal revocation. |
+| Tested | Focused tests cover exact retries, input conflicts, authority rejection, revocation ordering, independent instances, concurrent callers, poisoning, and sequence exhaustion. Workspace validation is reported separately in the PR. |
+| Security-validated | **PENDING/UNKNOWN**. The previously reported CodeQL timeout is not a security pass. Tests, Clippy, and formatting do not establish security validation. |
+
+Local validation (2026-10-19): with Rust 1.99.0 and a local PostgreSQL service,
+`cargo build --workspace --all-targets`, `cargo test --workspace --all-targets`
+(58 tests), `cargo test --workspace --doc` (one executable example), and
+`cargo clippy --workspace --all-targets -- -D warnings` passed. Citadel API
+documentation also builds with `RUSTDOCFLAGS="-D warnings"`.
+`cargo fmt --all -- --check` passes on both Rust 1.99.0 and the PALACO L.A.
+workflow's pinned Rust 1.90.0; this is not a claim that builds/tests were run on
+both toolchains. The CI format step now checks only, rather than silently
+formatting files and continuing.
+
+These are local results, not evidence that GitHub CI or CodeQL completed.
+Separately verified GitHub CI evidence (2026-10-19): GO-06
+[run 39221651343, attempt 2](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651343/attempts/2)
+completed successfully for commit `7d235e9685b556d7cdbb10342117c22e65fb07c2`.
+Its job logs confirm 58 workspace tests (including all five PostgreSQL integration
+tests) and the ERA-009 Rustdoc example passed. This is commit-specific test
+evidence, not an all-checks pass or security validation.
+At that inspection, [GO-07](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651418),
+[GO-08](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651429) and
+[PALACO L.A.](https://github.com/Maurits-pixe/PALACO/actions/runs/39221651381)
+for the same commit still reported `action_required`. Their separate approval
+and execution remain pending; the GO-06 success does not cover their checks or
+automatically validate later documentation commits.
+Additional local validation (2026-10-19) also passed on GO-06/GO-08's pinned
+Rust 1.98.1 with disposable PostgreSQL 17: workspace check, build, all 58 tests,
+the Rustdoc example, strict Clippy and formatting. Six Python regression tests
+and PVS-001/PVS-002 also pass locally. GO-06/07/08 now include path-scoped
+`pull_request` checks targeting `main`, alongside their existing push/manual
+triggers; GO-06 explicitly runs Rustdoc examples as well as all-target tests.
+These ordinary PR checks retain read-only permissions and GitHub's execution
+approval requirements; they do not use privileged `pull_request_target`.
+The previously inspected PALACO L.A. run
+[39214144567](https://github.com/Maurits-pixe/PALACO/actions/runs/39214144567)
+still has `action_required` with zero jobs, not a test result.
+The GO-06 workspace-test failure in
+[run 37801980437](https://github.com/Maurits-pixe/PALACO/actions/runs/37801980437)
+reported missing `DATABASE_URL` in all five PostgreSQL integration tests.
+GO-06 and GO-08 now provision disposable PostgreSQL 17 services with readiness
+checks and a job-level connection URL; no database tests are skipped. Their
+passwordless trust configuration is for ephemeral CI data only, with published
+ports bound to runner loopback, not a deployment configuration.
+That PostgreSQL 17 container configuration and connection URL were also exercised
+locally: all five database integration tests, 58 workspace tests and the Rustdoc
+example passed, with strict Clippy and full-workspace formatting clean. This
+checked the service wiring locally; the subsequent Rust 1.98.1 validation above
+also covers the pinned toolchain, but neither establishes a successful GitHub run.
+The separate PVS-001 membership failure in GO-08
+[run 37801980240](https://github.com/Maurits-pixe/PALACO/actions/runs/37801980240)
+was reproduced locally. PVS-001 now explicitly includes `palaco-la` as an
+independently versioned workspace extension, without changing the seven
+Foundation crates' inheritance checks or PVS-002 dependency contracts.
+The extension must retain its package identity, matching edition and Rust
+minimum, disabled publication, forbidden unsafe code, manifest and library source.
+Unknown, duplicate and missing members remain rejected. Six Python regression
+tests and both PVS-001/PVS-002 pass locally; GO-07 and GO-08 run those regression
+tests before PVS-001. The 58 workspace tests, Rustdoc example, build, strict
+Clippy and formatting were also rerun successfully with Rust 1.99.0 and disposable
+PostgreSQL 17. A local pass is not evidence that GitHub GO-08 completed.
+The inspected PALACO L.A. run
+[39201803436](https://github.com/Maurits-pixe/PALACO/actions/runs/39201803436)
+has `action_required` with no executed jobs or job logs. A maintainer must
+resolve that GitHub-side requirement before CI execution can be evaluated.
+Partial CodeQL results for Actions/JavaScript do not validate the ERA-009 Rust
+model; an overall timeout or incomplete language coverage remains
+**PENDING/UNKNOWN**. An unavailable automated reviewer is likewise not a review
+pass. None of these checks adds production or security guarantees.
+
+Share one gate instance across participating threads. Successful new commits and
+the first revocation consume a single local sequence starting at one; rejected
+requests, exact retries, and repeated revocations do not. An idempotency key
+binds the complete boundary and exact payload bytes. An exact retry after
+revocation returns only the historical receipt, **not renewed execution
+permission**. A different request under the same key is rejected. A stale
+authorized boundary cannot create a new commit after this gate is revoked.
+Caller-supplied revoked, expired, or indeterminate provenance is always rejected,
+including on retries. Mutex poisoning and sequence exhaustion fail closed.
+Direct unit tests inject these otherwise hard-to-reach states for both commit
+APIs: the last sequence can be recorded and replayed, but new records and a new
+revocation cannot wrap the counter. Exhaustion takes precedence over the record
+limit for a new valid key. A poisoned mutex rejects even historical retries,
+both before and after revocation; it is not automatically recovered. These
+fault-injection checks are not crash-recovery or security evidence.
+
+`commit_with_outcome` makes this distinction explicit: `CommitOutcome::Recorded`
+means this call inserted a local record; `CommitOutcome::Replayed` means it
+returned an earlier receipt. Classification occurs inside the same mutex as
+commit/revocation, so concurrent identical requests produce one `Recorded` and
+only `Replayed` outcomes thereafter. Both variants expose the original receipt
+through `receipt()`. The existing `commit` API preserves its receipt/error
+behavior and shares the same state. Neither outcome grants execution permission,
+including `Recorded`: revocation can occur before the caller receives it.
+Focused tests cover mixed-API retries, error precedence, post-revocation
+replays, and concurrent outcome classification.
+Input-isolation tests verify that records own copies of the key, boundary and
+payload: changing or dropping caller inputs does not replace historical data.
+Payloads are compared as exact bytes, including embedded zeroes and non-UTF-8
+bytes. Keys remain exact strings: case, surrounding whitespace and Unicode
+encoding differences are not normalized. Callers must choose stable keys and
+payload encodings; these checks do not authenticate or canonicalize inputs.
+
+The public `InMemoryCommitGate` Rustdoc includes a runnable synthetic example
+covering both APIs, capacity rejection, conflicting retries, idempotent
+revocation, and historical replay after revocation. Run it from the repository
+root with `cargo test -p palaco-citadel --doc`; view it with
+`cargo doc -p palaco-citadel --no-deps --open`. The example performs no external
+effects, authenticates no authority, and is not a production adapter or security
+validation.
+
+Additional tests compare both APIs against an independent accepted-event log for
+all 32,768 length-five histories over eight operations at each of four record
+limits (unlimited, zero, one, two): 131,072 history/configuration cases covering
+two keys, conflicting payloads, changed evidence, each non-authorized authority
+state, and revocation. Both APIs retain historical receipts after revocation.
+A separate concurrent test races four revokers with eight mixed-API committers.
+An ordered cross-thread test holds eight workers behind a barrier until
+revocation returns, then checks that both APIs reject fresh keys with stale
+authorized boundaries while preserving exact historical retries and conflicts,
+for both unlimited and full gates. It uses no timing sleeps or assumed scheduler
+order.
+At limits one and two, eight identical requests racing for the final free slot
+must produce exactly one new record and seven historical replays.
+These are bounded local checks, not exhaustive concurrency exploration, formal
+verification, or security validation; they do not widen the model's guarantees.
+
+Authority context binding, authentication, evidence verification, expiry refresh,
+and routing every relevant caller through the same gate remain caller
+responsibilities, not guarantees of this model. Receipts acknowledge only
+in-memory records: no external operation is performed, rolled back, or made
+exactly-once. `new()` and `Default` retain records without a count limit.
+`with_record_limit(max_records)` optionally caps the number of distinct committed
+keys: full gates reject new keys with `RecordLimitReached`, without consuming a
+sequence or evicting records. Exact retries, conflict/authority checks, and
+revocation remain available; zero permits no new records but still permits
+revocation. The admission check shares the commit mutex. Tests cover saturation,
+zero, retained retries, and concurrent admission. This is **not a memory-byte
+limit**: individual keys, payloads, and boundaries remain unrestricted in size,
+and allocation failure is not recovered. No records are evicted. Separate
+instances and process restarts share no ordering, idempotency, or revocation
+state. There is no durability, replication, multi-process coordination, or
+production, exchange, or financial-grade guarantee. Other persistence or consensus
+claims elsewhere in this README do not apply to ERA-009.
+
+Decision boundary: **ADVISORY — HUMAN DECISION REQUIRED**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*
