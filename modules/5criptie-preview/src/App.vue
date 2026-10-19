@@ -13,6 +13,10 @@ const visibleEvents = computed(() => selectedSeverity.value === 'Alles'
 function barHeight(value) {
   return `${Math.max(8, value)}%`;
 }
+
+function reviewPercent(count) {
+  return reviewTotal ? Math.round(count / reviewTotal * 100) : 0;
+}
 </script>
 
 <template>
@@ -82,7 +86,8 @@ function barHeight(value) {
             <span class="review-label"><i class="severity" :class="severityTones[item.severity]"></i>{{ item.severity }}</span>
             <strong>{{ String(item.count).padStart(2, '0') }}</strong>
             <span class="review-track"><i :class="`${severityTones[item.severity]}-fill`"
-              :style="{ width: `${reviewTotal ? item.count / reviewTotal * 100 : 0}%` }"></i></span>
+              :style="{ width: `${reviewPercent(item.count)}%` }"></i></span>
+            <span class="review-percent">{{ reviewPercent(item.count) }}%</span>
           </div>
           <p class="review-note">Categorisering is illustratief en niet gebaseerd op detectie.</p>
         </article>

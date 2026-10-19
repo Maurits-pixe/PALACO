@@ -74,17 +74,18 @@ try {
     rows: [...panel.querySelectorAll('.review-row')].map(row => ({
       severity: row.querySelector('.review-label').textContent.trim(),
       count: row.querySelector('strong').textContent.trim(),
+      percent: row.querySelector('.review-percent').textContent.trim(),
       width: row.querySelector('.review-track i').style.width
     }))
   }));
   assert.equal(reviewState.total, '03');
-  assert.deepEqual(reviewState.rows.map(({ severity, count }) => ({ severity, count })), [
-    { severity: 'Hoog', count: '02' },
-    { severity: 'Middel', count: '01' },
-    { severity: 'Laag', count: '00' }
+  assert.deepEqual(reviewState.rows.map(({ severity, count, percent }) => ({ severity, count, percent })), [
+    { severity: 'Hoog', count: '02', percent: '67%' },
+    { severity: 'Middel', count: '01', percent: '33%' },
+    { severity: 'Laag', count: '00', percent: '0%' }
   ]);
-  assert.ok(Math.abs(parseFloat(reviewState.rows[0].width) - 2 / 3 * 100) < 0.01);
-  assert.ok(Math.abs(parseFloat(reviewState.rows[1].width) - 1 / 3 * 100) < 0.01);
+  assert.equal(reviewState.rows[0].width, '67%');
+  assert.equal(reviewState.rows[1].width, '33%');
   assert.equal(reviewState.rows[2].width, '0%');
   const documentOrigin = new URL(popup.url()).origin;
   const remoteRequests = [];
