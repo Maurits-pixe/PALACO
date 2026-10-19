@@ -5,6 +5,17 @@ on:
     branches: [main]
     paths:
       - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+      - "tools/pvs001_workspace_integrity.py"
+      - "tools/test_pvs001_workspace_integrity.py"
+      - "tools/pvs002_cross_crate_contracts.py"
+      - ".github/workflows/go-08-pvs-002.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
       - "crates/**"
       - "tools/pvs001_workspace_integrity.py"
       - "tools/test_pvs001_workspace_integrity.py"

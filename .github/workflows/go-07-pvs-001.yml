@@ -12,6 +12,17 @@ on:
       - "tools/pvs001_workspace_integrity.py"
       - "tools/test_pvs001_workspace_integrity.py"
       - ".github/workflows/go-07-pvs-001.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "crates/**"
+      - "docs/**"
+      - "tests/**"
+      - "evidence/**"
+      - "tools/pvs001_workspace_integrity.py"
+      - "tools/test_pvs001_workspace_integrity.py"
+      - ".github/workflows/go-07-pvs-001.yml"
   workflow_dispatch:
 
 permissions:

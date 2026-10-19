@@ -2116,6 +2116,17 @@ both toolchains. The CI format step now checks only, rather than silently
 formatting files and continuing.
 
 These are local results, not evidence that GitHub CI or CodeQL completed.
+Additional local validation (2026-10-19) also passed on GO-06/GO-08's pinned
+Rust 1.98.1 with disposable PostgreSQL 17: workspace check, build, all 58 tests,
+the Rustdoc example, strict Clippy and formatting. Six Python regression tests
+and PVS-001/PVS-002 also pass locally. GO-06/07/08 now include path-scoped
+`pull_request` checks targeting `main`, alongside their existing push/manual
+triggers; GO-06 explicitly runs Rustdoc examples as well as all-target tests.
+These ordinary PR checks retain read-only permissions and GitHub's execution
+approval requirements; they do not use privileged `pull_request_target`.
+The latest inspected PALACO L.A. run
+[39214144567](https://github.com/Maurits-pixe/PALACO/actions/runs/39214144567)
+still has `action_required` with zero jobs, not a test result.
 The GO-06 workspace-test failure in
 [run 37801980437](https://github.com/Maurits-pixe/PALACO/actions/runs/37801980437)
 reported missing `DATABASE_URL` in all five PostgreSQL integration tests.
@@ -2126,7 +2137,8 @@ ports bound to runner loopback, not a deployment configuration.
 That PostgreSQL 17 container configuration and connection URL were also exercised
 locally: all five database integration tests, 58 workspace tests and the Rustdoc
 example passed, with strict Clippy and full-workspace formatting clean. This
-checks the service wiring locally, not the pinned CI toolchain or a GitHub run.
+checked the service wiring locally; the subsequent Rust 1.98.1 validation above
+also covers the pinned toolchain, but neither establishes a successful GitHub run.
 The separate PVS-001 membership failure in GO-08
 [run 37801980240](https://github.com/Maurits-pixe/PALACO/actions/runs/37801980240)
 was reproduced locally. PVS-001 now explicitly includes `palaco-la` as an
