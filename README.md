@@ -122,6 +122,15 @@ broninformatie bevatten en zijn niet automatisch geschikt voor logging.
 Eerdere regels blijven staan; een schrijffout kan een gedeeltelijke laatste
 regel achterlaten. Deze API flusht niet en biedt geen rollback of retrygarantie.
 
+Bij een bronfout kunnen eerdere rapporten nog in een eigen `BufWriter` staan.
+Alleen de fout retourneren of de buffer laten vallen voorkomt niet dat bytes
+worden geschreven: `BufWriter` probeert bij `drop` resterende data weg te
+schrijven. De aanroeper kan `into_parts()` gebruiken om bestemming en
+resterende bytes zonder flush terug te nemen en de bytes bewust te verwerpen.
+Data die al aan de onderliggende bestemming is geleverd, wordt niet teruggedraaid.
+De bronfout mag ook een geleende, eigen foutwaarde zijn; de batch-API vereist
+geen `Error`, `Debug` of `Clone` voor het verwerken en retourneren daarvan.
+
 Een lange of doorlopende bron kan begrensd worden met
 `write_plan_inspections_jsonl(input.by_ref().take(n), &mut destination)`.
 De volgende aanroep kan dezelfde iterator vervolgen: de writer leest niet

@@ -28,6 +28,66 @@ fn plans() -> Result<Vec<RuntimePlan>, ContractError> {
     .collect()
 }
 
+#[test]
+fn source_failure_preserves_buffered_reports_for_explicit_discard()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let mut expected = Vec::new();
+    write_plan_inspection_json(&plans[0], &mut expected)?;
+    let mut output = BufWriter::with_capacity(
+        4096,
+        Destination {
+            bytes: Vec::new(),
+            remaining: usize::MAX,
+        },
+    );
+    let mut input = [Ok(&plans[0]), Err("source failed"), Ok(&plans[1])].into_iter();
+    let error = try_write_plan_inspections_jsonl(&mut input, &mut output)
+        .expect_err("source must fail after one buffered report");
+    assert!(matches!(
+        error,
+        PlanInspectionWriteError::Source("source failed")
+    ));
+    assert_eq!(output.buffer(), expected);
+    assert!(output.get_ref().bytes.is_empty());
+    assert_eq!(input.next(), Some(Ok(&plans[1])));
+
+    let (destination, pending) = output.into_parts();
+    assert_eq!(pending.expect("writer did not panic"), expected);
+    assert!(destination.bytes.is_empty());
+    Ok(())
+}
+
+#[test]
+fn borrowed_source_errors_need_no_error_debug_or_clone_implementation()
+-> Result<(), Box<dyn std::error::Error>> {
+    struct SourceFailure {
+        detail: String,
+    }
+    let failure = SourceFailure {
+        detail: "caller-owned detail".into(),
+    };
+    let mut output = Vec::new();
+    let result = try_write_plan_inspections_jsonl(
+        std::iter::once(Err::<&RuntimePlan, _>(&failure)),
+        &mut output,
+    );
+    let error = match result {
+        Err(error) => error,
+        Ok(()) => panic!("source error must propagate"),
+    };
+    assert_eq!(error.to_string(), "plan inspection source failed");
+    match error {
+        PlanInspectionWriteError::Source(original) => {
+            assert!(std::ptr::eq(original, &failure));
+            assert_eq!(original.detail, "caller-owned detail");
+        }
+        PlanInspectionWriteError::Output(_) => panic!("unexpected output error"),
+    }
+    assert!(output.is_empty());
+    Ok(())
+}
+
 struct Destination {
     bytes: Vec<u8>,
     remaining: usize,

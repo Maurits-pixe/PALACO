@@ -132,6 +132,10 @@ impl<E: std::error::Error + 'static> std::error::Error for PlanInspectionWriteEr
 /// Errors are returned, never serialized into the report stream. Their `Debug`
 /// representation and error chain may contain caller-provided sensitive data.
 /// Success still requires a caller-owned flush for buffered destinations.
+/// On source failure, earlier reports may remain in a caller-owned buffer.
+/// Dropping a `BufWriter` may still write those bytes. Use its `into_parts` to
+/// recover and discard pending bytes without flushing; bytes already delivered
+/// to the underlying destination cannot be retracted.
 pub fn try_write_plan_inspections_jsonl<'a, E>(
     plans: impl IntoIterator<Item = Result<&'a RuntimePlan, E>>,
     output: &mut (impl Write + ?Sized),
