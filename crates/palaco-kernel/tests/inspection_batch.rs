@@ -65,6 +65,63 @@ fn summaries_keep_disposition_and_validation_counts_separate()
 }
 
 #[test]
+fn checked_summary_addition_matches_chunks_and_counts_overlapping_observations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    let whole = summarize_plans(&plans);
+    let empty = PlanInspectionSummary::default();
+    assert_eq!(whole.checked_add(empty), Some(whole));
+    assert_eq!(empty.checked_add(whole), Some(whole));
+    for split in 0..=plans.len() {
+        let left = summarize_plans(&plans[..split]);
+        let right = summarize_plans(&plans[split..]);
+        assert_eq!(left.checked_add(right), Some(whole));
+        assert_eq!(right.checked_add(left), Some(whole));
+    }
+    let folded = plans
+        .chunks(1)
+        .try_fold(empty, |sum, chunk| sum.checked_add(summarize_plans(chunk)));
+    assert_eq!(folded, Some(whole));
+    let duplicate = [plans[0].clone(), plans[0].clone()];
+    let single = summarize_plans(&plans[..1]);
+    assert_eq!(
+        single.checked_add(single),
+        Some(summarize_plans(&duplicate))
+    );
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn checked_summary_addition_checks_every_public_counter_without_mutation() {
+    fn fields(summary: &mut PlanInspectionSummary) -> [&mut usize; 6] {
+        [
+            &mut summary.total,
+            &mut summary.execute,
+            &mut summary.hold,
+            &mut summary.deny,
+            &mut summary.contract_valid,
+            &mut summary.contract_invalid,
+        ]
+    }
+
+    for index in 0..6 {
+        let mut maximum = PlanInspectionSummary::default();
+        let mut one = PlanInspectionSummary::default();
+        let zero = PlanInspectionSummary::default();
+        *fields(&mut maximum)[index] = usize::MAX;
+        *fields(&mut one)[index] = 1;
+        let original = maximum;
+        assert_eq!(maximum.checked_add(zero), Some(maximum));
+        assert_eq!(zero.checked_add(maximum), Some(maximum));
+        assert_eq!(maximum.checked_add(one), None);
+        assert_eq!(one.checked_add(maximum), None);
+        assert_eq!(maximum, original);
+    }
+}
+
+#[test]
 fn repeated_plans_count_per_entry_and_local_summary_edits_are_isolated()
 -> Result<(), Box<dyn std::error::Error>> {
     let plans = plans()?;

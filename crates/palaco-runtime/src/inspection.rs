@@ -52,6 +52,27 @@ pub struct PlanInspectionSummary {
     pub contract_invalid: usize,
 }
 
+impl PlanInspectionSummary {
+    /// Adds observation counts field by field, returning `None` on any overflow.
+    ///
+    /// Allows callers to combine finite chunk summaries without collecting all
+    /// plans. Overlapping chunks count observations again; no deduplication,
+    /// authentication or consistency validation of public fields is performed.
+    /// Inputs are unchanged on success or failure. No execution permission is
+    /// granted, and existing JSON writers still inspect plans directly.
+    #[must_use]
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        Some(Self {
+            total: self.total.checked_add(other.total)?,
+            execute: self.execute.checked_add(other.execute)?,
+            hold: self.hold.checked_add(other.hold)?,
+            deny: self.deny.checked_add(other.deny)?,
+            contract_valid: self.contract_valid.checked_add(other.contract_valid)?,
+            contract_invalid: self.contract_invalid.checked_add(other.contract_invalid)?,
+        })
+    }
+}
+
 /// Summarizes a finite slice without modifying plans, allocating or performing I/O.
 ///
 /// Each entry is inspected once using [`inspect_plan`]. Repeated entries count

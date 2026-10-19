@@ -88,6 +88,13 @@ Dit zijn observaties van de bestaande contracten, geen uitvoeringsstatistieken,
 geverifieerde autoriteit of toestemming. Plannen en bestaande JSON-contracten
 blijven ongewijzigd.
 
+Met `summary.checked_add(other)` kunnen samenvattingen van eindige deelbatches
+zonder het verzamelen van alle plannen worden gecombineerd. Elke teller wordt
+afzonderlijk op overflow gecontroleerd; bij overflow volgt `None`, zonder
+gewijzigde invoer of een gedeeltelijk resultaat. Overlappende batches tellen
+observaties opnieuw. De methode valideert geen samenhang van publiek gewijzigde
+velden, authenticeert niets en verleent geen uitvoeringsrechten.
+
 `write_plan_inspection_summary_json(&plans, &mut output)` schrijft deze tellingen
 als één apart `plan-inspection-summary`-JSON-object (`schema_version: 1`) met
 afsluitende newline, `execution_performed: false` en `authority_verified: false`.
