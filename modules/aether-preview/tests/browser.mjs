@@ -107,6 +107,13 @@ try {
   });
   await page.getByRole('status').filter({ hasText: 'Versleutelde back-up geïmporteerd' }).waitFor();
   assert.equal(await page.locator('.vault-list li').count(), 1);
+  await page.locator('.backup-import input').setInputFiles({
+    name: 'ongeldige-backup.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from('{"schema":"unknown"}')
+  });
+  await page.getByRole('alert').filter({ hasText: 'Onbekend of ongeldig' }).waitFor();
+  assert.equal(await page.locator('.vault-list li').count(), 1);
 
   await page.locator('#vault-passphrase').fill('onjuiste wachtzin testwaarde');
   await page.getByRole('button', { name: 'ONTGRENDEL' }).click();
@@ -121,6 +128,9 @@ try {
   assert.equal(restored.suggestedFilename(), originalName);
   const restoredPath = await restored.path();
   assert.equal(await fs.promises.readFile(restoredPath, 'utf8'), originalContent);
+  page.once('dialog', dialog => dialog.dismiss());
+  await page.getByRole('button', { name: 'WIS KLUIS' }).click();
+  assert.equal(await page.locator('.vault-list li').count(), 1);
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'WIS KLUIS' }).click();
   await page.locator('.vault-list').waitFor({ state: 'detached' });
