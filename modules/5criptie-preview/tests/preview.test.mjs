@@ -4,6 +4,7 @@ import test from 'node:test';
 import { events, metrics, trafficSamples } from '../src/telemetry.js';
 
 const manifest = JSON.parse(await readFile(new URL('../public/.well-known/palaco-app.json', import.meta.url), 'utf8'));
+const appSource = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
 
 test('launcher metadata identifies 5CRIPTIE as a preview only', () => {
   assert.equal(manifest.appId, '5criptie');
@@ -16,4 +17,8 @@ test('dashboard fixtures are static and labeled as synthetic', () => {
   assert.equal(trafficSamples.length, 12);
   assert.ok(events.every(event => event.source.includes('fixture')));
   assert.ok(Object.isFrozen(metrics) && Object.isFrozen(events) && Object.isFrozen(trafficSamples));
+});
+
+test('dashboard contains no network collection or scan client', () => {
+  assert.doesNotMatch(appSource, /\bfetch\s*\(|\bWebSocket\b|\bXMLHttpRequest\b|sendBeacon/);
 });

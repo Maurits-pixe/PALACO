@@ -10,18 +10,6 @@ Het dashboard toont de gemeten duur en het resultaat van de laatste metadata-che
 
 Gebruik Node 22.12 of nieuwer; deze candidate is uitgevoerd met Node 24.19.0. De dependencies staan exact gepind in `package.json` en `package-lock.json`.
 
-Start de lokale 5CRIPTIE-interface in een tweede terminal om de metadata-check vanuit de launcher te demonstreren:
-
-```bash
-cd ../5criptie-preview
-npm ci
-mkdir certs
-mkcert -cert-file certs/localhost.pem -key-file certs/localhost-key.pem localhost 127.0.0.1 ::1
-npm run dev
-```
-
-Open daarna de launcher op `https://127.0.0.1:5173`, voer voor 5CRIPTIE `https://localhost:5176` in en kies **Opslaan & verifiëren**. 5CRIPTIE serveert alleen statische metadata en vaste synthetische fixtures; dit is geen echte monitor, heartbeat of security-analyse. De preview is niet toegevoegd aan Render of andere publieke hosting.
-
 ```bash
 npm ci
 mkdir certs
@@ -32,6 +20,18 @@ npm run dev
 Voor deze mkcert-opdracht moeten mkcert en jouw vertrouwde lokale CA al zijn ingericht volgens de [mkcert-handleiding](https://github.com/FiloSottile/mkcert). De uitvoerbestandsnamen komen exact overeen met de configuratie. Er zijn geen private certificaatsleutels meegeleverd of CA's in het systeem geïnstalleerd tijdens deze bouwstap.
 
 Open **https://127.0.0.1:5173**. Dev en preview gebruiken dezelfde vaste poort en uitsluitend HTTPS. Ontbrekende/ongeldige certificaatbestanden of een bezette poort blokkeren de server. Er is geen stille HTTP-fallback.
+
+Start voor een lokale 5CRIPTIE-metadata-check een tweede terminal:
+
+```bash
+cd ../5criptie-preview
+npm ci
+mkdir certs
+mkcert -cert-file certs/localhost.pem -key-file certs/localhost-key.pem localhost 127.0.0.1 ::1
+npm run dev
+```
+
+In de launcher voer je voor 5CRIPTIE `https://localhost:5176` in en kies je **Opslaan & verifiëren**. 5CRIPTIE serveert alleen statische metadata en vaste synthetische fixtures; dit is geen echte monitor, heartbeat of security-analyse. De preview is niet toegevoegd aan Render of andere publieke hosting.
 
 Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
 
