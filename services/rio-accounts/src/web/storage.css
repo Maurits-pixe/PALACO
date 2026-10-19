@@ -1,0 +1,14 @@
+.vault-page .card + .card { margin-top: 1.25rem; }
+.vault-page .field select {
+  min-height: 48px;
+  max-width: 100%;
+  padding: .6rem .8rem;
+  border: 1.5px solid var(--navy);
+  border-radius: .6rem;
+  background: var(--paper);
+  color: var(--navy);
+  font: inherit;
+}
+.vault-page #vault-list { list-style: none; padding: 0; margin-top: 1rem; }
+.vault-page #vault-list li { border-top: 1px solid var(--line); padding-block: 1rem; }
+.vault-page .object-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .6rem; }

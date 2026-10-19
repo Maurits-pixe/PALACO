@@ -1,9 +1,9 @@
 name: Pinned ecosystem integration
 on:
   push:
-    branches: ['codex/ecosystem-document-exchange']
+    branches: ['codex/ecosystem-document-exchange', 'codex/rio-cmv-document-vault']
   pull_request:
-    branches: ['codex/rio-cmv-verified-delete']
+    branches: ['codex/rio-cmv-verified-delete', 'codex/ecosystem-document-exchange']
 permissions:
   contents: read
 jobs:
@@ -17,7 +17,7 @@ jobs:
           repository: Maurits-pixe/PALACO
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           path: PALACO-dev
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: false
           sparse-checkout: |
             ecosystem

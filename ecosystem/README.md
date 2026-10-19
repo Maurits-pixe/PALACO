@@ -49,3 +49,29 @@ is served only by the opt-in storage router; it grants no independent access.
 
 This slice supplies tested data adapters and a reproducible authenticated flow.
 It does not mount new Book/Q&A application routes or unify production identities.
+
+The next candidate adds `/storage` exclusively to the existing opt-in CMV router.
+It opens canonical packet files after an explicit local selection, checks the
+content, saves with an explicit retention choice, lists the current account's
+complete verified catalog, opens a pinned document and conditionally erases it.
+The default account/Studio surface stays unchanged. The page reuses the existing
+session/CSRF, exact-origin, CSP and no-store boundaries; it opens no production
+account or contact access.
+
+`storage-vault.mjs` validates lifecycle times, unique IDs, quotas and complete byte
+totals, pins upload acknowledgements to the local bytes and verifies downloads
+against the catalog and inner document. It uses fixed same-origin paths, bounded
+JSON streams and an eight-second deadline, with no automatic mutation retries.
+An uncertain upload retains only its ID/digest/retention/account metadata in
+memory. Reconnecting to the same account and resubmitting identical bytes/retention
+uses the same PUT ID. Logout, page hiding/navigation and account replacement clear
+local data; old requests and file reads cannot repopulate a later session.
+Recovery metadata is deliberately not durable: after leaving, hiding or reloading,
+review the catalog before manually submitting another file. No localStorage,
+IndexedDB, service worker or browser bearer token is used.
+
+The document preview expires using server observation plus elapsed monotonic time,
+independently of changes to the local wall clock. Catalog updates require a fresh
+server read. The existing mandatory TLS browser phase now also exercises the page
+with real provider login, reload, another account, checked erasure and logout on
+primary and restored databases, including 390/1280px layout and touch controls.
