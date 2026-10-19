@@ -31,6 +31,39 @@ pub fn inspect_plan(plan: &RuntimePlan) -> PlanInspection {
     }
 }
 
+/// Writes one schema-version-1 plan-inspection JSON object and a newline.
+///
+/// Observes the supplied plan directly, never a caller-modified report copy.
+/// Only fixed descriptors are serialized; evidence identifiers are excluded.
+/// `contract_valid` records validation success, not execution permission:
+/// held and denied plans may be valid. No execution or independent authority
+/// verification is performed. This is not an authorization receipt.
+///
+/// The caller owns flushing and persistence. For validation error details, use
+/// [`inspect_plan`] instead. The status-JSON contract is unaffected.
+///
+/// # Errors
+///
+/// Returns the destination's write error; output may be partial on failure.
+/// Contract validation failure is represented by `contract_valid: false`, not
+/// an I/O error.
+pub fn write_plan_inspection_json(
+    plan: &RuntimePlan,
+    output: &mut (impl Write + ?Sized),
+) -> io::Result<()> {
+    let report = inspect_plan(plan);
+    let disposition = match report.disposition {
+        ContractDisposition::Execute => "execute",
+        ContractDisposition::Hold => "hold",
+        ContractDisposition::Deny => "deny",
+    };
+    writeln!(
+        output,
+        "{{\"schema_version\":1,\"report_type\":\"plan-inspection\",\"disposition\":\"{disposition}\",\"contract_valid\":{},\"execution_performed\":false,\"authority_verified\":false}}",
+        report.validation.is_ok()
+    )
+}
+
 /// Descriptive inspection data, never evidence, permission or live host health.
 ///
 /// Changing a local copy does not change the interface or authorize execution.

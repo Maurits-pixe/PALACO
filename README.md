@@ -78,6 +78,17 @@ geen bewijs, ververst geen autoriteit en controleert geen actuele intrekking;
 ook `Execute` is geen nieuw autorisatiebewijs of beschikbare uitvoeringshost.
 Een lokaal gewijzigde rapportkopie verandert het oorspronkelijke plan niet.
 
+`write_plan_inspection_json(&plan, &mut destination)` schrijft die observatie als
+één JSON-object plus newline. Het afzonderlijke contract heeft `schema_version: 1`,
+`report_type: "plan-inspection"`, `disposition` (`execute`, `hold` of `deny`) en
+`contract_valid` als boolean. `execution_performed` en `authority_verified`
+zijn altijd `false`. Bewijsidentificatoren en eventteksten worden niet opgenomen.
+De writer leest het plan rechtstreeks, flusht niet en retourneert schrijffouten;
+gedeeltelijke uitvoer moet worden verworpen. Validatiefouten staan als
+`contract_valid: false` in het rapport; details blijven beschikbaar via de
+getypeerde API. Dit wijzigt de CLI of het bestaande status-JSON niet en is geen
+autorisatiebewijs.
+
 Een uitvoerbaar integratievoorbeeld gebruikt de bibliotheek rechtstreeks en
 schrijft hetzelfde JSON-rapport via een eigen `BufWriter` naar stdout:
 
