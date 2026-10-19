@@ -65,6 +65,18 @@ altered retries still conflict. This reservation applies only to new admissions:
 legacy already-full logs cannot exceed the verifier cap and require separate
 handling/**HOLD**; no migration or cap bypass is provided.
 
+Opening a store and each submit (including retries), revoke and export validate
+persisted source metadata, bounded strict JSON, complete fixed-data hash/link groups,
+terminal-only revocation and the exact one-to-one request/receipt mapping inside
+their transaction. Corruption rejects with rollback: no repair, reseal, truncation
+or recreation of missing metadata over existing records/requests. Empty and
+revoked-only stores remain valid internally; the standalone checker still requires
+a committed group. Valid legacy historical retries remain available.
+This is structural consistency, not authenticity or rollback detection: coherent
+suffix removal together with its request rows can still pass without a trusted
+caller-held proof anchor. It does not defend against malicious schema triggers or
+arbitrary SQL ownership.
+
 The exactly sixteen `wf_t01`–`wf_t16` methods are **proposed local mappings only**,
 not official scenarios whose definitions are absent:
 
@@ -90,6 +102,8 @@ not official scenarios whose definitions are absent:
 `test_hardening.py` adds ordinary unittest anchor, readonly and on-disk capacity
 regressions (including the actual 1000-record bound), not official WF mappings
 or additions to the sixteen local scenarios.
+`test_recovery.py` adds on-disk persisted-corruption/restart/no-auto-repair checks,
+including mutations through a second connection after opening.
 
 These checks demonstrate local SQLite `BEGIN IMMEDIATE`, `synchronous=FULL`
 transaction behavior and process-crash recovery on the tested filesystem, not
