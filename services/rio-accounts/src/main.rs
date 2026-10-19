@@ -1,6 +1,6 @@
 use axum_server::tls_rustls::RustlsConfig;
 use rio_accounts::endpoint_policy::{ENDPOINT_DOCUMENT_LIMIT, StagingEndpointPlan};
-use rio_accounts::{AppState, DevConfig, router};
+use rio_accounts::{AppState, DevConfig, router, router_with_cmv_storage};
 use std::{
     ffi::OsString,
     io::{self, Read, Write},
@@ -48,15 +48,21 @@ async fn run(arguments: Vec<OsString>) -> Result<(), Box<dyn std::error::Error +
         println!("RIO synthetic restore fence committed; restored sessions stay closed.");
         return Ok(());
     }
-    if !arguments.is_empty() {
+    let cmv = arguments == ["--cmv-storage"];
+    if !arguments.is_empty() && !cmv {
         return Err(std::io::Error::other("unsupported synthetic service command").into());
     }
     let tls = RustlsConfig::from_pem_file(&config.tls_cert, &config.tls_key).await?;
     let state = AppState::discover(&config).await?;
+    let app = if cmv {
+        router_with_cmv_storage(state).await?
+    } else {
+        router(state)
+    };
     let address = SocketAddr::from(([127, 0, 0, 1], 8088));
     println!("RIO SYNTHETIC_ONLY: https://localhost:8088; ACCOUNT-1 HOLD");
     axum_server::bind_rustls(address, tls)
-        .serve(router(state).into_make_service())
+        .serve(app.into_make_service())
         .await?;
     Ok(())
 }

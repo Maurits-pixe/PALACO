@@ -247,6 +247,37 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
     const betaAccount = await assertOwnAccount(betaPage, credentials.beta.username);
     const alphaCookie = await assertCookie(alpha, alphaPage);
     const betaCookie = await assertCookie(beta, betaPage);
+    if (process.env.RIO_CMV_HTTP_PROOF === '1') {
+      await test.step('cmv-objects', async () => {
+        const objectId = await alphaPage.evaluate(() => {
+          const bytes = crypto.getRandomValues(new Uint8Array(32));
+          return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        });
+        const request = async (page, method, path, csrf, body) => page.evaluate(async args => {
+          const headers = args.csrf ? {'content-type':'application/json','x-csrf-token':args.csrf} : {};
+          const response = await fetch(args.path, {method:args.method,headers,
+            credentials:'same-origin',cache:'no-store',...(args.body ? {body:JSON.stringify(args.body)} : {})});
+          const data = response.ok ? await response.json() : null;
+          return {status:response.status, noStore:response.headers.get('cache-control')==='no-store',
+            closed:data ? data.accountActive===false && data.canOpenContact===false && data.operativeAuthority==='NONE' : true,
+            payloadMatches:data?.object?.payload==='YnJvd3NlciBmaXh0dXJl'};
+        }, {method,path,csrf,body});
+        const body={objectId,payload:'YnJvd3NlciBmaXh0dXJl',retentionMs:60000};
+        const path='/api/storage/objects/'+objectId;
+        expect((await request(alphaPage,'POST','/api/storage/objects',betaAccount.csrfToken,body)).status).toBe(403);
+        const created=await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body);
+        expect(created.status).toBe(201); expect(created.noStore && created.closed).toBe(true);
+        const own=await request(alphaPage,'GET',path,null,null);
+        expect(own.status).toBe(200); expect(own.payloadMatches && own.noStore && own.closed).toBe(true);
+        expect((await request(betaPage,'GET',path,null,null)).status).toBe(403);
+        expect((await request(betaPage,'DELETE',path,betaAccount.csrfToken,{})).status).toBe(403);
+        expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
+        expect((await request(alphaPage,'DELETE',path,alphaAccount.csrfToken,{})).status).toBe(200);
+        expect((await request(alphaPage,'GET',path,null,null)).status).toBe(403);
+        expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
+        expect((await request(betaPage,'GET','/api/storage/usage',null,null)).status).toBe(200);
+      });
+    }
     await test.step('context-isolation', async () => {
       expect(alphaCookie.value !== betaCookie.value).toBe(true);
       expect(alphaAccount.csrfToken !== betaAccount.csrfToken).toBe(true);

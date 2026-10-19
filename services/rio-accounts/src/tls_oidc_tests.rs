@@ -1,6 +1,6 @@
 //! Test-only HTTPS listener and real Keycloak browser login over TLS-backed storage.
 use crate::{
-    AppState, router,
+    AppState,
     tls_database::{SyntheticTlsDbConfig, SyntheticTlsRestoreDbConfig},
 };
 use axum_server::{Handle, tls_rustls::RustlsConfig};
@@ -194,7 +194,12 @@ impl Server {
             axum_server::from_tcp_rustls(listener, tls)
                 .map_err(|_| rejected())?
                 .handle(handle.clone())
-                .serve(router(state).into_make_service()),
+                .serve(
+                    crate::router_with_cmv_storage(state)
+                        .await
+                        .map_err(|_| rejected())?
+                        .into_make_service(),
+                ),
         );
         let server = Self { handle, task };
         let address = timeout(Duration::from_secs(5), server.handle.listening())
@@ -268,6 +273,9 @@ async fn browser(verification: &Path, target: ProofTarget) -> io::Result<ExitSta
             command.env_remove(name);
         }
     }
+    // Set only after removing inherited test selectors; the optional routes are
+    // mandatory in this owned TLS proof and never inferred from a browser response.
+    command.env("RIO_CMV_HTTP_PROOF", "1");
     let mut child = command.spawn().map_err(|_| rejected())?;
     match timeout(Duration::from_secs(145), child.wait()).await {
         Ok(Ok(status)) => Ok(status),
