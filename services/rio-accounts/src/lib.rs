@@ -311,6 +311,24 @@ impl AppState {
         Self::discover_with_store(client_secret, db).await
     }
 
+    /// Recover the fixed TLS clone before discovering the fixed loopback synthetic IdP.
+    /// Each explicit call fences old sessions, flows and consent before any state is returned.
+    /// A later discovery failure leaves that fence committed and returns no service state.
+    /// The normal launcher gains no restore target or configuration selector.
+    pub async fn discover_tls_synthetic_restore(
+        mode: &str,
+        client_secret: &str,
+        database: &tls_database::SyntheticTlsRestoreDbConfig,
+    ) -> Result<Self, io::Error> {
+        validate_synthetic_credentials(mode, client_secret)?;
+        let db = Arc::new(
+            PgStore::connect_tls_synthetic_restore(database)
+                .await
+                .map_err(|_| io::Error::other("synthetic TLS restore database unavailable"))?,
+        );
+        Self::discover_with_store(client_secret, db).await
+    }
+
     async fn discover_with_store(client_secret: &str, db: Arc<PgStore>) -> Result<Self, io::Error> {
         // Storage transport never selects or changes provider/browser endpoints.
         let endpoints = RuntimeEndpoints::loopback();

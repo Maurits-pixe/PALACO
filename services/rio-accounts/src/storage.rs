@@ -407,6 +407,10 @@ async fn validate_bootstrap(tx: &Transaction<'_>) -> Result<(), StoreError> {
 #[path = "storage_bootstrap_tests.rs"]
 mod bootstrap_tests;
 
+#[cfg(test)]
+#[path = "storage_tls_restore_tests.rs"]
+pub(crate) mod tls_restore_tests;
+
 impl PgStore {
     /// Connect only to fixed loopback PostgreSQL; initialize or validate atomically.
     /// The isolated restore database is fenced before this method returns.
@@ -429,7 +433,7 @@ impl PgStore {
                 connection: task.abort_handle(),
             }),
         };
-        store.initialize_or_validate().await?;
+        store.initialize_or_validate(false).await?;
         if restore {
             store.recover_after_restore().await?;
         }
@@ -441,16 +445,31 @@ impl PgStore {
     pub async fn connect_tls_synthetic(
         config: &crate::tls_database::SyntheticTlsDbConfig,
     ) -> Result<Self, StoreError> {
-        let connection = config.connect().await?;
-        let store = Self {
+        let store = Self::from_tls_connection(config.connect().await?);
+        store.initialize_or_validate(false).await?;
+        Ok(store)
+    }
+
+    /// Fence the fixed TLS restore database before returning any usable store.
+    /// An absent or incomplete restored namespace is refused without bootstrapping.
+    /// Each recovery advances epochs and clears sessions, login flows and consent grants.
+    pub async fn connect_tls_synthetic_restore(
+        config: &crate::tls_database::SyntheticTlsRestoreDbConfig,
+    ) -> Result<Self, StoreError> {
+        let store = Self::from_tls_connection(config.connect().await?);
+        store.initialize_or_validate(true).await?;
+        store.recover_after_restore().await?;
+        Ok(store)
+    }
+
+    fn from_tls_connection(connection: crate::tls_database::TlsConnectionParts) -> Self {
+        Self {
             inner: Arc::new(Inner {
                 client: Mutex::new(connection.client),
                 healthy: connection.healthy,
                 connection: connection.connection,
             }),
-        };
-        store.initialize_or_validate().await?;
-        Ok(store)
+        }
     }
 
     async fn timed<T>(
@@ -472,7 +491,7 @@ impl PgStore {
         result
     }
 
-    async fn initialize_or_validate(&self) -> Result<(), StoreError> {
+    async fn initialize_or_validate(&self, require_existing: bool) -> Result<(), StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
             let tx = client.transaction().await?;
@@ -487,6 +506,9 @@ impl PgStore {
                 .try_get(0)?;
             // An existing namespace is never treated as permission to repair identity data.
             if !exists {
+                if require_existing {
+                    return Err(StoreError::Unavailable);
+                }
                 tx.batch_execute(include_str!("../migrations/0001_synthetic_accounts.sql"))
                     .await?;
             }
@@ -826,7 +848,7 @@ impl PgStore {
     }
 
     /// Fence an explicitly restored snapshot before it serves any bearer.
-    /// Normal connections to rio_synthetic preserve sessions. The restore database invokes this automatically.
+    /// Ordinary connections preserve sessions; restore constructors invoke this before return.
     pub async fn recover_after_restore(&self) -> Result<(), StoreError> {
         self.timed(async {
             let mut client = self.inner.client.lock().await;
