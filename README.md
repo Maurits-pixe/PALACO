@@ -2105,6 +2105,26 @@ does not revalidate time freshness.
 | Tested | Focused tests cover exact retries, input conflicts, authority rejection, revocation ordering, independent instances, concurrent callers, poisoning, and sequence exhaustion. Workspace validation is reported separately in the PR. |
 | Security-validated | **PENDING/UNKNOWN**. The previously reported CodeQL timeout is not a security pass. Tests, Clippy, and formatting do not establish security validation. |
 
+Local validation (2026-10-19): with Rust 1.99.0 and a local PostgreSQL service,
+`cargo build --workspace --all-targets`, `cargo test --workspace --all-targets`
+(58 tests), `cargo test --workspace --doc` (one executable example), and
+`cargo clippy --workspace --all-targets -- -D warnings` passed. Citadel API
+documentation also builds with `RUSTDOCFLAGS="-D warnings"`.
+`cargo fmt --all -- --check` passes on both Rust 1.99.0 and the PALACO L.A.
+workflow's pinned Rust 1.90.0; this is not a claim that builds/tests were run on
+both toolchains. The CI format step now checks only, rather than silently
+formatting files and continuing.
+
+These are local results, not evidence that GitHub CI or CodeQL completed.
+The inspected PALACO L.A. run
+[39201803436](https://github.com/Maurits-pixe/PALACO/actions/runs/39201803436)
+has `action_required` with no executed jobs or job logs. A maintainer must
+resolve that GitHub-side requirement before CI execution can be evaluated.
+Partial CodeQL results for Actions/JavaScript do not validate the ERA-009 Rust
+model; an overall timeout or incomplete language coverage remains
+**PENDING/UNKNOWN**. An unavailable automated reviewer is likewise not a review
+pass. None of these checks adds production or security guarantees.
+
 Share one gate instance across participating threads. Successful new commits and
 the first revocation consume a single local sequence starting at one; rejected
 requests, exact retries, and repeated revocations do not. An idempotency key
