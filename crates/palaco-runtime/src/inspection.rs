@@ -73,6 +73,27 @@ impl PlanInspectionSummary {
     }
 }
 
+fn observation_counts(report: PlanInspection) -> PlanInspectionSummary {
+    PlanInspectionSummary {
+        total: 1,
+        execute: usize::from(report.disposition == ContractDisposition::Execute),
+        hold: usize::from(report.disposition == ContractDisposition::Hold),
+        deny: usize::from(report.disposition == ContractDisposition::Deny),
+        contract_valid: usize::from(report.validation.is_ok()),
+        contract_invalid: usize::from(report.validation.is_err()),
+    }
+}
+
+fn summarize_observations(
+    reports: impl IntoIterator<Item = PlanInspection>,
+    mut summary: PlanInspectionSummary,
+) -> Option<PlanInspectionSummary> {
+    for report in reports {
+        summary = summary.checked_add(observation_counts(report))?;
+    }
+    Some(summary)
+}
+
 /// Summarizes a finite slice without modifying plans, allocating or performing I/O.
 ///
 /// Each entry is inspected once using [`inspect_plan`]. Repeated entries count
@@ -86,17 +107,12 @@ pub fn summarize_plans(plans: &[RuntimePlan]) -> PlanInspectionSummary {
         ..PlanInspectionSummary::default()
     };
     for plan in plans {
-        let report = inspect_plan(plan);
-        match report.disposition {
-            ContractDisposition::Execute => summary.execute += 1,
-            ContractDisposition::Hold => summary.hold += 1,
-            ContractDisposition::Deny => summary.deny += 1,
-        }
-        if report.validation.is_ok() {
-            summary.contract_valid += 1;
-        } else {
-            summary.contract_invalid += 1;
-        }
+        let counts = observation_counts(inspect_plan(plan));
+        summary.execute += counts.execute;
+        summary.hold += counts.hold;
+        summary.deny += counts.deny;
+        summary.contract_valid += counts.contract_valid;
+        summary.contract_invalid += counts.contract_invalid;
     }
     summary
 }
@@ -118,11 +134,94 @@ pub fn summarize_plans(plans: &[RuntimePlan]) -> PlanInspectionSummary {
 pub fn summarize_plan_iter<'a>(
     plans: impl IntoIterator<Item = &'a RuntimePlan>,
 ) -> Option<PlanInspectionSummary> {
-    let mut summary = PlanInspectionSummary::default();
-    for plan in plans {
-        summary = summary.checked_add(summarize_plans(std::slice::from_ref(plan)))?;
+    summarize_observations(
+        plans.into_iter().map(inspect_plan),
+        PlanInspectionSummary::default(),
+    )
+}
+
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+
+    #[test]
+    fn synthetic_observation_matrix_keeps_disposition_and_validation_independent() {
+        let mut reports = Vec::new();
+        for disposition in [
+            ContractDisposition::Execute,
+            ContractDisposition::Hold,
+            ContractDisposition::Deny,
+        ] {
+            for validation in [
+                Ok(()),
+                Err(ContractError::MissingEvidence),
+                Err(ContractError::RevokedAuthority),
+                Err(ContractError::ExpiredAuthority),
+                Err(ContractError::AuthorityInDoubt),
+            ] {
+                let report = PlanInspection {
+                    disposition,
+                    validation,
+                };
+                let counts = observation_counts(report);
+                assert_eq!(counts.total, 1);
+                assert_eq!(
+                    counts.execute,
+                    usize::from(disposition == ContractDisposition::Execute)
+                );
+                assert_eq!(
+                    counts.hold,
+                    usize::from(disposition == ContractDisposition::Hold)
+                );
+                assert_eq!(
+                    counts.deny,
+                    usize::from(disposition == ContractDisposition::Deny)
+                );
+                assert_eq!(counts.contract_valid, usize::from(validation.is_ok()));
+                assert_eq!(counts.contract_invalid, usize::from(validation.is_err()));
+                reports.push(report);
+            }
+        }
+        let original = reports.clone();
+        let summary =
+            summarize_observations(reports.iter().copied(), PlanInspectionSummary::default())
+                .expect("small observation matrix cannot overflow");
+        assert_eq!(summary.total, 15);
+        assert_eq!((summary.execute, summary.hold, summary.deny), (5, 5, 5));
+        assert_eq!((summary.contract_valid, summary.contract_invalid), (3, 12));
+        assert_eq!(reports, original);
     }
-    Some(summary)
+
+    #[test]
+    fn overflowing_observation_consumes_only_the_failed_item() {
+        let report = PlanInspection {
+            disposition: ContractDisposition::Deny,
+            validation: Err(ContractError::MissingEvidence),
+        };
+        for initial in [
+            PlanInspectionSummary {
+                total: usize::MAX,
+                ..Default::default()
+            },
+            PlanInspectionSummary {
+                deny: usize::MAX,
+                ..Default::default()
+            },
+            PlanInspectionSummary {
+                contract_invalid: usize::MAX,
+                ..Default::default()
+            },
+        ] {
+            let requested = std::cell::Cell::new(0);
+            let mut reports = [report, report].into_iter().inspect(|_| {
+                requested.set(requested.get() + 1);
+            });
+            assert_eq!(summarize_observations(&mut reports, initial), None);
+            assert_eq!(requested.get(), 1);
+            assert_eq!(reports.next(), Some(report));
+            assert_eq!(requested.get(), 2);
+        }
+    }
 }
 
 /// Writes one schema-version-1 plan-inspection-summary JSON object and a newline.

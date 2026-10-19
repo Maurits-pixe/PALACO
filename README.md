@@ -103,6 +103,12 @@ zonder gedeeltelijk resultaat of het volgende plan op te vragen; het falende
 element is al geconsumeerd. Bijwerkingen van de iterator worden niet teruggedraaid.
 Dit blijft uitsluitend observatie, geen uitvoering of autoriteitscontrole.
 
+Slice- en iteratorsamenvattingen delen dezelfde interne observatietelling.
+Unit-tests toetsen alle drie disposities met zowel succesvolle validatie als
+alle vier contractfouten, plus stoppen bij overflow zonder vooruit te lezen.
+Die foutmatrix gebruikt synthetische `PlanInspection`-waarden, geen gefabriceerde
+ongeldige `RuntimePlan`-constructors; de bestaande planvalidatie blijft intact.
+
 `write_plan_inspection_summary_json(&plans, &mut output)` schrijft deze tellingen
 als één apart `plan-inspection-summary`-JSON-object (`schema_version: 1`) met
 afsluitende newline, `execution_performed: false` en `authority_verified: false`.
