@@ -316,7 +316,13 @@ pub fn write_plan_inspection_summary_json(
     plans: &[RuntimePlan],
     output: &mut (impl Write + ?Sized),
 ) -> io::Result<()> {
-    let summary = summarize_plans(plans);
+    write_summary_json(summarize_plans(plans), output)
+}
+
+fn write_summary_json(
+    summary: PlanInspectionSummary,
+    output: &mut (impl Write + ?Sized),
+) -> io::Result<()> {
     writeln!(
         output,
         "{{\"schema_version\":1,\"report_type\":\"plan-inspection-summary\",\"total\":{},\"execute\":{},\"hold\":{},\"deny\":{},\"contract_valid\":{},\"contract_invalid\":{},\"execution_performed\":false,\"authority_verified\":false}}",
@@ -327,6 +333,66 @@ pub fn write_plan_inspection_summary_json(
         summary.contract_valid,
         summary.contract_invalid,
     )
+}
+
+/// Failure to aggregate or publish a complete summary.
+///
+/// `Display` omits error details; `Debug` and the error chain may expose them.
+#[derive(Debug)]
+pub enum PlanInspectionSummaryWriteError<E> {
+    /// The original source error; the destination was not touched.
+    Source(E),
+    /// A counter overflowed; the destination was not touched.
+    Overflow,
+    /// Writing the complete summary failed; output may be partial.
+    Output(io::Error),
+}
+
+impl<E> std::fmt::Display for PlanInspectionSummaryWriteError<E> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::Source(_) => "plan inspection summary source failed",
+            Self::Overflow => "plan inspection summary counter overflow",
+            Self::Output(_) => "plan inspection summary output failed",
+        })
+    }
+}
+
+impl<E: std::error::Error + 'static> std::error::Error for PlanInspectionSummaryWriteError<E> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Source(error) => Some(error),
+            Self::Overflow => None,
+            Self::Output(error) => Some(error),
+        }
+    }
+}
+
+/// Aggregates a finite, fallible source before writing one summary JSON report.
+///
+/// Uses [`try_summarize_plan_iter`] without collecting plans or accepting mutable
+/// summary copies. On success, emits the same contract as
+/// [`write_plan_inspection_summary_json`], including for empty input.
+/// No execution or authority verification is performed.
+///
+/// # Errors
+///
+/// Source errors and overflow leave the destination entirely untouched, even
+/// when it already contains bytes. The failing source item is consumed without
+/// requesting the next one. Caller-owned source side effects are not rolled back.
+/// Output errors occur only after source exhaustion and may leave partial JSON.
+/// This is not atomic delivery: the caller owns flushing and persistence, and
+/// buffered destination failures may surface later. Bound long sources with
+/// `by_ref().take(n)`; success covers only that bounded input.
+pub fn try_write_plan_inspection_summary_json<'a, E>(
+    plans: impl IntoIterator<Item = Result<&'a RuntimePlan, E>>,
+    output: &mut (impl Write + ?Sized),
+) -> Result<(), PlanInspectionSummaryWriteError<E>> {
+    let summary = try_summarize_plan_iter(plans).map_err(|error| match error {
+        PlanInspectionSummaryError::Source(error) => PlanInspectionSummaryWriteError::Source(error),
+        PlanInspectionSummaryError::Overflow => PlanInspectionSummaryWriteError::Overflow,
+    })?;
+    write_summary_json(summary, output).map_err(PlanInspectionSummaryWriteError::Output)
 }
 
 /// Writes one schema-version-1 plan-inspection JSON object and a newline.

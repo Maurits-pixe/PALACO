@@ -119,6 +119,15 @@ hervatten is een expliciete keuze van de aanroeper, geen automatische retry.
 Combineer alleen bewust gekozen succesvolle deelbatches met `checked_add`;
 dit bewijst geen volledigheid van de oorspronkelijke bron.
 
+`try_write_plan_inspection_summary_json(source, &mut output)` verbindt een
+eindige foutgevoelige bron met hetzelfde JSON-samenvattingscontract. De volledige
+bron wordt eerst geteld, zonder plannen te verzamelen. Bij `Source(E)` of
+`Overflow` blijft de bestemming volledig ongemoeid, inclusief bestaande bytes.
+Bij `Output(io::Error)` is de bron al uitgeput en kan gedeeltelijk JSON zijn
+geschreven. Dit is geen atomaire aflevering: flush en opslag blijven bij de
+aanroeper. Bronbijwerkingen worden niet teruggedraaid en succes van een begrensde
+deelbatch bewijst niet dat de resterende bron foutloos of volledig is.
+
 Slice- en iteratorsamenvattingen delen dezelfde interne observatietelling.
 Unit-tests toetsen alle drie disposities met zowel succesvolle validatie als
 alle vier contractfouten, plus stoppen bij overflow zonder vooruit te lezen.

@@ -5,10 +5,11 @@ use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
     inspection::{
-        PlanInspectionSummary, PlanInspectionSummaryError, PlanInspectionWriteError,
-        summarize_plan_iter, summarize_plans, try_summarize_plan_iter,
-        try_write_plan_inspections_jsonl, write_plan_inspection_json,
-        write_plan_inspection_summary_json, write_plan_inspections_jsonl,
+        PlanInspectionSummary, PlanInspectionSummaryError, PlanInspectionSummaryWriteError,
+        PlanInspectionWriteError, summarize_plan_iter, summarize_plans, try_summarize_plan_iter,
+        try_write_plan_inspection_summary_json, try_write_plan_inspections_jsonl,
+        write_plan_inspection_json, write_plan_inspection_summary_json,
+        write_plan_inspections_jsonl,
     },
 };
 use std::io::{self, BufWriter, Write};
@@ -28,6 +29,120 @@ fn plans() -> Result<Vec<RuntimePlan>, ContractError> {
         )))
     })
     .collect()
+}
+
+#[test]
+fn fallible_summary_json_matches_slice_reports_for_empty_and_repeated_sources()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    for input in [&[][..], plans.as_slice()] {
+        let mut expected = Vec::new();
+        write_plan_inspection_summary_json(input, &mut expected)?;
+        let mut output = Destination {
+            bytes: Vec::new(),
+            remaining: usize::MAX,
+        };
+        try_write_plan_inspection_summary_json(
+            input.iter().map(Ok::<_, io::Error>),
+            &mut output as &mut dyn Write,
+        )?;
+        assert_eq!(output.bytes, expected);
+    }
+    let mut source = plans.iter().cycle().map(Ok::<_, io::Error>);
+    let mut output = Vec::new();
+    try_write_plan_inspection_summary_json(source.by_ref().take(6), &mut output)?;
+    let repeated: Vec<_> = plans.iter().cycle().take(6).cloned().collect();
+    let mut expected = Vec::new();
+    write_plan_inspection_summary_json(&repeated, &mut expected)?;
+    assert_eq!(output, expected);
+    assert!(matches!(source.next(), Some(Ok(plan)) if std::ptr::eq(plan, &plans[2])));
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn fallible_summary_json_source_failure_never_touches_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    struct Untouchable;
+    impl Write for Untouchable {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            panic!("must not write");
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            panic!("must not flush");
+        }
+    }
+    struct BorrowedFailure<'a>(&'a str);
+    let detail = String::from("private borrowed source detail");
+    let failure = BorrowedFailure(&detail);
+    let plans = plans()?;
+    for completed in [0, 1, plans.len()] {
+        let mut source = plans[..completed]
+            .iter()
+            .map(Ok)
+            .chain([Err(&failure), Ok(&plans[0])]);
+        let error = match try_write_plan_inspection_summary_json(&mut source, &mut Untouchable) {
+            Err(error) => error,
+            Ok(()) => panic!("source must fail"),
+        };
+        assert_eq!(error.to_string(), "plan inspection summary source failed");
+        match error {
+            PlanInspectionSummaryWriteError::Source(error) => {
+                assert!(std::ptr::eq(error, &failure));
+                assert_eq!(error.0, detail);
+            }
+            _ => panic!("expected original source error"),
+        }
+        assert!(matches!(source.next(), Some(Ok(plan)) if std::ptr::eq(plan, &plans[0])));
+        let mut existing = b"previous report\n".to_vec();
+        let result = try_write_plan_inspection_summary_json(
+            plans[..completed].iter().map(Ok).chain([Err(&failure)]),
+            &mut existing,
+        );
+        assert!(matches!(
+            result,
+            Err(PlanInspectionSummaryWriteError::Source(_))
+        ));
+        assert_eq!(existing, b"previous report\n");
+    }
+    Ok(())
+}
+
+#[test]
+fn fallible_summary_json_output_failure_follows_source_exhaustion()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let mut expected = Vec::new();
+    write_plan_inspection_summary_json(&plans, &mut expected)?;
+    for remaining in [0, 7, expected.len() - 1] {
+        let requests = std::cell::Cell::new(0);
+        let mut source = plans.iter().map(Ok::<_, io::Error>).inspect(|_| {
+            requests.set(requests.get() + 1);
+        });
+        let mut output = Destination {
+            bytes: Vec::new(),
+            remaining,
+        };
+        let error = try_write_plan_inspection_summary_json(&mut source, &mut output)
+            .expect_err("output must fail");
+        assert_eq!(error.to_string(), "plan inspection summary output failed");
+        assert!(std::error::Error::source(&error).is_some());
+        assert!(
+            matches!(error, PlanInspectionSummaryWriteError::Output(ref e)
+            if e.kind() == io::ErrorKind::BrokenPipe)
+        );
+        assert_eq!(requests.get(), plans.len());
+        assert!(source.next().is_none());
+        assert_eq!(output.bytes, expected[..remaining]);
+    }
+    let error = PlanInspectionSummaryWriteError::<io::Error>::Overflow;
+    assert_eq!(
+        error.to_string(),
+        "plan inspection summary counter overflow"
+    );
+    assert!(std::error::Error::source(&error).is_none());
+    Ok(())
 }
 
 #[test]
