@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages as calculateReviewPercentages, reviewSummaryLabel, trafficSamples } from './telemetry.js';
 
 const selectedSeverity = ref('Alles');
@@ -24,12 +24,18 @@ function barHeight(value) {
   return `${Math.max(8, value)}%`;
 }
 
-function printReport() {
+async function printReport() {
   const reviewDetails = document.querySelector('.review-details');
   const wasOpen = reviewDetails.open;
+  const previousSeverity = selectedSeverity.value;
   reviewDetails.open = true;
+  selectedSeverity.value = 'Alles';
+  await nextTick();
+  window.addEventListener('afterprint', () => {
+    reviewDetails.open = wasOpen;
+    selectedSeverity.value = previousSeverity;
+  }, { once: true });
   window.print();
-  reviewDetails.open = wasOpen;
 }
 
 </script>

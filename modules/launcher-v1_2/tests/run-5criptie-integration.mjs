@@ -107,13 +107,22 @@ try {
   ]);
   await popup.keyboard.press('Space');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
+  const eventRows = popup.locator('.events-panel tbody tr');
   await popup.evaluate(() => {
     window.print = () => {
       window.__reviewTableWasOpenForPrint = document.querySelector('.review-details').open;
+      window.__filterStatusAtPrint = document.querySelector('.events-panel [role="status"]').textContent.trim();
+      window.__fixtureRowsAtPrint = document.querySelectorAll('.events-panel tbody tr').length;
+      window.dispatchEvent(new Event('afterprint'));
     };
   });
+  await popup.getByRole('button', { name: 'Hoog', exact: true }).click();
+  assert.equal(await eventRows.count(), 2);
   await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).click();
   assert.equal(await popup.evaluate(() => window.__reviewTableWasOpenForPrint), true);
+  assert.equal(await popup.evaluate(() => window.__filterStatusAtPrint), 'Toont 6 synthetische signalen.');
+  assert.equal(await popup.evaluate(() => window.__fixtureRowsAtPrint), 6);
+  assert.equal(await eventRows.count(), 2, 'printing restores the on-screen filter after the dialog');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
   await popup.emulateMedia({ media: 'print' });
   assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);
@@ -121,6 +130,7 @@ try {
   await reviewDetails.evaluate(details => { details.open = true; });
   assert.equal(await reviewDetails.locator('table').isVisible(), true);
   assert.equal(await popup.locator('.table-wrap').evaluate(table => getComputedStyle(table).overflowX), 'visible');
+  assert.equal(await popup.locator('.events-panel tbody tr').count(), 2);
   await popup.emulateMedia({ media: 'screen' });
   const documentOrigin = new URL(popup.url()).origin;
   const remoteRequests = [];
@@ -131,7 +141,6 @@ try {
   await popup.getByRole('heading', { name: 'Signal overview' }).waitFor();
   assert.deepEqual(remoteRequests, []);
 
-  const eventRows = popup.locator('.events-panel tbody tr');
   assert.equal(await eventRows.count(), 6);
   assert.equal(await popup.getByRole('group', { name: 'Filter synthetische signalen' }).count(), 1);
   assert.equal(await popup.locator('.events-panel caption').textContent(), 'Vaste synthetische signalen, gefilterd op ernst');

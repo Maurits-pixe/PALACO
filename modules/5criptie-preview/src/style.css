@@ -117,6 +117,7 @@ tr:last-child td { border-bottom: 0; }.event-id { color: #6cbab9; font: .64rem u
   .review-track { background: #e8edf1; }
   .table-wrap { overflow: visible; }
   .events-panel table { width: 100%; min-width: 0; table-layout: fixed; }
+  .events-panel tbody tr { display: table-row !important; }
   .events-panel th, .events-panel td { padding: 2mm 1.5mm; border-color: #d6dee6; color: #344357; font-size: 7pt; white-space: normal; overflow-wrap: anywhere; }
   .events-panel th { color: #526174; }
   .event-summary { max-width: none; overflow: visible; text-overflow: clip; }
