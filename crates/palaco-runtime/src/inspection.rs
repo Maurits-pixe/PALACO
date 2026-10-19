@@ -80,6 +80,38 @@ pub fn summarize_plans(plans: &[RuntimePlan]) -> PlanInspectionSummary {
     summary
 }
 
+/// Writes one schema-version-1 plan-inspection-summary JSON object and a newline.
+///
+/// Summarizes the supplied slice directly using [`summarize_plans`], never a
+/// caller-modified summary. Empty input emits a report with zero counts.
+/// Counts describe observations, not executions or independently verified
+/// authority. Only fixed descriptors and counts are serialized, not evidence
+/// identifiers. Existing per-plan and status JSON contracts are unchanged.
+///
+/// The caller owns flushing and persistence; success does not imply a buffered
+/// destination was flushed.
+///
+/// # Errors
+///
+/// Returns the destination's write error; output may be partial on failure.
+/// Contract validation failures are counted, not returned as I/O errors.
+pub fn write_plan_inspection_summary_json(
+    plans: &[RuntimePlan],
+    output: &mut (impl Write + ?Sized),
+) -> io::Result<()> {
+    let summary = summarize_plans(plans);
+    writeln!(
+        output,
+        "{{\"schema_version\":1,\"report_type\":\"plan-inspection-summary\",\"total\":{},\"execute\":{},\"hold\":{},\"deny\":{},\"contract_valid\":{},\"contract_invalid\":{},\"execution_performed\":false,\"authority_verified\":false}}",
+        summary.total,
+        summary.execute,
+        summary.hold,
+        summary.deny,
+        summary.contract_valid,
+        summary.contract_invalid,
+    )
+}
+
 /// Writes one schema-version-1 plan-inspection JSON object and a newline.
 ///
 /// Observes the supplied plan directly, never a caller-modified report copy.

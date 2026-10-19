@@ -88,6 +88,15 @@ Dit zijn observaties van de bestaande contracten, geen uitvoeringsstatistieken,
 geverifieerde autoriteit of toestemming. Plannen en bestaande JSON-contracten
 blijven ongewijzigd.
 
+`write_plan_inspection_summary_json(&plans, &mut output)` schrijft deze tellingen
+als één apart `plan-inspection-summary`-JSON-object (`schema_version: 1`) met
+afsluitende newline, `execution_performed: false` en `authority_verified: false`.
+De writer observeert de planslice rechtstreeks, niet een lokaal gewijzigde
+samenvatting. Een lege slice levert een rapport met nullen, niet lege output.
+Bewijsidentificaties worden niet opgenomen. Writefouten worden doorgegeven
+en kunnen gedeeltelijke output achterlaten; de aanroeper verzorgt flush en
+opslag. Bestaande individuele planrapporten en statusrapporten veranderen niet.
+
 `RuntimePlan` implementeert ook het bestaande
 `palaco_foundation::FailClosed`-contract. `plan.fail_closed()` retourneert altijd
 `ContractDisposition::Deny`, net als de Citadel-boundary en de kernel, ook bij

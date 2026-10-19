@@ -6,7 +6,8 @@ use palaco_runtime::{
     RuntimePlan,
     inspection::{
         PlanInspectionSummary, PlanInspectionWriteError, summarize_plans,
-        try_write_plan_inspections_jsonl, write_plan_inspection_json, write_plan_inspections_jsonl,
+        try_write_plan_inspections_jsonl, write_plan_inspection_json,
+        write_plan_inspection_summary_json, write_plan_inspections_jsonl,
     },
 };
 use std::io::{self, BufWriter, Write};
@@ -81,6 +82,55 @@ fn repeated_plans_count_per_entry_and_local_summary_edits_are_isolated()
     assert_ne!(local, summarize_plans(&repeated));
     assert_eq!(summarize_plans(&repeated), summary);
     assert_eq!(repeated, original);
+    Ok(())
+}
+
+#[test]
+fn summary_json_reports_exact_counts_without_evidence_or_plan_mutations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let repeated = [plans[1].clone(), plans[1].clone(), plans[0].clone()];
+    for (input, counts) in [
+        (&[][..], [0, 0, 0, 0, 0, 0]),
+        (plans.as_slice(), [4, 1, 1, 2, 4, 0]),
+        (&repeated[..], [3, 1, 0, 2, 3, 0]),
+    ] {
+        let original = input.to_vec();
+        let [total, execute, hold, deny, valid, invalid] = counts;
+        let expected = format!(
+            "{{\"schema_version\":1,\"report_type\":\"plan-inspection-summary\",\"total\":{total},\"execute\":{execute},\"hold\":{hold},\"deny\":{deny},\"contract_valid\":{valid},\"contract_invalid\":{invalid},\"execution_performed\":false,\"authority_verified\":false}}\n"
+        );
+        let mut destination = Destination {
+            bytes: Vec::new(),
+            remaining: usize::MAX,
+        };
+        write_plan_inspection_summary_json(input, &mut destination as &mut dyn Write)?;
+        assert_eq!(destination.bytes, expected.as_bytes());
+        assert_eq!(input, original);
+    }
+    Ok(())
+}
+
+#[test]
+fn summary_json_propagates_write_errors_with_exact_partial_output()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    for input in [&[][..], plans.as_slice()] {
+        let mut expected = Vec::new();
+        write_plan_inspection_summary_json(input, &mut expected)?;
+        for remaining in [0, 7, expected.len() - 1] {
+            let mut destination = Destination {
+                bytes: Vec::new(),
+                remaining,
+            };
+            let error = write_plan_inspection_summary_json(input, &mut destination)
+                .expect_err("destination must fail");
+            assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+            assert_eq!(destination.bytes, expected[..remaining]);
+        }
+    }
+    assert_eq!(plans, original);
     Ok(())
 }
 
