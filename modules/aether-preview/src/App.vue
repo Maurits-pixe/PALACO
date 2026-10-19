@@ -12,6 +12,7 @@ import { listVaultItems, removeVaultItem, saveVaultItem } from './vault.js';
 
 const selectedFile = ref(null);
 const encryptPassphrase = ref('');
+const confirmPassphrase = ref('');
 const decryptPassphrase = ref('');
 const vaultItems = ref([]);
 const busy = ref(false);
@@ -76,6 +77,10 @@ async function encryptSelectedFile() {
     errorMessage.value = 'Kies eerst een bestand.';
     return;
   }
+  if (encryptPassphrase.value !== confirmPassphrase.value) {
+    errorMessage.value = 'De wachtzinnen komen niet overeen.';
+    return;
+  }
   if (selectedFile.value.size > MAX_FILE_BYTES) {
     errorMessage.value = 'Bestanden mogen maximaal 25 MiB groot zijn.';
     return;
@@ -88,6 +93,7 @@ async function encryptSelectedFile() {
     await saveVaultItem({ id, envelope });
     selectedFile.value = null;
     encryptPassphrase.value = '';
+    confirmPassphrase.value = '';
     const fileInput = document.querySelector('#file-to-encrypt');
     if (fileInput) fileInput.value = '';
     await refreshVault();
@@ -225,6 +231,17 @@ onMounted(async () => {
             :maxlength="MAX_PASSPHRASE_LENGTH"
             :disabled="busy || !systemReady"
             placeholder="Gebruik een unieke, sterke wachtzin"
+          />
+          <label class="field-label" for="confirm-passphrase">Bevestig wachtzin</label>
+          <input
+            id="confirm-passphrase"
+            v-model="confirmPassphrase"
+            type="password"
+            autocomplete="new-password"
+            :minlength="MIN_PASSPHRASE_LENGTH"
+            :maxlength="MAX_PASSPHRASE_LENGTH"
+            :disabled="busy || !systemReady"
+            placeholder="Voer dezelfde wachtzin opnieuw in"
           />
           <p class="field-help">De wachtzin verlaat deze pagina niet en wordt niet opgeslagen. AETHER kan verloren wachtzinnen niet herstellen.</p>
           <button class="primary-button" type="submit" :disabled="busy || !systemReady">

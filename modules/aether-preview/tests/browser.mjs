@@ -60,6 +60,11 @@ try {
     buffer: Buffer.from(originalContent)
   });
   await page.locator('#passphrase').fill(passphrase);
+  await page.locator('#confirm-passphrase').fill('andere wachtzin voor test');
+  await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
+  await page.getByRole('alert').filter({ hasText: 'wachtzinnen komen niet overeen' }).waitFor();
+  assert.equal(await page.locator('.vault-list li').count(), 0);
+  await page.locator('#confirm-passphrase').fill(passphrase);
   await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
   await page.getByRole('status').filter({ hasText: 'Bestand versleuteld en lokaal opgeslagen' }).waitFor();
   assert.equal(await page.locator('.vault-list li').count(), 1);
