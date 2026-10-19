@@ -12,7 +12,7 @@ Wijzigingen voor deze overdracht: expliciete previewmelding, Node native config 
 
 ## Grenzen
 
-- AETHER, BASTION en 5CRIPTIE zijn catalogusbestemmingen; hun volledige applicatiebron is niet teruggevonden. Fixtures zijn herkenbare testpagina's, geen werkende modules.
+- AETHER en BASTION blijven catalogusbestemmingen waarvan de volledige applicatiebron hier niet is overgedragen. `modules/5criptie-preview` is een afzonderlijke, statische Vue-preview met uitsluitend vaste synthetische gegevens; het is geen echte monitoringmodule of bewijs van operationele netwerkobservatie.
 - De launcher doet uitsluitend metadata-GET-verzoeken zonder credentials. Metadata met appId/status is geen bewijs van autorisatie of veilige inhoud.
 - De statische hosting bevat geen agenda-API, SQL, database, productiedata of secrets. Een HTTP-methodetest op de aparte serverguard bewijst geen integratie met die hosting.
 - De standalone guard blokkeert vier prepare/execute-ingangen voor alle methoden met `STORAGE_EFFECT_DEADLINE_UNSUPPORTED`, zonder opslagverbinding of consumption. Alle overige routes geven 404. Er is geen vrijgaveflag.
@@ -31,4 +31,4 @@ De originele README beschrijft lokale HTTPS-start met eigen certificaten. De apa
 
 ## Tijdelijkheid
 
-De gebruiker heeft ingestemd met een publieke Render-preview van alleen de launcher. `render.yaml` beschrijft een handmatig te deployen Static Site; accountimport en daadwerkelijke deployment zijn niet uitgevoerd of bevestigd. Inhoud van Render Static Sites is publiek toegankelijk. Dit verandert de status ACCEPTATIE / INTEGRATIE / PRODUCTIE: HOLD niet en maakt de achterliggende modules niet operationeel. Er is nog geen verwijderdatum overeengekomen of automatische verwijdering ingesteld. Bron en bewijs blijven behouden als de preview later wordt verwijderd.
+De gebruiker heeft ingestemd met een publieke Render-preview van alleen de launcher. `render.yaml` beschrijft een handmatig te deployen Static Site; accountimport en daadwerkelijke deployment zijn niet uitgevoerd of bevestigd. Inhoud van Render Static Sites is publiek toegankelijk. De 5CRIPTIE-preview is niet aan Render of andere publieke hosting toegevoegd. Dit verandert de status ACCEPTATIE / INTEGRATIE / PRODUCTIE: HOLD niet en maakt de achterliggende modules niet operationeel. Er is nog geen verwijderdatum overeengekomen of automatische verwijdering ingesteld. Bron en bewijs blijven behouden als de preview later wordt verwijderd.

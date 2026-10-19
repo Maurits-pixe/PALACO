@@ -2,13 +2,25 @@
 
 **Afzonderlijke herstelcandidate `1.2.0-candidate.1`.** Het pakket bevat een volledige Vue-launcher, productiebundle, vastgelegde dependencies, regressietests en evidence. Lees `REVIEW.md` voor de uitgevoerde controles en hun grenzen. `ACCEPTANCE.md` bevat de gerichte acceptatiebasis.
 
-De launcher controleert modulemetadata en opent de geverifieerde origin. AETHER, BASTION en 5CRIPTIE behouden hun namen en appId. Dit pakket bevat niet de achterliggende versleutelings-, commandocentrum- of monitoringmachines.
+De launcher controleert modulemetadata en opent de geverifieerde origin. AETHER, BASTION en 5CRIPTIE behouden hun namen en appId. De afzonderlijke 5CRIPTIE-preview bevat uitsluitend statische fixtures, geen achterliggende monitoringmachine.
 
 Het dashboard toont de gemeten duur en het resultaat van de laatste metadata-check, de resterende lokale verificatiegeldigheid, recent gestarte openverzoeken en een sessiegebonden launcherlog. Dit zijn geen echte module-heartbeats, certificaatvervalcontroles, externe sessiestatussen of een ecosysteembrede auditfeed. De lokale noodstop trekt alleen launcher-verificaties in en wist de openingslijst; browsers geven de launcher geen beheer over elders geopende tabs. Er wordt geen `localStorage` of andere blijvende sessiedata gewist omdat deze launcher daar niets opslaat.
 
 ## Lokaal starten
 
 Gebruik Node 22.12 of nieuwer; deze candidate is uitgevoerd met Node 24.19.0. De dependencies staan exact gepind in `package.json` en `package-lock.json`.
+
+Start de lokale 5CRIPTIE-interface in een tweede terminal om de metadata-check vanuit de launcher te demonstreren:
+
+```bash
+cd ../5criptie-preview
+npm ci
+mkdir certs
+mkcert -cert-file certs/localhost.pem -key-file certs/localhost-key.pem localhost 127.0.0.1 ::1
+npm run dev
+```
+
+Open daarna de launcher op `https://127.0.0.1:5173`, voer voor 5CRIPTIE `https://localhost:5176` in en kies **Opslaan & verifiëren**. 5CRIPTIE serveert alleen statische metadata en vaste synthetische fixtures; dit is geen echte monitor, heartbeat of security-analyse. De preview is niet toegevoegd aan Render of andere publieke hosting.
 
 ```bash
 npm ci

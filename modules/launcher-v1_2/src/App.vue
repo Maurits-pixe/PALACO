@@ -119,7 +119,7 @@ onUnmounted(() => {
     <main>
       <aside class="preview-note" aria-label="Previewstatus">
         <strong>PREVIEW — GEEN ACCEPTATIE / PRODUCTIE</strong>
-        <p>Dit is de launcher. AETHER, BASTION en 5CRIPTIE zijn nog niet als werkende apps overgedragen.</p>
+        <p>5CRIPTIE is alleen een synthetische monitoring-preview; deze launcher bewijst geen werking van AETHER- of BASTION-systemen.</p>
         <p>Agenda-uitvoering is geblokkeerd. Deze preview verleent geen toestemming om afspraken te wijzigen.</p>
         <p>Status en audit hieronder gelden alleen voor deze launcher. Er is geen module-heartbeat of ecosysteembreed audit-endpoint.</p>
       </aside>
