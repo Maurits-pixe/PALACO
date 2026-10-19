@@ -31,11 +31,22 @@ async function printReport() {
   reviewDetails.open = true;
   selectedSeverity.value = 'Alles';
   await nextTick();
-  window.addEventListener('afterprint', () => {
+  const restoreReportState = () => {
     reviewDetails.open = wasOpen;
     selectedSeverity.value = previousSeverity;
-  }, { once: true });
-  window.print();
+  };
+  const handleAfterPrint = () => {
+    window.removeEventListener('afterprint', handleAfterPrint);
+    restoreReportState();
+  };
+  window.addEventListener('afterprint', handleAfterPrint);
+  try {
+    window.print();
+  } catch (error) {
+    window.removeEventListener('afterprint', handleAfterPrint);
+    restoreReportState();
+    throw error;
+  }
 }
 
 </script>

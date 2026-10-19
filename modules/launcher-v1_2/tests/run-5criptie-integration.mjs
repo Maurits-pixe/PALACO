@@ -124,6 +124,14 @@ try {
   assert.equal(await popup.evaluate(() => window.__fixtureRowsAtPrint), 6);
   assert.equal(await eventRows.count(), 2, 'printing restores the on-screen filter after the dialog');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
+  await popup.evaluate(() => {
+    window.print = () => { throw new Error('print unavailable'); };
+  });
+  const printError = new Promise(resolve => popup.once('pageerror', resolve));
+  await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).click();
+  assert.match((await printError).message, /print unavailable/);
+  assert.equal(await eventRows.count(), 2, 'failed printing restores the active filter');
+  assert.equal(await reviewDetails.locator('table').isVisible(), false, 'failed printing restores disclosure state');
   await popup.emulateMedia({ media: 'print' });
   assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);
   assert.equal(await popup.locator('.filter-group').evaluate(group => getComputedStyle(group).display), 'none');
