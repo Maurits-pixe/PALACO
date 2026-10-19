@@ -118,6 +118,7 @@ try {
   await popup.emulateMedia({ media: 'print' });
   assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);
   assert.equal(await popup.locator('.filter-group').evaluate(group => getComputedStyle(group).display), 'none');
+  await reviewDetails.evaluate(details => { details.open = true; });
   assert.equal(await reviewDetails.locator('table').isVisible(), true);
   assert.equal(await popup.locator('.table-wrap').evaluate(table => getComputedStyle(table).overflowX), 'visible');
   await popup.emulateMedia({ media: 'screen' });
