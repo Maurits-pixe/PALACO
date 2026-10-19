@@ -96,6 +96,12 @@ samenvatting. Een lege slice levert een rapport met nullen, niet lege output.
 Bewijsidentificaties worden niet opgenomen. Writefouten worden doorgegeven
 en kunnen gedeeltelijke output achterlaten; de aanroeper verzorgt flush en
 opslag. Bestaande individuele planrapporten en statusrapporten veranderen niet.
+Ook voor samenvattingen worden `Interrupted`-writes opnieuw geprobeerd en geeft
+een nul-byte-write `WriteZero`. Succes kan betekenen dat het volledige rapport
+alleen nog in een `BufWriter` staat; een bestemmingfout kan pas bij de eigen
+flush zichtbaar worden. Gebruik bij expliciet verwerpen `into_parts()` om
+resterende bufferbytes zonder flush terug te nemen; eerder afgeleverde bytes
+kunnen niet worden ingetrokken.
 
 `RuntimePlan` implementeert ook het bestaande
 `palaco_foundation::FailClosed`-contract. `plan.fail_closed()` retourneert altijd

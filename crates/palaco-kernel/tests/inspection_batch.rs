@@ -135,6 +135,101 @@ fn summary_json_propagates_write_errors_with_exact_partial_output()
 }
 
 #[test]
+fn summary_json_retries_interrupted_writes_and_rejects_zero_progress()
+-> Result<(), Box<dyn std::error::Error>> {
+    struct InterruptedDestination {
+        bytes: Vec<u8>,
+        interrupt: bool,
+        stop_after: usize,
+    }
+
+    impl Write for InterruptedDestination {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.interrupt {
+                self.interrupt = false;
+                return Err(io::ErrorKind::Interrupted.into());
+            }
+            self.interrupt = true;
+            let count = bytes.len().min(2).min(self.stop_after - self.bytes.len());
+            self.bytes.extend_from_slice(&bytes[..count]);
+            Ok(count)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            panic!("summary writer must not flush");
+        }
+    }
+
+    let plans = plans()?;
+    let original = plans.clone();
+    for input in [&[][..], plans.as_slice()] {
+        let mut expected = Vec::new();
+        write_plan_inspection_summary_json(input, &mut expected)?;
+        for stop_after in [0, 7, expected.len() - 1, expected.len()] {
+            let mut destination = InterruptedDestination {
+                bytes: Vec::new(),
+                interrupt: true,
+                stop_after,
+            };
+            let result = write_plan_inspection_summary_json(input, &mut destination);
+            if stop_after == expected.len() {
+                result?;
+            } else {
+                assert_eq!(
+                    result.expect_err("zero progress must fail").kind(),
+                    io::ErrorKind::WriteZero
+                );
+            }
+            assert_eq!(destination.bytes, expected[..stop_after]);
+        }
+    }
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
+fn summary_json_leaves_buffered_delivery_and_errors_to_the_caller()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plans = plans()?;
+    let original = plans.clone();
+    for input in [&[][..], plans.as_slice()] {
+        let mut expected = Vec::new();
+        write_plan_inspection_summary_json(input, &mut expected)?;
+        for remaining in [0, 7, usize::MAX] {
+            let mut output = BufWriter::with_capacity(
+                expected.len() + 1,
+                Destination {
+                    bytes: Vec::new(),
+                    remaining,
+                },
+            );
+            write_plan_inspection_summary_json(input, &mut output)?;
+            assert_eq!(output.buffer(), expected);
+            assert!(output.get_ref().bytes.is_empty());
+            if remaining != usize::MAX {
+                let error = output.flush().expect_err("buffered destination must fail");
+                assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+                assert_eq!(output.get_ref().bytes, expected[..remaining]);
+                assert_eq!(output.buffer(), &expected[remaining..]);
+            }
+            let (destination, pending) = output.into_parts();
+            let delivered = if remaining == usize::MAX {
+                0
+            } else {
+                remaining
+            };
+            assert_eq!(destination.bytes, expected[..delivered]);
+            assert_eq!(
+                pending.expect("writer did not panic"),
+                expected[delivered..]
+            );
+        }
+    }
+    assert_eq!(plans, original);
+    Ok(())
+}
+
+#[test]
 fn source_failure_preserves_buffered_reports_for_explicit_discard()
 -> Result<(), Box<dyn std::error::Error>> {
     let plans = plans()?;
