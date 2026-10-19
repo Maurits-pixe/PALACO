@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 
 LIMIT = 1_048_576
+_UNSET = object()
 
 
 def encode(value):
@@ -52,7 +53,10 @@ def reject_constant(_):
     raise ValueError("non-JSON number")
 
 
-def verify(path):
+def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET):
+    for anchor, length in ((expected_source_commit, 40), (expected_proof, 64)):
+        if anchor is not _UNSET:
+            require(type(anchor) is str and re.fullmatch(r"[0-9a-f]{%d}" % length, anchor) is not None)
     with Path(path).open("rb") as stream:
         raw = stream.read(LIMIT + 1)
     require(len(raw) <= LIMIT)
@@ -113,16 +117,30 @@ def verify(path):
         consume("commit", {"authorization": authority, "request": request,
                            "request_hash": sha(request), "execution": False})
     require(bool(seen))
+    require(expected_source_commit is _UNSET or expected_source_commit == commit)
+    require(expected_proof is _UNSET or expected_proof == value["proof"]["digest"])
     return {"result": "VERIFIED_SYNTHETIC_ONLY", "records": len(records),
-            "proof": value["proof"]["digest"], "execution": False, "authenticity": False}
+            "source_commit": commit, "proof": value["proof"]["digest"],
+            "source_anchor_supplied": expected_source_commit is not _UNSET,
+            "source_anchor_matched": True if expected_source_commit is not _UNSET else None,
+            "proof_anchor_supplied": expected_proof is not _UNSET,
+            "proof_anchor_matched": True if expected_proof is not _UNSET else None,
+            "execution": False, "authenticity": False}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("envelope", type=Path)
+    parser.add_argument("--expected-source-commit", help="caller-supplied lowercase 40-hex revision")
+    parser.add_argument("--expected-proof", help="caller-supplied lowercase 64-hex digest")
     args = parser.parse_args()
+    anchors = {}
+    if args.expected_source_commit is not None:
+        anchors["expected_source_commit"] = args.expected_source_commit
+    if args.expected_proof is not None:
+        anchors["expected_proof"] = args.expected_proof
     try:
-        print(json.dumps(verify(args.envelope), sort_keys=True))
+        print(json.dumps(verify(args.envelope, **anchors), sort_keys=True))
     except (ValueError, OSError, UnicodeError, RecursionError, OverflowError):
         print('{"result":"REJECTED"}')
         raise SystemExit(1)

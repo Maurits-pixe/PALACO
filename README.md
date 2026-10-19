@@ -25,9 +25,12 @@ Reproduce from this checkout using fresh caller-owned output paths:
 
 ```bash
 SOURCE=$(git -C /home/runner/work/PALACO/PALACO rev-parse HEAD)
+RUN=/home/runner/work/PALACO/PALACO/verification/era-synthetic/.runtime/era-hardening-demo
+mkdir -p "$RUN"  # Use a fresh directory; the envelope is created exclusively.
 python3 -m unittest discover -s /home/runner/work/PALACO/PALACO/verification/era-synthetic -p 'test_*.py' -v
-python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py demo --db /tmp/era-synthetic-demo.sqlite --envelope /tmp/era-synthetic-demo.envelope.json --source-commit "$SOURCE"
-python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py /tmp/era-synthetic-demo.envelope.json
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py demo --db "$RUN/state.sqlite" --envelope "$RUN/envelope.json" --source-commit "$SOURCE"
+# Supply EXPECTED_PROOF from a previously trusted caller-held digest, not the envelope.
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py "$RUN/envelope.json" --expected-source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF"
 ```
 
 The runner supplies a real 40-hex `git rev-parse HEAD`; the reviewer must compare
@@ -39,6 +42,28 @@ Export uses a consistent database snapshot. SHA256 binds the versioned envelope,
 repository/revision, ordered chain and no-execution flags; it supplies integrity,
 **not signatures, authenticity or external validation**. The readonly, database-free
 checker is a separate implementation, not independent human verification.
+
+Both anchors are optional (including separately); omitting both preserves legacy
+`verify(path)`/CLI structural checking. API keywords are `expected_source_commit`
+and `expected_proof`; supplied values must be lowercase 40-/64-hex strings.
+Success reports `source_commit`, `proof`, and `source_anchor_supplied` /
+`source_anchor_matched` plus corresponding `proof_anchor_*` fields: matched is
+`true` when supplied and checked, `null` when absent. Invalid or mismatched
+anchors reject; matching anchors never bypass full envelope validation.
+A trusted caller-provided expected digest prevents accepting a valid-but-resealed
+or truncated log (including removal of terminal revocation). Unanchored structural
+hashing cannot detect those rewrites; a source anchor alone cannot detect truncation.
+Anchors are caller assertions, not signatures or independent authentication:
+`authenticity` and `execution` remain `false`. A HEAD binding with dirty files is
+preliminary, not evidence that those edits were committed.
+
+New submissions reserve five linked records **plus one durable revocation slot**
+under the existing transaction. At the 1000-record bound, 199 groups use 995
+records and revocation uses record 996; fresh keys are then rejected without changes.
+Historical exact retries remain available before/after idempotent revocation;
+altered retries still conflict. This reservation applies only to new admissions:
+legacy already-full logs cannot exceed the verifier cap and require separate
+handling/**HOLD**; no migration or cap bypass is provided.
 
 The exactly sixteen `wf_t01`–`wf_t16` methods are **proposed local mappings only**,
 not official scenarios whose definitions are absent:
@@ -61,6 +86,10 @@ not official scenarios whose definitions are absent:
 | T14 | Tampering, strict JSON/schema/types/duplicate keys/bounds |
 | T15 | Missing/reordered links, recomputed malicious proofs, decision mismatch |
 | T16 | Demo CLI and separate readonly envelope-only checker CLI |
+
+`test_hardening.py` adds ordinary unittest anchor, readonly and on-disk capacity
+regressions (including the actual 1000-record bound), not official WF mappings
+or additions to the sixteen local scenarios.
 
 These checks demonstrate local SQLite `BEGIN IMMEDIATE`, `synchronous=FULL`
 transaction behavior and process-crash recovery on the tested filesystem, not
