@@ -21,6 +21,11 @@ export const reviewBreakdown = Object.freeze(
   }))
 );
 
+export function reviewSummaryLabel(total) {
+  if (total === 0) return 'Geen reviewmeldingen';
+  return `${total} ${total === 1 ? 'reviewmelding' : 'reviewmeldingen'}`;
+}
+
 export const trafficSamples = Object.freeze([
   Object.freeze({ time: '14:00', value: 28 }),
   Object.freeze({ time: '14:05', value: 38 }),
