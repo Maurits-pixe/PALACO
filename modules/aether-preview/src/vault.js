@@ -48,3 +48,7 @@ export function saveVaultItem(item) {
 export function removeVaultItem(id) {
   return requestInVault('readwrite', store => store.delete(id));
 }
+
+export function clearVault() {
+  return requestInVault('readwrite', store => store.clear());
+}

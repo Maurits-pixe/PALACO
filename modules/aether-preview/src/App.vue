@@ -8,7 +8,7 @@ import {
   MIN_PASSPHRASE_LENGTH,
   validateEnvelope
 } from './crypto.js';
-import { listVaultItems, removeVaultItem, saveVaultItem } from './vault.js';
+import { clearVault, listVaultItems, removeVaultItem, saveVaultItem } from './vault.js';
 
 const selectedFile = ref(null);
 const encryptPassphrase = ref('');
@@ -175,6 +175,18 @@ async function deleteVaultItem(id) {
   }
 }
 
+async function clearAllVaultItems() {
+  if (!window.confirm('Verwijder alle versleutelde bestanden uit deze browserkluis?')) return;
+  try {
+    await clearVault();
+    await refreshVault();
+    message.value = 'Alle versleutelde bestanden zijn uit deze browserkluis verwijderd.';
+    errorMessage.value = '';
+  } catch (error) {
+    errorMessage.value = error.message;
+  }
+}
+
 onMounted(async () => {
   cryptoAvailable.value = Boolean(globalThis.crypto?.subtle && globalThis.crypto?.getRandomValues);
   await refreshVault();
@@ -252,7 +264,16 @@ onMounted(async () => {
         <section class="panel vault-panel" aria-labelledby="vault-title">
           <div class="section-heading">
             <div><span class="section-index">03</span><h2 id="vault-title">Bestandskluis</h2></div>
-            <span class="vault-count">{{ vaultItems.length }} ITEM{{ vaultItems.length === 1 ? '' : 'S' }}</span>
+            <div class="vault-heading-actions">
+              <span class="vault-count">{{ vaultItems.length }} ITEM{{ vaultItems.length === 1 ? '' : 'S' }}</span>
+              <button
+                v-if="vaultItems.length"
+                class="delete-all-button"
+                type="button"
+                :disabled="busy"
+                @click="clearAllVaultItems"
+              >WIS KLUIS</button>
+            </div>
           </div>
           <label class="backup-import">
             <span>IMPORTEER VERSLEUTELDE BACK-UP</span>

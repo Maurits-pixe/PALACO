@@ -45,6 +45,8 @@ h1 span { color: #40df98; }
 .work-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .panel { min-width: 0; padding: 1.25rem; }
 .algorithm, .vault-count { border: 0; padding: 0; color: #7d9e8d; font-size: .55rem; }
+.vault-heading-actions { display: flex; align-items: center; gap: .7rem; }
+.delete-all-button { border: 1px solid #633c3c; border-radius: 2px; background: transparent; color: #dd8585; padding: .4rem .5rem; font-size: .52rem; letter-spacing: .04em; cursor: pointer; }
 .field-label { display: flex; justify-content: space-between; gap: .5rem; margin: 1.1rem 0 .45rem; color: #b1c8bb; font-size: .65rem; }
 .field-label small { color: #668776; font-size: .55rem; }
 .backup-import { display: grid; gap: .5rem; margin: .8rem 0 1rem; padding: .75rem; border: 1px dashed #356449; color: #83c9a2; font-size: .58rem; letter-spacing: .05em; }

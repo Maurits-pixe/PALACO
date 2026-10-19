@@ -121,6 +121,11 @@ try {
   assert.equal(restored.suggestedFilename(), originalName);
   const restoredPath = await restored.path();
   assert.equal(await fs.promises.readFile(restoredPath, 'utf8'), originalContent);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'WIS KLUIS' }).click();
+  await page.locator('.vault-list').waitFor({ state: 'detached' });
+  await page.getByText('Nog geen versleutelde bestanden in deze browser.').waitFor();
+  assert.equal(await page.locator('.vault-list li').count(), 0);
   assert.deepEqual(browserErrors, []);
   await context.close();
   console.log(JSON.stringify({
