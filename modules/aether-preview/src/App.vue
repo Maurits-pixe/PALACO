@@ -284,7 +284,7 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             :minlength="MIN_PASSPHRASE_LENGTH"
-            :maxlength="MAX_PASSPHRASE_LENGTH"
+            :maxlength="MAX_PASSPHRASE_LENGTH * 2"
             :disabled="busy || !systemReady"
             placeholder="Gebruik een unieke, sterke wachtzin"
           />
@@ -295,7 +295,7 @@ onUnmounted(() => {
             type="password"
             autocomplete="new-password"
             :minlength="MIN_PASSPHRASE_LENGTH"
-            :maxlength="MAX_PASSPHRASE_LENGTH"
+            :maxlength="MAX_PASSPHRASE_LENGTH * 2"
             :disabled="busy || !systemReady"
             placeholder="Voer dezelfde wachtzin opnieuw in"
           />
@@ -335,7 +335,7 @@ onUnmounted(() => {
             type="password"
             autocomplete="current-password"
             :minlength="MIN_PASSPHRASE_LENGTH"
-            :maxlength="MAX_PASSPHRASE_LENGTH"
+            :maxlength="MAX_PASSPHRASE_LENGTH * 2"
             :disabled="busy || !systemReady"
             placeholder="Vul dezelfde wachtzin in"
           />

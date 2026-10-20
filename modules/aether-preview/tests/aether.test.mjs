@@ -64,6 +64,17 @@ test('rejects short passphrases and unknown envelope formats', async () => {
   );
 });
 
+test('supports the full passphrase limit for astral Unicode characters', async () => {
+  const unicodePassphrase = '😀'.repeat(MAX_PASSPHRASE_LENGTH);
+  const bytes = new Uint8Array([1, 2, 3]);
+  const envelope = await encryptBytes(bytes, unicodePassphrase, webcrypto);
+  assert.deepEqual(await decryptBytes(envelope, unicodePassphrase, webcrypto), bytes);
+  await assert.rejects(
+    encryptBytes(bytes, `${unicodePassphrase}😀`, webcrypto),
+    new RegExp(`maximaal ${MAX_PASSPHRASE_LENGTH}`)
+  );
+});
+
 test('validates portable encrypted backup envelopes and rejects malformed data', async () => {
   const envelope = await encryptBytes(new Uint8Array([10, 20, 30]), passphrase, webcrypto);
   assert.equal(validateEnvelope(envelope), envelope);

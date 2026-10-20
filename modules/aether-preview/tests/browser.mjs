@@ -62,6 +62,12 @@ try {
   const passphrase = 'unieke aether browser testzin';
   const originalName = 'geheim-fixture.txt';
   const originalContent = 'AETHER houdt deze voorbeelddata versleuteld.';
+  for (const selector of ['#passphrase', '#confirm-passphrase', '#vault-passphrase']) {
+    assert.equal(await page.locator(selector).getAttribute('maxlength'), '2048');
+  }
+  const unicodePassphrase = '😀'.repeat(1024);
+  await page.locator('#passphrase').fill(unicodePassphrase);
+  assert.equal([...await page.locator('#passphrase').inputValue()].length, 1024);
   await page.locator('#passphrase').fill(passphrase);
   await page.locator('#confirm-passphrase').fill(passphrase);
   await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
