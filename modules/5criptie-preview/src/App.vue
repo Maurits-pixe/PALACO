@@ -3,6 +3,7 @@ import { computed, nextTick, ref } from 'vue';
 import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages as calculateReviewPercentages, reviewSummaryLabel, trafficSamples } from './telemetry.js';
 
 const selectedSeverity = ref('Alles');
+const printDate = ref('');
 const severities = ['Alles', 'Hoog', 'Middel', 'Laag'];
 const reviewTotal = reviewBreakdown.reduce((total, item) => total + item.count, 0);
 const reviewPercentages = calculateReviewPercentages(reviewBreakdown, reviewTotal);
@@ -30,6 +31,7 @@ async function printReport() {
   const previousSeverity = selectedSeverity.value;
   reviewDetails.open = true;
   selectedSeverity.value = 'Alles';
+  printDate.value = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long' }).format(new Date());
   await nextTick();
   const restoreReportState = () => {
     reviewDetails.open = wasOpen;
@@ -74,6 +76,7 @@ async function printReport() {
         </div>
         <div class="time-window"><span class="live-indicator"></span> VASTE DEMODATA <span class="divider">/</span> VENSTER 60 MIN</div>
       </section>
+      <p v-if="printDate" class="print-meta">Afgedrukt op {{ printDate }} · Synthetische voorbeelddata</p>
 
       <aside class="preview-warning" role="note">
         <span class="warning-icon" aria-hidden="true">i</span>

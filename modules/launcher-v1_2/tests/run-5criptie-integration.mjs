@@ -113,6 +113,7 @@ try {
       window.__reviewTableWasOpenForPrint = document.querySelector('.review-details').open;
       window.__filterStatusAtPrint = document.querySelector('.events-panel [role="status"]').textContent.trim();
       window.__fixtureRowsAtPrint = document.querySelectorAll('.events-panel tbody tr').length;
+      window.__reportMetadataAtPrint = document.querySelector('.print-meta').textContent.trim();
       window.dispatchEvent(new Event('afterprint'));
     };
   });
@@ -122,6 +123,8 @@ try {
   assert.equal(await popup.evaluate(() => window.__reviewTableWasOpenForPrint), true);
   assert.equal(await popup.evaluate(() => window.__filterStatusAtPrint), 'Toont 6 synthetische signalen.');
   assert.equal(await popup.evaluate(() => window.__fixtureRowsAtPrint), 6);
+  assert.match(await popup.evaluate(() => window.__reportMetadataAtPrint), /^Afgedrukt op .+ · Synthetische voorbeelddata$/);
+  assert.equal(await popup.locator('.print-meta').evaluate(element => getComputedStyle(element).display), 'none');
   assert.equal(await eventRows.count(), 2, 'printing restores the on-screen filter after the dialog');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
   await popup.evaluate(() => {
@@ -133,6 +136,7 @@ try {
   assert.equal(await eventRows.count(), 2, 'failed printing restores the active filter');
   assert.equal(await reviewDetails.locator('table').isVisible(), false, 'failed printing restores disclosure state');
   await popup.emulateMedia({ media: 'print' });
+  assert.equal(await popup.locator('.print-meta').evaluate(element => getComputedStyle(element).display), 'block');
   assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);
   assert.equal(await popup.locator('.filter-group').evaluate(group => getComputedStyle(group).display), 'none');
   await reviewDetails.evaluate(details => { details.open = true; });
