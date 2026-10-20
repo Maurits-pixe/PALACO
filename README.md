@@ -305,8 +305,18 @@ python3 -I /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py
   --receipt-output /absolute/runtime/new-receipt.json
 python3 -I /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py \
   /absolute/runtime/envelope.json --receipt /absolute/runtime/new-receipt.json \
-  --expected-source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF" --review-summary
+  --expected-source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF" \
+  --expected-request-key demo-1 --review-summary
 ```
+
+Optional `--expected-request-key KEY` (API `expected_request_key=key`) binds the
+receipt to the caller's expected request, not merely any commit in the envelope.
+It requires a receipt and both explicit current anchors before any file reads;
+only exact strings matching `[a-z0-9-]{1,48}` are accepted. Bound success alone adds
+`expected_request_key`, `request_key_anchor_supplied: true` and
+`request_key_anchor_matched: true` inside `receipt_verification`; omitted binding
+leaves output unchanged. A known key supplies neither authentication nor current
+permission, replaces no source/proof anchor, and never clears **HOLD**.
 
 Omit `--receipt-output` for stdout only. The optional private file is atomically
 published without overwriting existing paths; success stdout follows publication.

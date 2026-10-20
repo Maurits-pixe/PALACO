@@ -130,9 +130,14 @@ def _verify_envelope(value, *, expected_source_commit=_UNSET, expected_proof=_UN
 
 def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
            previous_envelope=_UNSET, expected_previous_proof=_UNSET, review_summary=False,
-           receipt=_UNSET):
+           receipt=_UNSET, expected_request_key=_UNSET):
     require(type(review_summary) is bool)
     check_receipt = receipt is not _UNSET
+    bind_request = expected_request_key is not _UNSET
+    if bind_request:
+        require(type(expected_request_key) is str and
+                re.fullmatch(r"[a-z0-9-]{1,48}", expected_request_key) is not None)
+        require(check_receipt)
     require(not (review_summary or check_receipt) or
             (expected_source_commit is not _UNSET and expected_proof is not _UNSET))
     if check_receipt:
@@ -196,6 +201,8 @@ def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
                 matched = record
                 break
         require(matched is not None)
+        require(not bind_request or
+                matched["data"]["request"]["request_key"] == expected_request_key)
         result["receipt_verification"] = {
             "result": "VERIFIED_HISTORICAL_RECEIPT",
             "request_key": matched["data"]["request"]["request_key"],
@@ -203,6 +210,10 @@ def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
             "request_hash": matched["data"]["request_hash"],
             "historical_record_only": True, "execution": False, "authenticity": False,
         }
+        if bind_request:
+            result["receipt_verification"].update(
+                expected_request_key=expected_request_key,
+                request_key_anchor_supplied=True, request_key_anchor_matched=True)
     return result
 
 
@@ -217,6 +228,8 @@ def main():
                         help="local advisory summary; requires both current anchors and terminal revocation")
     parser.add_argument("--receipt", type=Path,
                         help="retained historical producer receipt; requires both current anchors")
+    parser.add_argument("--expected-request-key",
+                        help="caller-supplied request key; requires receipt and both current anchors")
     args = parser.parse_args()
     anchors = {}
     if args.expected_source_commit is not None:
@@ -229,6 +242,8 @@ def main():
         anchors["expected_previous_proof"] = args.expected_previous_proof
     if args.receipt is not None:
         anchors["receipt"] = args.receipt
+    if args.expected_request_key is not None:
+        anchors["expected_request_key"] = args.expected_request_key
     try:
         print(json.dumps(verify(args.envelope, review_summary=args.review_summary, **anchors), sort_keys=True))
     except (ValueError, OSError, UnicodeError, RecursionError, OverflowError):
