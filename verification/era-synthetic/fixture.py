@@ -292,6 +292,9 @@ class Store:
             validate_request(value)
             if any(r["kind"] == "revocation" for r in records):
                 raise ValueError("synthetic authority revoked")
+            # Reserve a durable revocation slot before admitting a new five-record group.
+            if len(records) + 5 + 1 > MAX_RECORDS:
+                raise ValueError("record bound exceeded")
             identity = self._append("identity", {"request_key": key, "identity": value["identity"]})
             evidence = self._append("evidence", {"identity": identity, "evidence": value["evidence"]})
             decision = self._append("decision", {"evidence": evidence, "decision": "ALLOW_SYNTHETIC"})

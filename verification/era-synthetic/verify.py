@@ -6,7 +6,9 @@ SHA256 consistency is not authentication, signature verification or provenance.
 import argparse
 import hashlib
 import json
+import os
 import re
+import stat
 from pathlib import Path
 
 LIMIT = 1_048_576
@@ -54,8 +56,14 @@ def reject_constant(_):
 
 
 def _load_envelope(path, *, limit=LIMIT):
-    with Path(path).open("rb") as stream:
-        raw = stream.read(limit + 1)
+    fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0))
+    try:
+        metadata = os.fstat(fd)
+        require(stat.S_ISREG(metadata.st_mode) and metadata.st_size <= limit)
+        with os.fdopen(fd, "rb", closefd=False) as stream:
+            raw = stream.read(limit + 1)
+    finally:
+        os.close(fd)
     require(len(raw) <= limit)
     return json.loads(raw.decode("utf-8"), object_pairs_hook=unique_pairs,
                       parse_constant=reject_constant)
