@@ -29,6 +29,11 @@ function clearPassphrases() {
   decryptPassphrase.value = '';
 }
 
+function clearEncryptionPassphrases() {
+  encryptPassphrase.value = '';
+  confirmPassphrase.value = '';
+}
+
 function clearPassphrasesWhenHidden() {
   if (document.visibilityState === 'hidden') clearPassphrases();
 }
@@ -88,14 +93,17 @@ async function encryptSelectedFile() {
   errorMessage.value = '';
   if (!selectedFile.value) {
     errorMessage.value = 'Kies eerst een bestand.';
+    clearEncryptionPassphrases();
     return;
   }
   if (encryptPassphrase.value !== confirmPassphrase.value) {
     errorMessage.value = 'De wachtzinnen komen niet overeen.';
+    clearEncryptionPassphrases();
     return;
   }
   if (selectedFile.value.size > MAX_FILE_BYTES) {
     errorMessage.value = 'Bestanden mogen maximaal 25 MiB groot zijn.';
+    clearEncryptionPassphrases();
     return;
   }
   busy.value = true;

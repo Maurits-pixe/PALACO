@@ -62,6 +62,12 @@ try {
   const passphrase = 'unieke aether browser testzin';
   const originalName = 'geheim-fixture.txt';
   const originalContent = 'AETHER houdt deze voorbeelddata versleuteld.';
+  await page.locator('#passphrase').fill(passphrase);
+  await page.locator('#confirm-passphrase').fill(passphrase);
+  await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
+  await page.getByRole('alert').filter({ hasText: 'Kies eerst een bestand' }).waitFor();
+  assert.equal(await page.locator('#passphrase').inputValue(), '');
+  assert.equal(await page.locator('#confirm-passphrase').inputValue(), '');
   await page.locator('#file-to-encrypt').setInputFiles({
     name: originalName,
     mimeType: 'text/plain',
@@ -71,7 +77,27 @@ try {
   await page.locator('#confirm-passphrase').fill('andere wachtzin voor test');
   await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
   await page.getByRole('alert').filter({ hasText: 'wachtzinnen komen niet overeen' }).waitFor();
+  assert.equal(await page.locator('#passphrase').inputValue(), '');
+  assert.equal(await page.locator('#confirm-passphrase').inputValue(), '');
   assert.equal(await page.locator('.vault-list li').count(), 0);
+  await page.locator('#file-to-encrypt').setInputFiles({
+    name: 'te-groot.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.alloc(25 * 1024 * 1024 + 1, 65)
+  });
+  await page.locator('#passphrase').fill(passphrase);
+  await page.locator('#confirm-passphrase').fill(passphrase);
+  await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
+  await page.getByRole('alert').filter({ hasText: 'maximaal 25 MiB' }).waitFor();
+  assert.equal(await page.locator('#passphrase').inputValue(), '');
+  assert.equal(await page.locator('#confirm-passphrase').inputValue(), '');
+  assert.equal(await page.locator('.vault-list li').count(), 0);
+  await page.locator('#file-to-encrypt').setInputFiles({
+    name: originalName,
+    mimeType: 'text/plain',
+    buffer: Buffer.from(originalContent)
+  });
+  await page.locator('#passphrase').fill(passphrase);
   await page.locator('#confirm-passphrase').fill(passphrase);
   await page.getByRole('button', { name: 'VERSLEUTEL EN BEWAAR LOKAAL' }).click();
   await page.getByRole('status').filter({ hasText: 'Bestand versleuteld en lokaal opgeslagen' }).waitFor();
