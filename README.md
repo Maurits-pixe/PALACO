@@ -326,6 +326,15 @@ authentication. After revocation this remains only a historical receipt, never
 renewed execution, real permission, authentication or external audit. Human release
 remains **HOLD**. These ordinary regression tests run under existing CI discovery.
 
+Integrated receipt-recovery drills use real process death (SIGKILL) at deterministic
+pre/post-commit barriers, including a committed submission whose acknowledgement
+never returns. They check anchored read-only recovery without replay, revocation
+and separately named backup recovery against retained local test checkpoints, not
+independently authenticated anchors. Only the pre-commit case explicitly opens
+writable to allow SQLite hot-journal rollback where needed; read-only access need
+not repair it. This is not arbitrary power-loss, WAL or hardware durability proof,
+nor official conformance evidence.
+
 Callers retain checkpoints and trusted digests externally; this supplies no
 freshness, authenticity, global antirollback guarantee or production release.
 The human release gate remains **HOLD**; official source contracts remain unavailable.
