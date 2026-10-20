@@ -30,6 +30,7 @@ mkdir -p "$RUN"  # Use a fresh directory; the envelope is created exclusively.
 python3 -m unittest discover -s /home/runner/work/PALACO/PALACO/verification/era-synthetic -p 'test_*.py' -v
 python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py demo --db "$RUN/state.sqlite" --envelope "$RUN/envelope.json" --source-commit "$SOURCE"
 # Supply EXPECTED_PROOF from a previously trusted caller-held digest, not the envelope.
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py export --db "$RUN/state.sqlite" --envelope "$RUN/reexport.json" --source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF"
 python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py "$RUN/envelope.json" --expected-source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF"
 ```
 
@@ -42,6 +43,36 @@ Export uses a consistent database snapshot. SHA256 binds the versioned envelope,
 repository/revision, ordered chain and no-execution flags; it supplies integrity,
 **not signatures, authenticity or external validation**. The readonly, database-free
 checker is a separate implementation, not independent human verification.
+
+Unlike mutating `demo`, `export` inspects only an existing synthetic database and
+exports its current state: it never submits, revokes, creates schema or initializes
+metadata. `--source-commit` remains required as the expected persistent binding.
+Success reports `SYNTHETIC_READ_ONLY_EXPORT`, record count, proof, source commit,
+`execution: false` and `authenticity: false`. Output is created exclusively, never
+overwritten; invalid state, source or proof rejects before creating the envelope.
+Paths are caller-owned; this is not an atomic publication protocol.
+
+The API is `Store(path, source_commit, read_only=True)` (strict boolean,
+keyword-only); the default remains writable with historical retry behavior.
+Read-only `submit` and `revoke` always reject, including exact historical retries.
+`store.export(expected_proof=trusted_digest)` optionally checks a lowercase
+64-hex digest against the fully validated snapshot in the same deferred
+transaction; omitting it preserves ordinary export, while explicit `None` rejects.
+The CLI's optional `--expected-proof` is export-only and rejects on `demo` before
+mutation. A newly computed/rehashed digest is not a trusted original anchor:
+coherent suffix/request-row removal can pass unanchored export but fails an
+original caller-held proof. Matching anchors do not establish authenticity.
+Empty and revoked-only internal stores can be exported; the independent checker
+explicitly rejects envelopes with no committed group.
+
+Read-only connections use escaped absolute SQLite `mode=ro` URIs, `query_only`,
+bounded busy timeout and ordinary locking, without `immutable`, dirty reads,
+copying, repair or writable fallback. The application does not mutate the main
+database. This is not a claim of no filesystem access, atime changes or
+SQLite-managed sidecar writes: WAL may involve sidecars, and WAL support/host
+durability guarantees are not claimed. Tests use the existing DELETE-journal
+implementation. A hot journal requiring write recovery may fail read-only;
+leave **HOLD**, never silently reopen writable or recover/repair for inspection.
 
 Both anchors are optional (including separately); omitting both preserves legacy
 `verify(path)`/CLI structural checking. API keywords are `expected_source_commit`
@@ -104,6 +135,8 @@ regressions (including the actual 1000-record bound), not official WF mappings
 or additions to the sixteen local scenarios.
 `test_recovery.py` adds on-disk persisted-corruption/restart/no-auto-repair checks,
 including mutations through a second connection after opening.
+`test_readonly.py` adds ordinary unittest read-only database/export/anchor,
+literal-path, locking, no-mutation and CLI regressions, not new local WF mappings.
 
 These checks demonstrate local SQLite `BEGIN IMMEDIATE`, `synchronous=FULL`
 transaction behavior and process-crash recovery on the tested filesystem, not
