@@ -2404,6 +2404,57 @@ credentials worden pas daarna via een beveiligde invoerroute gevraagd.
 Deze documentatiewijziging maakt geen productieaccounts, issuerinschrijving,
 netwerkadapter, contactopening of deployment aan.
 
+### Aanvulling v0.2 — lokale stagingdiagnostiek, geen veiligheidsdienst
+
+De bovenstaande v0.1 is een historische ontwerpstatus, geen claim dat deze
+aanvulling toen al gebouwd was. De documentatieoplevering is op GitHub bevestigd
+als commit
+[`9e2fafb6a05cf25b58f91717de61245e78d6efa8`](https://github.com/Maurits-pixe/PALACO/commit/9e2fafb6a05cf25b58f91717de61245e78d6efa8),
+op branch `copilot/engineeringbaseline-operationele-aansluiting`.
+Bij die broncontrole was geen open PR voor deze branch gevonden.
+
+Deze aanvulling bouwt een afzonderlijke
+[Rust-stagingmodule](crates/palaco-runtime/src/brigade_staging.rs) zonder nieuwe
+dependencies of koppeling aan `RuntimePlan` of de commitgate:
+
+- Een host-geselecteerd adapterinterface voor synchrone, begrensde lokale
+  diagnostiek; geen netwerkadapter, gedownloade agent of externe dienst.
+- Een echte hostklokobservatie via `SystemTime`, uitsluitend als lokale
+  diagnostische input. Dit bewijst geen betrouwbare klok, E2EE of BG-rolcontrole.
+- Achttien zichtbare rol-/partijplaatsen, met `Unknown` bij ontbrekende,
+  onbeschikbare, dubbele, verkeerd gebonden of verlopen observaties.
+- Exacte vergelijking van challenge, contractreferentie, actors/devices,
+  tenantcontext, policy, sleutelepoch en checkpoint. Deze context is
+  caller-supplied, niet geauthenticeerd of wire-compatible met de bronreferences.
+- Afwijzing van kruiselingse `Synthetic`/`LocalObservation`-input. Modes zijn
+  labels, geen bewijs van provenance of fysieke isolatie. De module bewaart niets;
+  toekomstige echte adapters vereisen afzonderlijke processen/stores/keys.
+- Positieve én negatieve adapterclaims blijven `Unverified`; zij kunnen geen
+  PASS of geauthenticeerde STOP produceren. Elk rapport blijft HOLD/NONE,
+  zonder contactopening, runtimeverbinding of externe effecten.
+
+De module is een library, geen draaiende server of aangesloten veiligheidsdienst.
+Gebruik de uitvoerbare Rustdoc als lokaal aanroepvoorbeeld. De host moet adapters
+als vertrouwde lokale code selecteren; er is geen sandbox of timeoutworker die
+arbitraire blokkerende code veilig maakt. Geen persoonsgegevens, plaintext,
+private keys of credentials horen in deze diagnostische context.
+
+Validatie vanuit de repositoryroot:
+`cargo test -p palaco-runtime`,
+`cargo clippy -p palaco-runtime --all-targets -- -D warnings` en
+`python tools/pvs002_cross_crate_contracts.py`.
+De negatieve tests behandelen ontbrekende dekking per positie, foutieve
+context/checkpoints, modes, slotspoofing, toekomst/expiry, onbeschikbaarheid,
+dubbele registraties en ongeldige input. Herhaalde evaluatie consumeert geen
+challenge en geeft geen nieuwe rechten. Tests met adapterclaims zijn fixtures,
+geen observaties van echte guards.
+
+E1/E2 blijven BLOCKED/HOLD. E3 is uitsluitend gedeeltelijk voorbereid door deze
+lokale diagnostiek, niet voltooid als echte-observatieadapter. E4 voor echte
+adapters, netwerk-timeouts, revocation, races en duurzaam crashherstel blijft
+NOT RUN; E5/E6 blijven HOLD. Er is geen issuerinschrijving, productieaccount,
+menselijke receipt, E2EE-controle, duurzame commit of deployment gerealiseerd.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*
