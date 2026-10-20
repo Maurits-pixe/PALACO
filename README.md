@@ -2583,6 +2583,57 @@ ná de gelezen snapshot. De rapportage levert geen bevoegde commitbeslissing.
 Productie blijft **HOLD / NONE**; de historische vault-/kernelkop hieronder is
 geen bewijs van activering door deze stagingwijzigingen.
 
+### Aanvulling v0.5 — expliciete ongeverifieerde Python/Rust-stagingbridge
+
+De [Python-reader](verification/brigade-staging/register_reader.py) biedt nu
+`read_bridge` voor een verse, digest-gepinde bestandsread. De
+[Rust-import](crates/palaco-runtime/src/brigade_staging/key_registry/reader_bridge.rs)
+`KeyRegistryAdapter::from_reader_bytes` zet die uitvoer begrensd om naar de
+bestaande BG05-afzenderadapter. De host selecteert nog steeds requestbinding,
+sleutelreferentie, verwachte revisie en mode onafhankelijk van de bron.
+Er is geen automatische procesaansturing vanuit Rust of geïnstalleerde service.
+
+Het afzonderlijke bridgecontract is `BRIGADE_UNVERIFIED_SNAPSHOT_V1`.
+Exacte UTF-8-regelvolgorde, elke regel afgesloten door één LF:
+header, mode, revision, issued_at, expires_at, recordcount; vervolgens per record
+tenant, actor, device, key_ref, epoch, valid_from, expires_at, revoked.
+Getallen zijn canonieke unsigned decimale u64-waarden zonder teken of
+voorloopnullen (behalve `0`); revoked is exact `0` of `1`.
+Een laatste LF is verplicht; extra velden, regels of trailing bytes worden
+geweigerd. Referenties mogen geen controltekens bevatten en zijn maximaal
+256 UTF-8-bytes. De bovengrens is 140.000 bridgebytes en 128 records.
+Dit nieuwe contract is niet het historische Node-/Rust-/auth-wirecontract.
+
+Python exporteert alleen na een geslaagde read en herhaalde freshnesscontrole.
+Rust valideert de framing, UTF-8, versie, mode, revisie, geldigheid, duplicaten en
+recordstructuur opnieuw vóór constructie. Verlopen bridgebytes zijn niet
+herbruikbaar als actuele snapshot. Observaties blijven aan de volledige
+caller-supplied requestcontext gebonden; zij geven geen duurzame replaypreventie.
+
+**De bridge is geen trustbewijs.** De oorspronkelijke SHA-256-pin geldt voor het
+registerbestand, niet voor de getransformeerde bridgebytes. Rust bewijst niet
+dat Python heeft gedraaid of een pin heeft gecontroleerd: de host moet de private
+overdracht en workerselectie beheersen. De bytes bevatten bewust geen
+`authenticated`- of authorityvlag die dekking kan promoveren.
+Ook rechtstreeks aangeleverde of vervalste bridgebytes kunnen uitsluitend
+ongeverifieerde assertions opleveren. Geen nieuwe trust anchors of echte
+registerpins worden met deze wijziging aangemaakt.
+
+Twee Python-tests pinnen het gedeelde contractvector en weigering bij readfouten.
+Vier Rust-tests behandelen hetzelfde vector, alle truncatiepunten, trailing data,
+ongeldige UTF-8/nummers, verkeerde versie/mode/revisie, expiry en duplicaten.
+Een echte ketentest start Python met tijdelijke synthetische registerdata, voert
+de gepinde read en export uit en importeert de bytes in Rust. Beide modes en
+actieve/ingetrokken records blijven HOLD/NONE met zeventien ontbrekende plaatsen.
+Dit bewijst de testketen, niet echte guarddekking of een gekoppelde telefoon.
+`cargo test -p palaco-runtime` vereist voor die ketentest Python 3.11+.
+De bestaande Python-test-, Clippy- en PVS-002-commando's blijven gelden.
+
+Een afzonderlijk beoordeelde bronconfiguratie, OS-securitysandbox, echte
+toestelinschrijving, sleutelbezitbewijs, betrouwbare klok en live revocation
+blijven open. Geen contactopening, productieaccount, deployment of productie-
+uitvoeringsrecht volgt uit de bridge: productie blijft **HOLD / NONE**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

@@ -165,7 +165,7 @@ def read_register(path, expected_sha256, expected_revision, mode, timeout_second
     the register itself. No output is persisted. Each invocation starts a fresh
     fixed Python worker; startup, read, hash and parse share a 0 < deadline <= 5s.
     Process creation/kill/reaping still depend on OS scheduling; no hard-real-time
-    guarantee or sandbox is claimed. No automatic Rust bridge is implemented.
+    guarantee or sandbox is claimed. Rust does not launch this reader.
     """
     if (
         type(path) is not str or not 0 < len(path) <= 4096 or "\0" in path
@@ -210,6 +210,47 @@ def read_register(path, expected_sha256, expected_revision, mode, timeout_second
         return _result(str(error))
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError, OverflowError):
         return _result("UNAVAILABLE")
+
+
+BRIDGE_HEADER = "BRIGADE_UNVERIFIED_SNAPSHOT_V1"
+BRIDGE_LIMIT = 140_000
+
+
+def _encode_bridge(snapshot, revision, mode, now):
+    """Versioned UTF-8 lines, never signed evidence or proof of reader execution."""
+    if not _reference(revision) or type(mode) is not str or mode not in MODES:
+        raise Rejected("INVALID")
+    snapshot = _validate(snapshot, revision, mode, now)
+    fields = [
+        BRIDGE_HEADER, mode, revision, str(snapshot["issued_at"]),
+        str(snapshot["expires_at"]), str(len(snapshot["records"])),
+    ]
+    for record in snapshot["records"]:
+        fields.extend(record[key] for key in ("tenant", "actor", "device", "key_ref"))
+        fields.extend(str(record[key]) for key in ("epoch", "valid_from", "expires_at"))
+        fields.append("1" if record["revoked"] else "0")
+    raw = ("\n".join(fields) + "\n").encode("utf-8")
+    if len(raw) > BRIDGE_LIMIT:
+        raise Rejected("INVALID")
+    return raw
+
+
+def read_bridge(path, expected_sha256, expected_revision, mode, timeout_seconds=2.0):
+    """Read/pin a fresh snapshot and export explicit unverified Rust bridge bytes.
+
+    Raises Rejected with a sanitized category on any read or export failure.
+    The original file SHA-256 does not authenticate these transformed bytes.
+    Transport must remain host-controlled; no trust marker is encoded.
+    """
+    result = read_register(path, expected_sha256, expected_revision, mode, timeout_seconds)
+    if result["status"] != "PINNED_UNVERIFIED":
+        raise Rejected(result["status"])
+    try:
+        return _encode_bridge(result["snapshot"], expected_revision, mode, int(time.time()))
+    except Rejected:
+        raise
+    except (ValueError, TypeError, KeyError, UnicodeError, OverflowError) as error:
+        raise Rejected("INVALID") from error
 
 
 if __name__ == "__main__":

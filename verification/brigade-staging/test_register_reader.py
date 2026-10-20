@@ -189,6 +189,37 @@ class ReaderTests(unittest.TestCase):
         with patch.object(reader.time, "time", return_value=self.now + 59):
             self.closed(self.read(digest), "STALE")
 
+    def test_bridge_contract_vector_and_rejection(self):
+        snapshot = {
+            "schema": reader.SCHEMA, "revision": "r1", "mode": "Synthetic",
+            "issued_at": 100, "expires_at": 150,
+            "records": [{
+                "tenant": "tenant", "actor": "actor", "device": "device",
+                "key_ref": "key", "epoch": 1, "valid_from": 90,
+                "expires_at": 200, "revoked": False,
+            }],
+        }
+        expected = (
+            b"BRIGADE_UNVERIFIED_SNAPSHOT_V1\nSynthetic\nr1\n100\n150\n1\n"
+            b"tenant\nactor\ndevice\nkey\n1\n90\n200\n0\n"
+        )
+        self.assertEqual(reader._encode_bridge(snapshot, "r1", "Synthetic", 120), expected)
+        for now in [99, 150]:
+            with self.assertRaises(reader.Rejected):
+                reader._encode_bridge(snapshot, "r1", "Synthetic", now)
+        for field, value in [("revision", "wrong"), ("mode", "LocalObservation")]:
+            changed = dict(snapshot, **{field: value})
+            with self.assertRaises(reader.Rejected):
+                reader._encode_bridge(changed, "r1", "Synthetic", 120)
+
+    def test_bridge_only_exports_successful_fresh_pinned_read(self):
+        digest = self.write()
+        raw = reader.read_bridge(str(self.path), digest, "fixture-r1", "Synthetic")
+        self.assertTrue(raw.startswith((reader.BRIDGE_HEADER + "\nSynthetic\n").encode()))
+        self.assertLessEqual(len(raw), reader.BRIDGE_LIMIT)
+        with self.assertRaisesRegex(reader.Rejected, "INTEGRITY_MISMATCH"):
+            reader.read_bridge(str(self.path), "0" * 64, "fixture-r1", "Synthetic")
+
 
 if __name__ == "__main__":
     unittest.main()

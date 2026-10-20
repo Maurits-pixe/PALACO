@@ -8,6 +8,8 @@ use super::{
     AdapterError, Binding, ClockSample, Finding, Mode, Observation, ObservationAdapter, Party, Role,
 };
 
+pub mod reader_bridge;
+
 /// Maximum records accepted in one local diagnostic snapshot.
 pub const MAX_RECORDS: usize = 128;
 /// Maximum snapshot lifetime; this is a local bound, not a trusted-time lease.
