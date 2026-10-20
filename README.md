@@ -345,6 +345,13 @@ writable to allow SQLite hot-journal rollback where needed; read-only access nee
 not repair it. This is not arbitrary power-loss, WAL or hardware durability proof,
 nor official conformance evidence.
 
+Additional process-concurrency tests check a single SQLite read snapshot spanning
+proof validation and receipt lookup during a competing submission or revocation.
+Later committed writes make the old anchor stale on a new lookup; snapshot success
+is not globally fresh permission. SQLite locks are honored, and failed reads recover
+on the same connection without writable fallback. These are local synthetic tests,
+not additional production guarantees.
+
 Callers retain checkpoints and trusted digests externally; this supplies no
 freshness, authenticity, global antirollback guarantee or production release.
 The human release gate remains **HOLD**; official source contracts remain unavailable.
