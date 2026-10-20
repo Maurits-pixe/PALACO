@@ -1,0 +1,178 @@
+{
+  "vector_version": "ERA_SYNTHETIC_LOCAL_VECTORS_V1",
+  "description": "Local synthetic known answers, not an external canonical standard. The all-zero source is an artificial fixture binding, not a verified Git commit or provenance.",
+  "canonical_cases": [
+    {
+      "name": "empty_object",
+      "input": {},
+      "canonical_ascii": "{}",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "sorted_nested",
+      "input": {
+        "z": [true, false, null, 0, -7, 42],
+        "a": {"z": 2, "a": 1}
+      },
+      "canonical_ascii": "{\"a\":{\"a\":1,\"z\":2},\"z\":[true,false,null,0,-7,42]}",
+      "sha256": "b9875a01e3e21c8e72f74e2b20d51e606869daa21d9671f9f55589ed288e5498"
+    },
+    {
+      "name": "unicode_controls",
+      "input": {
+        "text": "éΩ中😀",
+        "controls": "\u0000\b\f\n\r\t\u001f\u007f",
+        "punctuation": "\"\\/"
+      },
+      "canonical_ascii": "{\"controls\":\"\\u0000\\b\\f\\n\\r\\t\\u001f\\u007f\",\"punctuation\":\"\\\"\\\\/\",\"text\":\"\\u00e9\\u03a9\\u4e2d\\ud83d\\ude00\"}",
+      "sha256": "b5b0f65c3a78525e8cb1b14f690ed56bbd862ff44308a6eee0443bf39658fe9a"
+    }
+  ],
+  "request": {
+    "input": {
+      "request_key": "vector-1",
+      "identity": "synthetic-alice",
+      "world": "WORLD-SYNTHETIC-1",
+      "action": "record-fixture",
+      "authority": "synthetic-recorder",
+      "evidence": "fixture-observation-ok",
+      "decision": "ALLOW_SYNTHETIC",
+      "payload": {
+        "fixture": "hello-era",
+        "version": 1
+      }
+    },
+    "canonical_ascii": "{\"action\":\"record-fixture\",\"authority\":\"synthetic-recorder\",\"decision\":\"ALLOW_SYNTHETIC\",\"evidence\":\"fixture-observation-ok\",\"identity\":\"synthetic-alice\",\"payload\":{\"fixture\":\"hello-era\",\"version\":1},\"request_key\":\"vector-1\",\"world\":\"WORLD-SYNTHETIC-1\"}",
+    "sha256": "c135335dde46eb53ad4ea18dcb49a03f38cf5e48539c4d94c794fe3237b5ec8f"
+  },
+  "payload": {
+    "input": {
+      "fixture": "hello-era",
+      "version": 1
+    },
+    "canonical_ascii": "{\"fixture\":\"hello-era\",\"version\":1}",
+    "sha256": "66b934b4faccea315deb653bdd837f4f6f2abdcc3e8bf4674bf5370a1d5d7e67"
+  },
+  "genesis": {
+    "input": {
+      "schema": "ERA_SYNTHETIC_V1",
+      "source": {
+        "repository": "https://github.com/Maurits-pixe/PALACO",
+        "commit": "0000000000000000000000000000000000000000"
+      },
+      "flags": {
+        "synthetic_only": true,
+        "execution": false,
+        "release": false
+      }
+    },
+    "canonical_ascii": "{\"flags\":{\"execution\":false,\"release\":false,\"synthetic_only\":true},\"schema\":\"ERA_SYNTHETIC_V1\",\"source\":{\"commit\":\"0000000000000000000000000000000000000000\",\"repository\":\"https://github.com/Maurits-pixe/PALACO\"}}",
+    "sha256": "32b4134667fca2c4a3d59782e2addf588b03249a676c2e87c6c8ff3585ba2b1c"
+  },
+  "open_proof": {
+    "algorithm": "SHA256",
+    "digest": "ce831252324badf455c712fad6dfeba08e811ce1754c2ab9b70987dd0b36bffd",
+    "authenticity": false
+  },
+  "closed_envelope": {
+    "schema": "ERA_SYNTHETIC_V1",
+    "source": {
+      "repository": "https://github.com/Maurits-pixe/PALACO",
+      "commit": "0000000000000000000000000000000000000000"
+    },
+    "flags": {
+      "synthetic_only": true,
+      "execution": false,
+      "release": false
+    },
+    "records": [
+      {
+        "seq": 1,
+        "kind": "identity",
+        "data": {
+          "request_key": "vector-1",
+          "identity": "synthetic-alice"
+        },
+        "prev": "32b4134667fca2c4a3d59782e2addf588b03249a676c2e87c6c8ff3585ba2b1c",
+        "hash": "a5c2646862bb02ebda82aa3448802a131c80ca3ebcc5f5fe9cbe8fb66fd5ee6b"
+      },
+      {
+        "seq": 2,
+        "kind": "evidence",
+        "data": {
+          "identity": "a5c2646862bb02ebda82aa3448802a131c80ca3ebcc5f5fe9cbe8fb66fd5ee6b",
+          "evidence": "fixture-observation-ok"
+        },
+        "prev": "a5c2646862bb02ebda82aa3448802a131c80ca3ebcc5f5fe9cbe8fb66fd5ee6b",
+        "hash": "4f10ac945d95a3ccdee4fa7d54ba20997f06ca2eb9814a37aeb6172212e0e95d"
+      },
+      {
+        "seq": 3,
+        "kind": "decision",
+        "data": {
+          "evidence": "4f10ac945d95a3ccdee4fa7d54ba20997f06ca2eb9814a37aeb6172212e0e95d",
+          "decision": "ALLOW_SYNTHETIC"
+        },
+        "prev": "4f10ac945d95a3ccdee4fa7d54ba20997f06ca2eb9814a37aeb6172212e0e95d",
+        "hash": "d55e3fd7594ede60756fd5e97c5f6f4e2f23ba8640c75228ffb297aae536c57e"
+      },
+      {
+        "seq": 4,
+        "kind": "authorization",
+        "data": {
+          "decision": "d55e3fd7594ede60756fd5e97c5f6f4e2f23ba8640c75228ffb297aae536c57e",
+          "authority": "synthetic-recorder",
+          "execution": false
+        },
+        "prev": "d55e3fd7594ede60756fd5e97c5f6f4e2f23ba8640c75228ffb297aae536c57e",
+        "hash": "615d2132ee9b253fbde1b584cb6c65b5970ab4ddcbe07732b83ff4734a63db69"
+      },
+      {
+        "seq": 5,
+        "kind": "commit",
+        "data": {
+          "authorization": "615d2132ee9b253fbde1b584cb6c65b5970ab4ddcbe07732b83ff4734a63db69",
+          "request": {
+            "request_key": "vector-1",
+            "identity": "synthetic-alice",
+            "world": "WORLD-SYNTHETIC-1",
+            "action": "record-fixture",
+            "authority": "synthetic-recorder",
+            "evidence": "fixture-observation-ok",
+            "decision": "ALLOW_SYNTHETIC",
+            "payload": {
+              "fixture": "hello-era",
+              "version": 1
+            }
+          },
+          "request_hash": "c135335dde46eb53ad4ea18dcb49a03f38cf5e48539c4d94c794fe3237b5ec8f",
+          "execution": false
+        },
+        "prev": "615d2132ee9b253fbde1b584cb6c65b5970ab4ddcbe07732b83ff4734a63db69",
+        "hash": "3fdb1472cc21155c71e4e4ec3df965a67cd139fd6715af0dac69afc7dc2461e5"
+      },
+      {
+        "seq": 6,
+        "kind": "revocation",
+        "data": {
+          "authority": "synthetic-recorder",
+          "execution": false
+        },
+        "prev": "3fdb1472cc21155c71e4e4ec3df965a67cd139fd6715af0dac69afc7dc2461e5",
+        "hash": "be95ee88db1b6932c8618c6e55730e211c67c518548c05700e8f31e6359a96a5"
+      }
+    ],
+    "proof": {
+      "algorithm": "SHA256",
+      "digest": "22e3729b6be32df11732572e67fe1d94c9b3c843ab1489ad36380645aa33c894",
+      "authenticity": false
+    }
+  },
+  "receipt": {
+    "commit": "3fdb1472cc21155c71e4e4ec3df965a67cd139fd6715af0dac69afc7dc2461e5",
+    "request_hash": "c135335dde46eb53ad4ea18dcb49a03f38cf5e48539c4d94c794fe3237b5ec8f",
+    "historical_record_only": true,
+    "execution": false
+  },
+  "envelope_canonical_sha256": "93db7497fcbeb10c6f4f4a2559ac514b2d6cc311337d4c7b8c34074886e09e28"
+}
