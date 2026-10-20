@@ -166,6 +166,20 @@ async function importEncryptedBackup(event) {
   try {
     const envelope = JSON.parse(await file.text());
     validateEnvelope(envelope);
+    const existingItems = await listVaultItems();
+    const duplicate = existingItems.some(({ envelope: saved }) =>
+      saved.schema === envelope.schema &&
+      saved.cipher === envelope.cipher &&
+      saved.kdf === envelope.kdf &&
+      saved.iterations === envelope.iterations &&
+      saved.salt === envelope.salt &&
+      saved.iv === envelope.iv &&
+      saved.ciphertext === envelope.ciphertext
+    );
+    if (duplicate) {
+      message.value = 'Dit versleutelde bestand staat al in de browserkluis.';
+      return;
+    }
     await saveVaultItem({ id: crypto.randomUUID(), envelope });
     await refreshVault();
     message.value = 'Versleutelde back-up geïmporteerd. Ontsleutelen vereist de oorspronkelijke wachtzin.';

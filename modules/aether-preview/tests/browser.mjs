@@ -108,6 +108,13 @@ try {
   await page.getByRole('status').filter({ hasText: 'Versleutelde back-up geïmporteerd' }).waitFor();
   assert.equal(await page.locator('.vault-list li').count(), 1);
   await page.locator('.backup-import input').setInputFiles({
+    name: backup.suggestedFilename(),
+    mimeType: 'application/json',
+    buffer: Buffer.from(backupContents)
+  });
+  await page.getByRole('status').filter({ hasText: 'staat al in de browserkluis' }).waitFor();
+  assert.equal(await page.locator('.vault-list li').count(), 1);
+  await page.locator('.backup-import input').setInputFiles({
     name: 'ongeldige-backup.json',
     mimeType: 'application/json',
     buffer: Buffer.from('{"schema":"unknown"}')
