@@ -83,6 +83,30 @@ original caller-held proof. Matching anchors do not establish authenticity.
 Empty and revoked-only internal stores can be exported; the independent checker
 explicitly rejects envelopes with no committed group.
 
+Writable API calls also accept optional keyword-only
+`store.submit(value, expected_proof=trusted_digest)` and
+`store.revoke(expected_proof=trusted_digest)`. Omission preserves legacy behavior;
+supplied anchors require an exact `str` of 64 lowercase hex characters (`None`,
+subclasses and other types reject). Read-only rejection comes first, then malformed
+anchor rejection before any transaction. Inside `BEGIN IMMEDIATE`, full state
+validation precedes comparison with the same source-bound current snapshot digest
+as export, before historical retry lookup, request admission or append. This is
+compare-and-swap optimistic concurrency: stale anchors raise
+`ValueError("expected proof mismatch")`, roll back unchanged, and take precedence
+over retry conflicts, invalid requests and revoked authority.
+
+Even an exact historical retry rejects a stale anchor before/after revocation.
+A matching current anchor returns its historical-only receipt without changes;
+it never renews authority. Matching-anchor repeated revocation is idempotent;
+fresh requests still reject after revocation. An empty internal export's digest
+can guard the first submission although the standalone checker requires a group.
+There are no new CLI flags, automatic anchor refreshes or retries. After rejection,
+the caller must explicitly re-export, check continuity against an independently
+saved trusted checkpoint, and decide whether to use the new digest. A caller who
+accepts an attacker's coherently rewritten current digest loses the old checkpoint
+protection: hashing proves neither origin nor signatures, current truth, freshness
+or human release. All synthetic flags and **HOLD** remain unchanged.
+
 Read-only connections use escaped absolute SQLite `mode=ro` URIs, `query_only`,
 bounded busy timeout and ordinary locking, without `immutable`, dirty reads,
 raw file copying, repair or writable fallback. The application does not mutate the main
