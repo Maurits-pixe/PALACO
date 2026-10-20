@@ -2455,6 +2455,54 @@ adapters, netwerk-timeouts, revocation, races en duurzaam crashherstel blijft
 NOT RUN; E5/E6 blijven HOLD. Er is geen issuerinschrijving, productieaccount,
 menselijke receipt, E2EE-controle, duurzame commit of deployment gerealiseerd.
 
+### Aanvulling v0.3 — BG05-afzendercontrole op registersnapshot
+
+De [BG05-registeradapter](crates/palaco-runtime/src/brigade_staging/key_registry.rs)
+voegt lokale controlelogica toe voor een door de host aangeleverde staging-
+snapshot. Dit is een gedeeltelijke vervolgslice, geen aangesloten of vertrouwd
+register. De in deze opdracht aangewezen stagingbeheerder is `Maurits-pixe`;
+deze aanwijzing is geen issuerinschrijving, accountverificatie of trust anchor.
+Het genoemde domein en GitHub-account zijn niet automatisch registerbronnen.
+
+De host configureert één volledige requestbinding, een publieke sleutelreferentie,
+mode en verwachte registerrevisie. De adapter accepteert maximaal 128 records,
+referenties van maximaal 256 bytes en een snapshotgeldigheid van maximaal
+60 seconden. Hij bezit een afzonderlijke kopie en schrijft niets terug.
+Tenant, afzender, afzendertoestel, sleutelepoch en sleutelreferentie moeten exact
+overeenkomen; een andere challenge of checkpoint kan de adapter niet hergebruiken.
+Dubbele toestel-/epochbindingen, zelfs met verschillende keys, worden geweigerd.
+
+Een geldig, niet-ingetrokken record geeft alleen `Unverified(Positive)`; een
+geldig ingetrokken record alleen `Unverified(Negative)`. Ontbrekende records,
+verkeerde bindingen, onbeschikbaarheid en verlopen of toekomstige geldigheid
+blijven UNKNOWN/HOLD. Een constructiefout moet de host als ontbrekende/
+onbeschikbare dekking behandelen, nooit met een fallback-PASS.
+De andere zeventien controleplaatsen blijven zonder eigen bewijs UNKNOWN.
+Geen uitkomst bewijst apparaatbezit, werkende E2EE of volledige BG05-dekking.
+
+De revisievergelijking is geen cryptografische digest- of integriteitscontrole.
+Gewijzigde inhoud onder dezelfde revisienaam wordt niet geauthenticeerd of
+gedetecteerd. Een bevroren snapshot ziet latere intrekkingen niet: de host moet
+voor elke nieuwe beoordeling een nieuwe, onafhankelijk verkregen snapshot
+aanleveren. De korte geldigheid en lokale hostklok bewijzen geen actuele
+revocation of betrouwbare tijd. Een klokverschuiving of een observatie uitgegeven
+na de evaluatieklok mag tot HOLD leiden, nooit tot ruimere rechten.
+
+Zeven nieuwe tests toetsen actieve/ingetrokken fixtures, ontbrekende bron/records,
+verkeerde sleutel/context, tijdgrenzen, revisie-/modefouten, dubbele en ongeldige
+records, omvangslimieten, snapshotisolatie en integratie met de evaluator.
+De integratietest leest de echte hostklok met synthetische registerdata;
+dit is geen controle van een echt toestel of operationeel register.
+De bestaande Rust-test-, build-, Clippy- en PVS-002-commando's blijven van toepassing.
+
+**Nog niet gebouwd:** registeropslag en beveiligde beheerroute, bestand-/netwerk-
+reader met integriteitscontrole, geïsoleerd uitvoeringsproces, harde timeout,
+en tests op onleesbare bestanden of wijzigingen tijdens I/O. De pure
+snapshotberekening is begrensd maar is geen processandbox of harde tijdsgarantie.
+Ook telefoonkoppeling, sleutelbezitbewijs en productieaansluiting zijn niet
+geïmplementeerd. Er zijn geen echte toestelsleutels geregistreerd.
+E2/E3/E4 blijven voor die aansluiting open; productie blijft **HOLD / NONE**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

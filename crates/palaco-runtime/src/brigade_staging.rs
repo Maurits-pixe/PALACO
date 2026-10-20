@@ -9,6 +9,8 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub mod key_registry;
+
 /// Logical specialties, not enrolled identities.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
