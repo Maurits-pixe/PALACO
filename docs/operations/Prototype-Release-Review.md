@@ -25,15 +25,74 @@ For every domain below, the human reviewer must record the exact scope and revis
 | Data retention and deletion | UNKNOWN / NOT REVIEWED | Identify data collected or stored, storage locations, backups and replicas, retention periods, deletion behavior, and responsible owner. Confirm no real-user or sensitive data is used before approval. |
 | Incident response | UNKNOWN / NOT REVIEWED | Identify the accountable responder, reporting path, containment and credential-revocation steps, evidence preservation, communication process, and recovery procedure. Attach the approved runbook and exercise evidence. |
 
-## Per-domain review record
+## Per-domain review records
 
-Create one copy of this record for each review domain above. A domain remains **UNKNOWN / NOT REVIEWED** unless its reviewer has completed the record and explicitly stated a decision. `NOT RECORDED` is a prompt for the reviewer, not a finding or approval.
+Complete each record independently. A domain remains **UNKNOWN / NOT REVIEWED** unless an authorized human reviewer has examined its scope, recorded evidence and findings, and explicitly stated a decision. `NOT RECORDED` is a prompt for the reviewer, not a finding or approval.
 
-### [Review domain]
+### Authentication — UNKNOWN / NOT REVIEWED
 
 - Reviewer(s) and authority: **NOT RECORDED**
-- Review date: **NOT RECORDED**
-- Exact scope, commit, deployment, and configuration examined: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
+- Evidence references and hashes: **NOT RECORDED**
+- Findings and dissent: **NOT RECORDED**
+- Remaining risks and mitigations: **NOT RECORDED**
+- Decision and authorized scope: **NOT RECORDED**
+- Follow-up owner and conditions: **NOT RECORDED**
+
+### Authorization — UNKNOWN / NOT REVIEWED
+
+- Reviewer(s) and authority: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
+- Evidence references and hashes: **NOT RECORDED**
+- Findings and dissent: **NOT RECORDED**
+- Remaining risks and mitigations: **NOT RECORDED**
+- Decision and authorized scope: **NOT RECORDED**
+- Follow-up owner and conditions: **NOT RECORDED**
+
+### Secrets — UNKNOWN / NOT REVIEWED
+
+- Reviewer(s) and authority: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
+- Evidence references and hashes: **NOT RECORDED**
+- Findings and dissent: **NOT RECORDED**
+- Remaining risks and mitigations: **NOT RECORDED**
+- Decision and authorized scope: **NOT RECORDED**
+- Follow-up owner and conditions: **NOT RECORDED**
+
+### Public exposure — UNKNOWN / NOT REVIEWED
+
+- Reviewer(s) and authority: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
+- Evidence references and hashes: **NOT RECORDED**
+- Findings and dissent: **NOT RECORDED**
+- Remaining risks and mitigations: **NOT RECORDED**
+- Decision and authorized scope: **NOT RECORDED**
+- Follow-up owner and conditions: **NOT RECORDED**
+
+### Logging and audit — UNKNOWN / NOT REVIEWED
+
+- Reviewer(s) and authority: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
+- Evidence references and hashes: **NOT RECORDED**
+- Findings and dissent: **NOT RECORDED**
+- Remaining risks and mitigations: **NOT RECORDED**
+- Decision and authorized scope: **NOT RECORDED**
+- Follow-up owner and conditions: **NOT RECORDED**
+
+### Data retention and deletion — UNKNOWN / NOT REVIEWED
+
+- Reviewer(s) and authority: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
+- Evidence references and hashes: **NOT RECORDED**
+- Findings and dissent: **NOT RECORDED**
+- Remaining risks and mitigations: **NOT RECORDED**
+- Decision and authorized scope: **NOT RECORDED**
+- Follow-up owner and conditions: **NOT RECORDED**
+
+### Incident response — UNKNOWN / NOT REVIEWED
+
+- Reviewer(s) and authority: **NOT RECORDED**
+- Review date and exact scope/revision: **NOT RECORDED**
 - Evidence references and hashes: **NOT RECORDED**
 - Findings and dissent: **NOT RECORDED**
 - Remaining risks and mitigations: **NOT RECORDED**
