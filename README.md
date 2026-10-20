@@ -2503,6 +2503,86 @@ Ook telefoonkoppeling, sleutelbezitbewijs en productieaansluiting zijn niet
 geïmplementeerd. Er zijn geen echte toestelsleutels geregistreerd.
 E2/E3/E4 blijven voor die aansluiting open; productie blijft **HOLD / NONE**.
 
+### Aanvulling v0.4 — gepinde offline registerinname in apart proces
+
+De [Python-registerreader](verification/brigade-staging/register_reader.py)
+neemt nu een lokaal stagingregisterbestand in een afzonderlijk, vast Python-
+werkproces in. Dit is een offline voorbereidingscomponent, geen aangesloten
+veiligheidsdienst en **nog geen Python/Rust-bridge**. De Rust-adapter blijft
+host-supplied snapshots beoordelen; hij roept deze reader niet automatisch aan.
+Er is geen beheerregister gevuld of telefoon gekoppeld.
+
+De importeerbare API `read_register` ontvangt een absoluut lokaal bestandspad,
+een verwachte SHA-256 van de exacte bestandsbytes, een verwachte revisie,
+de expliciete mode en een timeout van maximaal vijf seconden (standaard twee).
+De beheerder moet pin, revisie en mode via afzonderlijk beoordeelde hostconfiguratie
+beheren: nooit uit het register of providerantwoord afleiden als nieuwe trust.
+Deze wijziging creëert geen pin of trustinschrijving voor een echte bron.
+Een digestmatch bewijst uitsluitend bytegelijkheid met de aangeleverde pin;
+niet wie het bestand beheert of dat de status werkelijk actueel is.
+
+Het nieuwe invoercontract heet `BRIGADE_STAGING_REGISTRY_V1`. Het bevat exact
+`schema`, `revision`, `mode`, `issued_at`, `expires_at`, `records`.
+Modes zijn exact `Synthetic` of `LocalObservation`. Elk record bevat exact
+`tenant`, `actor`, `device`, `key_ref`, `epoch`, `valid_from`, `expires_at`,
+`revoked`. Referenties zijn niet-lege UTF-8-strings van maximaal 256 bytes zonder
+controltekens; tijd en epoch zijn unsigned 64-bit integers, geen booleans.
+`revoked` is uitsluitend boolean. Dubbele JSON-keys, onbekende velden,
+niet-eindige getallen en dubbele tenant/actor/device/epochbindingen worden
+geweigerd. Er zijn maximaal 128 records en 65.536 invoerbytes toegestaan.
+Snapshotgeldigheid is maximaal 60 seconden en moet zowel in het werkproces
+als na ontvangst door de parent actueel zijn volgens de lokale hostklok.
+Recordgeldigheid blijft apart te beoordelen door de BG05-adapter.
+
+Er bestaat geen canonicalisatie of ondertekend wirecontract: de pin geldt voor
+de **exacte UTF-8-bytes**, inclusief whitespace en sleutelvolgorde. Herformatteren
+vereist een nieuwe onafhankelijk beoordeelde pin. Een changed revision of
+mode wordt geweigerd, ook bij een geldige digest. Dit formaat is niet stilzwijgend
+compatibel met Node, de historische Rust-reference of het authprofiel.
+
+De reader weigert waargenomen symlinks, directories en niet-reguliere bestanden,
+gebruikt `O_NOFOLLOW` en nonblocking open, leest begrensd via één descriptor en
+vergelijkt bestandsidentiteit en metadata vóór/na lezen met het actuele pad.
+SHA-256 controleert de bytes die daadwerkelijk worden geparseerd. Wijzigingen,
+bronvervanging en mismatches leiden tot HOLD zonder snapshot. POSIX met
+`O_NOFOLLOW` is vereist; andere platforms falen gesloten.
+Private, stabiele parentdirectories, lokale mounts en OS-toegangsrechten blijven
+hostverantwoordelijkheden. Dit bewijst geen afwezigheid van alle filesystemraces
+of toegang tot netwerkfilesystems.
+
+De deadline omvat workerstartup, lezen, hashen, parsen en IPC. Bij timeout wordt
+het directe werkproces beëindigd en gereaped; het antwoord is `TIMEOUT`, zonder
+snapshot. Procescreatie, kill en reap zijn afhankelijk van OS-scheduling: dit
+is geen hard-real-timegarantie of OS-securitysandbox. Het werkproces draait met
+dezelfde OS-rechten als de parent, voert geen willekeurige agents uit en mag geen
+alternatief executablepad uit registerinput aannemen.
+
+De API geeft alleen bij succes `PINNED_UNVERIFIED` met snapshot terug.
+Alle antwoorden blijven `HOLD`, `operativeAuthority=NONE`, `authenticated=false`
+en zonder contactopening, runtimekoppeling of externe beschermde effecten.
+Fouten tonen geen paden, broninhoud of ruwe uitzonderingen. Succesdata blijft
+gevoelige stagingcontext: niet loggen of committen. Gebruik alleen publieke,
+pseudonieme referenties; geen privékeys, credentials of persoonsregisters.
+
+Elf nieuwe unittests omvatten gewijzigde bytes onder dezelfde revisie,
+whitespacewijziging, ontbrekende/onleesbare bronnen, symlinks/FIFO/directories,
+padvervanging tijdens lezen, verlopen/toekomstige snapshots, mode/revisie,
+schema/type-/omvangfouten en een echt geblokkeerd testproces dat na timeout
+beëindigd en gereaped is. Een aparte test controleert expiry na IPC.
+De onleesbaarheidstest injecteert een permission error zodat ook privileged CI
+deterministisch blijft; dit is geen test van echte productie-ACLs.
+Uitvoeren vanuit de repositoryroot:
+`PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s verification/brigade-staging -p test_register_reader.py -v`.
+Er zijn geen nieuwe dependencies of CI-/deploymentinstellingen toegevoegd.
+
+Open blijven: onafhankelijk beoordeelde bronconfiguratie en wijzigingsprocedure,
+OS-rechtenisolatie, de expliciete Rust-bridge met gepinde omzettingsregels,
+betrouwbare tijd, live revocation en fysieke toestel-/sleutelbezitcontrole.
+Een succesvolle read vernieuwt geen pin of rechten en ziet geen intrekkingen
+ná de gelezen snapshot. De rapportage levert geen bevoegde commitbeslissing.
+Productie blijft **HOLD / NONE**; de historische vault-/kernelkop hieronder is
+geen bewijs van activering door deze stagingwijzigingen.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*
