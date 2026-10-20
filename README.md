@@ -2249,6 +2249,161 @@ claims elsewhere in this README do not apply to ERA-009.
 
 Decision boundary: **ADVISORY — HUMAN DECISION REQUIRED**.
 
+## BRI9ADE / 6RI9ADE — geïsoleerd stagingontwerp v0.1
+
+Status: **DESIGN_ONLY — NOT_IMPLEMENTED — NOT_CONNECTED**.
+Deze versie legt de engineeringbaseline BG01–BG09 en het stagingontwerp onder
+gebruikers-GO vast voor review; zij activeert geen dienst of contact. Wijzigingen
+vereisen een nieuwe versie, expliciete review en behoud van deze historie.
+Historische bronclaims en testresultaten worden niet met terugwerkende kracht
+herschreven of als opnieuw geverifieerd opgevoerd.
+
+### Bron- en hergebruikgrens
+
+De historische naam BRIGADE is volgens de aangeleverde bronbinding gevonden;
+historische aliasequivalentie met BRI9ADE/6RI9ADE blijft **UNKNOWN**. BG01–BG09 zijn
+logische specialismen, geen aangetoonde agentidentiteiten, negen bedrijven of
+negen onafhankelijke modellen.
+
+Op de onderzochte PALACO-checkout
+`85a448e51ae5c8f6f40619d59d3056cdffc712a1` ontbreken
+`crates/palaco-runtime/src/sixri9ade.rs` en
+`docs/6ri9ade-runtime-bridge-v0.1.md`. De aanwezige
+[proceslokale commitreference](crates/palaco-citadel/src/commit_gate.rs) biedt geen
+duurzame contactcommit, trustverificatie of externe uitvoeringsbevoegdheid.
+Hergebruik van de contactreference vereist eerst het beschikbaar maken en
+beoordelen van de gepinde bronnen, schemas en canonical bytes; deze wijziging
+importeert of implementeert die niet.
+
+Externe bronpins, hier als aangeleverde referenties en niet als in deze wijziging
+opnieuw uitgevoerde verificatie:
+
+- [Negenrollenontwerp en historische bronbinding](https://github.com/Maurits-pixe/PALACO-Citadel/blob/5393a39ae4ecb03b784d6855ab28d79e77a522dc/rio/CONTACT-FOUNDATION.md).
+- [Reference-evidencecontract](https://github.com/Maurits-pixe/PALACO-Citadel/blob/5393a39ae4ecb03b784d6855ab28d79e77a522dc/rio/BRIGADE-EVIDENCE.md).
+- [Afzonderlijk auth-safetyprofiel](https://github.com/Maurits-pixe/PALACO-Citadel/blob/5393a39ae4ecb03b784d6855ab28d79e77a522dc/ambassades/auth/SAFETY-PROVIDER.md).
+- [Rust-reference op historische broncommit](https://github.com/Maurits-pixe/PALACO/blob/316488daab35db06dea11f1c4e13158ddd0aa705/crates/palaco-runtime/src/sixri9ade.rs).
+
+Het authprofiel met vijf controletaken plus DECISION en REVOCATION is geen
+mapping naar negen contactrollen of achttien bilaterale attestations.
+Verschillende keys bewijzen geen onafhankelijke operators of uitgevoerde
+controles. Ook de bestaande
+[T05-account-stagingpreflight](specs/rio-staging-plan/T05-STAGING-PLAN.md)
+is geen contactadapter of BRI9ADE-veiligheidsbewijs.
+
+### Negen rollen, achttien afzonderlijke controleplaatsen
+
+Voor elke rol zijn afzonderlijk zichtbare resultaten nodig voor afzender en
+ontvanger. BRI9ADE beschermt de afzender; de ontvangende STEWARD beschermt
+eigenaar en receptie. Een aggregaat-PASS vervangt geen ontbrekende rol.
+Alle operationele inschrijvingen blijven **UNENROLLED / NOT_CONNECTED**.
+
+| Rol | Specialisme | Minimale controle |
+| --- | --- | --- |
+| BG01 | Identiteit en apparaat | Actuele account-, sessie-, device- en issuerbinding |
+| BG02 | Adres en bestemming | Juiste P.P.-eigenaar en ontvangercontext; geen rechtenovererving bij heruitgifte |
+| BG03 | Menselijke toestemming | Afzonderlijke NOVA-toelating en exacte finale instemming |
+| BG04 | Toegang en beleid | Actuele policy, minimale rechten en uitsluitend afgesproken scope |
+| BG05 | Versleuteling en sleutels | Bewezen E2EE, geauthenticeerde toestelsleutels en zichtbare sleutelwisselingen |
+| BG06 | Inhoud en integriteit | Berichtcontext, integriteit en veilige endpointweergave |
+| BG07 | Herhaling en volgorde | Replaypreventie, epochs, idempotency en begrensde herordening |
+| BG08 | Privacy en metadata | Dataminimalisatie, veilige meldingen en begrensde audit |
+| BG09 | Aflevering en intrekking | Actuele rechten bij commit en aflevering, duurzaamheid en revocation |
+
+### Contact- en isolatiegrenzen
+
+De route blijft: menselijk verzoek → NOVA in geïsoleerde receptie → eerste
+menselijke toelating → bilaterale controles → exacte finale instemming van
+beide partijen → uitsluitend begrensd contact. De eerste beoogde scope is
+`chat:text`, zonder privé-Mundo, bestanden, agenda, beheer of vrije Citadel-toegang.
+Dit ontwerp opent ook die beperkte scope niet.
+
+BG03 toetst eerst verzoek en toelating; finale receipts volgen afzonderlijk na
+de controles. Advies, technische PASS, gelezenmelding of wachtstatus is geen
+consent. Guards mogen alleen binnen vooraf expliciet verleende beschermingsrechten
+blokkeren, nooit zelfstandig sociaal contact accepteren of scope uitbreiden.
+Alleen manifests en protocolberichten reizen mee, geen uitvoerbare agents.
+
+Het toekomstige stagingontwerp scheidt:
+
+- Een referenceomgeving voor synthetische fixtures en testkeys.
+- Een observatieomgeving voor later beoordeelde adapters naar echte controles.
+- Een evaluator met achttien zichtbare rol-/partijplaatsen en hun beperkingen.
+- Read-only rapportage zonder contactopening of beslissingsrecht over productie.
+
+Synthetische en echte registraties, keys, stores en resultaten blijven strikt
+gescheiden. Geen omzetting van een `SYNTHETIC_ONLY`-schakelaar als migratie.
+Een echte stagingobservatie is evenmin een productieattestation.
+
+### Enrollment, trust en adaptercontract — nog te beoordelen
+
+Per rol en partij is vóór aansluiting een beoordeeld enrollmentrecord vereist:
+unieke enrollment- en issuerreferentie, BG-rol, partij, verantwoordelijke operator,
+mandaat/provenance, toegestane controletaken, actor/device/tenantcontext,
+publieke keyreferentie, geldigheid, revocationbron en versie. Private keys blijven
+bij de bevoegde dienst; deze voorbereiding genereert of registreert geen keys.
+
+De host selecteert vertrouwde inschrijvingen uit een onafhankelijk beheerde
+trustbron. Keys uit clientrequests of providerantwoorden worden nooit nieuwe
+trust anchors. Wijzigingsbevoegdheid, review, versiebeheer, rollback en recovery
+van die bron moeten vóór aansluiting expliciet worden vastgesteld.
+
+Elke adapter moet zijn feitelijke controle, beperkingen, minimale gegevens,
+toegestane endpoints, timeouts en bewaartermijnen documenteren. Elke uitslag bindt
+request/challenge, contractdigest, partijen en apparaten, context, rol,
+policyversie, sleutelepoch, uitgifte/verval, evidenceverwijzing, issuer en
+checkpoint. Finale menselijke receipts binden de volledige evidenceset en
+toelating. Schemas en canonical bytes moeten eerst worden gepind; er is geen
+stil hergebruik tussen Node, Rust en het authprofiel.
+
+Een handtekening bewijst de assertion, niet de feitelijke uitvoering. BG05/BG06
+geven de relay geen E2EE-plaintext of privésleutels. Inhoud blijft onbetrouwbare
+data; integriteit bewijst geen waarheid of onschadelijkheid.
+
+### Beslissen, commit en aflevering
+
+Ontbrekend, onbekend, verlopen, onbetrouwbaar of tegenstrijdig bewijs geeft
+**HOLD**. Alleen een actuele, vertrouwde en exact gebonden FAIL geeft **STOP**;
+onbetrouwbare input kan geen geauthenticeerde FAIL fabriceren.
+Een positieve reference- of staginguitkomst verleent geen contactbevoegdheid.
+Voor dit ontwerp blijven `canOpenContact=false`, `operativeAuthority=NONE`,
+`runtimeConnected=false` en `externalSideEffect=false`.
+
+`SERVICE_COMMIT` en `QUEUED_DELIVERY` zijn afzonderlijke checkpoints. Een
+toekomstige implementatie vereist actuele revocation op beide checkpoints,
+expliciete lease/deadline, betrouwbare klok, bescherming tegen
+configuratiewijzigingen tijdens beoordeling en duurzame atomische
+challengeconsumptie met het bevoegde commitbesluit en de outboxvastlegging.
+Polling blijft read-only. Geen beschermd extern effect vóór het bevoegde besluit.
+Retries mogen historische receipts opleveren, nooit nieuwe bevoegdheid.
+Intrekking stopt nieuw verkeer volgens het vastgelegde transactiebeslispunt;
+reeds ontvangen inhoud en screenshots zijn niet gegarandeerd terughaalbaar.
+
+### Uitvoeringspoorten en negatieve acceptatiematrix
+
+| Poort | Vereist bewijs | Status van deze voorbereiding |
+| --- | --- | --- |
+| E0 Engineeringbaseline | Negen rollen en contactgrenzen onder gebruikers-GO | Vastgelegd voor review in deze versie |
+| E1 Dienst en verantwoordelijkheid | Bestaande dienst, operator, bevoegd mandaat en rol-/partijdekking | BLOCKED — niet aangewezen |
+| E2 Trust en protocol | Beoordeelde enrollment, endpoints, revocation, klok/leases en gepinde bytes | HOLD |
+| E3 Stagingadapter | Begrensde echte observaties zonder productie-effecten | NOT IMPLEMENTED |
+| E4 Negatieve verificatie | Adversariële en hersteltests op de adapter | NOT RUN |
+| E5 Bilaterale integratie | Echte actors/devices, menselijke receipts, E2EE en duurzame verwerking | HOLD |
+| E6 Beperkte release | Onafhankelijke security/privacy/operationsreview en afzonderlijk menselijk releasebesluit | HOLD |
+
+De toekomstige E4-matrix moet minimaal ontbreken van elk van de achttien
+controleplaatsen, spoofing, verkeerde context/partij/device/checkpoint,
+replay, expiry, keyrotatie, timeout, intrekking, configuratieraces,
+gelijktijdige challengeconsumptie, dubbele verwerking en crashherstel toetsen.
+Vermenging van synthetische en echte evidence en het promoveren van onbevoegde
+keys moeten worden geweigerd; polling mag geen toestand of bevoegdheid wijzigen.
+Dit zijn acceptatievereisten, geen bestaande tests of geslaagde verificatie.
+
+E1 kan niet worden gesloten door een verzonnen dienstnaam, testkeys of een
+AI-verklaring. Eerst zijn dienst, beheerder en aantoonbare controles nodig;
+credentials worden pas daarna via een beveiligde invoerroute gevraagd.
+Deze documentatiewijziging maakt geen productieaccounts, issuerinschrijving,
+netwerkadapter, contactopening of deployment aan.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*
