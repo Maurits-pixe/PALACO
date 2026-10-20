@@ -2634,6 +2634,64 @@ toestelinschrijving, sleutelbezitbewijs, betrouwbare klok en live revocation
 blijven open. Geen contactopening, productieaccount, deployment of productie-
 uitvoeringsrecht volgt uit de bridge: productie blijft **HOLD / NONE**.
 
+### Aanvulling v0.6 — gesloten hostconfiguratie en lokale reader-CLI
+
+De [reader](verification/brigade-staging/register_reader.py) kan nu host-owned
+configuratiebytes verwerken via `read_configured`, met een afzonderlijk door de
+aanroeper geselecteerde mode. Het configuratiecontract heet
+`BRIGADE_READER_HOST_V1` en accepteert exact:
+
+| Veld | Vereiste |
+| --- | --- |
+| schema | `BRIGADE_READER_HOST_V1` |
+| role / party | uitsluitend `BG05` / `Sender` |
+| mode | `Synthetic` of `LocalObservation`, exact gelijk aan de aanroepmode |
+| source | exact `path`, `sha256`, `revision` |
+| source.path | absoluut lokaal pad zonder controltekens, `..` of UNC-prefix |
+| source.sha256 | 64 lowercase hextekens, onafhankelijk beoordeelde exact-byte pin |
+| source.revision | niet-lege referentie, maximaal 256 UTF-8-bytes |
+| timeout_seconds | getal groter dan nul en maximaal vijf; boolean is ongeldig |
+
+Maximaal 16.384 configuratiebytes, strict UTF-8/JSON zonder dubbele keys of
+onbekende velden. Credentials, authorityvlaggen, endpoints en extra rollen
+zijn geen toegestane configuratievelden. Een configuratiefout start geen
+registerread. Dit valideert alleen structuur en samenhang: het bewijst geen
+operatoridentiteit, mandaat, onafhankelijke review of veilige opslag.
+Er wordt geen echte configuratie, bronpin of registerbestand meegeleverd.
+
+De lokale CLI leest configuratie uitsluitend van stdin. Aanroepen:
+`python /home/runner/work/PALACO/PALACO/verification/brigade-staging/register_reader.py --host-check Synthetic`
+of expliciet `--host-bridge Synthetic` voor private bridgeoverdracht.
+Voor een afzonderlijke echte-observatiestagingrun wordt de aanroepmode exact
+`LocalObservation`; dit selecteert geen productieomgeving of geauthenticeerde
+dekking. De host moet zelf de beoordeelde configuratie via een beveiligde pipe
+aanleveren; plak geen configuratie, paden, keys of registerdata in publieke logs.
+
+`--host-check` geeft alleen een gesanitiseerde status zonder snapshot, pad of
+toestelreferenties. `--host-bridge` schrijft uitsluitend bij succes de
+ongeverifieerde bridgebytes naar stdout. Bij fouten blijft bridge-stdout leeg
+en verschijnt een gesanitiseerde HOLD-status op stderr. Exit 0 betekent alleen
+een geslaagde pin-/structuur-/freshnesscontrole of export; exit 2 betekent
+weigering/onbeschikbaarheid. Beide blijven HOLD/NONE, nooit contactbevoegdheid.
+
+De bestaande registerworker behoudt zijn timeout en wordt per read opnieuw
+gestart. Stdin-inname, configuratieparsing en hostprocesbeheer vallen niet onder
+die workerdeadline. Een host moet de configuratiepipe en eigen procesdeadline
+beheersen; dit is geen complete service- of securitysandbox.
+Vijf nieuwe tests toetsen echte CLI-check/export, lege bridge-output bij fouten,
+mode-/scopeweigering, ontbrekende pins, extra velden en ongeldige configuratie.
+De reader-suite bevat nu 18 tests; de bestaande Python/Rust-ketentest blijft gelden.
+
+De beheerprocedure blijft menselijk: beoordeel bron en bytes onafhankelijk,
+review pin/revisie/mode samen, beheer configuratie buiten het register en leg
+wijzigingsrechten en recovery vast vóór echte aansluiting. De tool berekent of
+vernieuwt geen pin voor gebruik en accepteert geen register als zijn eigen
+trustconfiguratie. Rollback-/revocationfencing en OS-rechtenisolatie zijn nog
+niet geïmplementeerd; een geldige oude configuratie kan niet uitsluitend op
+configuratiesyntax worden herkend als ingetrokken.
+Geen telefoonkoppeling, issuerinschrijving, productieaccount of deployment:
+productie blijft **HOLD / NONE**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

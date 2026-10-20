@@ -220,6 +220,86 @@ class ReaderTests(unittest.TestCase):
         with self.assertRaisesRegex(reader.Rejected, "INTEGRITY_MISMATCH"):
             reader.read_bridge(str(self.path), "0" * 64, "fixture-r1", "Synthetic")
 
+    def config(self):
+        return {
+            "schema": reader.HOST_SCHEMA, "role": "BG05", "party": "Sender",
+            "mode": "Synthetic", "source": {
+                "path": str(self.path), "sha256": self.write(), "revision": "fixture-r1",
+            }, "timeout_seconds": 2,
+        }
+
+    def cli(self, raw, command="--host-check", mode="Synthetic"):
+        return subprocess.run(
+            [sys.executable, "-I", str(Path(reader.__file__).absolute()), command, mode],
+            input=raw, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5,
+            check=False,
+        )
+
+    def test_configured_read_and_sanitized_cli_check(self):
+        raw = json.dumps(self.config()).encode()
+        self.closed(reader.read_configured(raw, "Synthetic"), "PINNED_UNVERIFIED")
+        output = self.cli(raw)
+        self.assertEqual(output.returncode, 0)
+        self.assertEqual(output.stderr, b"")
+        result = json.loads(output.stdout)
+        self.closed(result, "PINNED_UNVERIFIED")
+        self.assertNotIn("snapshot", result)
+        self.assertNotIn("fixture-actor", output.stdout.decode())
+
+    def test_config_rejects_scope_mode_credentials_and_incomplete_source_before_read(self):
+        original = self.config()
+        mutations = [
+            lambda c: c.update(schema="other"),
+            lambda c: c.update(role="BG01"),
+            lambda c: c.update(party="Recipient"),
+            lambda c: c.update(mode="LocalObservation"),
+            lambda c: c.update(operativeAuthority="NONE"),
+            lambda c: c["source"].update(token="forbidden-placeholder"),
+            lambda c: c["source"].update(path="relative.json"),
+            lambda c: c["source"].update(path="/tmp/../registry.json"),
+            lambda c: c["source"].update(path="//host/register.json"),
+            lambda c: c["source"].update(path="/tmp/bad\npath"),
+            lambda c: c["source"].update(sha256=None),
+            lambda c: c["source"].pop("revision"),
+            lambda c: c.update(timeout_seconds=True),
+            lambda c: c.update(timeout_seconds=0),
+            lambda c: c.update(timeout_seconds=6),
+        ]
+        with patch.object(reader, "read_register") as read:
+            for mutation in mutations:
+                config = copy.deepcopy(original)
+                mutation(config)
+                self.closed(reader.read_configured(json.dumps(config).encode(), "Synthetic"), "INVALID")
+            read.assert_not_called()
+
+    def test_config_duplicate_keys_encoding_and_size_are_closed(self):
+        for raw in [
+            b'{"schema":1,"schema":2}', b'{"x":NaN}', b"\xff",
+            b"[" * 2000, b"x" * (reader.HOST_CONFIG_LIMIT + 1),
+        ]:
+            self.closed(reader.read_configured(raw, "Synthetic"), "INVALID")
+        self.closed(reader.read_configured(b"{}", "not-a-mode"), "INVALID")
+
+    def test_cli_bridge_is_opt_in_and_failure_has_no_stdout(self):
+        config = self.config()
+        output = self.cli(json.dumps(config).encode(), "--host-bridge")
+        self.assertEqual(output.returncode, 0)
+        self.assertEqual(output.stderr, b"")
+        self.assertTrue(output.stdout.startswith((reader.BRIDGE_HEADER + "\n").encode()))
+        config["source"]["sha256"] = "0" * 64
+        output = self.cli(json.dumps(config).encode(), "--host-bridge")
+        self.assertEqual(output.returncode, 2)
+        self.assertEqual(output.stdout, b"")
+        self.closed(json.loads(output.stderr), "INTEGRITY_MISMATCH")
+
+    def test_cli_mode_mismatch_and_bad_invocation_do_not_export(self):
+        raw = json.dumps(self.config()).encode()
+        for command, mode in [("--host-check", "LocalObservation"), ("--other", "Synthetic")]:
+            output = self.cli(raw, command, mode)
+            self.assertEqual(output.returncode, 2)
+            self.closed(json.loads(output.stdout), "INVALID")
+        self.closed(json.loads(self.cli(b"{").stdout), "INVALID")
+
 
 if __name__ == "__main__":
     unittest.main()

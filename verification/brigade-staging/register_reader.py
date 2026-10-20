@@ -214,6 +214,8 @@ def read_register(path, expected_sha256, expected_revision, mode, timeout_second
 
 BRIDGE_HEADER = "BRIGADE_UNVERIFIED_SNAPSHOT_V1"
 BRIDGE_LIMIT = 140_000
+HOST_CONFIG_LIMIT = 16_384
+HOST_SCHEMA = "BRIGADE_READER_HOST_V1"
 
 
 def _encode_bridge(snapshot, revision, mode, now):
@@ -253,15 +255,102 @@ def read_bridge(path, expected_sha256, expected_revision, mode, timeout_seconds=
         raise Rejected("INVALID") from error
 
 
-if __name__ == "__main__":
-    if sys.argv[1:] != ["--worker"]:
-        print(json.dumps(_result("INVALID"), sort_keys=True))
-        sys.exit(2)
+def _host_config(raw, expected_mode):
+    """Parse host-owned bytes, not a configuration supplied by the register."""
+    if type(raw) is not bytes or len(raw) > HOST_CONFIG_LIMIT:
+        raise Rejected("INVALID")
+    if type(expected_mode) is not str or expected_mode not in MODES:
+        raise Rejected("INVALID")
+    config = _decode(raw)
+    if not _keys(config, "schema role party mode source timeout_seconds"):
+        raise Rejected("INVALID")
+    if (
+        config["schema"] != HOST_SCHEMA or config["role"] != "BG05"
+        or config["party"] != "Sender" or config["mode"] != expected_mode
+        or not _keys(config["source"], "path sha256 revision")
+    ):
+        raise Rejected("INVALID")
+    source = config["source"]
+    path, digest, revision = source["path"], source["sha256"], source["revision"]
+    timeout = config["timeout_seconds"]
+    if (
+        type(path) is not str or not 0 < len(path) <= 4096
+        or any(unicodedata.category(char) == "Cc" for char in path)
+        or not Path(path).is_absolute() or path.startswith("//") or ".." in Path(path).parts
+        or type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+        or not _reference(revision)
+        or type(timeout) not in (int, float)
+        or not math.isfinite(timeout) or not 0 < timeout <= 5
+    ):
+        raise Rejected("INVALID")
+    return config
+
+
+def read_configured(raw_config, expected_mode):
+    """Host-owned config bytes -> read result. No enrollment or config persistence.
+
+    The caller must independently select mode and protect the config input channel.
+    Schema validation is not review, operator authentication or rollback fencing.
+    Unknown fields (including credentials/authority flags) are rejected.
+    """
     try:
-        request_bytes = sys.stdin.buffer.read(16_385)
-        if len(request_bytes) > 16_384:
-            raise Rejected("INVALID")
-        output = _worker(_decode(request_bytes))
-    except (ValueError, TypeError, UnicodeError, RecursionError):
-        output = _result("INVALID")
-    sys.stdout.write(json.dumps(output, ensure_ascii=True, separators=(",", ":")))
+        config = _host_config(raw_config, expected_mode)
+        source = config["source"]
+        return read_register(
+            source["path"], source["sha256"], source["revision"],
+            expected_mode, config["timeout_seconds"],
+        )
+    except (ValueError, TypeError, KeyError, RecursionError, OverflowError):
+        return _result("INVALID")
+
+
+def main(arguments):
+    """CLI accepts bounded configuration on stdin, never secrets on argv.
+
+    Default configured check emits only sanitized status. Explicit bridge export
+    emits unverified context bytes on stdout; route only through a private pipe.
+    stdin acquisition is not covered by the register worker's timeout.
+    """
+    if arguments == ["--worker"]:
+        try:
+            request_bytes = sys.stdin.buffer.read(HOST_CONFIG_LIMIT + 1)
+            if len(request_bytes) > HOST_CONFIG_LIMIT:
+                raise Rejected("INVALID")
+            output = _worker(_decode(request_bytes))
+        except (ValueError, TypeError, UnicodeError, RecursionError):
+            output = _result("INVALID")
+        sys.stdout.write(json.dumps(output, ensure_ascii=True, separators=(",", ":")))
+        return 0
+    if (
+        len(arguments) != 2 or arguments[0] not in {"--host-check", "--host-bridge"}
+        or arguments[1] not in MODES
+    ):
+        print(json.dumps(_result("INVALID"), sort_keys=True))
+        return 2
+    result = read_configured(
+        sys.stdin.buffer.read(HOST_CONFIG_LIMIT + 1), arguments[1],
+    )
+    if arguments[0] == "--host-bridge":
+        if result["status"] == "PINNED_UNVERIFIED":
+            try:
+                raw = _encode_bridge(
+                    result["snapshot"], result["snapshot"]["revision"],
+                    arguments[1], int(time.time()),
+                )
+                sys.stdout.buffer.write(raw)
+                return 0
+            except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+                result = _result("STALE")
+        # A failed export must never mix JSON diagnostics with bridge stdout.
+        print(json.dumps(_result(result["status"]), sort_keys=True), file=sys.stderr)
+        return 2
+    print(json.dumps(_result(result["status"]), sort_keys=True))
+    return 0 if result["status"] == "PINNED_UNVERIFIED" else 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except (OSError, ValueError, OverflowError):
+        # Broken pipes and other I/O failures expose no paths or source values.
+        sys.exit(2)
