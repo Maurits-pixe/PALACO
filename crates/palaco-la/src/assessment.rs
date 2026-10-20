@@ -1,5 +1,5 @@
 use crate::domain::{
-    Evidence, EpistemicState, EpistemicStatus, Question, ThresholdAssessment, ThresholdState,
+    EpistemicState, EpistemicStatus, Evidence, Question, ThresholdAssessment, ThresholdState,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,7 +79,11 @@ mod tests {
     use crate::domain::{EvidenceId, QuestionId};
 
     fn question() -> Question {
-        Question { id: QuestionId::new(Uuid::new_v4()), subject: "test subject".to_owned(), context: "test context".to_owned() }
+        Question {
+            id: QuestionId::new(Uuid::new_v4()),
+            subject: "test subject".to_owned(),
+            context: "test context".to_owned(),
+        }
     }
 
     fn evidence(question_id: QuestionId) -> Evidence {
