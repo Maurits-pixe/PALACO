@@ -21,6 +21,7 @@ FIXED = {
 MAX_RECORDS = 1000
 MAX_JSON_CHARS = 8192
 MAX_JSON_BYTES = MAX_JSON_CHARS
+_UNSET = object()
 
 
 def canonical(value):
@@ -77,30 +78,40 @@ def load_persisted(text, sql_type):
 
 
 class Store:
-    def __init__(self, path, source_commit):
+    def __init__(self, path, source_commit, *, read_only=False):
+        if type(read_only) is not bool:
+            raise ValueError("read_only must be a bool")
         if type(source_commit) is not str or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
             raise ValueError("a runner-supplied 40-hex source commit is required")
         if str(path) in ("", ":memory:"):
             raise ValueError("on-disk database required")
         self.source = {"repository": REPOSITORY, "commit": source_commit}
-        self.db = sqlite3.connect(str(path), timeout=2, isolation_level=None)
+        self.read_only = read_only
+        target = Path(path).absolute().as_uri() + "?mode=ro" if read_only else str(path)
+        self.db = sqlite3.connect(target, timeout=2, isolation_level=None, uri=read_only)
         try:
             self.db.execute("PRAGMA busy_timeout=2000")
-            self.db.execute("PRAGMA journal_mode=DELETE")
-            self.db.execute("PRAGMA synchronous=FULL")
-            self.db.execute("BEGIN IMMEDIATE")
-            self.db.execute("CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id=1), source TEXT NOT NULL)")
-            self.db.execute("CREATE TABLE IF NOT EXISTS records (seq INTEGER PRIMARY KEY, body TEXT NOT NULL)")
-            self.db.execute("CREATE TABLE IF NOT EXISTS requests (key TEXT PRIMARY KEY, request_hash TEXT NOT NULL, receipt TEXT NOT NULL)")
-            if not self.db.execute("SELECT 1 FROM metadata LIMIT 1").fetchone() and not (
-                    self.db.execute("SELECT 1 FROM records LIMIT 1").fetchone() or
-                    self.db.execute("SELECT 1 FROM requests LIMIT 1").fetchone()):
-                self.db.execute("INSERT INTO metadata VALUES (1,?)", (canonical(self.source).decode(),))
+            if read_only:
+                self.db.execute("PRAGMA query_only=ON")
+                self.db.execute("BEGIN")
+            else:
+                self.db.execute("PRAGMA journal_mode=DELETE")
+                self.db.execute("PRAGMA synchronous=FULL")
+                self.db.execute("BEGIN IMMEDIATE")
+                self.db.execute("CREATE TABLE IF NOT EXISTS metadata (id INTEGER PRIMARY KEY CHECK(id=1), source TEXT NOT NULL)")
+                self.db.execute("CREATE TABLE IF NOT EXISTS records (seq INTEGER PRIMARY KEY, body TEXT NOT NULL)")
+                self.db.execute("CREATE TABLE IF NOT EXISTS requests (key TEXT PRIMARY KEY, request_hash TEXT NOT NULL, receipt TEXT NOT NULL)")
+                if not self.db.execute("SELECT 1 FROM metadata LIMIT 1").fetchone() and not (
+                        self.db.execute("SELECT 1 FROM records LIMIT 1").fetchone() or
+                        self.db.execute("SELECT 1 FROM requests LIMIT 1").fetchone()):
+                    self.db.execute("INSERT INTO metadata VALUES (1,?)", (canonical(self.source).decode(),))
             self._validate_state()
             self.db.commit()
         except BaseException:
-            self.db.rollback()
-            self.db.close()
+            try:
+                self.db.rollback()
+            finally:
+                self.db.close()
             raise
 
     def close(self):
@@ -206,6 +217,8 @@ class Store:
         return record["hash"]
 
     def submit(self, value, *, _checkpoint=None):
+        if self.read_only:
+            raise ValueError("read-only store permits export only")
         # Internal callable seam only: no CLI/input field can enable fault injection.
         self.db.execute("BEGIN IMMEDIATE")
         try:
@@ -244,6 +257,8 @@ class Store:
             raise
 
     def revoke(self):
+        if self.read_only:
+            raise ValueError("read-only store permits export only")
         self.db.execute("BEGIN IMMEDIATE")
         try:
             records = self._validate_state()
@@ -254,7 +269,11 @@ class Store:
             self.db.rollback()
             raise
 
-    def export(self):
+    def export(self, *, expected_proof=_UNSET):
+        if expected_proof is not _UNSET and (
+                type(expected_proof) is not str or
+                not re.fullmatch(r"[0-9a-f]{64}", expected_proof)):
+            raise ValueError("expected proof must be a lowercase 64-hex string")
         self.db.execute("BEGIN")
         try:
             # Metadata and ordered log are read in the same SQLite snapshot.
@@ -263,6 +282,8 @@ class Store:
                     "records": records}
             envelope = {**body, "proof": {"algorithm": "SHA256", "digest": digest(body),
                                         "authenticity": False}}
+            if expected_proof is not _UNSET and expected_proof != envelope["proof"]["digest"]:
+                raise ValueError("expected proof mismatch")
             self.db.commit()
             return envelope
         except BaseException:
@@ -272,24 +293,33 @@ class Store:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["demo"])
+    parser.add_argument("command", choices=["demo", "export"])
     parser.add_argument("--db", required=True, type=Path)
     parser.add_argument("--envelope", required=True, type=Path)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--expected-proof", default=_UNSET)
     args = parser.parse_args()
-    if args.db.resolve() == args.envelope.resolve():
+    if args.command == "demo" and args.expected_proof is not _UNSET:
+        parser.error("--expected-proof is only supported for export")
+    if args.db.resolve() == args.envelope.resolve() or (
+            args.db.exists() and args.envelope.exists() and args.db.samefile(args.envelope)):
         parser.error("database and envelope paths must differ")
-    store = Store(args.db, args.source_commit)
+    store = Store(args.db, args.source_commit, read_only=args.command == "export")
     try:
-        receipt = store.submit(request())
-        store.revoke()
-        assert store.submit(request()) == receipt
-        envelope = store.export()
+        if args.command == "demo":
+            receipt = store.submit(request())
+            store.revoke()
+            assert store.submit(request()) == receipt
+        envelope = store.export(expected_proof=args.expected_proof)
         # Exclusive creation avoids overwriting caller inputs, including the database.
         with args.envelope.open("x", encoding="ascii") as output:
             output.write(canonical(envelope).decode() + "\n")
-        print(json.dumps({"result": "SYNTHETIC_ONLY", "records": len(envelope["records"]),
-                          "proof": envelope["proof"]["digest"], "execution": False}))
+        result = {"result": "SYNTHETIC_ONLY", "records": len(envelope["records"]),
+                  "proof": envelope["proof"]["digest"], "execution": False}
+        if args.command == "export":
+            result.update(result="SYNTHETIC_READ_ONLY_EXPORT", authenticity=False,
+                          source_commit=envelope["source"]["commit"])
+        print(json.dumps(result))
     finally:
         store.close()
 
