@@ -102,9 +102,9 @@ try {
     return { moduleIds: ['aether', 'bastion', '5criptie'], transport: 'native HTTPS Fetch, CORS, stream and emitted JSON Worker' };
   }, 'real browser Fetch/Worker with TLS fixtures and restrictive CORS headers');
   for (const [id, mode, label] of [
-    ['BROWSER-SCHEMA-MISSING-STATUS', 'missing-status', 'Verificatie mislukt'],
-    ['BROWSER-IDENTITY-MISMATCH', 'wrong-id', 'Verificatie mislukt'],
-    ['BROWSER-JSON-MALFORMED', 'malformed', 'Verificatie mislukt'],
+    ['BROWSER-SCHEMA-MISSING-STATUS', 'missing-status', 'Metadata niet bevestigd'],
+    ['BROWSER-IDENTITY-MISMATCH', 'wrong-id', 'Metadata niet bevestigd'],
+    ['BROWSER-JSON-MALFORMED', 'malformed', 'Metadata niet bevestigd'],
     ['BROWSER-CORS-REFUSAL', 'no-cors', 'Controle niet mogelijk'],
     ['BROWSER-REDIRECT-REFUSAL', 'redirect', 'Controle niet mogelijk']
   ]) await report.check(id, async () => {
@@ -180,14 +180,14 @@ try {
     const second = await card('aether').locator('[data-countdown]').textContent();
     assert.notEqual(first, second);
     console.log(JSON.stringify({ progress: 'real 60-second TTL started', first, second }));
-    await status('aether', 'Verificatie verlopen', 62000);
+    await status('aether', 'Metadata-bevestiging verlopen', 62000);
     assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
     return { first, second, elapsedMs: performance.now() - start, realWallClockWait: true, launchDisabled: true };
   }, 'actual browser render/timers and real 60-second validity period; no simulated clock');
   await report.check('BROWSER-RETURN-REVOKES-VERIFICATION', async () => {
     await fresh(); await verify(); await status('aether', 'Modulemetadata bevestigd');
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await status('aether', 'Verificatie verlopen'); return { returnRequiresNewCheck: true, event: 'synthetic focus dispatch in native browser' };
+    await status('aether', 'Metadata-bevestiging verlopen'); return { returnRequiresNewCheck: true, event: 'synthetic focus dispatch in native browser' };
   }, 'actual Vue event handler and DOM; explicitly synthetic lifecycle event');
   await report.check('BROWSER-SIMULATED-EXACT-TTL', async () => {
     const originalPage = page;
@@ -200,7 +200,7 @@ try {
       await page.clock.fastForward(59999);
       await status('aether', 'Modulemetadata bevestigd');
       await page.clock.fastForward(1);
-      await status('aether', 'Verificatie verlopen');
+      await status('aether', 'Metadata-bevestiging verlopen');
       assert.equal(await card('aether').locator('[data-launch]').isDisabled(), true);
       return { simulatedElapsedMs: 60000, verifiedAt59999: true, expiredAt60000: true };
     } finally { await clockPage.close(); page = originalPage; }
