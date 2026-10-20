@@ -50,7 +50,25 @@ metadata. `--source-commit` remains required as the expected persistent binding.
 Success reports `SYNTHETIC_READ_ONLY_EXPORT`, record count, proof, source commit,
 `execution: false` and `authenticity: false`. Output is created exclusively, never
 overwritten; invalid state, source or proof rejects before creating the envelope.
-Paths are caller-owned; this is not an atomic publication protocol.
+Both `demo` and `export` serialize the complete canonical envelope plus newline
+before creating any output file. Publication writes and checks a private `0600`
+`.era-envelope-*.tmp` stage in the destination directory, flushes and fsyncs the
+file, then atomically hard-links it to the exclusive final name and fsyncs the
+directory before reporting success. Existing files, directories and dangling
+symlinks are refused unchanged. There is no overwrite, rename or copy fallback:
+this protocol requires Linux same-filesystem hard links and directory-fsync
+support. Output paths/directories are caller-owned; hostile directory renames
+are outside this boundary.
+
+Handled pre-link errors leave no final and clean up the stage. A process kill
+before linking may leave a private orphan stage; after linking, the final is
+complete but directory fsync may not have happened. Stages are not authority and
+are never automatically swept: review orphan stages manually. A post-link
+directory-fsync or staging-cleanup error reports failure, but the complete final
+may remain visible and is never automatically deleted. Retrying cannot overwrite
+it: inspect and independently verify it externally, or reverify using a fresh
+output name. Process-interruption tests are not power-loss tests; these operations
+provide no storage/hardware or power-loss guarantees and establish no authenticity.
 
 The API is `Store(path, source_commit, read_only=True)` (strict boolean,
 keyword-only); the default remains writable with historical retry behavior.

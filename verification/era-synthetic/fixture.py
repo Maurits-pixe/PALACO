@@ -2,8 +2,10 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import sqlite3
+import tempfile
 from pathlib import Path
 
 SCHEMA = "ERA_SYNTHETIC_V1"
@@ -27,6 +29,39 @@ _UNSET = object()
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
                       allow_nan=False).encode("ascii")
+
+
+def publish_envelope(path, envelope, *, _checkpoint=None):
+    payload = canonical(envelope) + b"\n"
+    path = Path(path)
+    directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    staged = None
+    descriptor = None
+    try:
+        descriptor, name = tempfile.mkstemp(
+            prefix=".era-envelope-", suffix=".tmp", dir=path.parent)
+        staged = Path(name).name
+        with os.fdopen(descriptor, "wb") as output:
+            descriptor = None
+            if output.write(payload) != len(payload):
+                raise OSError("incomplete envelope write")
+            output.flush()
+            os.fsync(output.fileno())
+        if _checkpoint is not None:
+            _checkpoint("before_publish")
+        os.link(staged, path.name, src_dir_fd=directory, dst_dir_fd=directory,
+                follow_symlinks=False)
+        if _checkpoint is not None:
+            _checkpoint("after_publish")
+        os.fsync(directory)
+    finally:
+        try:
+            if descriptor is not None:
+                os.close(descriptor)
+            if staged is not None:
+                os.unlink(staged, dir_fd=directory)
+        finally:
+            os.close(directory)
 
 
 def digest(value):
@@ -311,9 +346,7 @@ def main():
             store.revoke()
             assert store.submit(request()) == receipt
         envelope = store.export(expected_proof=args.expected_proof)
-        # Exclusive creation avoids overwriting caller inputs, including the database.
-        with args.envelope.open("x", encoding="ascii") as output:
-            output.write(canonical(envelope).decode() + "\n")
+        publish_envelope(args.envelope, envelope)
         result = {"result": "SYNTHETIC_ONLY", "records": len(envelope["records"]),
                   "proof": envelope["proof"]["digest"], "execution": False}
         if args.command == "export":
