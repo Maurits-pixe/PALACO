@@ -287,7 +287,7 @@ def _host_config(raw, expected_mode):
 
 
 def read_configured(raw_config, expected_mode):
-    """Host-owned config bytes -> read result. No enrollment or config persistence.
+    """Unpinned low-level config API. Prefer read_pinned_configured for host use.
 
     The caller must independently select mode and protect the config input channel.
     Schema validation is not review, operator authentication or rollback fencing.
@@ -302,6 +302,25 @@ def read_configured(raw_config, expected_mode):
         )
     except (ValueError, TypeError, KeyError, RecursionError, OverflowError):
         return _result("INVALID")
+
+
+def read_pinned_configured(raw_config, expected_config_sha256, expected_mode):
+    """Check exact config bytes before parsing or reading any register.
+
+    The expected config digest must come from independent, reviewed host policy,
+    not stdin, the register, or a hash computed from the candidate config.
+    This is integrity relative to that policy, not identity or rollback protection.
+    Immutable bytes are hashed and parsed in the same invocation.
+    """
+    if (
+        type(raw_config) is not bytes or len(raw_config) > HOST_CONFIG_LIMIT
+        or type(expected_config_sha256) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", expected_config_sha256) is None
+    ):
+        return _result("INVALID")
+    if hashlib.sha256(raw_config).hexdigest() != expected_config_sha256:
+        return _result("CONFIG_INTEGRITY_MISMATCH")
+    return read_configured(raw_config, expected_mode)
 
 
 def main(arguments):
@@ -322,14 +341,15 @@ def main(arguments):
         sys.stdout.write(json.dumps(output, ensure_ascii=True, separators=(",", ":")))
         return 0
     if (
-        len(arguments) != 2 or arguments[0] not in {"--host-check", "--host-bridge"}
+        len(arguments) != 3 or arguments[0] not in {"--host-check", "--host-bridge"}
         or arguments[1] not in MODES
+        or re.fullmatch(r"[0-9a-f]{64}", arguments[2]) is None
     ):
         stream = sys.stderr if arguments and arguments[0] == "--host-bridge" else sys.stdout
         print(json.dumps(_result("INVALID"), sort_keys=True), file=stream)
         return 2
-    result = read_configured(
-        sys.stdin.buffer.read(HOST_CONFIG_LIMIT + 1), arguments[1],
+    result = read_pinned_configured(
+        sys.stdin.buffer.read(HOST_CONFIG_LIMIT + 1), arguments[2], arguments[1],
     )
     if arguments[0] == "--host-bridge":
         if result["status"] == "PINNED_UNVERIFIED":

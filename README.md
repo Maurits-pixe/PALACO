@@ -2692,6 +2692,48 @@ configuratiesyntax worden herkend als ingetrokken.
 Geen telefoonkoppeling, issuerinschrijving, productieaccount of deployment:
 productie blijft **HOLD / NONE**.
 
+### Aanvulling v0.7 — onafhankelijke integriteitspin voor hostconfiguratie
+
+De reader biedt nu `read_pinned_configured(raw_config, expected_config_sha256,
+expected_mode)`. De volledige immutable configuratiebytes worden vóór parsing
+of registertoegang vergeleken met een afzonderlijk geselecteerde SHA-256-pin.
+Zo zijn ook bronpad, registerpin, revisie, mode, scope en timeout samen gebonden.
+Een geldige configpin slaat de bestaande schema-, scope- en modecontroles niet
+over. Een mismatch geeft `CONFIG_INTEGRITY_MISMATCH`, zonder bronread of snapshot.
+
+**CLI-wijziging:** `--host-check` en `--host-bridge` vereisen vanaf deze versie
+een derde argument: de onafhankelijk beoordeelde configpin. De twee-argument-
+aanroepen uit de historische v0.6 hierboven worden nu gesloten geweigerd.
+De volledige aanroep is
+`python /home/runner/work/PALACO/PALACO/verification/brigade-staging/register_reader.py --host-check Synthetic CONFIG_SHA256`
+of `--host-bridge Synthetic CONFIG_SHA256`, met de configuratie op stdin.
+`CONFIG_SHA256` is een placeholder die door een bestaande, beoordeelde lowercase
+64-hexpin moet worden vervangen; de tool levert of genereert geen echte pin.
+Deze digest is geen credential en bevat geen configuratiepad of toesteldata.
+
+De host mag de verwachte configpin niet uit dezelfde stdin-input, het register
+of een providerantwoord afleiden. Pins en wijzigingen horen in onafhankelijk
+beheerde, gereviewde hostpolicy. De testfixtures berekenen pins alleen voor hun
+eigen synthetische bytes; dat is geen veilige operationele enrollmentmethode.
+De oorspronkelijke registerpin blijft afzonderlijk gelden voor de bestandsbytes;
+de configpin vervangt die controle niet en authenticeert geen bridgeoverdracht.
+
+De low-level API `read_configured` blijft voor bestaande lokale callers bestaan,
+maar is expliciet **ongepind** en wordt niet door de CLI gebruikt.
+Callers die die API rechtstreeks gebruiken, leveren zelf de integriteitsgrens.
+Ook de gepinde API bewijst geen menselijke review, beheerderidentiteit,
+issuervertrouwen, actuele revocation of bescherming tegen rollback naar een
+oude nog toegestane policy. De host moet de actuele verwachte pin beveiligen.
+
+Twee aanvullende tests controleren wijzigingen van elk policy-/bronveld,
+whitespace, ontbrekende/ongeldige pins, immutable input, grootte, mode en
+schemaweigering ondanks digestmatch. Echte CLI-tests controleren de verplichte
+pin, gesanitiseerde fouten en lege bridge-stdout bij mislukking.
+De reader-suite bevat nu twintig tests. Er zijn geen dependencies, Rust-
+productiecode, echte bronconfiguraties of deploymentinstellingen gewijzigd.
+Stdin en configparsing blijven buiten de registerworkerdeadline.
+Geen telefoonkoppeling of nieuwe bevoegdheid: productie blijft **HOLD / NONE**.
+
 ### 🔒 PALACO CORE v2.0: VAULT ANCHOR ACKNOWLEDGED
 > **⚙️ KERNEL STATE REPORT**
 > *"Persistence window active. Vault telemetry confirms immutable state across all active workspaces and governance layers. System standing by."*

@@ -228,9 +228,11 @@ class ReaderTests(unittest.TestCase):
             }, "timeout_seconds": 2,
         }
 
-    def cli(self, raw, command="--host-check", mode="Synthetic"):
+    def cli(self, raw, command="--host-check", mode="Synthetic", config_pin=None):
+        # Fixture-only pin derivation. Real hosts must select a previously reviewed pin.
+        config_pin = config_pin if config_pin is not None else hashlib.sha256(raw).hexdigest()
         return subprocess.run(
-            [sys.executable, "-I", str(Path(reader.__file__).absolute()), command, mode],
+            [sys.executable, "-I", str(Path(reader.__file__).absolute()), command, mode, config_pin],
             input=raw, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=5,
             check=False,
         )
@@ -308,6 +310,61 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(output.returncode, 2)
             self.assertEqual(output.stdout, b"")
             self.closed(json.loads(output.stderr), "INVALID")
+
+    def test_config_pin_binds_all_source_and_policy_fields_before_read(self):
+        config = self.config()
+        raw = json.dumps(config).encode()
+        digest = hashlib.sha256(raw).hexdigest()
+        self.closed(reader.read_pinned_configured(raw, digest, "Synthetic"), "PINNED_UNVERIFIED")
+        mutations = [
+            lambda c: c["source"].update(path="/tmp/replaced-register.json"),
+            lambda c: c["source"].update(sha256="0" * 64),
+            lambda c: c["source"].update(revision="replacement"),
+            lambda c: c.update(mode="LocalObservation"),
+            lambda c: c.update(timeout_seconds=1),
+            lambda c: c.update(role="BG01"),
+        ]
+        with patch.object(reader, "read_register") as read:
+            for mutation in mutations:
+                changed = copy.deepcopy(config)
+                mutation(changed)
+                self.closed(
+                    reader.read_pinned_configured(json.dumps(changed).encode(), digest, "Synthetic"),
+                    "CONFIG_INTEGRITY_MISMATCH",
+                )
+            self.closed(reader.read_pinned_configured(raw + b"\n", digest, "Synthetic"), "CONFIG_INTEGRITY_MISMATCH")
+            for invalid in [None, "", "0" * 63, "A" * 64]:
+                self.closed(reader.read_pinned_configured(raw, invalid, "Synthetic"), "INVALID")
+            self.closed(reader.read_pinned_configured(bytearray(raw), digest, "Synthetic"), "INVALID")
+            self.closed(reader.read_pinned_configured(b"x" * (reader.HOST_CONFIG_LIMIT + 1), digest, "Synthetic"), "INVALID")
+            self.closed(reader.read_pinned_configured(raw, digest, "LocalObservation"), "INVALID")
+            malformed = b'{"schema":1,"schema":2}'
+            self.closed(reader.read_pinned_configured(
+                malformed, hashlib.sha256(malformed).hexdigest(), "Synthetic",
+            ), "INVALID")
+            read.assert_not_called()
+
+    def test_cli_requires_independent_config_pin_and_sanitizes_mismatch(self):
+        raw = json.dumps(self.config()).encode()
+        for command in ["--host-check", "--host-bridge"]:
+            output = self.cli(raw, command, config_pin="0" * 64)
+            self.assertEqual(output.returncode, 2)
+            if command == "--host-bridge":
+                self.assertEqual(output.stdout, b"")
+                result = json.loads(output.stderr)
+            else:
+                self.assertEqual(output.stderr, b"")
+                result = json.loads(output.stdout)
+            self.closed(result, "CONFIG_INTEGRITY_MISMATCH")
+            output = subprocess.run(
+                [sys.executable, "-I", str(Path(reader.__file__).absolute()), command, "Synthetic"],
+                input=raw, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=5, check=False,
+            )
+            self.assertEqual(output.returncode, 2)
+            self.closed(json.loads(output.stderr if command == "--host-bridge" else output.stdout), "INVALID")
+            if command == "--host-bridge":
+                self.assertEqual(output.stdout, b"")
 
 
 if __name__ == "__main__":
