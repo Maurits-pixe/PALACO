@@ -225,6 +225,9 @@ class ReceiptConcurrency(unittest.TestCase):
         self.assertEqual(written[0], "result", written)
         self.assertEqual(found[1:3], (self.receipt, self.proof))
         self.assert_trace(found[3])
+        self.assertEqual([sql for sql in found[3]
+                          if sql.split()[0] in ("BEGIN", "COMMIT", "ROLLBACK")],
+                         ["BEGIN", "COMMIT"])
         self.assertEqual(found[3][-1], "COMMIT")
         self.assertTrue(found[3][-2].startswith("SELECT receipt,typeof(receipt)"))
         self.assertEqual(found[4:], (0, False))
