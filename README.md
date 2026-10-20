@@ -185,6 +185,26 @@ only unchanged content. Current source/proof anchors remain independently
 optional and checked. The result remains `VERIFIED_SYNTHETIC_ONLY`, with
 `execution: false` and `authenticity: false`.
 The checker never infers trust from a file or updates/stores checkpoints.
+Opt-in `--review-summary` (API keyword-only `review_summary=True`, strict bool)
+requires **both** explicit, trusted current source/proof anchors and a fully
+validated envelope ending in revocation with at least one committed request:
+
+```bash
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py "$RUN/envelope.json" --review-summary --expected-source-commit "$SOURCE" --expected-proof "${EXPECTED_PROOF:?supply trusted current digest}"
+```
+
+Obtain `SOURCE` and `EXPECTED_PROOF` from trusted caller-held checkpoints, not
+from the envelope being checked. Default output is unchanged. The additional
+`review_summary` stdout JSON object reports validated committed-request groups,
+record count and terminal revocation sequence from the same loaded snapshot.
+Optional continuity checks still complete first; an open prior checkpoint may
+extend to a revoked current envelope. Revoked closure is not execution authority,
+specification conformance or readiness. This is local structural evidence, not
+independently signed human review or an official WF test mapping. No report files,
+signatures, reviewer identities or external actions are created. Human release
+remains **HOLD** and cannot be cleared by this option or summary; durable human
+review remains outside the automated fixture.
+
 Callers retain checkpoints and trusted digests externally; this supplies no
 freshness, authenticity, global antirollback guarantee or production release.
 The human release gate remains **HOLD**; official source contracts remain unavailable.

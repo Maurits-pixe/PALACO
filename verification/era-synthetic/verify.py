@@ -129,7 +129,9 @@ def _verify_envelope(value, *, expected_source_commit=_UNSET, expected_proof=_UN
 
 
 def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
-           previous_envelope=_UNSET, expected_previous_proof=_UNSET):
+           previous_envelope=_UNSET, expected_previous_proof=_UNSET, review_summary=False):
+    require(type(review_summary) is bool)
+    require(not review_summary or (expected_source_commit is not _UNSET and expected_proof is not _UNSET))
     continuity = previous_envelope is not _UNSET
     require(continuity == (expected_previous_proof is not _UNSET))
     require(not continuity or previous_envelope is not None)
@@ -157,6 +159,20 @@ def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
         result.update(previous_proof=previous["proof"]["digest"], previous_records=count,
                      added_records=added, continuity="EXTENDED" if added else "UNCHANGED",
                      previous_proof_anchor_supplied=True, previous_proof_anchor_matched=True)
+    if review_summary:
+        records = current["records"]
+        require(records[-1]["kind"] == "revocation")
+        result["review_summary"] = {
+            "schema": "ERA_SYNTHETIC_REVIEW_V1",
+            "source_commit": result["source_commit"], "proof": result["proof"],
+            "committed_requests": sum(record["kind"] == "commit" for record in records),
+            "records": len(records), "revocation_sequence": records[-1]["seq"],
+            "synthetic_only": True, "execution": False, "authenticity": False,
+            "release_authorized": False, "release_status": "HOLD",
+            "decision_boundary": "ADVISORY — HUMAN DECISION REQUIRED",
+            "open_gates": ["canonical_contract_conformance", "independent_external_verification",
+                          "operational_authorization", "human_release_decision"],
+        }
     return result
 
 
@@ -167,6 +183,8 @@ def main():
     parser.add_argument("--expected-proof", help="caller-supplied lowercase 64-hex digest")
     parser.add_argument("--previous-envelope", type=Path, help="externally retained previous envelope")
     parser.add_argument("--expected-previous-proof", help="caller-held trusted previous 64-hex digest")
+    parser.add_argument("--review-summary", action="store_true",
+                        help="local advisory summary; requires both current anchors and terminal revocation")
     args = parser.parse_args()
     anchors = {}
     if args.expected_source_commit is not None:
@@ -178,7 +196,7 @@ def main():
     if args.expected_previous_proof is not None:
         anchors["expected_previous_proof"] = args.expected_previous_proof
     try:
-        print(json.dumps(verify(args.envelope, **anchors), sort_keys=True))
+        print(json.dumps(verify(args.envelope, review_summary=args.review_summary, **anchors), sort_keys=True))
     except (ValueError, OSError, UnicodeError, RecursionError, OverflowError):
         print('{"result":"REJECTED"}')
         raise SystemExit(1)
