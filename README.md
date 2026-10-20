@@ -293,6 +293,30 @@ authentication, current permission or authorization. It writes no inputs/reports
 re-executes nothing and has no external effects. Source/digest trust stays with
 the caller, new test IDs are not official WF mappings, and human release stays **HOLD**.
 
+Recover the exact producer receipt without replay using the read-only `receipt`
+command (`Store.lookup_receipt(key, *, expected_proof=...)` requires
+`read_only=True` and a caller-supplied current proof):
+
+```bash
+python3 -I /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py receipt \
+  --db /absolute/runtime/state.sqlite --request-key demo-1 \
+  --expected-proof "${EXPECTED_PROOF:?supply trusted current digest}" \
+  --source-commit "${SOURCE:?supply trusted source revision}" \
+  --receipt-output /absolute/runtime/new-receipt.json
+python3 -I /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py \
+  /absolute/runtime/envelope.json --receipt /absolute/runtime/new-receipt.json \
+  --expected-source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF" --review-summary
+```
+
+Omit `--receipt-output` for stdout only. The optional private file is atomically
+published without overwriting existing paths; success stdout follows publication.
+Lookup validates the entire database and mandatory proof in one read snapshot,
+without submit/replay, initialization or proof refresh. The source/proof checkpoint
+must be trusted externally; stdout repeats the matched caller anchor, not independent
+authentication. After revocation this remains only a historical receipt, never
+renewed execution, real permission, authentication or external audit. Human release
+remains **HOLD**. These ordinary regression tests run under existing CI discovery.
+
 Callers retain checkpoints and trusted digests externally; this supplies no
 freshness, authenticity, global antirollback guarantee or production release.
 The human release gate remains **HOLD**; official source contracts remain unavailable.

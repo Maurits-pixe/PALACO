@@ -274,7 +274,7 @@ class Store:
 
     def submit(self, value, *, expected_proof=_UNSET, _checkpoint=None):
         if self.read_only:
-            raise ValueError("read-only store permits export/backup only")
+            raise ValueError("read-only store permits export/backup/receipt lookup only")
         _validate_expected_proof(expected_proof)
         # Internal callable seam only: no CLI/input field can enable fault injection.
         self.db.execute("BEGIN IMMEDIATE")
@@ -316,7 +316,7 @@ class Store:
 
     def revoke(self, *, expected_proof=_UNSET):
         if self.read_only:
-            raise ValueError("read-only store permits export/backup only")
+            raise ValueError("read-only store permits export/backup/receipt lookup only")
         _validate_expected_proof(expected_proof)
         self.db.execute("BEGIN IMMEDIATE")
         try:
@@ -338,6 +338,29 @@ class Store:
             envelope = self._check_expected_proof(records, expected_proof)
             self.db.commit()
             return envelope
+        except BaseException:
+            self.db.rollback()
+            raise
+
+    def lookup_receipt(self, key, *, expected_proof):
+        if not self.read_only:
+            raise ValueError("receipt lookup requires a read-only store")
+        if type(key) is not str or not re.fullmatch(r"[a-z0-9-]{1,48}", key):
+            raise ValueError("unsupported request key")
+        if (type(expected_proof) is not str or
+                not re.fullmatch(r"[0-9a-f]{64}", expected_proof)):
+            raise ValueError("expected proof must be a lowercase 64-hex string")
+        self.db.execute("BEGIN")
+        try:
+            records = self._validate_state()
+            self._check_expected_proof(records, expected_proof)
+            row = self.db.execute(
+                "SELECT receipt,typeof(receipt) FROM requests WHERE key=?", (key,)).fetchone()
+            if row is None:
+                raise ValueError("historical receipt not found")
+            receipt = load_persisted(*row)
+            self.db.commit()
+            return receipt
         except BaseException:
             self.db.rollback()
             raise
@@ -406,14 +429,28 @@ class Store:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["demo", "export", "backup"])
+    parser.add_argument("command", choices=["demo", "export", "backup", "receipt"])
     parser.add_argument("--db", required=True, type=Path)
     parser.add_argument("--envelope", type=Path)
     parser.add_argument("--backup-db", type=Path)
+    parser.add_argument("--request-key")
+    parser.add_argument("--receipt-output", type=Path)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--expected-proof", default=_UNSET)
     args = parser.parse_args()
-    if args.command == "backup":
+    if args.command != "receipt" and (
+            args.request_key is not None or args.receipt_output is not None):
+        parser.error("--request-key and --receipt-output are only supported for receipt")
+    if args.command == "receipt":
+        if args.envelope is not None or args.backup_db is not None:
+            parser.error("--envelope and --backup-db are not supported for receipt")
+        if args.request_key is None or args.expected_proof is _UNSET:
+            parser.error("receipt requires --request-key and --expected-proof")
+        if not re.fullmatch(r"[a-z0-9-]{1,48}", args.request_key):
+            parser.error("--request-key must match [a-z0-9-]{1,48}")
+        if not re.fullmatch(r"[0-9a-f]{64}", args.expected_proof):
+            parser.error("--expected-proof must be a lowercase 64-hex string")
+    elif args.command == "backup":
         if args.envelope is not None:
             parser.error("--envelope is not supported for backup")
         if args.backup_db is None or args.expected_proof is _UNSET:
@@ -427,12 +464,26 @@ def main():
         if args.envelope is None:
             parser.error("--envelope is required for demo/export")
     if args.command == "demo" and args.expected_proof is not _UNSET:
-        parser.error("--expected-proof is only supported for export/backup")
+        parser.error("--expected-proof is only supported for export/backup/receipt")
     if args.envelope is not None and (args.db.resolve() == args.envelope.resolve() or (
             args.db.exists() and args.envelope.exists() and args.db.samefile(args.envelope))):
         parser.error("database and envelope paths must differ")
+    if args.receipt_output is not None and (
+            args.db.resolve() == args.receipt_output.resolve() or (
+                args.db.exists() and args.receipt_output.exists() and
+                args.db.samefile(args.receipt_output))):
+        parser.error("database and receipt paths must differ")
     store = Store(args.db, args.source_commit, read_only=args.command != "demo")
     try:
+        if args.command == "receipt":
+            receipt = store.lookup_receipt(args.request_key, expected_proof=args.expected_proof)
+            if args.receipt_output is not None:
+                publish_envelope(args.receipt_output, receipt)
+            print(json.dumps({
+                "result": "SYNTHETIC_HISTORICAL_RECEIPT", "request_key": args.request_key,
+                "source_commit": args.source_commit, "proof": args.expected_proof,
+                "receipt": receipt, "execution": False, "authenticity": False}))
+            return
         if args.command == "backup":
             print(json.dumps(store.backup(args.backup_db, expected_proof=args.expected_proof)))
             return
