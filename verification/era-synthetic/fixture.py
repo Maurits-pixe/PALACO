@@ -6,6 +6,7 @@ import os
 import re
 import sqlite3
 import tempfile
+import time
 from pathlib import Path
 
 SCHEMA = "ERA_SYNTHETIC_V1"
@@ -31,6 +32,16 @@ def canonical(value):
                       allow_nan=False).encode("ascii")
 
 
+def _publish_staged(directory, staged, name, checkpoint):
+    if checkpoint is not None:
+        checkpoint("before_publish")
+    os.link(staged, name, src_dir_fd=directory, dst_dir_fd=directory,
+            follow_symlinks=False)
+    if checkpoint is not None:
+        checkpoint("after_publish")
+    os.fsync(directory)
+
+
 def publish_envelope(path, envelope, *, _checkpoint=None):
     payload = canonical(envelope) + b"\n"
     path = Path(path)
@@ -47,13 +58,7 @@ def publish_envelope(path, envelope, *, _checkpoint=None):
                 raise OSError("incomplete envelope write")
             output.flush()
             os.fsync(output.fileno())
-        if _checkpoint is not None:
-            _checkpoint("before_publish")
-        os.link(staged, path.name, src_dir_fd=directory, dst_dir_fd=directory,
-                follow_symlinks=False)
-        if _checkpoint is not None:
-            _checkpoint("after_publish")
-        os.fsync(directory)
+        _publish_staged(directory, staged, path.name, _checkpoint)
     finally:
         try:
             if descriptor is not None:
@@ -253,7 +258,7 @@ class Store:
 
     def submit(self, value, *, _checkpoint=None):
         if self.read_only:
-            raise ValueError("read-only store permits export only")
+            raise ValueError("read-only store permits export/backup only")
         # Internal callable seam only: no CLI/input field can enable fault injection.
         self.db.execute("BEGIN IMMEDIATE")
         try:
@@ -296,7 +301,7 @@ class Store:
 
     def revoke(self):
         if self.read_only:
-            raise ValueError("read-only store permits export only")
+            raise ValueError("read-only store permits export/backup only")
         self.db.execute("BEGIN IMMEDIATE")
         try:
             records = self._validate_state()
@@ -328,22 +333,100 @@ class Store:
             self.db.rollback()
             raise
 
+    def backup(self, destination, *, expected_proof, _checkpoint=None):
+        if not self.read_only:
+            raise ValueError("backup requires a read-only store")
+        if (type(expected_proof) is not str or
+                not re.fullmatch(r"[0-9a-f]{64}", expected_proof)):
+            raise ValueError("expected proof must be a lowercase 64-hex string")
+        if self.db.in_transaction:
+            raise ValueError("backup requires no active source transaction")
+        path = Path(destination)
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        staged = None
+        descriptor = None
+        try:
+            descriptor, name = tempfile.mkstemp(
+                prefix=".era-backup-", suffix=".sqlite", dir=path.parent)
+            staged = Path(name).name
+            os.close(descriptor)
+            descriptor = None
+            deadline = time.monotonic() + 2
+
+            def progress(status, remaining, total):
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("synthetic backup exceeded two-second bound")
+
+            target = sqlite3.connect(name, timeout=2, isolation_level=None)
+            try:
+                self.db.backup(target, pages=64, progress=progress, sleep=0.01)
+                target.execute("PRAGMA journal_mode=DELETE")
+            finally:
+                target.close()
+            reopened = Store(name, self.source["commit"], read_only=True)
+            try:
+                if reopened.db.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                    raise ValueError("backup SQLite quick_check failed")
+                envelope = reopened.export(expected_proof=expected_proof)
+            finally:
+                reopened.close()
+            descriptor = os.open(name, os.O_RDONLY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+                descriptor = None
+            _publish_staged(directory, staged, path.name, _checkpoint)
+            return {"result": "SYNTHETIC_BACKUP_VERIFIED",
+                    "records": len(envelope["records"]), "proof": envelope["proof"]["digest"],
+                    "source_commit": self.source["commit"],
+                    "execution": False, "authenticity": False}
+        finally:
+            try:
+                if descriptor is not None:
+                    os.close(descriptor)
+                if staged is not None:
+                    for suffix in ("-journal", "-wal", "-shm", ""):
+                        try:
+                            os.unlink(staged + suffix, dir_fd=directory)
+                        except FileNotFoundError:
+                            pass
+            finally:
+                os.close(directory)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["demo", "export"])
+    parser.add_argument("command", choices=["demo", "export", "backup"])
     parser.add_argument("--db", required=True, type=Path)
-    parser.add_argument("--envelope", required=True, type=Path)
+    parser.add_argument("--envelope", type=Path)
+    parser.add_argument("--backup-db", type=Path)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--expected-proof", default=_UNSET)
     args = parser.parse_args()
+    if args.command == "backup":
+        if args.envelope is not None:
+            parser.error("--envelope is not supported for backup")
+        if args.backup_db is None or args.expected_proof is _UNSET:
+            parser.error("backup requires --backup-db and --expected-proof")
+        if (type(args.expected_proof) is not str or
+                not re.fullmatch(r"[0-9a-f]{64}", args.expected_proof)):
+            parser.error("--expected-proof must be a lowercase 64-hex string")
+    else:
+        if args.backup_db is not None:
+            parser.error("--backup-db is only supported for backup")
+        if args.envelope is None:
+            parser.error("--envelope is required for demo/export")
     if args.command == "demo" and args.expected_proof is not _UNSET:
-        parser.error("--expected-proof is only supported for export")
-    if args.db.resolve() == args.envelope.resolve() or (
-            args.db.exists() and args.envelope.exists() and args.db.samefile(args.envelope)):
+        parser.error("--expected-proof is only supported for export/backup")
+    if args.envelope is not None and (args.db.resolve() == args.envelope.resolve() or (
+            args.db.exists() and args.envelope.exists() and args.db.samefile(args.envelope))):
         parser.error("database and envelope paths must differ")
-    store = Store(args.db, args.source_commit, read_only=args.command == "export")
+    store = Store(args.db, args.source_commit, read_only=args.command != "demo")
     try:
+        if args.command == "backup":
+            print(json.dumps(store.backup(args.backup_db, expected_proof=args.expected_proof)))
+            return
         if args.command == "demo":
             receipt = store.submit(request())
             store.revoke()

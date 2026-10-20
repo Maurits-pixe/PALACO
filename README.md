@@ -76,8 +76,8 @@ Read-only `submit` and `revoke` always reject, including exact historical retrie
 `store.export(expected_proof=trusted_digest)` optionally checks a lowercase
 64-hex digest against the fully validated snapshot in the same deferred
 transaction; omitting it preserves ordinary export, while explicit `None` rejects.
-The CLI's optional `--expected-proof` is export-only and rejects on `demo` before
-mutation. A newly computed/rehashed digest is not a trusted original anchor:
+The CLI's `--expected-proof` is optional for export, required for backup, and
+rejects on `demo` before mutation. A newly computed/rehashed digest is not a trusted original anchor:
 coherent suffix/request-row removal can pass unanchored export but fails an
 original caller-held proof. Matching anchors do not establish authenticity.
 Empty and revoked-only internal stores can be exported; the independent checker
@@ -85,14 +85,68 @@ explicitly rejects envelopes with no committed group.
 
 Read-only connections use escaped absolute SQLite `mode=ro` URIs, `query_only`,
 bounded busy timeout and ordinary locking, without `immutable`, dirty reads,
-copying, repair or writable fallback. The application does not mutate the main
+raw file copying, repair or writable fallback. The application does not mutate the main
 database. This is not a claim of no filesystem access, atime changes or
 SQLite-managed sidecar writes: WAL may involve sidecars, and WAL support/host
 durability guarantees are not claimed. Tests use the existing DELETE-journal
 implementation. A hot journal requiring write recovery may fail read-only;
 leave **HOLD**, never silently reopen writable or recover/repair for inspection.
 
-Both anchors are optional (including separately); omitting both preserves legacy
+### Controlled synthetic SQLite backup/reopen
+
+The next recovery gate is an explicit, independently reopened SQLite backup
+checked against a **previously retained caller-held proof**. In the fresh
+caller-owned stable directory above, with `SOURCE` and `EXPECTED_PROOF` supplied
+from the caller's trusted checkpoint:
+
+```bash
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py backup --db "$RUN/state.sqlite" --backup-db "$RUN/backup.sqlite" --source-commit "$SOURCE" --expected-proof "${EXPECTED_PROOF:?supply trusted prior digest}"
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/fixture.py export --db "$RUN/backup.sqlite" --envelope "$RUN/backup-envelope.json" --source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF"
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py "$RUN/backup-envelope.json" --expected-source-commit "$SOURCE" --expected-proof "$EXPECTED_PROOF"
+```
+
+`Store.backup(destination, *, expected_proof=trusted_digest)` requires an existing
+`read_only=True` store, no active source transaction, and a lowercase 64-hex
+anchor (absent, `None`, wrong types and mismatches reject). SQLite's online backup
+API takes a coherent snapshot, not a raw file copy. It can observe changes since
+the source was opened: the independently reopened read-only destination must pass
+the original source binding, full record/request/receipt validation, SQLite
+`quick_check`, and anchored export before publication. A coherently rewritten
+database is not detected without the caller's original digest; never extract a
+new "trusted" anchor from the backup itself. No arbitrary hostile-schema defense
+or authenticity is claimed.
+
+The closed, complete private `0600` `.era-backup-*.sqlite` stage is file-fsynced,
+then uses the same exclusive hard-link and directory-fsync publication protocol
+as envelopes. Existing destinations (including the source, aliases, directories
+and dangling symlinks) are never overwritten. Handled failures clean owned stages
+and SQLite sidecars when cleanup succeeds; post-link failures report no success
+but may leave the complete validated final, which is never deleted automatically.
+SIGKILL may leave a private orphan stage or a complete final with directory fsync
+unfinished; no automatic sweep or power-loss guarantee is provided.
+
+Backup progress has a conservative overall two-second monotonic deadline, with
+small bounded SQLite retry sleeps, including BUSY/LOCKED retries. This is intended
+for the bounded 1000-record fixture, not a hard real-time OS/I/O deadline; sustained
+work or lock failures leave **HOLD**, not a writable fallback. The source main
+bytes/mtime are untouched; the read-only filesystem/sidecar/host limits above
+still apply. Destination journal mode is DELETE; no WAL recovery guarantee is added.
+Only successful publication reports `SYNTHETIC_BACKUP_VERIFIED`, `records`, `proof`,
+`source_commit`, `execution: false`, and `authenticity: false`.
+
+CLI backup requires `--backup-db`, `--expected-proof`, `--source-commit`, and
+`--db`, and rejects `--envelope`. Demo/export still require `--envelope` and reject
+`--backup-db` before opening a database. There is no automatic restore into the
+original, overwrite, metadata initialization or silent writable reopen. An
+operator may explicitly open the separate backed-up path as a writable synthetic
+`Store`: unrevoked copies permit fresh fixed requests, while revoked copies permit
+only exact historical retries, never renewed or real authority. Empty/revoked-only
+internal backups may validate, but their exported envelopes still fail the
+standalone checker's requirement for at least one committed group.
+The human release gate remains **HOLD**; this is not production recovery evidence.
+
+For the standalone envelope checker, both anchors are optional (including
+separately); omitting both preserves legacy
 `verify(path)`/CLI structural checking. API keywords are `expected_source_commit`
 and `expected_proof`; supplied values must be lowercase 40-/64-hex strings.
 Success reports `source_commit`, `proof`, and `source_anchor_supplied` /
