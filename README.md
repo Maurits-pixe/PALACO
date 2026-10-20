@@ -336,6 +336,21 @@ writable to allow SQLite hot-journal rollback where needed; read-only access nee
 not repair it. This is not arbitrary power-loss, WAL or hardware durability proof,
 nor official conformance evidence.
 
+`test_revocation_recovery.py` also kills a revoking process before and after
+commit, preserving the original historical receipt and checking rollback or the
+single terminal revocation against retained local checkpoints. Its callable
+checkpoint is an internal test seam only (including idempotent revoke commits),
+never a request field or CLI option. An after-commit callback error cannot undo
+the commit: re-inspect the checkpoint rather than assume rollback. These drills
+add no power-loss, WAL or authenticity guarantees; human release remains **HOLD**.
+
+Additional process-concurrency tests check a single SQLite read snapshot spanning
+proof validation and receipt lookup during a competing submission or revocation.
+Later committed writes make the old anchor stale on a new lookup; snapshot success
+is not globally fresh permission. SQLite locks are honored, and failed reads recover
+on the same connection without writable fallback. These are local synthetic tests,
+not additional production guarantees.
+
 Callers retain checkpoints and trusted digests externally; this supplies no
 freshness, authenticity, global antirollback guarantee or production release.
 The human release gate remains **HOLD**; official source contracts remain unavailable.

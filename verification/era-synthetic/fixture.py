@@ -314,7 +314,7 @@ class Store:
             self.db.rollback()
             raise
 
-    def revoke(self, *, expected_proof=_UNSET):
+    def revoke(self, *, expected_proof=_UNSET, _checkpoint=None):
         if self.read_only:
             raise ValueError("read-only store permits export/backup/receipt lookup only")
         _validate_expected_proof(expected_proof)
@@ -324,7 +324,12 @@ class Store:
             self._check_expected_proof(records, expected_proof)
             if not any(r["kind"] == "revocation" for r in records):
                 self._append("revocation", {"authority": FIXED["authority"], "execution": False})
+            # Internal callable seam, including commits of idempotent revocations.
+            if _checkpoint:
+                _checkpoint("before_commit")
             self.db.commit()
+            if _checkpoint:
+                _checkpoint("after_commit")
         except BaseException:
             self.db.rollback()
             raise
