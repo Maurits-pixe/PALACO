@@ -15,6 +15,14 @@ The current prototype classification is **CONDITIONAL GO for controlled prototyp
 
 For every domain below, the human reviewer must record the exact scope and revision examined, inspect evidence, document findings and unresolved risks, and explicitly state a decision. Until completed, the status remains **UNKNOWN / NOT REVIEWED**.
 
+### Review procedure
+
+1. Identify the exact app, deployment, configuration, and commit in scope. The deployment inventory in [Web preview deployments](Preview-Deployments.md) describes configured projects, not proof of their current external state.
+2. Collect evidence for that scope and record its source, capture date, and a content hash where practical. Redact credentials and personal or sensitive data; do not copy secrets into this worksheet or commit evidence containing them.
+3. Record what was examined, what could not be verified, findings and dissent, and any residual risk with its owner and mitigation. A missing or inaccessible source is an unresolved gap, not a passing result.
+4. Select a per-domain status only after review: **UNKNOWN / NOT REVIEWED**, **REVIEWED — FINDINGS RECORDED**, or **REVIEWED — NO FINDINGS**. The latter two describe review outcomes; neither grants release approval.
+5. Keep the overall release decision **NOT GRANTED** unless an authorized human separately records an explicit decision covering the exact revision, deployment, and requested scope. Any unresolved review domain or unaccepted risk remains visible to that decision-maker.
+
 | Review domain | Current status | Evidence and decision required |
 | --- | --- | --- |
 | Authentication | UNKNOWN / NOT REVIEWED | Identify whether authentication exists for each app and preview; review session lifecycle, recovery, and unauthenticated access. Attach implementation/configuration evidence and test results. |
