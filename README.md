@@ -84,6 +84,14 @@ hun aantal. Reeds overgedragen plannen worden niet geannuleerd of gewijzigd.
 Herhaalde drainverzoeken heropenen niets. `stop()` kan een drain onderbreken en
 verwijdert dan de resterende plannen. Drainvoltooiing betekent uitsluitend dat
 alle plannen zijn overgedragen, **niet** dat externe uitvoering voltooid is.
+`pending()` leent de wachtende plannen in FIFO-volgorde zonder klonen,
+verwijderen of allocatie. De iterator werkt rechtstreeks met
+`summarize_plan_iter(queue.pending())` en
+`write_plan_inspections_jsonl(queue.pending(), &mut output)`.
+Ook bij rapportagefouten blijven plannen en levenscyclus ongewijzigd; inspectie
+voltooit geen drain. Het is geen losstaande snapshot: Rust voorkomt mutatie
+zolang geleende planreferenties nog worden gebruikt. Inspectie is geen actuele
+autoriteitscontrole en kan bewijsgegevens via de geleende plannen blootleggen.
 Het uitvoerbare voorbeeld
 `cargo run --locked -p palaco-kernel --example synthetic_runtime_queue`
 doorloopt afwijzing van Hold/Deny, capaciteit, FIFO, drain en definitieve stop.

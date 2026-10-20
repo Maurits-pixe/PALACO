@@ -4,8 +4,10 @@ use palaco_foundation::{AuthorityState, ContractError, EvidenceRef};
 use palaco_quay::ProvenanceRecord;
 use palaco_runtime::{
     RuntimePlan,
+    inspection::{summarize_plan_iter, write_plan_inspection_json, write_plan_inspections_jsonl},
     scheduling::{AdmissionError, QueueState, RuntimeQueue},
 };
+use std::io::{self, Write};
 
 fn plan(id: &str, authority: AuthorityState) -> Result<RuntimePlan, ContractError> {
     Ok(RuntimePlan::new(ExecutionBoundary::new(
@@ -121,6 +123,108 @@ fn repeated_plans_are_distinct_pending_entries() -> Result<(), ContractError> {
     assert_eq!(queue.next_plan(), Some(original.clone()));
     assert_eq!(queue.next_plan(), Some(original));
     assert_eq!(queue.next_plan(), None);
+    Ok(())
+}
+
+#[test]
+fn pending_inspection_preserves_fifo_duplicates_and_drain_state()
+-> Result<(), Box<dyn std::error::Error>> {
+    let first = plan("INSPECT-FIRST", AuthorityState::Authorized)?;
+    let second = plan("INSPECT-SECOND", AuthorityState::Authorized)?;
+    let mut queue = RuntimeQueue::new(3);
+    assert_eq!(queue.pending().len(), 0);
+    queue.submit(first.clone()).expect("first");
+    queue.submit(second.clone()).expect("second");
+    assert_eq!(queue.next_plan(), Some(first.clone()));
+    queue.submit(first.clone()).expect("reuse freed slot");
+    queue.submit(first.clone()).expect("duplicate observation");
+    for draining in [false, true] {
+        if draining {
+            queue.begin_drain();
+        }
+        let state = queue.state();
+        let mut pending = queue.pending();
+        assert_eq!(pending.len(), 3);
+        assert_eq!(pending.next(), Some(&second));
+        assert_eq!(pending.next_back(), Some(&first));
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending.next(), Some(&first));
+        assert_eq!(pending.next(), None);
+        let summary = summarize_plan_iter(queue.pending()).expect("bounded queue");
+        assert_eq!(summary.total, 3);
+        assert_eq!(summary.execute, 3);
+        assert_eq!(summary.contract_valid, 3);
+        let mut actual = Vec::new();
+        write_plan_inspections_jsonl(queue.pending(), &mut actual)?;
+        let mut expected = Vec::new();
+        for plan in [&second, &first, &first] {
+            write_plan_inspection_json(plan, &mut expected)?;
+        }
+        assert_eq!(actual, expected);
+        assert_eq!(queue.len(), 3);
+        assert_eq!(queue.state(), state);
+    }
+    assert_eq!(queue.next_plan(), Some(second));
+    assert_eq!(queue.next_plan(), Some(first.clone()));
+    assert_eq!(queue.next_plan(), Some(first));
+    assert_eq!(queue.state(), QueueState::Stopped);
+    assert_eq!(queue.pending().len(), 0);
+    Ok(())
+}
+
+#[test]
+fn failed_pending_report_does_not_consume_or_stop_the_queue()
+-> Result<(), Box<dyn std::error::Error>> {
+    struct FailAfter {
+        bytes: Vec<u8>,
+        remaining: usize,
+    }
+    impl Write for FailAfter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            if self.remaining == 0 {
+                return Err(io::ErrorKind::BrokenPipe.into());
+            }
+            let count = bytes.len().min(self.remaining);
+            self.bytes.extend_from_slice(&bytes[..count]);
+            self.remaining -= count;
+            Ok(count)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            panic!("inspection must not flush");
+        }
+    }
+    let original = plan("UNCONSUMED", AuthorityState::Authorized)?;
+    for draining in [false, true] {
+        let mut queue = RuntimeQueue::new(1);
+        queue.submit(original.clone()).expect("admission");
+        if draining {
+            queue.begin_drain();
+        }
+        let state = queue.state();
+        let mut output = FailAfter {
+            bytes: Vec::new(),
+            remaining: 7,
+        };
+        let error = write_plan_inspections_jsonl(queue.pending(), &mut output)
+            .expect_err("partial output failure");
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(output.bytes.len(), 7);
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue.state(), state);
+        assert_eq!(queue.next_plan(), Some(original.clone()));
+        assert_eq!(
+            queue.state(),
+            if draining {
+                QueueState::Stopped
+            } else {
+                QueueState::Running
+            }
+        );
+    }
+    let mut stopped = RuntimeQueue::new(1);
+    stopped.submit(original).expect("admission");
+    stopped.stop();
+    assert_eq!(stopped.pending().next(), None);
     Ok(())
 }
 

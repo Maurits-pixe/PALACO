@@ -101,6 +101,18 @@ impl RuntimeQueue {
         self.pending.is_empty()
     }
 
+    /// Borrows pending plans in FIFO order without transferring or cloning them.
+    ///
+    /// Compatible with the inspection module's iterator APIs. Reading or
+    /// dropping this iterator does not change queue state, even during drain.
+    /// The borrow prevents queue mutation while yielded references are in use;
+    /// it is not a detached snapshot or a current-authority check.
+    pub fn pending(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &RuntimePlan> + DoubleEndedIterator + '_ {
+        self.pending.iter()
+    }
+
     /// Whether this queue has been permanently stopped.
     #[must_use]
     pub fn is_stopped(&self) -> bool {
