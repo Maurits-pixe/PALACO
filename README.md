@@ -169,7 +169,7 @@ internal backups may validate, but their exported envelopes still fail the
 standalone checker's requirement for at least one committed group.
 The human release gate remains **HOLD**; this is not production recovery evidence.
 
-For the standalone envelope checker, both anchors are optional (including
+For the standalone envelope checker without receipt/review options, both anchors are optional (including
 separately); omitting both preserves legacy
 `verify(path)`/CLI structural checking. API keywords are `expected_source_commit`
 and `expected_proof`; supplied values must be lowercase 40-/64-hex strings.
@@ -228,6 +228,35 @@ independently signed human review or an official WF test mapping. No report file
 signatures, reviewer identities or external actions are created. Human release
 remains **HOLD** and cannot be cleared by this option or summary; durable human
 review remains outside the automated fixture.
+
+Optional `--receipt PATH` (API keyword-only `receipt=path`) checks the existing
+historical dictionary returned by `Store.submit`, retained as JSON by the caller;
+it does not fabricate a real-world record:
+
+```bash
+python3 -I /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py \
+  /absolute/runtime/envelope.json --receipt /absolute/runtime/receipt.json \
+  --expected-source-commit "${SOURCE:?supply trusted source revision}" \
+  --expected-proof "${EXPECTED_PROOF:?supply trusted current digest}"
+```
+
+Both explicit current anchors are mandatory before any file reads; `None` rejects.
+The receipt is read once as strict duplicate-free JSON, bounded to 4096 bytes,
+and must exactly match one fully validated commit's `commit`, `request_hash`,
+`historical_record_only: true` and `execution: false`, with no extra fields.
+Full envelope validation, requested continuity and requested review summary must
+all pass. The unchanged top-level `VERIFIED_SYNTHETIC_ONLY` result adds only
+`receipt_verification`: `result: VERIFIED_HISTORICAL_RECEIPT`, derived `request_key`,
+`commit_sequence`, `commit`, `request_hash`, `historical_record_only: true`,
+`execution: false` and `authenticity: false`. Existing record/request counts and
+review-summary semantics are unchanged. Old receipts remain historical matches
+after later commits or revocation; terminal revocation is required only by
+`--review-summary`. A truncated valid envelope matches only if the caller
+deliberately supplies its different proof, not the retained original proof.
+This separately implemented consistency check is not signed independent review,
+authentication, current permission or authorization. It writes no inputs/reports,
+re-executes nothing and has no external effects. Source/digest trust stays with
+the caller, new test IDs are not official WF mappings, and human release stays **HOLD**.
 
 Callers retain checkpoints and trusted digests externally; this supplies no
 freshness, authenticity, global antirollback guarantee or production release.
