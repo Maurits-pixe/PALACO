@@ -33,6 +33,19 @@ For every domain below, the human reviewer must record the exact scope and revis
 | Data retention and deletion | UNKNOWN / NOT REVIEWED | Identify data collected or stored, storage locations, backups and replicas, retention periods, deletion behavior, and responsible owner. Confirm no real-user or sensitive data is used before approval. |
 | Incident response | UNKNOWN / NOT REVIEWED | Identify the accountable responder, reporting path, containment and credential-revocation steps, evidence preservation, communication process, and recovery procedure. Attach the approved runbook and exercise evidence. |
 
+### Repository starting points — not evidence of approval
+
+These links help locate material for the review; they do not establish that a control is effective, complete, or deployed. Review only the applications and revisions actually in scope, and record external evidence separately.
+
+| Domain | Repository starting points | Evidence still needed outside or beyond these files |
+| --- | --- | --- |
+| Authentication and authorization | [Bastion preview README](../../modules/citadel-bastion-preview/README.md), [launcher README](../../modules/launcher-v1_2/README.md), and each scoped app's routes, guards, and tests. | Verify every deployed app and endpoint, including provider-side access controls and unauthenticated/direct access. |
+| Secrets | Scoped app deployment configs ([website](../../website/vercel.json), [launcher](../../modules/launcher-v1_2/vercel.json), [Bastion](../../modules/citadel-bastion-preview/vercel.json)) and relevant [workflows](../../.github/workflows/). | Review complete repository history, build artifacts, provider settings, environment variables, and credential rotation; checked-in configuration cannot show provider-held values. |
+| Public exposure | [Preview deployment inventory](Preview-Deployments.md) and the scoped apps' deployment configs. | Confirm current project ownership/settings, actual URLs, access restrictions, reachable routes, and response headers from the deployed endpoints. |
+| Logging and audit | [Bastion preview README](../../modules/citadel-bastion-preview/README.md) and [D-013 backend review](../../modules/citadel-bastion-preview/D013-REVIEW.md), plus logging code for any other scoped app. | Inspect provider and infrastructure log contents, access, retention, integrity, and redacted representative records. |
+| Data retention and deletion | Storage implementations for each scoped app, such as [Rio Accounts storage](../../services/rio-accounts/src/storage.rs), and its [migration](../../services/rio-accounts/migrations/0001_synthetic_accounts.sql) if that service is in scope. | Inventory actual data, browser/device storage, backups, replicas, provider retention, deletion behavior, and accountable owners. |
+| Incident response | [Preview deployment inventory](Preview-Deployments.md) identifies configured hosting providers. | Obtain the approved organization/provider incident runbook, accountable responder, escalation contacts, and exercise evidence. |
+
 ## Per-domain review records
 
 Complete each record independently. A domain remains **UNKNOWN / NOT REVIEWED** unless an authorized human reviewer has examined its scope, recorded evidence and findings, and explicitly stated a decision. `NOT RECORDED` is a prompt for the reviewer, not a finding or approval.
