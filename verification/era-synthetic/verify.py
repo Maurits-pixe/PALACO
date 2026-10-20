@@ -1,6 +1,6 @@
 """Separate offline checker implementation, not independent human validation.
 
-Reads only envelopes; imports no runtime fixture and opens no database.
+Reads only envelopes and optional receipts; imports no runtime fixture or database.
 SHA256 consistency is not authentication, signature verification or provenance.
 """
 import argparse
@@ -53,10 +53,10 @@ def reject_constant(_):
     raise ValueError("non-JSON number")
 
 
-def _load_envelope(path):
+def _load_envelope(path, *, limit=LIMIT):
     with Path(path).open("rb") as stream:
-        raw = stream.read(LIMIT + 1)
-    require(len(raw) <= LIMIT)
+        raw = stream.read(limit + 1)
+    require(len(raw) <= limit)
     return json.loads(raw.decode("utf-8"), object_pairs_hook=unique_pairs,
                       parse_constant=reject_constant)
 
@@ -129,9 +129,18 @@ def _verify_envelope(value, *, expected_source_commit=_UNSET, expected_proof=_UN
 
 
 def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
-           previous_envelope=_UNSET, expected_previous_proof=_UNSET, review_summary=False):
+           previous_envelope=_UNSET, expected_previous_proof=_UNSET, review_summary=False,
+           receipt=_UNSET):
     require(type(review_summary) is bool)
-    require(not review_summary or (expected_source_commit is not _UNSET and expected_proof is not _UNSET))
+    check_receipt = receipt is not _UNSET
+    require(not (review_summary or check_receipt) or
+            (expected_source_commit is not _UNSET and expected_proof is not _UNSET))
+    if check_receipt:
+        require(receipt is not None)
+        try:
+            receipt_path = Path(receipt)
+        except TypeError as error:
+            raise ValueError("invalid receipt path") from error
     continuity = previous_envelope is not _UNSET
     require(continuity == (expected_previous_proof is not _UNSET))
     require(not continuity or previous_envelope is not None)
@@ -140,11 +149,13 @@ def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
         if anchor is not _UNSET:
             require(type(anchor) is str and re.fullmatch(r"[0-9a-f]{%d}" % length, anchor) is not None)
     current_path = Path(path)
+    require(not check_receipt or receipt_path != current_path)
     current = _load_envelope(current_path)
     result = _verify_envelope(current, expected_source_commit=expected_source_commit,
                              expected_proof=expected_proof)
     if continuity:
         previous_path = Path(previous_envelope)
+        require(not check_receipt or receipt_path != previous_path)
         if previous_path == current_path:
             previous = current
         else:
@@ -173,6 +184,25 @@ def verify(path, *, expected_source_commit=_UNSET, expected_proof=_UNSET,
             "open_gates": ["canonical_contract_conformance", "independent_external_verification",
                           "operational_authorization", "human_release_decision"],
         }
+    if check_receipt:
+        supplied = _load_envelope(receipt_path, limit=4096)
+        matched = None
+        for record in current["records"]:
+            if record["kind"] != "commit":
+                continue
+            expected = {"commit": record["hash"], "request_hash": record["data"]["request_hash"],
+                        "historical_record_only": True, "execution": False}
+            if identical(supplied, expected):
+                matched = record
+                break
+        require(matched is not None)
+        result["receipt_verification"] = {
+            "result": "VERIFIED_HISTORICAL_RECEIPT",
+            "request_key": matched["data"]["request"]["request_key"],
+            "commit_sequence": matched["seq"], "commit": matched["hash"],
+            "request_hash": matched["data"]["request_hash"],
+            "historical_record_only": True, "execution": False, "authenticity": False,
+        }
     return result
 
 
@@ -185,6 +215,8 @@ def main():
     parser.add_argument("--expected-previous-proof", help="caller-held trusted previous 64-hex digest")
     parser.add_argument("--review-summary", action="store_true",
                         help="local advisory summary; requires both current anchors and terminal revocation")
+    parser.add_argument("--receipt", type=Path,
+                        help="retained historical producer receipt; requires both current anchors")
     args = parser.parse_args()
     anchors = {}
     if args.expected_source_commit is not None:
@@ -195,6 +227,8 @@ def main():
         anchors["previous_envelope"] = args.previous_envelope
     if args.expected_previous_proof is not None:
         anchors["expected_previous_proof"] = args.expected_previous_proof
+    if args.receipt is not None:
+        anchors["receipt"] = args.receipt
     try:
         print(json.dumps(verify(args.envelope, review_summary=args.review_summary, **anchors), sort_keys=True))
     except (ValueError, OSError, UnicodeError, RecursionError, OverflowError):
