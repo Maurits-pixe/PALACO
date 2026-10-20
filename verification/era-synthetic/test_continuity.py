@@ -298,20 +298,21 @@ class Continuity(unittest.TestCase):
 
     def test_distinct_files_read_and_validated_once(self):
         opened = []
-        original = Path.open
+        original = verify.os.open
 
         def monitor(path, *args, **kwargs):
             opened.append((path, args))
             return original(path, *args, **kwargs)
 
         before = self.snapshot()
-        with patch.object(Path, "open", monitor), patch.object(
+        with patch.object(verify.os, "open", monitor), patch.object(
                 verify, "_verify_envelope", wraps=verify._verify_envelope) as validate:
             self.assert_output(verify.verify(
                 self.path, previous_envelope=self.prior_path,
                 expected_previous_proof=self.anchor), 5, 5)
             self.assertEqual(validate.call_count, 2)
-        self.assertCountEqual(opened, [(self.path, ("rb",)), (self.prior_path, ("rb",))])
+        flags = verify.os.O_RDONLY | verify.os.O_NONBLOCK | getattr(verify.os, "O_CLOEXEC", 0)
+        self.assertCountEqual(opened, [(self.path, (flags,)), (self.prior_path, (flags,))])
         self.assertEqual(self.snapshot(), before)
 
     def test_same_file_read_and_validated_once(self):

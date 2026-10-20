@@ -219,6 +219,15 @@ Anchors are caller assertions, not signatures or independent authentication:
 `authenticity` and `execution` remain `false`. A HEAD binding with dirty files is
 preliminary, not evidence that those edits were committed.
 
+The offline checker accepts regular files only for current/previous envelopes
+(at most 1 MiB each) and receipts (4096 bytes). A read-only nonblocking open
+rejects FIFOs without waiting for a writer; directories, devices and sockets
+also reject. Symlinks to regular files remain allowed. File type and size are
+checked on the same descriptor used for the bounded read, whose actual byte
+count is also checked if the file grows. This is not authentication, an atomic
+or immutable snapshot, or a universal I/O deadline: slow/network filesystems
+can still block regular-file access. The human release gate remains **HOLD**.
+
 Optional offline append-only continuity checking requires **both**
 `--previous-envelope` and `--expected-previous-proof` (API keyword-only
 `previous_envelope` / `expected_previous_proof`; neither accepts `None`).

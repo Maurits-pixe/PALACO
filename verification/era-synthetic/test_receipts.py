@@ -338,7 +338,7 @@ class HistoricalReceipts(unittest.TestCase):
             "--expected-previous-proof", self.first["proof"]["digest"]))
 
     def test_each_envelope_and_receipt_opened_only_once(self):
-        original = Path.open
+        original = verify.os.open
         opened = []
 
         def tracked(path, *args, **kwargs):
@@ -349,7 +349,7 @@ class HistoricalReceipts(unittest.TestCase):
             with self.subTest(prior=prior):
                 opened.clear()
                 digest = (self.first if prior == self.prior_path else self.closed)["proof"]["digest"]
-                with patch.object(Path, "open", tracked):
+                with patch.object(verify.os, "open", tracked):
                     verify.verify(self.path, **self.options(), review_summary=True,
                                   previous_envelope=prior, expected_previous_proof=digest)
                 self.assertEqual(opened.count(self.path), 1)
@@ -359,12 +359,14 @@ class HistoricalReceipts(unittest.TestCase):
                 self.assertEqual(len(opened), 3 if prior != self.path else 2)
 
     def test_receipt_loader_reads_at_most_bound_plus_one(self):
-        original = Path.open
+        original = verify.os.fdopen
         reads = []
 
         class Bounded:
+            def __init__(inner, fd, *args, **kwargs):
+                inner.stream = original(fd, *args, **kwargs)
+
             def __enter__(inner):
-                inner.stream = original(self.receipt_path, "rb")
                 return inner
 
             def __exit__(inner, *args):
@@ -374,10 +376,12 @@ class HistoricalReceipts(unittest.TestCase):
                 reads.append(size)
                 return inner.stream.read(size)
 
-        def tracked(path, *args, **kwargs):
-            return Bounded() if path == self.receipt_path else original(path, *args, **kwargs)
+        def tracked(fd, *args, **kwargs):
+            if verify.os.fstat(fd).st_ino == self.receipt_path.stat().st_ino:
+                return Bounded(fd, *args, **kwargs)
+            return original(fd, *args, **kwargs)
 
-        with patch.object(Path, "open", tracked):
+        with patch.object(verify.os, "fdopen", tracked):
             verify.verify(self.path, **self.options())
         self.assertEqual(reads, [4097])
 

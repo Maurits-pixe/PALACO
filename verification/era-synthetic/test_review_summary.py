@@ -288,7 +288,7 @@ class ReviewSummary(unittest.TestCase):
             self.check(accepted=False, **options)
 
     def test_same_loaded_object_single_read_and_readonly(self):
-        original = Path.open
+        original = verify.os.open
         opened = []
 
         def monitor(path, *args, **kwargs):
@@ -296,18 +296,19 @@ class ReviewSummary(unittest.TestCase):
             return original(path, *args, **kwargs)
 
         before = self.snapshot()
-        with patch.object(Path, "open", monitor), patch.object(
+        with patch.object(verify.os, "open", monitor), patch.object(
                 verify, "_verify_envelope", wraps=verify._verify_envelope) as validate:
             result = verify.verify(self.path, **self.options())
             self.assertEqual(result["review_summary"]["records"], 11)
             self.assertEqual(validate.call_count, 1)
-        self.assertEqual(opened, [(self.path, ("rb",))])
+        flags = verify.os.O_RDONLY | verify.os.O_NONBLOCK | getattr(verify.os, "O_CLOEXEC", 0)
+        self.assertEqual(opened, [(self.path, (flags,))])
         self.assertEqual(self.snapshot(), before)
         opened.clear()
-        with patch.object(Path, "open", monitor):
+        with patch.object(verify.os, "open", monitor):
             verify.verify(self.path, **self.options(), previous_envelope=self.prior_path,
                           expected_previous_proof=self.previous["proof"]["digest"])
-        self.assertCountEqual(opened, [(self.path, ("rb",)), (self.prior_path, ("rb",))])
+        self.assertCountEqual(opened, [(self.path, (flags,)), (self.prior_path, (flags,))])
         self.assertEqual(self.snapshot(), before)
 
     def test_verifier_does_not_import_fixture_or_sqlite(self):
