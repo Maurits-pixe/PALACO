@@ -77,7 +77,10 @@ function unpackFile(packed) {
     throw new Error('De versleutelde bestandsmetadata is ongeldig.');
   }
   const name = header.name.split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g, '') || 'ontsleuteld-bestand';
-  return { name, type: 'application/octet-stream', bytes: packed.slice(headerEnd) };
+  const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(header.type)
+    ? header.type.toLowerCase()
+    : 'application/octet-stream';
+  return { name, type, bytes: packed.slice(headerEnd) };
 }
 
 async function encryptSelectedFile() {

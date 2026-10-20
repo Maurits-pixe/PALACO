@@ -45,6 +45,14 @@ try {
   });
   const context = await browser.newContext({ acceptDownloads: true });
   const page = await context.newPage();
+  await page.addInitScript(() => {
+    const createObjectURL = URL.createObjectURL.bind(URL);
+    window.aetherBlobTypes = [];
+    URL.createObjectURL = blob => {
+      window.aetherBlobTypes.push(blob.type);
+      return createObjectURL(blob);
+    };
+  });
   const browserErrors = [];
   page.on('pageerror', error => browserErrors.push(error.message));
   const address = server.address();
@@ -136,6 +144,7 @@ try {
   assert.equal(restored.suggestedFilename(), originalName);
   const restoredPath = await restored.path();
   assert.equal(await fs.promises.readFile(restoredPath, 'utf8'), originalContent);
+  assert.ok((await page.evaluate(() => window.aetherBlobTypes)).includes('text/plain'));
   await page.locator('#passphrase').fill(passphrase);
   await page.locator('#confirm-passphrase').fill(passphrase);
   await page.locator('#vault-passphrase').fill(passphrase);
