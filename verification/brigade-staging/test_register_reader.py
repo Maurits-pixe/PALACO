@@ -299,6 +299,15 @@ class ReaderTests(unittest.TestCase):
             self.assertEqual(output.returncode, 2)
             self.closed(json.loads(output.stdout), "INVALID")
         self.closed(json.loads(self.cli(b"{").stdout), "INVALID")
+        for arguments in [["--host-bridge"], ["--host-bridge", "invalid"]]:
+            output = subprocess.run(
+                [sys.executable, "-I", str(Path(reader.__file__).absolute()), *arguments],
+                input=b"", stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=5, check=False,
+            )
+            self.assertEqual(output.returncode, 2)
+            self.assertEqual(output.stdout, b"")
+            self.closed(json.loads(output.stderr), "INVALID")
 
 
 if __name__ == "__main__":

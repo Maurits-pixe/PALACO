@@ -325,7 +325,8 @@ def main(arguments):
         len(arguments) != 2 or arguments[0] not in {"--host-check", "--host-bridge"}
         or arguments[1] not in MODES
     ):
-        print(json.dumps(_result("INVALID"), sort_keys=True))
+        stream = sys.stderr if arguments and arguments[0] == "--host-bridge" else sys.stdout
+        print(json.dumps(_result("INVALID"), sort_keys=True), file=stream)
         return 2
     result = read_configured(
         sys.stdin.buffer.read(HOST_CONFIG_LIMIT + 1), arguments[1],
