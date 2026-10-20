@@ -139,6 +139,8 @@ try {
   assert.equal(await reviewDetails.locator('table').isVisible(), true);
   assert.equal(await popup.locator('.table-wrap').evaluate(table => getComputedStyle(table).overflowX), 'visible');
   assert.equal(await popup.locator('.events-panel tbody tr').count(), 2);
+  assert.equal(await popup.locator('.events-panel thead').evaluate(header => getComputedStyle(header).display), 'table-header-group');
+  assert.equal(await popup.locator('.events-panel tbody tr').first().evaluate(row => getComputedStyle(row).breakInside), 'avoid');
   await popup.emulateMedia({ media: 'screen' });
   const documentOrigin = new URL(popup.url()).origin;
   const remoteRequests = [];
