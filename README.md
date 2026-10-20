@@ -12,6 +12,24 @@ Thank you for your interest in contributing to PALACO! This document outlines th
 
 For Vercel preview deployment setup and URLs for PALACO's web apps, see [Web preview deployments](docs/operations/Preview-Deployments.md).
 
+## Offline ERA/P.G.E. EDTR + PAD comparator v0.1
+
+Afzonderlijke synthetische verificatie in PALACO, niet de ontbrekende
+PALACO-INDUSTRIE/pge-prototype-checkout of een aangesloten ERA-dienst.
+Zie het [velden-, byte- en bewijscontract](verification/era-pad-comparator/era-pad-comparator-contract.v0.1.md).
+De pure comparator toetst contextbinding, ruwe SHA-256 en expliciete normalisatie;
+ontbrekende/onzekere tijd blijft UNKNOWN met behoud van geldige PAD-data.
+Iedere uitkomst blijft HOLD/NONE, zonder seal, authority, conformance,
+commitvolgorde, contactopening, database, netwerk of productieactivering.
+BRI9ADE, UI, proof.json en bestaande paneel-/ambassadeursstatus zijn niet gewijzigd.
+
+Vanuit `/home/runner/work/PALACO/PALACO`:
+`node --test verification/era-pad-comparator/era-pad-comparator.test.mjs`.
+Syntax: `node --check verification/era-pad-comparator/era-pad-comparator.mjs`.
+Node 22+ vereist (`String.isWellFormed`); geen dependencies of server nodig.
+Notion-bronpin en prototypeversie blijven UNKNOWN. Volgende gate:
+technische contractreview, niet operationele vrijgave.
+
 ---
 
 ## Code of Conduct
