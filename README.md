@@ -44,6 +44,22 @@ repository/revision, ordered chain and no-execution flags; it supplies integrity
 **not signatures, authenticity or external validation**. The readonly, database-free
 checker is a separate implementation, not independent human verification.
 
+`verification/era-synthetic/vectors/v1.json` pins local synthetic known answers:
+Python `json.dumps` sorted, compact, `ensure_ascii=True` bytes (not generic RFC 8785),
+primitive/request/payload/genesis digests, every linked record, open/closed proofs,
+a historical receipt and the full canonical envelope SHA256 (without newline).
+The all-zero 40-hex source is **intentionally artificial**, only a syntax/binding
+fixture, not an actual verified Git commit or runtime provenance evidence.
+These literals were independently assembled from protocol fields with an inline
+Node.js serializer matching these Python escaping cases and Node's built-in
+`crypto` SHA256, then cross-checked with Python stdlib hashing; neither producer
+nor checker generated the expected artifact. This is not an external audit,
+signature, authentication, official WF mapping or WCG/WIV/WFR contract conformance.
+`test_vectors.py` reads the artifact without rewriting it and is included by the
+existing CI unittest discovery above; Node is not a test dependency. Canonical or
+contract changes require explicit vector-version review, never automatic test
+regeneration. The human review/release gate remains **HOLD**.
+
 Unlike mutating `demo`, `export` inspects only an existing synthetic database and
 exports its current state: it never submits, revokes, creates schema or initializes
 metadata. `--source-commit` remains required as the expected persistent binding.
