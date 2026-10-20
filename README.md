@@ -160,6 +160,55 @@ Anchors are caller assertions, not signatures or independent authentication:
 `authenticity` and `execution` remain `false`. A HEAD binding with dirty files is
 preliminary, not evidence that those edits were committed.
 
+Optional offline append-only continuity checking requires **both**
+`--previous-envelope` and `--expected-previous-proof` (API keyword-only
+`previous_envelope` / `expected_previous_proof`; neither accepts `None`).
+For caller-owned, externally retained checkpoint files:
+
+```bash
+# PREVIOUS_PROOF is an independently saved, trusted prior digest, NOT extracted
+# from either envelope. Set it from the caller's trusted checkpoint record.
+python3 -I /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py \
+  /home/runner/work/PALACO/PALACO/verification/era-synthetic/.runtime/current.envelope.json \
+  --previous-envelope /home/runner/work/PALACO/PALACO/verification/era-synthetic/.runtime/previous.envelope.json \
+  --expected-previous-proof "${PREVIOUS_PROOF:?supply independently saved trusted prior digest}"
+```
+
+Both bounded, strict-JSON envelopes undergo full validation without database
+access or writes. The previous proof must match the caller-held anchor; schema,
+source binding and flags must match with exact types, and all previous records
+(including hashes/links) must be an identical prefix of the current same-lineage
+log. JSON formatting need not match. Continuity adds `previous_proof`,
+`previous_records`, `added_records`, `previous_proof_anchor_matched: true` and
+`continuity: UNCHANGED` or `EXTENDED`; a terminally revoked checkpoint permits
+only unchanged content. Current source/proof anchors remain independently
+optional and checked. The result remains `VERIFIED_SYNTHETIC_ONLY`, with
+`execution: false` and `authenticity: false`.
+The checker never infers trust from a file or updates/stores checkpoints.
+Opt-in `--review-summary` (API keyword-only `review_summary=True`, strict bool)
+requires **both** explicit, trusted current source/proof anchors and a fully
+validated envelope ending in revocation with at least one committed request:
+
+```bash
+python3 /home/runner/work/PALACO/PALACO/verification/era-synthetic/verify.py "$RUN/envelope.json" --review-summary --expected-source-commit "$SOURCE" --expected-proof "${EXPECTED_PROOF:?supply trusted current digest}"
+```
+
+Obtain `SOURCE` and `EXPECTED_PROOF` from trusted caller-held checkpoints, not
+from the envelope being checked. Default output is unchanged. The additional
+`review_summary` stdout JSON object reports validated committed-request groups,
+record count and terminal revocation sequence from the same loaded snapshot.
+Optional continuity checks still complete first; an open prior checkpoint may
+extend to a revoked current envelope. Revoked closure is not execution authority,
+specification conformance or readiness. This is local structural evidence, not
+independently signed human review or an official WF test mapping. No report files,
+signatures, reviewer identities or external actions are created. Human release
+remains **HOLD** and cannot be cleared by this option or summary; durable human
+review remains outside the automated fixture.
+
+Callers retain checkpoints and trusted digests externally; this supplies no
+freshness, authenticity, global antirollback guarantee or production release.
+The human release gate remains **HOLD**; official source contracts remain unavailable.
+
 New submissions reserve five linked records **plus one durable revocation slot**
 under the existing transaction. At the 1000-record bound, 199 groups use 995
 records and revocation uses record 996; fresh keys are then rejected without changes.
