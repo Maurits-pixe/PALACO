@@ -185,6 +185,25 @@ internal backups may validate, but their exported envelopes still fail the
 standalone checker's requirement for at least one committed group.
 The human release gate remains **HOLD**; this is not production recovery evidence.
 
+### Integrated synthetic recovery acceptance drill
+
+`test_recovery_drill.py`, included in the unittest discovery command above, combines
+on-disk SQLite, backup/export CLIs, fresh writable processes on explicit recovery
+copies, and the isolated standalone checker. It covers open-to-closed recovery
+with retained historical receipts and advisory review, stale backups, coherent
+rollback, revoked-copy no-ops, wrong anchors/corrupt receipts, and divergent forks.
+Caller-held proofs/checkpoints are retained from producers before backup, never
+promoted from recovered files; source databases and retained evidence are checked
+unchanged. A coherent rollback can pass structural validation but not continuity
+against its trusted checkpoint. Two copies can each extend validly: this does not
+provide global fork prevention or automatic restoration over the source.
+
+The runner binds provenance to actual `git rev-parse HEAD`, not an artificial
+revision; this is not authentication or proof that working-tree edits are committed.
+These test-only local drills add no official WF mappings or contract-conformance,
+external-verification, hardware/power-loss, or production-recovery claims.
+The advisory human release gate remains **HOLD**.
+
 For the standalone envelope checker without receipt/review options, both anchors are optional (including
 separately); omitting both preserves legacy
 `verify(path)`/CLI structural checking. API keywords are `expected_source_commit`
