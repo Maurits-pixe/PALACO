@@ -73,6 +73,13 @@ def digest(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
+def _validate_expected_proof(expected_proof):
+    if expected_proof is not _UNSET and (
+            type(expected_proof) is not str or
+            not re.fullmatch(r"[0-9a-f]{64}", expected_proof)):
+        raise ValueError("expected proof must be a lowercase 64-hex string")
+
+
 def same(left, right):
     if type(left) is not type(right):
         return False
@@ -256,13 +263,24 @@ class Store:
                         (record["seq"], canonical(record).decode()))
         return record["hash"]
 
-    def submit(self, value, *, _checkpoint=None):
+    def _check_expected_proof(self, records, expected_proof):
+        body = {"schema": SCHEMA, "source": dict(self.source), "flags": dict(FLAGS),
+                "records": records}
+        envelope = {**body, "proof": {"algorithm": "SHA256", "digest": digest(body),
+                                    "authenticity": False}}
+        if expected_proof is not _UNSET and expected_proof != envelope["proof"]["digest"]:
+            raise ValueError("expected proof mismatch")
+        return envelope
+
+    def submit(self, value, *, expected_proof=_UNSET, _checkpoint=None):
         if self.read_only:
             raise ValueError("read-only store permits export/backup only")
+        _validate_expected_proof(expected_proof)
         # Internal callable seam only: no CLI/input field can enable fault injection.
         self.db.execute("BEGIN IMMEDIATE")
         try:
             records = self._validate_state()
+            self._check_expected_proof(records, expected_proof)
             key = value.get("request_key") if type(value) is dict else None
             if type(key) is str:
                 old = self.db.execute("SELECT request_hash,receipt FROM requests WHERE key=?", (key,)).fetchone()
@@ -296,12 +314,14 @@ class Store:
             self.db.rollback()
             raise
 
-    def revoke(self):
+    def revoke(self, *, expected_proof=_UNSET):
         if self.read_only:
             raise ValueError("read-only store permits export/backup only")
+        _validate_expected_proof(expected_proof)
         self.db.execute("BEGIN IMMEDIATE")
         try:
             records = self._validate_state()
+            self._check_expected_proof(records, expected_proof)
             if not any(r["kind"] == "revocation" for r in records):
                 self._append("revocation", {"authority": FIXED["authority"], "execution": False})
             self.db.commit()
@@ -310,20 +330,12 @@ class Store:
             raise
 
     def export(self, *, expected_proof=_UNSET):
-        if expected_proof is not _UNSET and (
-                type(expected_proof) is not str or
-                not re.fullmatch(r"[0-9a-f]{64}", expected_proof)):
-            raise ValueError("expected proof must be a lowercase 64-hex string")
+        _validate_expected_proof(expected_proof)
         self.db.execute("BEGIN")
         try:
             # Metadata and ordered log are read in the same SQLite snapshot.
             records = self._validate_state()
-            body = {"schema": SCHEMA, "source": dict(self.source), "flags": dict(FLAGS),
-                    "records": records}
-            envelope = {**body, "proof": {"algorithm": "SHA256", "digest": digest(body),
-                                        "authenticity": False}}
-            if expected_proof is not _UNSET and expected_proof != envelope["proof"]["digest"]:
-                raise ValueError("expected proof mismatch")
+            envelope = self._check_expected_proof(records, expected_proof)
             self.db.commit()
             return envelope
         except BaseException:
