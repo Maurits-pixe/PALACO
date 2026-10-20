@@ -111,6 +111,8 @@ async function encryptSelectedFile() {
   } catch (error) {
     errorMessage.value = error.message || 'Versleutelen is mislukt.';
   } finally {
+    encryptPassphrase.value = '';
+    confirmPassphrase.value = '';
     busy.value = false;
   }
 }
@@ -133,6 +135,7 @@ async function decryptVaultItem(item) {
   } catch (error) {
     errorMessage.value = error.message || 'Ontsleutelen is mislukt.';
   } finally {
+    decryptPassphrase.value = '';
     busy.value = false;
   }
 }

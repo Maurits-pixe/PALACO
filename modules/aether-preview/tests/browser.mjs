@@ -118,6 +118,7 @@ try {
   await page.locator('#vault-passphrase').fill('onjuiste wachtzin testwaarde');
   await page.getByRole('button', { name: 'ONTGRENDEL' }).click();
   await page.getByRole('alert').filter({ hasText: 'Ontsleutelen' }).waitFor();
+  assert.equal(await page.locator('#vault-passphrase').inputValue(), '');
   assert.equal(await page.locator('.vault-list li').count(), 1);
 
   await page.locator('#vault-passphrase').fill(passphrase);
