@@ -84,6 +84,15 @@ hun aantal. Reeds overgedragen plannen worden niet geannuleerd of gewijzigd.
 Herhaalde drainverzoeken heropenen niets. `stop()` kan een drain onderbreken en
 verwijdert dan de resterende plannen. Drainvoltooiing betekent uitsluitend dat
 alle plannen zijn overgedragen, **niet** dat externe uitvoering voltooid is.
+Het uitvoerbare voorbeeld
+`cargo run --locked -p palaco-kernel --example synthetic_runtime_queue`
+doorloopt afwijzing van Hold/Deny, capaciteit, FIFO, drain en definitieve stop.
+Het schrijft alleen twee inspectierapporten van overgedragen synthetische
+plannen; `execution_performed` en `authority_verified` blijven `false`.
+Onverwachte argumenten worden geweigerd. Het voorbeeld controleert de
+levenscyclus met assertions en propageert write- en flush-fouten; beoordeel
+output uitsluitend na succesvolle procesexit. De bestaande runtime-CI voert
+het voorbeeld uit naast de inspectievoorbeelden.
 De wachtrij is proceslokaal, niet duurzaam en niet vooraf op maximale grootte
 gealloceerd. Ze authenticeert geen bewijs, ververst geen autoriteit en start
 geen callbacks, processen of externe acties. Een eerdere toelating is **geen**

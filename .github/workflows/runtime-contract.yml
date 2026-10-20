@@ -119,6 +119,19 @@ jobs:
               )
               if invalid.returncode == 0 or invalid.stdout:
                   raise SystemExit("Invalid example arguments must fail without a report")
-          print("Inspection examples match their contracts")
+          queue = run("-p", "palaco-kernel", "--example", "synthetic_runtime_queue")
+          if (
+              [json.loads(line) for line in queue.splitlines()] != [expected[0]] * 2
+              or not queue.endswith(b"\n")
+          ):
+              raise SystemExit("Unexpected runtime queue reports")
+          invalid_queue = subprocess.run(
+              ["cargo", "run", "--locked", "-p", "palaco-kernel",
+               "--example", "synthetic_runtime_queue", "--", "--execute"],
+              capture_output=True
+          )
+          if invalid_queue.returncode == 0 or invalid_queue.stdout:
+              raise SystemExit("Queue example must reject arguments without output")
+          print("Inspection and runtime queue examples match their contracts")
       - name: PVS-002 dependency and contract audit
         run: python tools/pvs002_cross_crate_contracts.py
