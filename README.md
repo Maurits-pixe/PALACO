@@ -24,11 +24,22 @@ commitvolgorde, contactopening, database, netwerk of productieactivering.
 BRI9ADE, UI, proof.json en bestaande paneel-/ambassadeursstatus zijn niet gewijzigd.
 
 Vanuit `/home/runner/work/PALACO/PALACO`:
-`node --test verification/era-pad-comparator/era-pad-comparator.test.mjs`.
+`node --test verification/era-pad-comparator/*.test.mjs`.
 Syntax: `node --check verification/era-pad-comparator/era-pad-comparator.mjs`.
 Node 22+ vereist (`String.isWellFormed`); geen dependencies of server nodig.
 Notion-bronpin en prototypeversie blijven UNKNOWN. Volgende gate:
 technische contractreview, niet operationele vrijgave.
+
+Additieve offline JSON/CLI-slice: `compareEraPadJson(bytes)` accepteert uitsluitend
+Buffer/Uint8Array, maximaal 16.384 inkomende bytes, strikte UTF-8/JSON zonder BOM,
+arrays of dubbele keys (ook escaped), maximaal drie objectniveaus.
+`node verification/era-pad-comparator/era-pad-cli.mjs` leest alleen binaire stdin,
+zonder argumenten of bestandslezer, met een vaste twee-seconden-inleesdeadline.
+Uitvoer is uitsluitend status, nooit pad/temporal, ruwe data, IDs of hashes.
+Exit 0 betekent alleen CONSISTENT_SYNTHETIC_ONLY, ook bij negatieve PAD-codes;
+anders exit 2, altijd HOLD/NONE. De deadline geldt alleen voor inputverwerving,
+niet als hard-realtimegarantie of sandbox. Geen nieuwe protocolbewijzen.
+Zie het bestaande contract voor bytegrenzen, foutafhandeling en beperkingen.
 
 ---
 

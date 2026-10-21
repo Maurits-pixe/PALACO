@@ -77,12 +77,55 @@ caller-owned objects; no writes or durable state. Identical repetition creates
 no authority. Equal timestamps establish no commit order, replay prevention or
 rollback protection. No polling or live freshness guarantee.
 
+## Additive JSON byte adapter and offline CLI (v0.1 scope extension)
+
+The object API above is unchanged. `compareEraPadJson(bytes)` in `era-pad-json.mjs`
+accepts only Buffer/Uint8Array views with at most 16,384 incoming bytes, including
+whitespace and JSON escapes. The existing serialized-object and raw-result limits
+also still apply. UTF-8 decoding is fatal: malformed byte sequences and a leading
+BOM are rejected, not repaired or silently removed.
+
+The bounded parser accepts one JSON root object, JSON whitespace only, no arrays,
+and at most three object levels (root, pad/temporal, uncertainty). It rejects
+duplicate decoded keys at every level, including escaped equivalent names,
+trailing input, comments, malformed numbers, nonfinite numeric values and malformed
+Unicode (including lone escaped surrogates in keys or values). Unknown fields still
+fail the existing comparator schema. Scans and allocations are bounded by the
+incoming byte limit; recursion is bounded by the object-depth limit.
+JSON escapes are decoded normally; raw_result hashing covers exactly the decoded
+string's UTF-8 bytes, not the JSON source spelling. No trimming or normalization.
+Parse failures reuse the existing HOLD/NONE REJECTED/INVALID_INPUT diagnostic
+without any raw content.
+
+Run `node verification/era-pad-comparator/era-pad-cli.mjs` with binary stdin and
+**no arguments**; there is no file reader or optional raw-export mode. It reads no
+more than the byte budget into retained buffers and destroys input on excess,
+timeout, end or error. A fixed two-second deadline covers input acquisition only:
+EOF is required, even after a complete JSON document. This is not a hard-realtime
+guarantee or a sandbox; event-loop scheduling and process startup can add latency.
+Empty/truncated input, stream errors, premature close, timeout and invalid arguments
+emit only the sanitized INVALID_INPUT diagnostic, never fixture text, errors,
+paths, IDs or hashes.
+
+Every CLI report omits pad and temporal, including for valid but inconsistent
+fixtures. It emits one JSON status line. Exit 0 means only
+CONSISTENT_SYNTHETIC_ONLY (including FAIL/ERROR/TIMEOUT/UNKNOWN PAD codes);
+all other outcomes exit 2. Neither exit code grants permission or authority.
+Importing the CLI module has no execution side effects. There is no network,
+database, server, external service, BRI9ADE change or new protocol evidence.
+
 ## Validation
 
 From `/home/runner/work/PALACO/PALACO`:
 
 `node --check verification/era-pad-comparator/era-pad-comparator.mjs`
 
-`node --test verification/era-pad-comparator/era-pad-comparator.test.mjs`
+`node --check verification/era-pad-comparator/era-pad-json.mjs`
+
+`node --check verification/era-pad-comparator/era-pad-cli.mjs`
+
+`node --check verification/era-pad-comparator/era-pad-json.test.mjs`
+
+`node --test verification/era-pad-comparator/*.test.mjs`
 
 Technical contract review remains the next gate, not production activation.
