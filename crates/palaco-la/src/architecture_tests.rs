@@ -169,11 +169,11 @@ mod tests {
                 verdict,
             };
 
-            let authorization = decision.can_authorize().then(|| Authorization {
-                id: AuthorizationId::new(Uuid::from_u128(4)),
-                decision_id: decision.id,
-                scope: scope.clone(),
-            });
+            let authorization = Authorization::from_decision(
+                AuthorizationId::new(Uuid::from_u128(4)),
+                &decision,
+                scope.clone(),
+            );
 
             assert_eq!(
                 authorization.is_some(),

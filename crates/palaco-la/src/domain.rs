@@ -108,6 +108,16 @@ pub struct Authorization {
     pub scope: Scope,
 }
 
+impl Authorization {
+    pub fn from_decision(id: AuthorizationId, decision: &Decision, scope: Scope) -> Option<Self> {
+        decision.can_authorize().then_some(Self {
+            id,
+            decision_id: decision.id,
+            scope,
+        })
+    }
+}
+
 impl Evidence {
     pub fn is_usable(&self) -> bool {
         !self.source.is_empty()
