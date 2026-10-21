@@ -116,6 +116,21 @@ database, server, external service, BRI9ADE change or new protocol evidence.
 
 ## Validation
 
+`era-pad-vectors.v0.1.json` is a test-only shared corpus of 12 fully explicit,
+fictional SYNTHETIC_ONLY inputs, complete literal status-only snapshots and CLI
+exits. Its exact harness schema is `corpus_version=ERA_PAD_VECTORS_V0.1`,
+`classification`, `source_authenticity`, `vectors`; each vector has exactly `id`,
+`structurally_valid`, `input`, `expected_status`, `expected_cli_exit`.
+Raw SHA-256 literals were independently authored with Node crypto (intentional
+integrity failures use the fixed PASS digest for ERROR); tests do not compute
+expected digests or derive expected statuses from the comparator.
+`era-pad-vectors.test.mjs` checks all three entrypoints against these same fixed
+snapshots, copied API payloads, sanitization, precedence and closed invariants,
+with a five-second per-vector timeout and hung-child cleanup.
+This is bounded consistency conformance only: shared implementation paths and
+hand-authored expectations are not an independent protocol oracle, ERA service,
+revocation, browser-acceptance, trusted-time or authority evidence.
+
 From `/home/runner/work/PALACO/PALACO`:
 
 `node --check verification/era-pad-comparator/era-pad-comparator.mjs`

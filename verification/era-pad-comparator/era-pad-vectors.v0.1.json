@@ -1,0 +1,368 @@
+{
+  "corpus_version": "ERA_PAD_VECTORS_V0.1",
+  "classification": "SYNTHETIC_ONLY",
+  "source_authenticity": "UNVERIFIED",
+  "vectors": [
+    {
+      "id": "synthetic-pass-known-time",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "PASS",
+          "raw_result_sha256": "2f9acb02faa121bb2a3621951f57b4c690655337edee2e5ac350be2b3be88ea8", "normalized_result": "PASS"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "PASS",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-fail-consistent",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "FAIL",
+          "raw_result_sha256": "425305e25df9df108e011164f7ca97522276cf1bc67b8aec3a7139cd60fb9a81", "normalized_result": "FAIL"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "FAIL",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-error-consistent",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "ERROR",
+          "raw_result_sha256": "d98ee0e5f9399db9381014c9f890f896d3fcb272c2a7a521d0a13aa23085a284", "normalized_result": "ERROR"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "ERROR",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-timeout-consistent",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "TIMEOUT",
+          "raw_result_sha256": "ab5b50c3846ccfef52997e6e153b187022cde34b543019aa4feaf1f732feff50", "normalized_result": "TIMEOUT"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "TIMEOUT",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-unknown-consistent",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "UNKNOWN",
+          "raw_result_sha256": "23759997b3c59884dc4c0ff5320d6301b0e7f63bf0f6483a7b54d7d43bc5ccd1", "normalized_result": "UNKNOWN"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "UNKNOWN",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-unicode-free-text",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "Fictional café e\u0301 🙂",
+          "raw_result_sha256": "f1cece4ef11a21ff5c766e283b379ca0b0777a2dfbfa96a6362846c4dddc20e2", "normalized_result": "UNKNOWN"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "UNKNOWN",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-unknown-temporal-context",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "PASS",
+          "raw_result_sha256": "2f9acb02faa121bb2a3621951f57b4c690655337edee2e5ac350be2b3be88ea8", "normalized_result": "PASS"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "UNKNOWN", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "UNKNOWN", "uncertainty": { "value": 2, "unit": "s" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "UNKNOWN", "pad_status": "PASS",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-missing-temporal-context",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "FAIL",
+          "raw_result_sha256": "425305e25df9df108e011164f7ca97522276cf1bc67b8aec3a7139cd60fb9a81", "normalized_result": "FAIL"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": null, "recorded_at": null,
+          "sync_status": "UNKNOWN", "uncertainty": null
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "CONSISTENT_SYNTHETIC_ONLY", "reason": null,
+        "binding_status": "MATCH", "temporal_status": "UNKNOWN", "pad_status": "FAIL",
+        "integrity_status": "MATCH", "normalization_status": "MATCH"
+      },
+      "expected_cli_exit": 0
+    },
+    {
+      "id": "synthetic-binding-over-integrity-and-normalization",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "ERROR",
+          "raw_result_sha256": "2f9acb02faa121bb2a3621951f57b4c690655337edee2e5ac350be2b3be88ea8", "normalized_result": "PASS"
+        },
+        "temporal": {
+          "assessment_id": "fictional-other-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "REJECTED", "reason": "BINDING_MISMATCH",
+        "binding_status": "MISMATCH", "temporal_status": "KNOWN", "pad_status": "ERROR",
+        "integrity_status": "INTEGRITY_MISMATCH", "normalization_status": "MISMATCH"
+      },
+      "expected_cli_exit": 2
+    },
+    {
+      "id": "synthetic-integrity-over-normalization",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "ERROR",
+          "raw_result_sha256": "2f9acb02faa121bb2a3621951f57b4c690655337edee2e5ac350be2b3be88ea8", "normalized_result": "PASS"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "INTEGRITY_MISMATCH", "reason": "INTEGRITY_MISMATCH",
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "ERROR",
+        "integrity_status": "INTEGRITY_MISMATCH", "normalization_status": "MISMATCH"
+      },
+      "expected_cli_exit": 2
+    },
+    {
+      "id": "synthetic-normalization-mismatch",
+      "structurally_valid": true,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "ERROR",
+          "raw_result_sha256": "d98ee0e5f9399db9381014c9f890f896d3fcb272c2a7a521d0a13aa23085a284", "normalized_result": "PASS"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        }
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "REJECTED", "reason": "NORMALIZATION_MISMATCH",
+        "binding_status": "MATCH", "temporal_status": "KNOWN", "pad_status": "ERROR",
+        "integrity_status": "MATCH", "normalization_status": "MISMATCH"
+      },
+      "expected_cli_exit": 2
+    },
+    {
+      "id": "synthetic-extra-authority-sanitized",
+      "structurally_valid": false,
+      "input": {
+        "schema_version": "ERA_PAD_COMPARATOR_V1",
+        "classification": "SYNTHETIC_ONLY",
+        "source_authenticity": "UNVERIFIED",
+        "assessment_id": "fictional-assessment",
+        "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "pad": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "observation_id": "fictional-observation", "raw_result": "PASS",
+          "raw_result_sha256": "2f9acb02faa121bb2a3621951f57b4c690655337edee2e5ac350be2b3be88ea8", "normalized_result": "PASS"
+        },
+        "temporal": {
+          "assessment_id": "fictional-assessment", "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source_kind": "SYNTHETIC_FIXTURE", "observed_at": "2040-01-02T03:04:05.000Z", "recorded_at": "2040-01-02T03:04:05.000Z",
+          "sync_status": "SYNCHRONIZED", "uncertainty": { "value": 0, "unit": "ms" }
+        },
+        "operativeAuthority": "FICTIONAL_OPEN"
+      },
+      "expected_status": {
+        "classification": "SYNTHETIC_ONLY", "source_authenticity": "UNVERIFIED",
+        "disposition": "HOLD", "operativeAuthority": "NONE", "canOpenContact": false,
+        "runtimeConnected": false, "externalSideEffect": false, "commit_order": "UNKNOWN",
+        "result": "REJECTED", "reason": "INVALID_INPUT",
+        "binding_status": "UNKNOWN", "temporal_status": "UNKNOWN", "pad_status": "UNKNOWN",
+        "integrity_status": "UNKNOWN", "normalization_status": "UNKNOWN"
+      },
+      "expected_cli_exit": 2
+    }
+  ]
+}

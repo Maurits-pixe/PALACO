@@ -41,6 +41,14 @@ anders exit 2, altijd HOLD/NONE. De deadline geldt alleen voor inputverwerving,
 niet als hard-realtimegarantie of sandbox. Geen nieuwe protocolbewijzen.
 Zie het bestaande contract voor bytegrenzen, foutafhandeling en beperkingen.
 
+De test-only [vaste JSON-vectoren](verification/era-pad-comparator/era-pad-vectors.v0.1.json)
+bevatten 12 expliciete fictieve SYNTHETIC_ONLY-inputs, onafhankelijk vastgelegde
+SHA-256-literals, volledige status-only verwachtingen en CLI-exits. De bestaande
+testglob vergelijkt object-API, JSON-byte-API en CLI met dezelfde gouden snapshots.
+Dit toetst alleen consistentieconformiteit; gedeelde implementatiepaden en
+handgeschreven verwachtingen zijn geen onafhankelijke protocoloracle of bewijs
+van ERA-dienst, revocation-herstel, browseracceptatie, vertrouwde tijd of authority.
+
 De afzonderlijke [offline CI-check](.github/workflows/era-pad-comparator.yml)
 draait syntax-, comparator-/CLI- en bestaande observatie-/reporterregressies op
 Node 24 bij relevante pushes/PR's of handmatige start. Geen package-installatie,
