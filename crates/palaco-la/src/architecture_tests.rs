@@ -7,8 +7,8 @@ mod tests {
         CanonicalBytes, CanonicalSigner, CanonicalVerifier,
         decision::{DecisionEvaluation, DecisionEvaluationError, evaluate},
         domain::{
-            DecisionId, DecisionVerdict, EpistemicStatus, Evidence, EvidenceId, Question,
-            QuestionId, ThresholdAssessment, ThresholdState,
+            Authorization, AuthorizationId, Decision, DecisionId, DecisionVerdict, EpistemicStatus,
+            Evidence, EvidenceId, Question, QuestionId, Scope, ThresholdAssessment, ThresholdState,
         },
     };
 
@@ -145,5 +145,45 @@ mod tests {
         assert_eq!(evaluation.decision.verdict, DecisionVerdict::Allow);
         assert_eq!(evaluation.decision.question_id, q.id);
         assert_eq!(evaluation.threshold.state, ThresholdState::Satisfied);
+    }
+
+    #[test]
+    fn authorization_preserves_only_the_scope_explicitly_bound_to_its_decision() {
+        let scope = Scope {
+            target: "synthetic-target".to_owned(),
+            operations: vec!["synthetic-read".to_owned()],
+            territory: "local-test".to_owned(),
+            purpose: "architecture-test".to_owned(),
+        };
+
+        for verdict in [
+            DecisionVerdict::Allow,
+            DecisionVerdict::Deny,
+            DecisionVerdict::Defer,
+            DecisionVerdict::Escalate,
+            DecisionVerdict::Unknown,
+        ] {
+            let decision = Decision {
+                id: DecisionId::new(Uuid::from_u128(3)),
+                question_id: QuestionId::new(Uuid::from_u128(1)),
+                verdict,
+            };
+
+            let authorization = decision.can_authorize().then(|| Authorization {
+                id: AuthorizationId::new(Uuid::from_u128(4)),
+                decision_id: decision.id,
+                scope: scope.clone(),
+            });
+
+            assert_eq!(
+                authorization.is_some(),
+                verdict == DecisionVerdict::Allow,
+                "unexpected authorization issuance for {verdict:?}"
+            );
+            if let Some(authorization) = authorization {
+                assert_eq!(authorization.decision_id, decision.id);
+                assert_eq!(authorization.scope, scope);
+            }
+        }
     }
 }
