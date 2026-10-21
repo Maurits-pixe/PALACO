@@ -41,6 +41,12 @@ anders exit 2, altijd HOLD/NONE. De deadline geldt alleen voor inputverwerving,
 niet als hard-realtimegarantie of sandbox. Geen nieuwe protocolbewijzen.
 Zie het bestaande contract voor bytegrenzen, foutafhandeling en beperkingen.
 
+De afzonderlijke [offline CI-check](.github/workflows/era-pad-comparator.yml)
+draait syntax-, comparator-/CLI- en bestaande observatie-/reporterregressies op
+Node 24 bij relevante pushes/PR's of handmatige start. Geen package-installatie,
+browser, database, secrets of deployment; CI-succes blijft synthetisch bewijs,
+geen operationele vrijgave. Checkout en runtime-installatie vereisen wel netwerk.
+
 ---
 
 ## Code of Conduct

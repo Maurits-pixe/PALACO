@@ -1,0 +1,52 @@
+name: ERA PAD offline synthetic verification
+
+on:
+  push:
+    paths:
+      - 'verification/era-pad-comparator/**'
+      - 'verification/rio-accounts/login-observation.mjs'
+      - 'verification/rio-accounts/test_login_observation.mjs'
+      - 'verification/rio-accounts/safe-reporter.mjs'
+      - 'verification/rio-accounts/test_safe_reporter.mjs'
+      - '.github/workflows/era-pad-comparator.yml'
+  pull_request:
+    paths:
+      - 'verification/era-pad-comparator/**'
+      - 'verification/rio-accounts/login-observation.mjs'
+      - 'verification/rio-accounts/test_login_observation.mjs'
+      - 'verification/rio-accounts/safe-reporter.mjs'
+      - 'verification/rio-accounts/test_safe_reporter.mjs'
+      - '.github/workflows/era-pad-comparator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: era-pad-offline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout event source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Node runtime without package caching
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check offline module syntax
+        run: |
+          node --version
+          for source in verification/era-pad-comparator/*.mjs; do
+            node --check "$source"
+          done
+      - name: Verify synthetic comparator and bounded CLI
+        run: node --test verification/era-pad-comparator/*.test.mjs
+      - name: Verify existing offline observation and sanitized reporter regressions
+        run: node --test verification/rio-accounts/test_login_observation.mjs verification/rio-accounts/test_safe_reporter.mjs

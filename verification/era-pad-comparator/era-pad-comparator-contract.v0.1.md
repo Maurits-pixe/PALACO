@@ -128,4 +128,15 @@ From `/home/runner/work/PALACO/PALACO`:
 
 `node --test verification/era-pad-comparator/*.test.mjs`
 
+The separate `.github/workflows/era-pad-comparator.yml` runs syntax checks for all
+comparator modules, this test suite and the existing offline login-observation and
+sanitized-reporter regression suites on Node 24. Relevant path-filtered pushes
+and pull requests trigger it; manual dispatch is also available. Pull requests
+test GitHub's merge ref; pushes/manual runs test the event ref. The workflow uses
+SHA-pinned actions, read-only contents permission, no persisted checkout
+credentials, no package installation/cache, no secrets, no browser/database
+fixture, no artifact upload and no deployment. Checkout and Node provisioning
+still require network; only verification itself is offline. A green run is not
+trusted-time, revocation-recovery, browser-acceptance or production evidence.
+
 Technical contract review remains the next gate, not production activation.
