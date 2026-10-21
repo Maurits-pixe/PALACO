@@ -79,7 +79,7 @@ mod tests {
             let result = evaluate(
                 q.clone(),
                 std::slice::from_ref(&e),
-                threshold(q.id, state),
+                threshold(q.id, state.clone()),
                 DecisionId::new(Uuid::from_u128(3)),
             );
 
@@ -119,9 +119,14 @@ mod tests {
 
         assert!(verifier.verify(&bytes, &signature).is_ok());
         assert!(!decision.can_authorize());
-        assert!(verifier
-            .verify(&CanonicalBytes::new(b"different bytes".to_vec()), &signature)
-            .is_err());
+        assert!(
+            verifier
+                .verify(
+                    &CanonicalBytes::new(b"different bytes".to_vec()),
+                    &signature
+                )
+                .is_err()
+        );
         assert!(!decision.can_authorize());
     }
 
