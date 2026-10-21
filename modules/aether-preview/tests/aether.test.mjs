@@ -9,6 +9,7 @@ import {
   MIN_PASSPHRASE_LENGTH,
   validateEnvelope
 } from '../src/crypto.js';
+import { packFile, unpackFile } from '../src/file-format.js';
 
 const root = new URL('../', import.meta.url);
 const passphrase = 'correct paard batterij';
@@ -89,6 +90,35 @@ test('rejects passphrases containing unpaired UTF-16 surrogates', async () => {
       /geldige Unicode/
     );
   }
+});
+
+test('validates decrypted file metadata and preserves file content', () => {
+  const bytes = new Uint8Array([0, 1, 2, 255]);
+  const packed = packFile({ name: 'folder\\sample.txt', type: 'text/plain' }, bytes);
+  const unpacked = unpackFile(packed);
+  assert.equal(unpacked.name, 'sample.txt');
+  assert.equal(unpacked.type, 'text/plain');
+  assert.deepEqual(unpacked.bytes, bytes);
+
+  const packedMetadata = metadata => {
+    const header = new TextEncoder().encode(JSON.stringify(metadata));
+    const value = new Uint8Array(4 + header.length);
+    new DataView(value.buffer).setUint32(0, header.length);
+    value.set(header, 4);
+    return value;
+  };
+  assert.throws(() => unpackFile(packedMetadata({ name: 'file.txt', type: 'text/plain', extra: 'plaintext' })), /metadata is ongeldig/);
+  assert.throws(() => unpackFile(packedMetadata({ name: '\ud800', type: 'text/plain' })), /metadata is ongeldig/);
+
+  const invalidUtf8 = new Uint8Array([0, 0, 0, 1, 0xff]);
+  assert.throws(() => unpackFile(invalidUtf8), /metadata is ongeldig/);
+  const oversizedHeader = new Uint8Array(4);
+  new DataView(oversizedHeader.buffer).setUint32(0, 64 * 1024 + 1);
+  assert.throws(() => unpackFile(oversizedHeader), /ontsleutelde bestand is ongeldig/);
+  assert.throws(
+    () => packFile({ name: 'x'.repeat(64 * 1024), type: 'text/plain' }, bytes),
+    /metadata is groter/
+  );
 });
 
 test('validates portable encrypted backup envelopes and rejects malformed data', async () => {

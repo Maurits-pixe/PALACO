@@ -8,6 +8,7 @@ import {
   MIN_PASSPHRASE_LENGTH,
   validateEnvelope
 } from './crypto.js';
+import { packFile, unpackFile } from './file-format.js';
 import { clearVault, listVaultItems, removeVaultItem, saveVaultItem } from './vault.js';
 
 const selectedFile = ref(null);
@@ -52,40 +53,6 @@ async function refreshVault() {
     vaultAvailable.value = false;
     errorMessage.value = error.message;
   }
-}
-
-function packFile(file, bytes) {
-  const header = new TextEncoder().encode(JSON.stringify({
-    name: file.name,
-    type: file.type || 'application/octet-stream'
-  }));
-  const packed = new Uint8Array(4 + header.length + bytes.length);
-  new DataView(packed.buffer).setUint32(0, header.length);
-  packed.set(header, 4);
-  packed.set(bytes, 4 + header.length);
-  return packed;
-}
-
-function unpackFile(packed) {
-  if (packed.byteLength < 4) throw new Error('Het ontsleutelde bestand is ongeldig.');
-  const headerLength = new DataView(packed.buffer, packed.byteOffset, packed.byteLength).getUint32(0);
-  if (headerLength > packed.byteLength - 4) throw new Error('Het ontsleutelde bestand is ongeldig.');
-  const headerStart = 4;
-  const headerEnd = headerStart + headerLength;
-  let header;
-  try {
-    header = JSON.parse(new TextDecoder().decode(packed.subarray(headerStart, headerEnd)));
-  } catch {
-    throw new Error('De versleutelde bestandsmetadata is ongeldig.');
-  }
-  if (typeof header.name !== 'string' || typeof header.type !== 'string') {
-    throw new Error('De versleutelde bestandsmetadata is ongeldig.');
-  }
-  const name = header.name.split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g, '') || 'ontsleuteld-bestand';
-  const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(header.type)
-    ? header.type.toLowerCase()
-    : 'application/octet-stream';
-  return { name, type, bytes: packed.slice(headerEnd) };
 }
 
 async function encryptSelectedFile() {
