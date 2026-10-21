@@ -7,8 +7,9 @@ mod tests {
         CanonicalBytes, CanonicalSigner, CanonicalVerifier,
         decision::{DecisionEvaluation, DecisionEvaluationError, evaluate},
         domain::{
-            Authorization, AuthorizationId, Decision, DecisionId, DecisionVerdict, EpistemicStatus,
-            Evidence, EvidenceId, Question, QuestionId, Scope, ThresholdAssessment, ThresholdState,
+            AuthorityId, Authorization, AuthorizationId, Decision, DecisionId, DecisionVerdict,
+            EpistemicStatus, Evidence, EvidenceId, Question, QuestionId, Scope,
+            ThresholdAssessment, ThresholdState,
         },
     };
 
@@ -169,9 +170,11 @@ mod tests {
                 verdict,
             };
 
-            let authorization = Authorization::from_decision(
+            let authority_id = AuthorityId::new(Uuid::from_u128(5));
+            let authorization = Authorization::from_decision_and_authority(
                 AuthorizationId::new(Uuid::from_u128(4)),
                 &decision,
+                authority_id,
                 scope.clone(),
             );
 
@@ -182,6 +185,7 @@ mod tests {
             );
             if let Some(authorization) = authorization {
                 assert_eq!(authorization.decision_id, decision.id);
+                assert_eq!(authorization.authority_id, authority_id);
                 assert_eq!(authorization.scope, scope);
             }
         }

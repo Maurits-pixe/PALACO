@@ -21,6 +21,7 @@ macro_rules! id_type {
 id_type!(QuestionId);
 id_type!(EvidenceId);
 id_type!(DecisionId);
+id_type!(AuthorityId);
 id_type!(AuthorizationId);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,14 +106,21 @@ pub struct Decision {
 pub struct Authorization {
     pub id: AuthorizationId,
     pub decision_id: DecisionId,
+    pub authority_id: AuthorityId,
     pub scope: Scope,
 }
 
 impl Authorization {
-    pub fn from_decision(id: AuthorizationId, decision: &Decision, scope: Scope) -> Option<Self> {
+    pub fn from_decision_and_authority(
+        id: AuthorizationId,
+        decision: &Decision,
+        authority_id: AuthorityId,
+        scope: Scope,
+    ) -> Option<Self> {
         decision.can_authorize().then_some(Self {
             id,
             decision_id: decision.id,
+            authority_id,
             scope,
         })
     }

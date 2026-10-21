@@ -23,3 +23,5 @@ The evaluator creates a `Decision`, not an `Authorization` and not an execution 
 ## Next boundary
 
 DECISION → AUTHORITY → AUTHORIZATION remains a separate constitutional layer.
+
+The L.A. domain requires an explicit `AuthorityId` reference when constructing an `Authorization`; an Allow `Decision` alone is insufficient. This reference is structural only: it does not establish that the authority exists, is valid, or permits the requested scope, and it does not grant execution permission.
