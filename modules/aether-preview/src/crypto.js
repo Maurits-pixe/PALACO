@@ -6,14 +6,20 @@ const MAX_ENVELOPE_BYTES = MAX_FILE_BYTES + 64 * 1024 + 16;
 const ENCODER = new TextEncoder();
 
 function requirePassphrase(passphrase) {
-  if (
-    typeof passphrase !== 'string' ||
-    passphrase.length > MAX_PASSPHRASE_LENGTH * 2 ||
-    [...passphrase].length > MAX_PASSPHRASE_LENGTH
-  ) {
+  if (typeof passphrase !== 'string' || passphrase.length > MAX_PASSPHRASE_LENGTH * 2) {
     throw new Error(`Gebruik een wachtzin van maximaal ${MAX_PASSPHRASE_LENGTH} tekens.`);
   }
-  if ([...passphrase].length < MIN_PASSPHRASE_LENGTH) {
+  const codePoints = [...passphrase];
+  if (codePoints.some(character => {
+    const codeUnit = character.charCodeAt(0);
+    return codeUnit >= 0xd800 && codeUnit <= 0xdfff;
+  })) {
+    throw new Error('Gebruik een wachtzin met geldige Unicode-tekens.');
+  }
+  if (codePoints.length > MAX_PASSPHRASE_LENGTH) {
+    throw new Error(`Gebruik een wachtzin van maximaal ${MAX_PASSPHRASE_LENGTH} tekens.`);
+  }
+  if (codePoints.length < MIN_PASSPHRASE_LENGTH) {
     throw new Error(`Gebruik een wachtzin van minimaal ${MIN_PASSPHRASE_LENGTH} tekens.`);
   }
 }

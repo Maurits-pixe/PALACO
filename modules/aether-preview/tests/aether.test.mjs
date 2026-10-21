@@ -75,6 +75,22 @@ test('supports the full passphrase limit for astral Unicode characters', async (
   );
 });
 
+test('rejects passphrases containing unpaired UTF-16 surrogates', async () => {
+  for (const invalidPassphrase of [
+    `${passphrase}\ud800`,
+    `${passphrase}\udfff`
+  ]) {
+    await assert.rejects(
+      encryptBytes(new Uint8Array([1]), invalidPassphrase, webcrypto),
+      /geldige Unicode/
+    );
+    await assert.rejects(
+      decryptBytes({ schema: 'unknown' }, invalidPassphrase, webcrypto),
+      /geldige Unicode/
+    );
+  }
+});
+
 test('validates portable encrypted backup envelopes and rejects malformed data', async () => {
   const envelope = await encryptBytes(new Uint8Array([10, 20, 30]), passphrase, webcrypto);
   assert.equal(validateEnvelope(envelope), envelope);
