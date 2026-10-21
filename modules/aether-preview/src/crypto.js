@@ -11,6 +11,7 @@ function requirePassphrase(passphrase) {
   }
   const codePoints = [...passphrase];
   if (codePoints.some(character => {
+    if (character.length !== 1) return false;
     const codeUnit = character.charCodeAt(0);
     return codeUnit >= 0xd800 && codeUnit <= 0xdfff;
   })) {
