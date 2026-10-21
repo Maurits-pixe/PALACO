@@ -97,6 +97,7 @@ test('validates portable encrypted backup envelopes and rejects malformed data',
   assert.throws(() => validateEnvelope({ ...envelope, salt: 'not base64!' }));
   assert.throws(() => validateEnvelope({ ...envelope, iterations: 1 }));
   assert.throws(() => validateEnvelope({ ...envelope, ciphertext: '' }));
+  assert.throws(() => validateEnvelope({ ...envelope, filename: 'plaintext.txt' }));
 });
 
 test('AETHER uses the launcher-configured local origin and no remote font', () => {

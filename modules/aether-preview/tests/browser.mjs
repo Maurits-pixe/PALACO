@@ -161,6 +161,14 @@ try {
   });
   await page.getByRole('alert').filter({ hasText: 'Onbekend of ongeldig' }).waitFor();
   assert.equal(await page.locator('.vault-list li').count(), 1);
+  const backupEnvelope = JSON.parse(backupContents);
+  await page.locator('.backup-import input').setInputFiles({
+    name: 'backup-met-onversleutelde-metadata.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...backupEnvelope, filename: originalName }))
+  });
+  await page.getByRole('alert').filter({ hasText: 'Onbekend of ongeldig' }).waitFor();
+  assert.equal(await page.locator('.vault-list li').count(), 1);
 
   await page.locator('#vault-passphrase').fill('onjuiste wachtzin testwaarde');
   await page.getByRole('button', { name: 'ONTGRENDEL' }).click();

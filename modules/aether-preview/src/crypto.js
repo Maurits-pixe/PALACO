@@ -50,10 +50,13 @@ function fromBase64(value) {
 }
 
 export function validateEnvelope(envelope) {
+  const envelopeFields = ['schema', 'cipher', 'kdf', 'iterations', 'salt', 'iv', 'ciphertext'];
   if (
     !envelope ||
     typeof envelope !== 'object' ||
     Array.isArray(envelope) ||
+    Object.keys(envelope).length !== envelopeFields.length ||
+    Object.keys(envelope).some(field => !envelopeFields.includes(field)) ||
     envelope.schema !== 'aether.v1' ||
     envelope.cipher !== 'AES-GCM-256' ||
     envelope.kdf !== 'PBKDF2-SHA-256' ||
