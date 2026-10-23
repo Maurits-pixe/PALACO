@@ -92,6 +92,13 @@ trailing input, comments, malformed numbers, nonfinite numeric values and malfor
 Unicode (including lone escaped surrogates in keys or values). Unknown fields still
 fail the existing comparator schema. Scans and allocations are bounded by the
 incoming byte limit; recursion is bounded by the object-depth limit.
+Numeric tokens with a nonzero decimal significand that round to zero are rejected
+(positive or negative underflow); exponent digits do not make a zero significand
+nonzero. Exact positive zero forms such as `0e-999` and `0.000e+999` remain valid;
+negative zero remains invalid. Other finite numbers still use IEEE-754 rounding,
+including representable tiny positive values; this is not arbitrary-precision
+decimal validation. The object API cannot recover lexical precision or detect
+underflow that occurred before it received a JavaScript number.
 JSON escapes are decoded normally; raw_result hashing covers exactly the decoded
 string's UTF-8 bytes, not the JSON source spelling. No trimming or normalization.
 Parse failures reuse the existing HOLD/NONE REJECTED/INVALID_INPUT diagnostic

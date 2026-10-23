@@ -34,7 +34,10 @@ function parse(text) {
     if (!match) fail();
     offset = token.lastIndex;
     const result = JSON.parse(match[0]);
-    if (typeof result === 'number' && !Number.isFinite(result)) fail();
+    if (typeof result === 'number') {
+      if (!Number.isFinite(result)) fail();
+      if (result === 0 && /[1-9]/.test(match[0].split(/[eE]/, 1)[0])) fail();
+    }
     return result;
   }
   function object(depth) {
