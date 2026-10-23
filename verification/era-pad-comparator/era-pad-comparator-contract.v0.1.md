@@ -127,6 +127,14 @@ expected digests or derive expected statuses from the comparator.
 `era-pad-vectors.test.mjs` checks all three entrypoints against these same fixed
 snapshots, copied API payloads, sanitization, precedence and closed invariants,
 with a five-second per-vector timeout and hung-child cleanup.
+`era-pad-stream.test.mjs` exercises the actual CLI `main` in fresh child processes
+with scheduled standard-stream writes and child-side chunk-count assertions:
+split raw UTF-8/emoji and JSON escapes/surrogate pairs, cumulative byte limits,
+incomplete UTF-8/truncated JSON at EOF, errors after complete JSON and premature
+close. It checks exact corpus status-only output, exits and sanitization with
+bounded timeouts and child cleanup. These deterministic injected streams do not
+establish OS-pipe chunk boundaries, transport behavior or hard-realtime guarantees;
+the existing deadline tests remain separate.
 This is bounded consistency conformance only: shared implementation paths and
 hand-authored expectations are not an independent protocol oracle, ERA service,
 revocation, browser-acceptance, trusted-time or authority evidence.
