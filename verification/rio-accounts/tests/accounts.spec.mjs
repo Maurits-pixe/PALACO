@@ -304,6 +304,33 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
         expect((await request(alphaPage,'PUT',path,alphaAccount.csrfToken,retryBody)).status).toBe(409);
         expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
         expect((await request(betaPage,'GET','/api/storage/usage',null,null)).status).toBe(200);
+        const fixture=JSON.parse(await readFile(new URL('../ecosystem-document-fixture.json',import.meta.url),'utf8'));
+        expect(fixture.schema).toBe('PALACO_ECOSYSTEM_FIXTURE_V1');expect(fixture.packets).toHaveLength(6);
+        for(const packet of fixture.packets) {
+          const result=await alphaPage.evaluate(async ({packet,csrf})=>{
+            const {storagePutRequest,decodeStoredDocument}=await import('/api/storage/client.mjs');
+            const bytes=Uint8Array.from(atob(packet.base64),c=>c.charCodeAt(0));
+            const idBytes=crypto.getRandomValues(new Uint8Array(32));
+            const objectId=btoa(String.fromCharCode(...idBytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+            const path='/api/storage/objects/'+objectId;
+            const body=await storagePutRequest(bytes,objectId,60000);
+            const headers={'content-type':'application/json','x-csrf-token':csrf};
+            const created=await fetch(path,{method:'PUT',headers,credentials:'same-origin',body:JSON.stringify(body)});
+            if(created.status!==201)throw Error('EXCHANGE_UPLOAD_FAILED');
+            const receipt=await created.json();
+            const response=await fetch(path,{credentials:'same-origin',cache:'no-store'});
+            if(response.status!==200)throw Error('EXCHANGE_DOWNLOAD_FAILED');
+            const document=await decodeStoredDocument(await response.json(),{objectId,sha256:receipt.object.sha256});
+            const erased=await fetch(path,{method:'DELETE',headers,credentials:'same-origin',body:JSON.stringify({sha256:receipt.object.sha256})});
+            if(erased.status!==200)throw Error('EXCHANGE_DELETE_FAILED');
+            const terminal=await erased.json();
+            return {repository:document.reference.repository,id:document.document.documentId,
+              closed:document.boundary.operativeAuthority==='NONE'&&document.boundary.sourceVerified===false,
+              erased:terminal.object.state==='DELETED'&&terminal.object.liveBytes===0};
+          },{packet,csrf:alphaAccount.csrfToken});
+          expect(result.repository).toBe(packet.repository);expect(result.id).toBe(packet.documentId);
+          expect(result.closed&&result.erased).toBe(true);
+        }
       });
     }
     await test.step('context-isolation', async () => {

@@ -1,0 +1,62 @@
+{
+  "schema": "PALACO_ECOSYSTEM_WORKSPACE_V1",
+  "codecSha256": "57694ee41ba4dab8b5da7518ba781df1ecf1b2fe2fdb0bff0ea793edda86a1fa",
+  "qaGitBlobSha": "cbeb56da0e13a41e885bd405e71f17cef03ac4b8",
+  "sourceExportProfile": "FIRST_12_README_LINES_TRIMMED",
+  "participants": [
+    {
+      "repository": "Maurits-pixe/PALACO",
+      "folder": "PALACO-dev",
+      "revision": "SELF",
+      "sourceCommit": "f43c5e43a9f2123e22d646a124b4ab6896e6e4db",
+      "sourcePath": "README.md",
+      "sourceBlobSha": "5df3c8c1d8905f552030781fbe0768e011a96cf6",
+      "mode": "PARTICIPANT"
+    },
+    {
+      "repository": "Maurits-pixe/palaco-genesis",
+      "folder": "ecosystem-genesis",
+      "revision": "b78e9f5dd0d84e6045ffffee19dff28b9f873647",
+      "sourceCommit": "a6d6487b474452c03fef92c8e7ed205067c0eb2e",
+      "sourcePath": "README.md",
+      "sourceBlobSha": "71e3eebfd0f525d9a76ce69483ebbf1ca7eeefa3",
+      "mode": "PARTICIPANT"
+    },
+    {
+      "repository": "Maurits-pixe/PALACO-BOOK-1",
+      "folder": "ecosystem-book",
+      "revision": "a96cdfc766f55eca7b2ac7e18281019b42018443",
+      "sourceCommit": "c27e3f25b892d6ec6e90655f2104be8b64ad1bad",
+      "sourcePath": "README.md",
+      "sourceBlobSha": "19a2db0632c59a799374334a3ce7306b8747883c",
+      "mode": "PARTICIPANT"
+    },
+    {
+      "repository": "Maurits-pixe/PALACO-INDUSTRIE",
+      "folder": "ecosystem-industrie",
+      "revision": "59e07c832f0464e8f4c10455bceea5734c9e4713",
+      "sourceCommit": "57e5169a193f4b442e440b3969eecd4ab3f7b500",
+      "sourcePath": "README.md",
+      "sourceBlobSha": "49386856f7df83b825c327b46d7756ef27aae202",
+      "mode": "PARTICIPANT"
+    },
+    {
+      "repository": "Maurits-pixe/PALACO-Citadel",
+      "folder": "PALACO-Citadel",
+      "revision": "855ca34dff73c1d0a6c4c379b197914ba4d102fb",
+      "sourceCommit": "5393a39ae4ecb03b784d6855ab28d79e77a522dc",
+      "sourcePath": "README.md",
+      "sourceBlobSha": "3fbb62691fe8ac68f8bcb8ef8deb966f16bfab13",
+      "mode": "PARTICIPANT"
+    },
+    {
+      "repository": "III6V9-Architect/local-qa",
+      "folder": "ecosystem-local-qa",
+      "revision": "93993b89f960b0182d344fc8d0ce9fa975aee768",
+      "sourceCommit": "93993b89f960b0182d344fc8d0ce9fa975aee768",
+      "sourcePath": "README.md",
+      "sourceBlobSha": "8a2d821ccf7bd90a25efabbbbec1fb52ece316f1",
+      "mode": "UPSTREAM_READ_ONLY"
+    }
+  ]
+}

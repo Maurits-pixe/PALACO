@@ -11,7 +11,7 @@ use axum::{
     Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, Path, State},
-    http::{HeaderMap, StatusCode},
+    http::{HeaderMap, StatusCode, header},
     routing::get,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -88,6 +88,24 @@ fn envelope() -> Value {
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
+        .route(
+            "/api/storage/document-exchange.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../../../ecosystem/document-exchange.mjs"),
+                )
+            }),
+        )
+        .route(
+            "/api/storage/client.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../../../ecosystem/storage-client.mjs"),
+                )
+            }),
+        )
         .route("/api/storage/usage", get(usage))
         .route(
             "/api/storage/objects",

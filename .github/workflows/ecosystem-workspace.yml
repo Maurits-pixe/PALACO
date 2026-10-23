@@ -1,0 +1,92 @@
+name: Pinned ecosystem integration
+on:
+  push:
+    branches: ['codex/ecosystem-document-exchange']
+  pull_request:
+    branches: ['codex/rio-cmv-verified-delete']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Maurits-pixe/PALACO
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Maurits-pixe/PALACO
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          path: PALACO-dev
+          fetch-depth: 3
+          persist-credentials: false
+          sparse-checkout: |
+            ecosystem
+            verification/rio-accounts
+      - name: Checkout Maurits-pixe/palaco-genesis
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Maurits-pixe/palaco-genesis
+          ref: b78e9f5dd0d84e6045ffffee19dff28b9f873647
+          path: ecosystem-genesis
+          fetch-depth: 3
+          persist-credentials: false
+          sparse-checkout: |
+            ecosystem
+      - name: Checkout Maurits-pixe/PALACO-BOOK-1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Maurits-pixe/PALACO-BOOK-1
+          ref: a96cdfc766f55eca7b2ac7e18281019b42018443
+          path: ecosystem-book
+          fetch-depth: 3
+          persist-credentials: false
+          sparse-checkout: |
+            ecosystem
+      - name: Checkout Maurits-pixe/PALACO-INDUSTRIE
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Maurits-pixe/PALACO-INDUSTRIE
+          ref: 59e07c832f0464e8f4c10455bceea5734c9e4713
+          path: ecosystem-industrie
+          fetch-depth: 3
+          persist-credentials: false
+          sparse-checkout: |
+            ecosystem
+            tests
+      - name: Checkout Maurits-pixe/PALACO-Citadel
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Maurits-pixe/PALACO-Citadel
+          ref: 855ca34dff73c1d0a6c4c379b197914ba4d102fb
+          path: PALACO-Citadel
+          fetch-depth: 3
+          persist-credentials: false
+          sparse-checkout: |
+            ecosystem
+            rio/vendor
+      - name: Checkout III6V9-Architect/local-qa
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: III6V9-Architect/local-qa
+          ref: 93993b89f960b0182d344fc8d0ce9fa975aee768
+          path: ecosystem-local-qa
+          fetch-depth: 3
+          persist-credentials: false
+          sparse-checkout: |
+            rio
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Participant and actual upstream Q&A tests
+        run: |
+          for folder in PALACO-dev ecosystem-genesis ecosystem-book ecosystem-industrie PALACO-Citadel; do
+            (cd "$folder" && node --test ecosystem/*.test.mjs)
+          done
+          node --test ecosystem-local-qa/rio/local-qa.test.mjs
+      - name: Real Industrie session, CSRF and two-owner catalog regression
+        working-directory: ecosystem-industrie
+        run: npm test
+      - name: Verify pinned six-repository data flow and retained browser fixture
+        run: |
+          node PALACO-dev/ecosystem/verify-workspace.mjs --workspace="$GITHUB_WORKSPACE" > ecosystem-evidence.json
+          cat ecosystem-evidence.json
