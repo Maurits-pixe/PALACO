@@ -190,4 +190,53 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn authorization_rejects_incomplete_scope() {
+        let decision = Decision {
+            id: DecisionId::new(Uuid::from_u128(3)),
+            question_id: QuestionId::new(Uuid::from_u128(1)),
+            verdict: DecisionVerdict::Allow,
+        };
+        let authority_id = AuthorityId::new(Uuid::from_u128(5));
+        let valid_scope = Scope {
+            target: "synthetic-target".to_owned(),
+            operations: vec!["synthetic-read".to_owned()],
+            territory: "local-test".to_owned(),
+            purpose: "architecture-test".to_owned(),
+        };
+        let mut invalid_scopes = Vec::new();
+
+        let mut scope = valid_scope.clone();
+        scope.target = "  ".to_owned();
+        invalid_scopes.push(scope);
+
+        let mut scope = valid_scope.clone();
+        scope.operations.clear();
+        invalid_scopes.push(scope);
+
+        let mut scope = valid_scope.clone();
+        scope.operations.push("\t".to_owned());
+        invalid_scopes.push(scope);
+
+        let mut scope = valid_scope.clone();
+        scope.territory = String::new();
+        invalid_scopes.push(scope);
+
+        let mut scope = valid_scope;
+        scope.purpose = " \n ".to_owned();
+        invalid_scopes.push(scope);
+
+        for scope in invalid_scopes {
+            assert!(
+                Authorization::from_decision_and_authority(
+                    AuthorizationId::new(Uuid::from_u128(4)),
+                    &decision,
+                    authority_id,
+                    scope,
+                )
+                .is_none()
+            );
+        }
+    }
 }

@@ -25,3 +25,5 @@ The evaluator creates a `Decision`, not an `Authorization` and not an execution 
 DECISION → AUTHORITY → AUTHORIZATION remains a separate constitutional layer.
 
 The L.A. domain requires an explicit `AuthorityId` reference when constructing an `Authorization`; an Allow `Decision` alone is insufficient. This reference is structural only: it does not establish that the authority exists, is valid, or permits the requested scope, and it does not grant execution permission.
+
+Authorization construction also rejects incomplete scopes: target, territory and purpose must contain non-whitespace text, and operations must contain at least one non-whitespace entry. Accepted values are retained as supplied; this is structural completeness checking, not policy or authority validation.

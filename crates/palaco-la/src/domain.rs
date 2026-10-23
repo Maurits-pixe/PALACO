@@ -95,6 +95,19 @@ pub struct Scope {
     pub purpose: String,
 }
 
+impl Scope {
+    pub fn is_well_formed(&self) -> bool {
+        !self.target.trim().is_empty()
+            && !self.operations.is_empty()
+            && self
+                .operations
+                .iter()
+                .all(|operation| !operation.trim().is_empty())
+            && !self.territory.trim().is_empty()
+            && !self.purpose.trim().is_empty()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Decision {
     pub id: DecisionId,
@@ -117,7 +130,11 @@ impl Authorization {
         authority_id: AuthorityId,
         scope: Scope,
     ) -> Option<Self> {
-        decision.can_authorize().then_some(Self {
+        if !decision.can_authorize() || !scope.is_well_formed() {
+            return None;
+        }
+
+        Some(Self {
             id,
             decision_id: decision.id,
             authority_id,
