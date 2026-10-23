@@ -266,10 +266,15 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
             catalogNoPayload:Array.isArray(data?.objects) && data.objects.every(item=>!Object.hasOwn(item,'payload'))};
         }, {method,path,csrf,body,objectId});
         const body={objectId,payload:'YnJvd3NlciBmaXh0dXJl',retentionMs:60000};
+        const retryBody={payload:body.payload,retentionMs:body.retentionMs};
         const path='/api/storage/objects/'+objectId;
         expect((await request(alphaPage,'POST','/api/storage/objects',betaAccount.csrfToken,body)).status).toBe(403);
-        const created=await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body);
+        expect((await request(alphaPage,'PUT',path,betaAccount.csrfToken,retryBody)).status).toBe(403);
+        const created=await request(alphaPage,'PUT',path,alphaAccount.csrfToken,retryBody);
         expect(created.status).toBe(201); expect(created.noStore && created.closed).toBe(true);
+        const confirmed=await request(alphaPage,'PUT',path,alphaAccount.csrfToken,retryBody);
+        expect(confirmed.status).toBe(200);expect(confirmed.noStore && confirmed.closed).toBe(true);
+        expect((await request(alphaPage,'PUT',path,alphaAccount.csrfToken,{...retryBody,retentionMs:60001})).status).toBe(409);
         const ownCatalog=await request(alphaPage,'GET','/api/storage/objects',null,null);
         expect(ownCatalog.status).toBe(200);expect(ownCatalog.catalogHasObject && ownCatalog.catalogNoPayload).toBe(true);
         expect(ownCatalog.catalogState).toBe('LIVE');
@@ -284,6 +289,7 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
         const deletedCatalog=await request(alphaPage,'GET','/api/storage/objects',null,null);
         expect(deletedCatalog.catalogState).toBe('DELETED');expect(deletedCatalog.catalogNoPayload).toBe(true);
         expect((await request(alphaPage,'GET',path,null,null)).status).toBe(403);
+        expect((await request(alphaPage,'PUT',path,alphaAccount.csrfToken,retryBody)).status).toBe(409);
         expect((await request(alphaPage,'POST','/api/storage/objects',alphaAccount.csrfToken,body)).status).toBe(409);
         expect((await request(betaPage,'GET','/api/storage/usage',null,null)).status).toBe(200);
       });

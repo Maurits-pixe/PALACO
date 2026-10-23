@@ -357,6 +357,161 @@ async fn seed(db: &PgStore, actor: &str) -> Result<(String, String), StoreError>
 }
 
 #[tokio::test]
+async fn retry_upload_has_strict_input_and_method_local_body_limits() -> TestResult {
+    let state = crate::tests::test_state()?;
+    let token = crate::random_token();
+    let csrf = crate::random_token();
+    let id = crate::random_token();
+    let path = format!("/api/storage/objects/{id}");
+    let valid = json!({"payload":"Zg","retentionMs":60000}).to_string();
+    assert_eq!(
+        call(
+            &router(state.clone()),
+            "PUT",
+            &path,
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &valid
+        )
+        .await?
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    let app = crate::router_with_routes(state, routes());
+    for (cookie, csrf, origin, status) in [
+        (
+            None,
+            Some(csrf.as_str()),
+            Some(ORIGIN),
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            Some(token.as_str()),
+            None,
+            Some(ORIGIN),
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            Some(token.as_str()),
+            Some(csrf.as_str()),
+            None,
+            StatusCode::FORBIDDEN,
+        ),
+        (
+            Some(token.as_str()),
+            Some(csrf.as_str()),
+            Some("https://attacker.example"),
+            StatusCode::FORBIDDEN,
+        ),
+    ] {
+        assert_eq!(
+            call(&app, "PUT", &path, cookie, csrf, origin, &valid)
+                .await?
+                .status(),
+            status
+        );
+    }
+    for body in [
+        "[]".to_owned(),
+        "null".to_owned(),
+        json!({"objectId":id,"payload":"Zg","retentionMs":1}).to_string(),
+        r#"{"payload":"Zg","retentionMs":1,"retentionMs":2}"#.to_owned(),
+        r#"{"payload":"Zg","payload":"Zw","retentionMs":1}"#.to_owned(),
+        json!({"payload":"Zg","retentionMs":0}).to_string(),
+        json!({"payload":"Zg","retentionMs":86400001}).to_string(),
+        json!({"payload":"Zg","retentionMs":1.5}).to_string(),
+        json!({"payload":"Zg","retentionMs":true}).to_string(),
+        json!({"payload":"Zg=","retentionMs":1}).to_string(),
+        json!({"payload":"Zh","retentionMs":1}).to_string(),
+        json!({"payload":"","retentionMs":1}).to_string(),
+        json!({"payload":URL_SAFE_NO_PAD.encode(vec![0;MAX_OBJECT_BYTES+1]),"retentionMs":1})
+            .to_string(),
+    ] {
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &path,
+                Some(&token),
+                Some(&csrf),
+                Some(ORIGIN),
+                &body
+            )
+            .await?
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    for bad_path in [
+        format!("{path}?accountId=TST-beta"),
+        format!("{path}="),
+        "/api/storage/objects/short".to_owned(),
+    ] {
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &bad_path,
+                Some(&token),
+                Some(&csrf),
+                Some(ORIGIN),
+                &valid
+            )
+            .await?
+            .status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
+    let full =
+        json!({"payload":URL_SAFE_NO_PAD.encode(vec![9;MAX_OBJECT_BYTES]),"retentionMs":60000})
+            .to_string();
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &path,
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &full
+        )
+        .await?
+        .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        call(
+            &app,
+            "DELETE",
+            &path,
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &full
+        )
+        .await?
+        .status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &path,
+            Some(&token),
+            Some(&csrf),
+            Some(ORIGIN),
+            &" ".repeat(BODY_LIMIT + 1)
+        )
+        .await?
+        .status(),
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+    Ok(())
+}
+
+#[tokio::test]
 #[ignore = "requires owned disposable synthetic PostgreSQL"]
 async fn postgres_cmv_http_contract() -> TestResult {
     let db = Arc::new(PgStore::connect_local(&std::env::var("RIO_PG_TEST_URL")?).await?);
@@ -400,6 +555,88 @@ async fn postgres_cmv_http_contract() -> TestResult {
     )
     .await?;
     assert_eq!(created["object"]["bytes"], MAX_OBJECT_BYTES);
+    let retry_body =
+        json!({"payload":URL_SAFE_NO_PAD.encode(&payload),"retentionMs":60000}).to_string();
+    let confirmed = document(
+        call(
+            &app,
+            "PUT",
+            &path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &retry_body,
+        )
+        .await?,
+        StatusCode::OK,
+    )
+    .await?;
+    assert_eq!(
+        confirmed, created,
+        "identical retry acknowledges the original bytes without changing the envelope"
+    );
+    for body in [
+        json!({"payload":"Zg","retentionMs":60000}).to_string(),
+        json!({"payload":URL_SAFE_NO_PAD.encode(&payload),"retentionMs":60001}).to_string(),
+    ] {
+        assert_eq!(
+            call(
+                &app,
+                "PUT",
+                &path,
+                Some(&beta),
+                Some(&csrf_b),
+                Some(ORIGIN),
+                &body
+            )
+            .await?
+            .status(),
+            StatusCode::CONFLICT
+        );
+    }
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &path,
+            Some(&beta),
+            Some(&csrf_a),
+            Some(ORIGIN),
+            &retry_body
+        )
+        .await?
+        .status(),
+        StatusCode::FORBIDDEN
+    );
+    let new_path = format!("/api/storage/objects/{}", crate::random_token());
+    document(
+        call(
+            &app,
+            "PUT",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &retry_body,
+        )
+        .await?,
+        StatusCode::CREATED,
+    )
+    .await?;
+    document(
+        call(
+            &app,
+            "DELETE",
+            &new_path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            "{}",
+        )
+        .await?,
+        StatusCode::OK,
+    )
+    .await?;
     let own = inventory(&app, &beta).await?;
     let item = own["objects"]
         .as_array()
@@ -544,6 +781,20 @@ async fn postgres_cmv_http_contract() -> TestResult {
     assert_eq!(
         call(
             &app,
+            "PUT",
+            &path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &retry_body
+        )
+        .await?
+        .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        call(
+            &app,
             "POST",
             "/api/storage/objects",
             Some(&beta),
@@ -571,6 +822,20 @@ async fn postgres_cmv_http_contract() -> TestResult {
         StatusCode::FORBIDDEN
     );
     db.logout_all(hash(&beta), &csrf_b).await?;
+    assert_eq!(
+        call(
+            &app,
+            "PUT",
+            &path,
+            Some(&beta),
+            Some(&csrf_b),
+            Some(ORIGIN),
+            &retry_body
+        )
+        .await?
+        .status(),
+        StatusCode::UNAUTHORIZED
+    );
     assert_eq!(
         call(
             &app,
