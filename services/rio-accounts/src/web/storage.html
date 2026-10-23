@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>RIO · jouw proefopslag</title>
+  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/api/storage/vault.css">
+  <script type="module" src="/api/storage/page.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Direct naar de inhoud</a>
+  <header class="site-header"><div class="header-inner">
+    <a class="brand" href="/">RIO · accountpagina</a><span class="test-badge">Alleen de proef</span>
+  </div></header>
+  <main id="main" class="page vault-page" tabindex="-1">
+    <section class="hero" aria-labelledby="page-title"><div>
+      <p class="eyebrow">Bewaren met een grens</p><h1 id="page-title">Jouw proefopslag</h1>
+      <p>Bewaar een documentbestand uit de gezamenlijke repositoryproef. Je ziet alleen de opslag van je eigen testaccount.</p>
+    </div><aside class="boundary-note">
+      <p>Herkomst en documentstatus zijn gebruikersopgaven, niet geverifieerd. Deze controle geeft geen bevoegdheid of persoonlijke toegang.</p>
+      <p id="vault-account" class="account-name"></p>
+    </aside></section>
+    <p id="vault-feedback" class="feedback" role="status" aria-live="polite" aria-atomic="true"></p>
+    <div class="studio-actions">
+      <button id="vault-connect" type="button" class="button button-primary">Testsessie opnieuw controleren</button>
+      <a href="/" class="button button-outline">Naar aanmelden en account</a>
+      <button id="vault-logout" type="button" class="button button-quiet" disabled>Deze testsessie afmelden</button>
+    </div>
+    <section class="card" aria-labelledby="save-title">
+      <h2 id="save-title">Een document bewaren</h2>
+      <p>Alleen het afgesproken documentformaat, maximaal 16 KiB per bestand. Dit is een aparte proef; je lokale Studio-concept wordt hier niet automatisch bewaard.</p>
+      <p class="field-help">Een onbevestigde bewaaractie kun je hier opnieuw proberen met hetzelfde bestand en dezelfde termijn. Controleer na verlaten, verbergen of herladen van deze pagina eerst je opslag.</p>
+      <form id="vault-form">
+        <div class="file-field"><label for="vault-file">Documentbestand openen</label>
+          <input id="vault-file" type="file" accept=".json,application/json" disabled aria-describedby="vault-file-help"></div>
+        <p id="vault-file-help" class="field-help">Na openen worden formaat en inhoudshash gecontroleerd. Bewaren gebeurt pas na jouw keuze.</p>
+        <div class="field"><label for="vault-retention">Bewaartermijn vanaf de eerste opslag</label>
+          <select id="vault-retention" disabled><option value="60000">1 minuut</option><option value="3600000">1 uur</option><option value="86400000">24 uur</option></select></div>
+        <section id="vault-staged" class="studio-preview" hidden aria-label="Geopend lokaal document">
+          <h3 id="vault-staged-title" class="preview-title"></h3><p id="vault-staged-content" class="preview-note"></p>
+        </section>
+        <div class="studio-actions"><button id="vault-save" type="submit" class="button button-primary" disabled>Document bewaren</button></div>
+      </form>
+    </section>
+    <section class="card" aria-labelledby="catalog-title">
+      <h2 id="catalog-title">Bewaarde documenten</h2>
+      <p id="vault-usage" class="quiet-note"></p>
+      <p>Wissen en verlopen maken de inhoud vrij. Het objectnummer blijft meetellen voor de grens van 64 objecten per proefaccount; de controlehistorie blijft bestaan.</p>
+      <button id="vault-refresh" class="button button-outline" type="button" disabled>Opslag opnieuw bekijken</button>
+      <ul id="vault-list" aria-label="Eigen opslagobjecten"></ul>
+    </section>
+    <section id="vault-preview" class="card" hidden aria-labelledby="document-title">
+      <h2 id="document-title" class="preview-title"></h2>
+      <p id="document-source" class="preview-note"></p>
+      <p class="draft-badge">Gebruikersopgave · niet geverifieerd</p>
+      <p id="document-content" class="preview-note"></p>
+    </section>
+    <noscript><p>Voor deze opslagproef is JavaScript nodig.</p></noscript>
+  </main>
+  <footer class="site-footer"><p>RIO · Tijdelijke opslag binnen je eigen testsessie.</p></footer>
+</body>
+</html>

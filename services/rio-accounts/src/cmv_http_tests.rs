@@ -121,6 +121,11 @@ async fn http_storage_is_opt_in_strict_bounded_and_never_uses_memory() -> TestRe
     assert!(router_with_cmv_storage(state.clone()).await.is_err());
     let default = router(state.clone());
     for path in [
+        "/storage",
+        "/api/storage/vault.css",
+        "/api/storage/vault.mjs",
+        "/api/storage/page.mjs",
+        "/api/storage/storage-client.mjs",
         "/api/storage/document-exchange.mjs",
         "/api/storage/client.mjs",
     ] {
@@ -138,7 +143,38 @@ async fn http_storage_is_opt_in_strict_bounded_and_never_uses_memory() -> TestRe
         StatusCode::NOT_FOUND
     );
     let app = crate::router_with_routes(state, routes());
+    let css = call(&app, "GET", "/api/storage/vault.css", None, None, None, "").await?;
+    assert_eq!(css.status(), StatusCode::OK);
+    assert_eq!(
+        css.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("text/css; charset=utf-8")
+    );
+    assert_eq!(
+        css.headers()
+            .get("cache-control")
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
+    let page = call(&app, "GET", "/storage", None, None, None, "").await?;
+    assert_eq!(page.status(), StatusCode::OK);
+    assert_eq!(
+        page.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok()),
+        Some("text/html; charset=utf-8")
+    );
+    assert_eq!(
+        page.headers()
+            .get("cache-control")
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store")
+    );
     for path in [
+        "/api/storage/vault.mjs",
+        "/api/storage/page.mjs",
+        "/api/storage/storage-client.mjs",
         "/api/storage/document-exchange.mjs",
         "/api/storage/client.mjs",
     ] {

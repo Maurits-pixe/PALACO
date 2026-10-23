@@ -37,6 +37,51 @@ async function contextFor(browser) {
   return context;
 }
 
+async function verifyVaultPage(browser, beta, packet) {
+  const context=await contextFor(browser);
+  let betaView;
+  try {
+    const page=await context.newPage();await login(page,credentials.alpha);
+    await page.goto(BFF+'/storage');await expect(page.locator('#vault-account')).toHaveText('TST-alpha');
+    const previousIds=await page.locator('#vault-list li').evaluateAll(nodes=>nodes.map(node=>node.dataset.objectId));
+    const buffer=Buffer.from(packet.base64,'base64'),document=JSON.parse(buffer.toString('utf8')).document;
+    await page.locator('#vault-file').setInputFiles({name:'synthetic-document.json',mimeType:'application/json',buffer});
+    await expect(page.locator('#vault-staged-title')).toHaveText(document.title);
+    await page.locator('#vault-save').click();
+    await expect(page.locator('#vault-feedback')).toHaveText('Bewaren bevestigd; bekijk de actuele status in de lijst.');
+    const currentIds=await page.locator('#vault-list li').evaluateAll(nodes=>nodes.map(node=>node.dataset.objectId));
+    const added=currentIds.filter(id=>!previousIds.includes(id));expect(added).toHaveLength(1);const id=added[0];
+    const live=page.locator(`#vault-list li[data-object-id="${id}"]`);await expect(live).toHaveAttribute('data-state','LIVE');
+    await live.locator('[data-action="open"]').click();
+    await expect(page.locator('#document-title')).toHaveText(document.title);
+    await expect(page.locator('#document-content')).toHaveText(document.content);
+    await expect(page.locator('#vault-preview')).toBeVisible();
+    await page.reload();await expect(page.locator('#vault-account')).toHaveText('TST-alpha');
+    const row=page.locator(`#vault-list li[data-object-id="${id}"]`);
+    await row.locator('[data-action="open"]').click();await expect(page.locator('#document-title')).toHaveText(document.title);
+    betaView=await beta.newPage();await betaView.goto(BFF+'/storage');
+    await expect(betaView.locator('#vault-account')).toHaveText('TST-beta');
+    await expect(betaView.locator(`#vault-list li[data-object-id="${id}"]`)).toHaveCount(0);
+    const foreign=await betaView.evaluate(async id=>(await fetch('/api/storage/objects/'+id,{cache:'no-store',credentials:'same-origin'})).status,id);
+    expect(foreign).toBe(403);
+    await page.bringToFront();await expect(page.locator('#vault-account')).toHaveText('TST-alpha');
+    for(const width of [390,1280]) {
+      await page.setViewportSize({width,height:844});
+      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1)).toBe(true);
+      expect((await page.locator('#vault-retention').boundingBox()).height).toBeGreaterThanOrEqual(44);
+    }
+    await row.locator('[data-action="erase"]').click();await expect(row).toHaveAttribute('data-state','DELETED');
+    await expect(page.locator('#vault-preview')).toBeHidden();await expect(page.locator('#document-content')).toHaveText('');
+    await page.locator('#vault-file').setInputFiles({name:'synthetic-document.json',mimeType:'application/json',buffer});
+    await expect(page.locator('#vault-staged')).toBeVisible();
+    await page.locator('#vault-logout').click();
+    await expect(page.locator('#vault-account')).toHaveText('');await expect(page.locator('#vault-list li')).toHaveCount(0);
+    await expect(page.locator('#vault-staged')).toBeHidden();await expect(page.locator('#vault-staged-content')).toHaveText('');
+    await expect(page.locator('#vault-feedback')).toHaveText('Geen geldige testsessie. Meld je aan via de accountpagina.');
+    expect((await readMe(page)).status).toBe(401);expect(pageErrorCounts.get(page)?.count).toBe(0);
+  } finally {await betaView?.close();await context.close();}
+}
+
 async function clickLogoutWithObservation(page, testInfo) {
   const observation = {
     logoutRequests: 0, logoutResponses: 0, logoutFailedRequests: 0,
@@ -331,6 +376,7 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
           expect(result.repository).toBe(packet.repository);expect(result.id).toBe(packet.documentId);
           expect(result.closed&&result.erased).toBe(true);
         }
+        await verifyVaultPage(browser,beta,fixture.packets[0]);
       });
     }
     await test.step('context-isolation', async () => {

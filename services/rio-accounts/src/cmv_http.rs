@@ -89,11 +89,51 @@ fn envelope() -> Value {
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route(
+            "/api/storage/vault.css",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+                    include_str!("web/storage.css"),
+                )
+            }),
+        )
+        .route(
+            "/storage",
+            get(|| async { axum::response::Html(include_str!("web/storage.html")) }),
+        )
+        .route(
+            "/api/storage/vault.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../../../ecosystem/storage-vault.mjs"),
+                )
+            }),
+        )
+        .route(
+            "/api/storage/page.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("web/storage.mjs"),
+                )
+            }),
+        )
+        .route(
             "/api/storage/document-exchange.mjs",
             get(|| async {
                 (
                     [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
                     include_str!("../../../ecosystem/document-exchange.mjs"),
+                )
+            }),
+        )
+        .route(
+            "/api/storage/storage-client.mjs",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+                    include_str!("../../../ecosystem/storage-client.mjs"),
                 )
             }),
         )
