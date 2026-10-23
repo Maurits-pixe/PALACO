@@ -108,9 +108,18 @@ emit only the sanitized INVALID_INPUT diagnostic, never fixture text, errors,
 paths, IDs or hashes.
 
 Every CLI report omits pad and temporal, including for valid but inconsistent
-fixtures. It emits one JSON status line. Exit 0 means only
-CONSISTENT_SYNTHETIC_ONLY (including FAIL/ERROR/TIMEOUT/UNKNOWN PAD codes);
-all other outcomes exit 2. Neither exit code grants permission or authority.
+fixtures. It attempts one JSON status line without retries or stderr fallback.
+Exit 0 requires both CONSISTENT_SYNTHETIC_ONLY (including FAIL/ERROR/TIMEOUT/UNKNOWN
+PAD codes) and a successful local output write callback; all other outcomes exit 2.
+Output acknowledgement has a separate fixed two-second deadline, bounded by
+event-loop scheduling, not realtime. Write throws, callback errors, stream errors,
+premature close, unavailable output and timeout destroy output without exposing
+raw errors. A failed owned output retains a minimal error listener because an
+asynchronous error can follow its callback or destruction; successful output
+retains no listener. The callback does not establish delivery, durability or
+consumer acceptance. Transport failure may expose partial sanitized status;
+there is no guarantee of one complete line on failed output.
+Neither exit code grants permission or authority.
 Importing the CLI module has no execution side effects. There is no network,
 database, server, external service, BRI9ADE change or new protocol evidence.
 
