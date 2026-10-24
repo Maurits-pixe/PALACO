@@ -47,6 +47,13 @@ export function reviewSummaryLabel(total) {
   return `${total} ${total === 1 ? 'reviewmelding' : 'reviewmeldingen'}`;
 }
 
+export function formatPrintDate(date) {
+  return new Intl.DateTimeFormat('nl-NL', {
+    dateStyle: 'long',
+    timeZone: 'UTC'
+  }).format(date);
+}
+
 export const trafficSamples = Object.freeze([
   Object.freeze({ time: '14:00', value: 28 }),
   Object.freeze({ time: '14:05', value: 38 }),

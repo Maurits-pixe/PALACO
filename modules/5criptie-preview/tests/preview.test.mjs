@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages, reviewSummaryLabel, trafficSamples } from '../src/telemetry.js';
+import { events, formatPrintDate, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages, reviewSummaryLabel, trafficSamples } from '../src/telemetry.js';
 
 const manifest = JSON.parse(await readFile(new URL('../public/.well-known/palaco-app.json', import.meta.url), 'utf8'));
 const appSource = await readFile(new URL('../src/App.vue', import.meta.url), 'utf8');
@@ -51,6 +51,10 @@ test('review percentages reconcile to the total using stable largest-remainder r
   assert.deepEqual(reviewPercentages(thirds, 3), [34, 33, 33]);
   assert.equal(reviewPercentages(thirds, 3).reduce((sum, percent) => sum + percent, 0), 100);
   assert.deepEqual(reviewPercentages(thirds.map(item => ({ ...item, count: 0 })), 0), [0, 0, 0]);
+});
+
+test('print date uses stable Dutch calendar formatting', () => {
+  assert.equal(formatPrintDate(new Date('2026-10-24T23:30:00-07:00')), '25 oktober 2026');
 });
 
 test('dashboard contains no network collection or scan client', () => {

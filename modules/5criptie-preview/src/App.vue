@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue';
-import { events, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages as calculateReviewPercentages, reviewSummaryLabel, trafficSamples } from './telemetry.js';
+import { events, formatPrintDate, metrics, reviewBreakdown, reviewBreakdownLabel, reviewPercentages as calculateReviewPercentages, reviewSummaryLabel, trafficSamples } from './telemetry.js';
 
 const selectedSeverity = ref('Alles');
 const printDate = ref('');
@@ -31,7 +31,7 @@ async function printReport() {
   const previousSeverity = selectedSeverity.value;
   reviewDetails.open = true;
   selectedSeverity.value = 'Alles';
-  printDate.value = new Intl.DateTimeFormat('nl-NL', { dateStyle: 'long' }).format(new Date());
+  printDate.value = formatPrintDate(new Date());
   await nextTick();
   const restoreReportState = () => {
     reviewDetails.open = wasOpen;
