@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { compareEraPad, MAX_INPUT_BYTES } from './era-pad-comparator.mjs';
-import { compareEraPadJson } from './era-pad-json.mjs';
+import { compareEraPadJson, compareEraPadJsonForRequest } from './era-pad-json.mjs';
+import { validRequestReferences } from './era-pad-context-internal.mjs';
 
 const READ_DEADLINE_MS = 2000;
 const WRITE_DEADLINE_MS = 2000;
@@ -85,21 +86,34 @@ function readInput(input) {
   });
 }
 
-/** Offline status-only CLI; importing this module performs no input or output. */
-export async function main() {
+async function run(expectedContext, validInvocation, requestBound) {
   let report;
-  if (process.argv.length !== 2) {
+  if (!validInvocation) {
     process.stdin.destroy();
     report = compareEraPad(null);
   } else {
     const bytes = await readInput(process.stdin);
-    report = bytes === null ? compareEraPad(null) : compareEraPadJson(bytes);
+    report = bytes === null ? compareEraPad(null)
+      : requestBound ? compareEraPadJsonForRequest(bytes, expectedContext) : compareEraPadJson(bytes);
   }
   const { pad, temporal, ...status } = report;
   process.exitCode = 2;
   const output = await writeStatus(process.stdout, `${JSON.stringify(status)}\n`);
   if (output.ok && status.result === 'CONSISTENT_SYNTHETIC_ONLY') process.exitCode = 0;
   output.release();
+}
+
+/** Offline status-only CLI; importing this module performs no input or output. */
+export async function main() {
+  await run(undefined, process.argv.length === 2, false);
+}
+
+/** Request-bound CLI with mandatory independently host-selected references. */
+export async function mainForRequest() {
+  const [, , assessment_id, request_digest] = process.argv;
+  const validInvocation = process.argv.length === 4
+    && validRequestReferences(assessment_id, request_digest);
+  await run({ assessment_id, request_digest }, validInvocation, true);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

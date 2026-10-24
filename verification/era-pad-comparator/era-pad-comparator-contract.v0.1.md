@@ -142,7 +142,7 @@ Expected context is an unverified host-selected reference, not trusted or
 authenticated context. Matching adds no authenticity, authorization, replay
 prevention, freshness, authority, network, durable state or clock guarantees.
 
-Run `node verification/era-pad-comparator/era-pad-cli.mjs` with binary stdin and
+Run `node /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/era-pad-cli.mjs` with binary stdin and
 **no arguments**; there is no file reader or optional raw-export mode. It reads no
 more than the byte budget into retained buffers and destroys input on excess,
 timeout, end or error. A fixed two-second deadline covers input acquisition only:
@@ -168,6 +168,30 @@ Neither exit code grants permission or authority.
 Importing the CLI module has no execution side effects. There is no network,
 database, server, external service, BRI9ADE change or new protocol evidence.
 
+### Separate mandatory request-bound CLI
+
+Run `node /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/era-pad-request-cli.mjs ASSESSMENT_ID REQUEST_DIGEST`
+with binary stdin. Exactly two positional references are required, using the same
+ID length/ASCII and lowercase digest constraints as `compareEraPadJsonForRequest`.
+There are no flags, options or file inputs. The host must independently select both
+references; neither JSON nor environment variables supply context or a fallback.
+These arguments can be visible in OS process listings: use only non-secret
+synthetic references, never credentials. This adds no trust provisioning or
+authentication claim.
+
+The wrapper calls `mainForRequest()` in the existing CLI module. Both entrypoints
+share a private runner and the same two-second input/output deadlines, byte budget,
+stream destruction, sanitized output handling and exit rules above. Invalid
+argument count or syntax destroys stdin immediately, before waiting for input or
+EOF, and attempts only the existing INVALID_INPUT status with exit 2. Valid
+arguments invoke `compareEraPadJsonForRequest`: malformed JSON/schema takes
+INVALID_INPUT precedence over a mismatching context; valid mismatches use
+BINDING_MISMATCH. Every bound CLI output is status-only, including matching
+contexts; no arguments, IDs, digests, paths, raw input or errors are echoed.
+Exit 0 requires CONSISTENT_SYNTHETIC_ONLY and local output acknowledgement.
+Importing either CLI module performs no I/O. The original CLI remains no-argument
+only; the new wrapper never silently chooses its unbound behavior.
+
 ## Validation
 
 `era-pad-vectors.v0.1.json` is a test-only shared corpus of 12 fully explicit,
@@ -185,6 +209,13 @@ with a five-second per-vector timeout and hung-child cleanup.
 golden snapshots and both existing APIs, coherent/root-only/nested-only
 substitutions, precedence, status-only privacy, strict context descriptors,
 caller isolation and the shared byte-parser boundaries.
+`era-pad-request-cli.test.mjs` runs the real request wrapper in fresh processes
+against all 12 golden statuses with matching root references, coherent component
+substitutions, malformed-input precedence, argument rejection without EOF, ID
+boundaries, import isolation, actual acquisition timeout and excess incoming
+bytes. Fresh injected `mainForRequest` processes also check delayed output
+acknowledgement, sanitized output errors and the actual output deadline.
+All child tests have fixed timeouts and hung-child cleanup.
 `era-pad-stream.test.mjs` exercises the actual CLI `main` in fresh child processes
 with scheduled standard-stream writes and child-side chunk-count assertions:
 split raw UTF-8/emoji and JSON escapes/surrogate pairs, cumulative byte limits,
@@ -199,15 +230,11 @@ revocation, browser-acceptance, trusted-time or authority evidence.
 
 From `/home/runner/work/PALACO/PALACO`:
 
-`node --check verification/era-pad-comparator/era-pad-comparator.mjs`
+`for path in /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/*.mjs; do node --check "$path" || break; done`
 
-`node --check verification/era-pad-comparator/era-pad-json.mjs`
+`node --test /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/*.test.mjs`
 
-`node --check verification/era-pad-comparator/era-pad-cli.mjs`
-
-`node --check verification/era-pad-comparator/era-pad-json.test.mjs`
-
-`node --test verification/era-pad-comparator/*.test.mjs`
+`node --test /home/runner/work/PALACO/PALACO/verification/rio-accounts/test_login_observation.mjs /home/runner/work/PALACO/PALACO/verification/rio-accounts/test_safe_reporter.mjs`
 
 The separate `.github/workflows/era-pad-comparator.yml` runs syntax checks for all
 comparator modules, this test suite and the existing offline login-observation and

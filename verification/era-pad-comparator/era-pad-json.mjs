@@ -1,5 +1,6 @@
 import { isUint8Array } from 'node:util/types';
 import { compareEraPad, MAX_INPUT_BYTES } from './era-pad-comparator.mjs';
+import { validRequestReferences } from './era-pad-context-internal.mjs';
 
 const byteLength = Object.getOwnPropertyDescriptor(
   Object.getPrototypeOf(Uint8Array.prototype), 'byteLength',
@@ -87,11 +88,7 @@ function snapshotContext(context) {
     if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) throw new TypeError();
     copy[name] = descriptor.value;
   }
-  if (typeof copy.assessment_id !== 'string'
-    || copy.assessment_id.length < 1 || copy.assessment_id.length > 128
-    || /[^A-Za-z0-9._:-]/.test(copy.assessment_id)
-    || typeof copy.request_digest !== 'string' || copy.request_digest.length !== 64
-    || /[^a-f0-9]/.test(copy.request_digest)) throw new TypeError();
+  if (!validRequestReferences(copy.assessment_id, copy.request_digest)) throw new TypeError();
   return copy;
 }
 

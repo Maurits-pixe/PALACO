@@ -24,8 +24,8 @@ commitvolgorde, contactopening, database, netwerk of productieactivering.
 BRI9ADE, UI, proof.json en bestaande paneel-/ambassadeursstatus zijn niet gewijzigd.
 
 Vanuit `/home/runner/work/PALACO/PALACO`:
-`node --test verification/era-pad-comparator/*.test.mjs`.
-Syntax: `node --check verification/era-pad-comparator/era-pad-comparator.mjs`.
+`node --test /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/*.test.mjs`.
+Syntax: `node --check /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/era-pad-comparator.mjs`.
 Node 22+ vereist (`String.isWellFormed`); geen dependencies of server nodig.
 Notion-bronpin en prototypeversie blijven UNKNOWN. Volgende gate:
 technische contractreview, niet operationele vrijgave.
@@ -33,7 +33,7 @@ technische contractreview, niet operationele vrijgave.
 Additieve offline JSON/CLI-slice: `compareEraPadJson(bytes)` accepteert uitsluitend
 Buffer/Uint8Array, maximaal 16.384 inkomende bytes, strikte UTF-8/JSON zonder BOM,
 arrays of dubbele keys (ook escaped), maximaal drie objectniveaus.
-`node verification/era-pad-comparator/era-pad-cli.mjs` leest alleen binaire stdin,
+`node /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/era-pad-cli.mjs` leest alleen binaire stdin,
 zonder argumenten of bestandslezer, met een vaste twee-seconden-inleesdeadline.
 Uitvoer is uitsluitend status, nooit pad/temporal, ruwe data, IDs of hashes.
 Exit 0 betekent alleen CONSISTENT_SYNTHETIC_ONLY, ook bij negatieve PAD-codes;
@@ -47,6 +47,15 @@ root-ID/digest met exact twee onafhankelijk door de host gekozen datavelden:
 Een root-mismatch geeft uitsluitend status, zonder pad/temporal; ongeldige input
 gaat voor. Bestaande API/CLI blijven ongewijzigd. Dit is geen authenticatie,
 replaybescherming of authority; zie het contract voor exacte velden en prioriteit.
+
+Afzonderlijke request-CLI:
+`node /home/runner/work/PALACO/PALACO/verification/era-pad-comparator/era-pad-request-cli.mjs ASSESSMENT_ID REQUEST_DIGEST`.
+Exact twee verplichte positionele referenties, onafhankelijk door de host gekozen;
+geen flags, opties, bestanden of fallback naar JSON/omgeving. Ongeldige argumenten
+sluiten stdin direct en geven gesanitiseerde INVALID_INPUT/exit 2. Dezelfde begrensde
+I/O en uitsluitend statusuitvoer gelden; exit 0 vereist ook lokale schrijfbevestiging.
+CLI-argumenten kunnen zichtbaar zijn in OS-proceslijsten: gebruik alleen niet-geheime
+synthetische referenties, nooit credentials. Geen trust-provisioning of authenticatie.
 
 De test-only [vaste JSON-vectoren](verification/era-pad-comparator/era-pad-vectors.v0.1.json)
 bevatten 12 expliciete fictieve SYNTHETIC_ONLY-inputs, onafhankelijk vastgelegde
