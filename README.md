@@ -67,7 +67,8 @@ van ERA-dienst, revocation-herstel, browseracceptatie, vertrouwde tijd of author
 
 De afzonderlijke [offline CI-check](.github/workflows/era-pad-comparator.yml)
 draait syntax-, comparator-/CLI- en bestaande observatie-/reporterregressies op
-Node 24 bij relevante pushes/PR's of handmatige start. Geen package-installatie,
+Node 22 en 24 in afzonderlijke matrixjobs bij relevante pushes/PR's of handmatige
+start. Een fout annuleert de andere runtimecheck niet. Geen package-installatie,
 browser, database, secrets of deployment; CI-succes blijft synthetisch bewijs,
 geen operationele vrijgave. Checkout en runtime-installatie vereisen wel netwerk.
 

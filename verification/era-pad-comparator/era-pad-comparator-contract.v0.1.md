@@ -248,7 +248,12 @@ From `/home/runner/work/PALACO/PALACO`:
 
 The separate `.github/workflows/era-pad-comparator.yml` runs syntax checks for all
 comparator modules, this test suite and the existing offline login-observation and
-sanitized-reporter regression suites on Node 24. Relevant path-filtered pushes
+sanitized-reporter regression suites in separate Node 22 and 24 matrix jobs.
+Each job has its own five-minute timeout; fail-fast is disabled so a failure on
+one runtime does not cancel verification on the other. Node 22 checks the
+documented minimum major version; this matrix does not certify every newer major
+or every patch version. Adding matrix jobs is not evidence that they have run.
+Relevant path-filtered pushes
 and pull requests trigger it; manual dispatch is also available. Pull requests
 test GitHub's merge ref; pushes/manual runs test the event ref. The workflow uses
 SHA-pinned actions, read-only contents permission, no persisted checkout
