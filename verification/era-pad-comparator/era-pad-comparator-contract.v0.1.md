@@ -216,6 +216,16 @@ boundaries, import isolation, actual acquisition timeout and excess incoming
 bytes. Fresh injected `mainForRequest` processes also check delayed output
 acknowledgement, sanitized output errors and the actual output deadline.
 All child tests have fixed timeouts and hung-child cleanup.
+
+`era-pad-schema.test.mjs` pins an explicit 22-field matrix (root 7, pad 6,
+temporal 7, uncertainty 2): 22 deletions, 22 disallowed boolean types and four
+extra-key mutations. Each checks exact sanitized INVALID_INPUT output through
+the object and byte APIs, including matching and valid mismatching host contexts,
+without changing caller inputs. Eight fresh CLI processes cover one mutation per
+object layer through both entrypoints. Positive controls preserve nullable times
+and uncertainty independently and in all combinations, plus empty raw_result
+with a fixed empty-string SHA-256 and UNKNOWN normalization.
+
 `era-pad-stream.test.mjs` exercises the actual CLI `main` in fresh child processes
 with scheduled standard-stream writes and child-side chunk-count assertions:
 split raw UTF-8/emoji and JSON escapes/surrogate pairs, cumulative byte limits,
