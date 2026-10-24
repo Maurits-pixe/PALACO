@@ -226,6 +226,20 @@ object layer through both entrypoints. Positive controls preserve nullable times
 and uncertainty independently and in all combinations, plus empty raw_result
 with a fixed empty-string SHA-256 and UNKNOWN normalization.
 
+`era-pad-duplicates.test.mjs` pins the same 22 paths (root 7, pad 6, temporal 7,
+uncertainty 2): 88 textual mutations pair original values with boolean true in
+both orders, using exact keys and first-ASCII-character `\uXXXX` equivalents.
+Both byte APIs require the literal golden INVALID_INPUT report without payload,
+including matching and valid mismatching host contexts. Native JSON.parse is
+only a fixture control verifying last-key-wins values and exact target paths.
+Five duplicate-free representations of all 11 structurally valid goldens preserve
+exact statuses/payloads and Unicode raw values/digests: ordinary, recursively
+reversed, legal whitespace, every property name escaped, and their combination.
+Sixteen fresh CLI children pair spellings across both entrypoints at four object
+layers in both orders, checking exact sanitized output, exit 2 and empty stderr
+with five-second timeouts and hung-child cleanup. This bounded CLI sample is not
+the full API cross-product; equal-value duplicates are not separately enumerated.
+
 `era-pad-stream.test.mjs` exercises the actual CLI `main` in fresh child processes
 with scheduled standard-stream writes and child-side chunk-count assertions:
 split raw UTF-8/emoji and JSON escapes/surrogate pairs, cumulative byte limits,
