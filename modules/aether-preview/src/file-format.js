@@ -46,7 +46,9 @@ export function unpackFile(packed) {
   ) {
     throw new Error('De versleutelde bestandsmetadata is ongeldig.');
   }
-  const name = header.name.split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g, '') || 'ontsleuteld-bestand';
+  const name = header.name.split(/[\\/]/).pop()
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, '') ||
+    'ontsleuteld-bestand';
   const type = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(header.type)
     ? header.type.toLowerCase()
     : 'application/octet-stream';

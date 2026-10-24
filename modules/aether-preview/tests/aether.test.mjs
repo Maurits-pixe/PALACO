@@ -99,6 +99,11 @@ test('validates decrypted file metadata and preserves file content', () => {
   assert.equal(unpacked.name, 'sample.txt');
   assert.equal(unpacked.type, 'text/plain');
   assert.deepEqual(unpacked.bytes, bytes);
+  const unsafeName = unpackFile(packFile({
+    name: 'report\u202egnp\u0085.txt',
+    type: 'text/plain'
+  }, bytes));
+  assert.equal(unsafeName.name, 'reportgnp.txt');
 
   const packedMetadata = metadata => {
     const header = new TextEncoder().encode(JSON.stringify(metadata));
