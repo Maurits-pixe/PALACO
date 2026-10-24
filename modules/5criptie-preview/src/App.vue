@@ -36,6 +36,7 @@ async function printReport() {
   const restoreReportState = () => {
     reviewDetails.open = wasOpen;
     selectedSeverity.value = previousSeverity;
+    printDate.value = '';
   };
   const handleAfterPrint = () => {
     window.removeEventListener('afterprint', handleAfterPrint);

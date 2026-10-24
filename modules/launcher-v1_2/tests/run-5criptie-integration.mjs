@@ -114,6 +114,7 @@ try {
       window.__filterStatusAtPrint = document.querySelector('.events-panel [role="status"]').textContent.trim();
       window.__fixtureRowsAtPrint = document.querySelectorAll('.events-panel tbody tr').length;
       window.__reportMetadataAtPrint = document.querySelector('.print-meta').textContent.trim();
+      window.__printMetaDisplayAtPrint = getComputedStyle(document.querySelector('.print-meta')).display;
       window.dispatchEvent(new Event('afterprint'));
     };
   });
@@ -124,9 +125,10 @@ try {
   assert.equal(await popup.evaluate(() => window.__filterStatusAtPrint), 'Toont 6 synthetische signalen.');
   assert.equal(await popup.evaluate(() => window.__fixtureRowsAtPrint), 6);
   assert.match(await popup.evaluate(() => window.__reportMetadataAtPrint), /^Afgedrukt op .+ · Synthetische voorbeelddata$/);
-  assert.equal(await popup.locator('.print-meta').evaluate(element => getComputedStyle(element).display), 'none');
+  assert.equal(await popup.evaluate(() => window.__printMetaDisplayAtPrint), 'none');
   assert.equal(await eventRows.count(), 2, 'printing restores the on-screen filter after the dialog');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
+  assert.equal(await popup.locator('.print-meta').count(), 0, 'print date metadata is cleared after printing');
   await popup.evaluate(() => {
     window.print = () => { throw new Error('print unavailable'); };
   });
@@ -135,8 +137,9 @@ try {
   assert.match((await printError).message, /print unavailable/);
   assert.equal(await eventRows.count(), 2, 'failed printing restores the active filter');
   assert.equal(await reviewDetails.locator('table').isVisible(), false, 'failed printing restores disclosure state');
+  assert.equal(await popup.locator('.print-meta').count(), 0, 'print date metadata is cleared after print failure');
   await popup.emulateMedia({ media: 'print' });
-  assert.equal(await popup.locator('.print-meta').evaluate(element => getComputedStyle(element).display), 'block');
+  assert.equal(await popup.locator('.print-meta').count(), 0);
   assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);
   assert.equal(await popup.locator('.filter-group').evaluate(group => getComputedStyle(group).display), 'none');
   await reviewDetails.evaluate(details => { details.open = true; });
