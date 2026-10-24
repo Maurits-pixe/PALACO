@@ -67,13 +67,53 @@ function parse(text) {
   return result;
 }
 
+function decodeAndParse(bytes) {
+  if (!isUint8Array(bytes) || byteLength.call(bytes) > MAX_INPUT_BYTES) throw new TypeError();
+  const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+  // Preserve a leading BOM in decoding so the strict JSON grammar rejects it.
+  return parse(text);
+}
+
+function snapshotContext(context) {
+  if (context === null || typeof context !== 'object') throw new TypeError();
+  const prototype = Object.getPrototypeOf(context);
+  if (prototype !== Object.prototype && prototype !== null) throw new TypeError();
+  const keys = Reflect.ownKeys(context);
+  const names = ['assessment_id', 'request_digest'];
+  if (keys.length !== names.length || keys.some(key => !names.includes(key))) throw new TypeError();
+  const copy = Object.create(null);
+  for (const name of names) {
+    const descriptor = Object.getOwnPropertyDescriptor(context, name);
+    if (!descriptor || !descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) throw new TypeError();
+    copy[name] = descriptor.value;
+  }
+  if (typeof copy.assessment_id !== 'string'
+    || copy.assessment_id.length < 1 || copy.assessment_id.length > 128
+    || /[^A-Za-z0-9._:-]/.test(copy.assessment_id)
+    || typeof copy.request_digest !== 'string' || copy.request_digest.length !== 64
+    || /[^a-f0-9]/.test(copy.request_digest)) throw new TypeError();
+  return copy;
+}
+
 /** Bounded byte-only JSON adapter; parse failures reuse the closed diagnostic. */
 export function compareEraPadJson(bytes) {
   try {
-    if (!isUint8Array(bytes) || byteLength.call(bytes) > MAX_INPUT_BYTES) return compareEraPad(null);
-    const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-    // Preserve a leading BOM in decoding so the strict JSON grammar rejects it.
-    return compareEraPad(parse(text));
+    return compareEraPad(decodeAndParse(bytes));
+  } catch {
+    return compareEraPad(null);
+  }
+}
+
+/** Compare root references with independently host-selected, unverified context. */
+export function compareEraPadJsonForRequest(bytes, expectedContext) {
+  try {
+    const expected = snapshotContext(expectedContext);
+    const input = decodeAndParse(bytes);
+    const report = compareEraPad(input);
+    if (report.reason === 'INVALID_INPUT') return report;
+    if (input.assessment_id === expected.assessment_id && input.request_digest === expected.request_digest) return report;
+    const { pad, temporal, ...status } = report;
+    return { ...status, result: 'REJECTED', reason: 'BINDING_MISMATCH', binding_status: 'MISMATCH' };
   } catch {
     return compareEraPad(null);
   }

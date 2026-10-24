@@ -41,6 +41,13 @@ anders exit 2, altijd HOLD/NONE. De deadline geldt alleen voor inputverwerving,
 niet als hard-realtimegarantie of sandbox. Geen nieuwe protocolbewijzen.
 Zie het bestaande contract voor bytegrenzen, foutafhandeling en beperkingen.
 
+Additief: `compareEraPadJsonForRequest(bytes, expectedContext)` vergelijkt ook de
+root-ID/digest met exact twee onafhankelijk door de host gekozen datavelden:
+`assessment_id` en `request_digest` (niet afleiden uit inkomende JSON).
+Een root-mismatch geeft uitsluitend status, zonder pad/temporal; ongeldige input
+gaat voor. Bestaande API/CLI blijven ongewijzigd. Dit is geen authenticatie,
+replaybescherming of authority; zie het contract voor exacte velden en prioriteit.
+
 De test-only [vaste JSON-vectoren](verification/era-pad-comparator/era-pad-vectors.v0.1.json)
 bevatten 12 expliciete fictieve SYNTHETIC_ONLY-inputs, onafhankelijk vastgelegde
 SHA-256-literals, volledige status-only verwachtingen en CLI-exits. De bestaande

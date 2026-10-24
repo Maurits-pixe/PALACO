@@ -104,6 +104,44 @@ string's UTF-8 bytes, not the JSON source spelling. No trimming or normalization
 Parse failures reuse the existing HOLD/NONE REJECTED/INVALID_INPUT diagnostic
 without any raw content.
 
+### Optional independently selected request context
+
+`compareEraPadJsonForRequest(bytes, expectedContext)` is a distinct additive export
+from `era-pad-json.mjs`. The existing object API, `compareEraPadJson` and CLI are
+unchanged; the input schema/version is unchanged. It shares the bounded byte,
+fatal UTF-8 and duplicate-rejecting parser above, parses once and validates the
+parsed local object with `compareEraPad`.
+
+The caller must independently select `expectedContext`, not derive it from the
+incoming JSON. It is exactly an Object.prototype or null-prototype object with
+only two own enumerable **data** fields: `assessment_id` (1–128 ASCII characters
+from `[A-Za-z0-9._:-]`) and `request_digest` (exactly 64 lowercase hex characters).
+Missing, undefined, null, extra, nonenumerable, accessor, symbol and exotic
+properties/objects are rejected. Frozen contexts are accepted. Descriptor `.value`
+fields are snapshotted into a local null-prototype object without invoking field
+getters or mutating the caller. Ordinary JavaScript Proxy inspection traps are
+not sandboxable: inspection can execute traps, and caught errors are sanitized.
+This is not a claim that adversarial JavaScript objects can be inspected without
+executing their code.
+
+Precedence and privacy:
+- Invalid expected context, malformed bytes/JSON or invalid fixed input schema
+  returns the existing sanitized REJECTED/INVALID_INPUT diagnostic first.
+- For valid context and input, compare expected fields with the **root**
+  `assessment_id` and `request_digest`, not only pad/temporal references. Either
+  root mismatch overrides inner binding, integrity and normalization outcomes:
+  result=REJECTED, reason=BINDING_MISMATCH, binding_status=MISMATCH. Other independent
+  comparator status fields remain unchanged, as do all HOLD/NONE invariants.
+  This report is status-only: pad and temporal are omitted so misbound payloads
+  are not echoed.
+- When both root fields match, return the existing comparator report unchanged,
+  including diagnostic pad/temporal payloads for existing inner binding, integrity
+  or normalization mismatches.
+
+Expected context is an unverified host-selected reference, not trusted or
+authenticated context. Matching adds no authenticity, authorization, replay
+prevention, freshness, authority, network, durable state or clock guarantees.
+
 Run `node verification/era-pad-comparator/era-pad-cli.mjs` with binary stdin and
 **no arguments**; there is no file reader or optional raw-export mode. It reads no
 more than the byte budget into retained buffers and destroys input on excess,
@@ -143,6 +181,10 @@ expected digests or derive expected statuses from the comparator.
 `era-pad-vectors.test.mjs` checks all three entrypoints against these same fixed
 snapshots, copied API payloads, sanitization, precedence and closed invariants,
 with a five-second per-vector timeout and hung-child cleanup.
+`era-pad-request.test.mjs` checks the additive request-context API against all 12
+golden snapshots and both existing APIs, coherent/root-only/nested-only
+substitutions, precedence, status-only privacy, strict context descriptors,
+caller isolation and the shared byte-parser boundaries.
 `era-pad-stream.test.mjs` exercises the actual CLI `main` in fresh child processes
 with scheduled standard-stream writes and child-side chunk-count assertions:
 split raw UTF-8/emoji and JSON escapes/surrogate pairs, cumulative byte limits,
