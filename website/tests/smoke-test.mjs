@@ -29,11 +29,11 @@ assert.match(js, /not a live LA-001 service or established HARA capability/);
 assert.match(js, /Cross-Citadel sharing would require an explicit contract and review/);
 assert.match(js, /HARA is not being equated with H∆R∆M/);
 assert.match(js, /NOT IMPLEMENTED/);
-assert.match(js, /function elixirs\(\)/);
+assert.match(js, /function elixirs\(requestedView = 'all'\)/);
 assert.match(js, /aria-labelledby="hara-widget-title"/);
 assert.match(js, /HARA desk/);
 assert.match(js, /Choose a HARA preview section/);
-assert.match(js, /data-hara-view="candidate" aria-pressed="false"/);
+assert.match(js, /data-hara-view="candidate" aria-controls="hara-candidate-panel" aria-pressed="\$\{view === 'candidate'\}"/);
 assert.match(js, /data-hara-panel="candidate"/);
 assert.match(js, /Showing the isolated D-012 candidate status only/);
 assert.match(js, /ISOLATED CANDIDATE · 0\.3\.3-d012\.1/);
@@ -60,7 +60,7 @@ assert.match(js, /How a future request might be handled/);
 assert.match(js, /Illustrative workflow only\. No request can be created from this preview\./);
 assert.match(js, /An accountable operator or authorized service records approval, refusal/);
 assert.match(js, /NO LIVE SERVICE/);
-assert.match(js, /else if \(raw === 'elixirs'\) main\.innerHTML = elixirs\(\)/);
+assert.match(js, /routePath === 'elixirs'\) main\.innerHTML = elixirs\(new URLSearchParams\(query\)\.get\('view'\) \|\| 'all'\)/);
 assert.match(js, /link\('citadels\/la-001','Explore Locus Amoenus'\)/);
 assert.match(js, /link\('proof\/provenance','Inspect provenance overview'\)/);
 assert.match(js, /link\('elixirs','View ELIXERS'\)/);
@@ -96,6 +96,17 @@ for (const directive of [
 
 const handlers = {};
 const main = { innerHTML: '', focus() {} };
+let locationHash = '#/elixirs?view=candidate';
+const historyEntries = [locationHash];
+const location = {
+  get hash() { return locationHash; },
+  set hash(value) {
+    if (value === locationHash) return;
+    locationHash = value;
+    historyEntries.push(value);
+    handlers['window:hashchange']?.();
+  }
+};
 const status = { textContent: 'Ready.' };
 const indicator = { textContent: 'STEP 0 OF 4' };
 const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Next example step' };
@@ -108,7 +119,9 @@ const maintenanceService = { dataset: { category: 'place' }, hidden: false };
 const guideService = { dataset: { category: 'place' }, hidden: false };
 const viewStatus = { textContent: 'Showing all.' };
 const overviewView = { dataset: { haraView: 'all' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const servicesView = { dataset: { haraView: 'services' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
 const candidateView = { dataset: { haraView: 'candidate' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const scenarioView = { dataset: { haraView: 'scenario' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
 const servicesPanel = { dataset: { haraPanel: 'services' }, hidden: false };
 const candidatePanel = { dataset: { haraPanel: 'candidate' }, hidden: false };
 const scenarioPanel = { dataset: { haraPanel: 'scenario' }, hidden: false };
@@ -117,20 +130,40 @@ const document = {
   querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-step-status]' ? status : selector === '[data-hara-step-indicator]' ? indicator : selector === '[data-hara-scenario]' ? demoButton : selector === '[data-hara-view-status]' ? viewStatus : null,
   querySelectorAll: (selector) => selector === '[data-hara-service]' ? [careService, maintenanceService, guideService] : selector === '[data-hara-filter]' ? [allFilter, careFilter, placeFilter] : selector === '[data-hara-panel]' ? [servicesPanel, candidatePanel, scenarioPanel] : selector === '[data-hara-view]' ? [overviewView, candidateView] : []
 };
-const window = { addEventListener() {}, scrollTo() {} };
+const window = { addEventListener: (name, handler) => { handlers[`window:${name}`] = handler; }, scrollTo() {} };
 runInNewContext(js, {
   document,
   window,
-  location: { hash: '#/elixirs' },
+  location,
+  URLSearchParams,
   fetch: () => { throw new Error('The HARA demo must not make network requests.'); }
 });
 assert.match(main.innerHTML, /HARA desk/);
+assert.match(main.innerHTML, /data-hara-view="candidate"[^>]*aria-pressed="true"/);
+assert.match(main.innerHTML, /data-hara-panel="services"[^>]* hidden>/);
+assert.match(main.innerHTML, /data-hara-panel="candidate"[^>]* aria-labelledby="hara-d012-title">/);
+assert.match(main.innerHTML, /data-hara-panel="scenario"[^>]* hidden>/);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-view]' ? servicesView : null } });
+assert.equal(location.hash, '#/elixirs?view=services');
+assert.match(main.innerHTML, /data-hara-view="services"[^>]*aria-pressed="true"/);
+assert.match(main.innerHTML, /data-hara-panel="services"[^>]* aria-labelledby="hara-widget-title">/);
+assert.match(main.innerHTML, /data-hara-panel="candidate"[^>]* hidden>/);
+assert.match(main.innerHTML, /data-hara-panel="scenario"[^>]* hidden>/);
 handlers.click({ target: { closest: (selector) => selector === '[data-hara-view]' ? candidateView : null } });
-assert.deepEqual([servicesPanel.hidden, candidatePanel.hidden, scenarioPanel.hidden], [true, false, true]);
-assert.deepEqual([overviewView.pressed, candidateView.pressed], ['false', 'true']);
-assert.equal(viewStatus.textContent, 'Showing the isolated D-012 candidate status only.');
+assert.equal(location.hash, '#/elixirs?view=candidate');
+assert.match(main.innerHTML, /Showing the isolated D-012 candidate status only\./);
 handlers.click({ target: { closest: (selector) => selector === '[data-hara-view]' ? overviewView : null } });
-assert.deepEqual([servicesPanel.hidden, candidatePanel.hidden, scenarioPanel.hidden], [false, false, false]);
+assert.equal(location.hash, '#/elixirs?view=all');
+assert.match(main.innerHTML, /data-hara-view="all"[^>]*aria-pressed="true"/);
+assert.doesNotMatch(main.innerHTML, /data-hara-panel="(?:services|candidate|scenario)"[^>]* hidden>/);
+historyEntries.pop();
+locationHash = historyEntries.at(-1);
+handlers['window:hashchange']();
+assert.equal(location.hash, '#/elixirs?view=candidate');
+assert.match(main.innerHTML, /data-hara-view="candidate"[^>]*aria-pressed="true"/);
+location.hash = '#/elixirs?view=unknown';
+assert.match(main.innerHTML, /data-hara-view="all"[^>]*aria-pressed="true"/);
+assert.match(main.innerHTML, /Showing the complete proposal overview\./);
 handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? careFilter : null } });
 assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [false, true, true]);
 assert.deepEqual([allFilter.pressed, careFilter.pressed, placeFilter.pressed], ['false', 'true', 'false']);

@@ -40,17 +40,24 @@ function proof() {
     <section class="section"><p class="eyebrow">Verify</p><h2>Search identity, Citadel, Watermerk or provenance reference.</h2><form data-verification><label for="reference">Reference</label><input id="reference" name="reference" autocomplete="off" placeholder="LA-001, identity or Watermerk"><button class="button" type="submit">Verify</button></form><output id="verification-result" aria-live="polite"></output></section>`);
 }
 
-function elixirs() {
+function elixirs(requestedView = 'all') {
+  const view = ['all', 'services', 'candidate', 'scenario'].includes(requestedView) ? requestedView : 'all';
+  const labels = {
+    all: 'Showing the complete proposal overview.',
+    services: 'Showing proposed service examples only.',
+    candidate: 'Showing the isolated D-012 candidate status only.',
+    scenario: 'Showing the fictional workflow example only.'
+  };
   return page(`${header('PALACO · ELIXERS', 'Elixirs', 'Curated experiences with origin, status, and provenance.')}
     <section class="section"><p>No public Elixir records are registered in this baseline. The HARA widget below is a proposed layout preview, not a registered or connected Elixir.</p>
       <div class="hara-widget__views" role="group" aria-label="Choose a HARA preview section">
-        <button type="button" data-hara-view="all" aria-pressed="true">Overview</button>
-        <button type="button" data-hara-view="services" aria-pressed="false">Services</button>
-        <button type="button" data-hara-view="candidate" aria-pressed="false">D-012 candidate</button>
-        <button type="button" data-hara-view="scenario" aria-pressed="false">Example workflow</button>
+        <button type="button" data-hara-view="all" aria-controls="hara-services-panel hara-candidate-panel hara-scenario-panel" aria-pressed="${view === 'all'}">Overview</button>
+        <button type="button" data-hara-view="services" aria-controls="hara-services-panel" aria-pressed="${view === 'services'}">Services</button>
+        <button type="button" data-hara-view="candidate" aria-controls="hara-candidate-panel" aria-pressed="${view === 'candidate'}">D-012 candidate</button>
+        <button type="button" data-hara-view="scenario" aria-controls="hara-scenario-panel" aria-pressed="${view === 'scenario'}">Example workflow</button>
       </div>
-      <p class="hara-widget__view-status" data-hara-view-status role="status" aria-live="polite">Showing the complete proposal overview.</p>
-      <article id="hara-services-panel" class="hara-widget" data-hara-panel="services" aria-labelledby="hara-widget-title">
+      <p class="hara-widget__view-status" data-hara-view-status role="status" aria-live="polite">${labels[view]}</p>
+      <article id="hara-services-panel" class="hara-widget" data-hara-panel="services" aria-labelledby="hara-widget-title"${view !== 'all' && view !== 'services' ? ' hidden' : ''}>
         <header class="hara-widget__header"><div><p class="eyebrow">HOUSEHOLD · WIDGET CONCEPT</p><h2 id="hara-widget-title">HARA desk</h2></div><span class="badge">PROPOSED</span></header>
         <div class="hara-widget__body">
           <section class="hara-widget__main" aria-label="Household overview preview">
@@ -86,11 +93,11 @@ function elixirs() {
         </div>
         <footer class="hara-widget__footer"><span>LA-001 · Reference layout only</span><span>NO LIVE SERVICE</span></footer>
       </article>
-      <aside id="hara-candidate-panel" class="hara-d012" data-hara-panel="candidate" aria-labelledby="hara-d012-title">
+      <aside id="hara-candidate-panel" class="hara-d012" data-hara-panel="candidate" aria-labelledby="hara-d012-title"${view !== 'all' && view !== 'candidate' ? ' hidden' : ''}>
         <div><p class="eyebrow">ISOLATED CANDIDATE · 0.3.3-d012.1</p><h2 id="hara-d012-title">H∆R∆ Hannie agenda · D-012</h2><p>Preparation, exact approval, permission checks, and historical recovery are available in candidate source.</p></div>
         <div><p><strong>Agenda execution</strong> <code>STORAGE_EFFECT_DEADLINE_UNSUPPORTED</code></p><p>Not connected to this website or a live calendar. Integration and production remain on hold.</p></div>
       </aside>
-      <section id="hara-scenario-panel" class="hara-scenario" data-hara-panel="scenario" aria-labelledby="hara-scenario-title">
+      <section id="hara-scenario-panel" class="hara-scenario" data-hara-panel="scenario" aria-labelledby="hara-scenario-title"${view !== 'all' && view !== 'scenario' ? ' hidden' : ''}>
         <div><p class="eyebrow">SYNTHETIC SCENARIO</p><h2 id="hara-scenario-title">A service request, safely bounded</h2><p>This separate preview uses fictional content only. Advancing it does not submit a request, contact an operator, store data, or trigger an action.</p></div>
         <div class="hara-scenario__panel">
           <div class="hara-scenario__progress"><span data-hara-step-indicator>STEP 0 OF 4</span><span class="badge">SIMULATION ONLY</span></div>
@@ -135,21 +142,26 @@ function syncNavigation(routeName) {
   });
 }
 
+let currentRoutePath = null;
 function route() {
   const raw = location.hash.replace(/^#\/?/, '').replace(/\/$/, '') || '';
+  const [routePath, query = ''] = raw.split('?');
   const main = document.querySelector('#main');
-  if (raw === '' || raw === 'enter') main.innerHTML = home();
-  else if (raw === 'citadels' || raw === 'citadels/la-001') main.innerHTML = citadels(raw);
-  else if (raw === 'elixirs') main.innerHTML = elixirs();
-  else if (raw === 'haram') main.innerHTML = haram();
-  else if (raw === 'proof' || raw === 'proof/verify') main.innerHTML = proof();
-  else if (raw === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
-  else if (raw === 'proof/watermerk') main.innerHTML = page(`${header('PALACO · PROOF', 'Watermerk', 'An identity-bearing authenticity layer.')}<section class="section"><p class="badge">UNVERIFIED</p><p>No Watermerk record is available to verify in this baseline.</p></section>`);
-  else main.innerHTML = detail(raw);
-  document.title = raw ? `${raw.split('/').pop().toUpperCase()} — PALACO` : 'PALACO — Constitutional infrastructure';
-  syncNavigation(raw);
-  main.focus({preventScroll: true});
-  window.scrollTo(0, 0);
+  if (routePath === '' || routePath === 'enter') main.innerHTML = home();
+  else if (routePath === 'citadels' || routePath === 'citadels/la-001') main.innerHTML = citadels(routePath);
+  else if (routePath === 'elixirs') main.innerHTML = elixirs(new URLSearchParams(query).get('view') || 'all');
+  else if (routePath === 'haram') main.innerHTML = haram();
+  else if (routePath === 'proof' || routePath === 'proof/verify') main.innerHTML = proof();
+  else if (routePath === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
+  else if (routePath === 'proof/watermerk') main.innerHTML = page(`${header('PALACO · PROOF', 'Watermerk', 'An identity-bearing authenticity layer.')}<section class="section"><p class="badge">UNVERIFIED</p><p>No Watermerk record is available to verify in this baseline.</p></section>`);
+  else main.innerHTML = detail(routePath);
+  document.title = routePath ? `${routePath.split('/').pop().toUpperCase()} — PALACO` : 'PALACO — Constitutional infrastructure';
+  syncNavigation(routePath);
+  if (routePath !== currentRoutePath) {
+    main.focus({preventScroll: true});
+    window.scrollTo(0, 0);
+    currentRoutePath = routePath;
+  }
 }
 
 window.addEventListener('hashchange', route);
@@ -166,20 +178,7 @@ document.addEventListener('submit', (event) => {
 document.addEventListener('click', (event) => {
   const view = event.target.closest('[data-hara-view]');
   if (view) {
-    const selected = view.dataset.haraView;
-    const labels = {
-      all: 'Showing the complete proposal overview.',
-      services: 'Showing proposed service examples only.',
-      candidate: 'Showing the isolated D-012 candidate status only.',
-      scenario: 'Showing the fictional workflow example only.'
-    };
-    document.querySelectorAll('[data-hara-panel]').forEach((panel) => {
-      panel.hidden = selected !== 'all' && panel.dataset.haraPanel !== selected;
-    });
-    document.querySelectorAll('[data-hara-view]').forEach((button) => {
-      button.setAttribute('aria-pressed', String(button === view));
-    });
-    document.querySelector('[data-hara-view-status]').textContent = labels[selected] || labels.all;
+    location.hash = `#/elixirs?view=${encodeURIComponent(view.dataset.haraView)}`;
     return;
   }
   const filter = event.target.closest('[data-hara-filter]');
