@@ -20,7 +20,7 @@ function home() {
   return page(`<section class="hero"><div class="hero-copy"><p class="eyebrow">PALACO.NL · PVD-001 · v1.0</p><p class="hero-kicker">A clearer way to build what comes next.</p><h1>Trust starts<br>with clarity.</h1><p class="hero-lede">Constitutional infrastructure for bounded digital environments — with identity, provenance and status in view.</p><div class="hero-actions"><a class="button button-primary" href="studio.html">Open PALACO Studio <span aria-hidden="true">↗</span></a><a class="text-link" href="#/citadels">Explore the architecture <span aria-hidden="true">↓</span></a></div><p class="hero-note"><span class="status-dot" aria-hidden="true"></span> PUBLIC BASELINE <span>·</span> DRAFT / UNVERIFIED</p></div><div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-core"><span>PALACO</span><strong>△</strong><small>BOUNDED BY DESIGN</small></div><div class="art-label art-label-top">IDENTITY <span>01</span></div><div class="art-label art-label-side">PROVENANCE <span>02</span></div><div class="art-caption">A framework for what matters.</div></div></section>
   <section class="section"><div class="section-heading"><p class="eyebrow">The PALACO approach</p><h2>Make the important things visible before anyone steps inside.</h2><p class="section-intro">Every environment has a purpose, a boundary and a story. PALACO brings them into focus.</p></div><div class="grid">${card('Citadels','Places and environments with identity, function and provenance.','citadels')}${card('Proof','Identity, provenance and status made inspectable.','proof')}${card('Evolution','Systems, experiments and change kept visible.','evolution')}</div></section>
   <section class="section dark"><p class="eyebrow">Reference Citadel · LA-001</p><h2>Locus Amoenus</h2><p>A living reference environment for PALACO architecture. Enter from the perimeter and inspect each layer at your own pace.</p>${architecture()}${link('citadels/la-001','Enter L.A.')}</section>
-  <section class="section"><div class="grid">${card('Elixirs','Curated experiences with origin, status and provenance.','elixirs')}${card('H∆R∆M','A human interface for orientation, context and action.','haram')}${card('Industrie','The practical layer for identity, infrastructure, commerce and research.','industrie')}</div></section>`);
+  <section class="section"><div class="grid">${card('Elixirs','Curated experiences with origin, status and provenance.','elixirs')}${card('H∆R∆M','A human interface for orientation, context, and provenance inspection.','haram')}${card('Industrie','The practical layer for identity, infrastructure, commerce and research.','industrie')}</div></section>`);
 }
 
 function citadels(route) {
@@ -39,6 +39,14 @@ function proof() {
     <section class="section"><p class="eyebrow">Verify</p><h2>Search identity, Citadel, Watermerk or provenance reference.</h2><form data-verification><label for="reference">Reference</label><input id="reference" name="reference" autocomplete="off" placeholder="LA-001, identity or Watermerk"><button class="button" type="submit">Verify</button></form><output id="verification-result" aria-live="polite"></output></section>`);
 }
 
+function haram() {
+  return page(`${header('PALACO · HUMAN INTERFACE', 'H∆R∆M', 'A presentation and interaction layer for the L.A. ecosystem.')}
+    <section class="section"><p class="eyebrow">Role and scope</p><h2>Help people explore, understand, and inspect.</h2><ul><li>Explore the Citadel and orient within its spaces.</li><li>Explain architectural information.</li><li>Support provenance inspection and evidence visibility.</li><li>Facilitate interaction with ELIXERS.</li></ul><dl><dt>Capability</dt><dd>PRESENT — present, explain, guide, and make information accessible within applicable boundaries.</dd><dt>Authority</dt><dd>NOT ESTABLISHED</dd><dt>Runtime execution</dt><dd>NOT ESTABLISHED</dd><dt>Issuance and governance</dt><dd>NOT ESTABLISHED</dd></dl></section>
+    <section class="section"><p class="eyebrow">Boundary</p><h2>Presentation is not authority.</h2><p>Interface prominence, naming, or interaction does not grant authorization, execution, issuance, governance, signing, or kernel access. PRESENT does not imply those capabilities.</p></section>
+    <section class="section"><p class="eyebrow">Identity and relationship review</p><h2>Related names remain separate unless explicitly established.</h2><p>HARA, HARAM, H∆R∆M, and HARA-LAB-001 / H∆R∆ are not automatically equivalent. The proposed H∆R∆M-is-Matriarch-of-H∆R∆ relationship is NOT_ESTABLISHED. No identity merge or inherited authority, capability, or namespace is assumed.</p></section>
+    <section class="section"><p class="eyebrow">Current public status</p><span class="badge">DRAFT</span> <span class="badge">UNVERIFIED</span><p>This page describes the public design baseline, not a verified runtime or production activation. Human review is required; production activation is not allowed by this status.</p></section>`);
+}
+
 function detail(route) {
   const map = {
     'elixirs': ['Elixirs','Curated experiences within the PALACO ecosystem.','No public Elixir records are registered in this baseline. Every future item will expose origin, Citadel, Watermerk, provenance and status.'],
@@ -46,7 +54,6 @@ function detail(route) {
     'governance': ['Governance','Authority should be attributable, bounded, reviewable and revocable.','Roles, authority, boundaries, review, revocation and history are public concepts. A displayed role is not an execution authorization.'],
     'evolution': ['Evolution','The public change record of PALACO.','CURRENT · PREVIOUS · PROPOSALS · EXPERIMENTS · ARCHIVE. Change is visible and versioned.'],
     'identity': ['Identity','Carry your PALACO identity with you.','Public identity surfaces expose only appropriate information. Identity presentation never implies authority.'],
-    'haram': ['H∆R∆M','Living interface between the human and the constitutional architecture.','Orient · Understand · Navigate · Verify · Act — always in context of Citadel, status and version.'],
     'stewardship': ['Stewardship','Responsibility without implied ownership.','Steward → Role → Authority scope → Review → Revocation.'],
     'about': ['About PALACO','The threshold into a constitutional architecture.','PALACO is a framework for bounded environments in which identity, participation, provenance and evidence remain visible and understandable.'],
     'constitution': ['Constitution','The public rules underlying the architecture.','Purpose · Identity · Boundaries · Authority · Provenance · Status · Review · Revocation · Evolution.']
@@ -69,6 +76,7 @@ function route() {
   const main = document.querySelector('#main');
   if (raw === '' || raw === 'enter') main.innerHTML = home();
   else if (raw === 'citadels' || raw === 'citadels/la-001') main.innerHTML = citadels(raw);
+  else if (raw === 'haram') main.innerHTML = haram();
   else if (raw === 'proof' || raw === 'proof/verify') main.innerHTML = proof();
   else if (raw === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
   else if (raw === 'proof/watermerk') main.innerHTML = page(`${header('PALACO · PROOF', 'Watermerk', 'An identity-bearing authenticity layer.')}<section class="section"><p class="badge">UNVERIFIED</p><p>No Watermerk record is available to verify in this baseline.</p></section>`);

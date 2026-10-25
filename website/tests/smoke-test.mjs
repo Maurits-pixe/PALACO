@@ -21,6 +21,12 @@ assert.match(js, /UNVERIFIED/);
 assert.match(js, /No access or authority is granted/);
 assert.match(js, /aria-current/);
 assert.match(js, /window\.scrollTo\(0, 0\)/);
+assert.match(js, /A presentation and interaction layer/);
+assert.match(js, /PRESENT — present, explain, guide/);
+assert.match(js, /Authority[\s\S]*NOT ESTABLISHED/);
+assert.match(js, /proposed H∆R∆M-is-Matriarch-of-H∆R∆ relationship is NOT_ESTABLISHED/);
+assert.match(js, /production activation is not allowed by this status/i);
+assert.doesNotMatch(js, /Orient · Understand · Navigate · Verify · Act/);
 
 assert.match(css, /prefers-reduced-motion/);
 assert.match(header, /href="#\/"[^>]*>PALACO/);
