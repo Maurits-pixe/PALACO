@@ -32,6 +32,10 @@ assert.match(js, /NOT IMPLEMENTED/);
 assert.match(js, /function elixirs\(\)/);
 assert.match(js, /aria-labelledby="hara-widget-title"/);
 assert.match(js, /HARA desk/);
+assert.match(js, /role="group" aria-label="Filter proposed service examples"/);
+assert.match(js, /data-hara-filter data-category="wellbeing" aria-pressed="false">Care/);
+assert.match(js, /data-hara-service data-category="place"/);
+assert.match(js, /service\.hidden = category !== 'all'/);
 assert.match(js, /Services[\s\S]*Requests[\s\S]*Updates/);
 assert.match(js, /This is a static layout concept\. It reads no household data and submits no requests\./);
 assert.match(js, /data-hara-scenario data-step="0"/);
@@ -59,6 +63,7 @@ assert.doesNotMatch(js, /Orient · Understand · Navigate · Verify · Act/);
 
 assert.match(css, /prefers-reduced-motion/);
 assert.match(css, /\.hara-widget__body\{display:grid/);
+assert.match(css, /\.hara-widget__filters button\[aria-pressed=true\]/);
 assert.match(css, /\.hara-scenario\{display:grid/);
 assert.match(css, /@media\(max-width:760px\)\{\.hara-widget__body\{grid-template-columns:1fr\}/);
 assert.match(header, /href="#\/"[^>]*>PALACO/);
@@ -84,10 +89,16 @@ const status = { textContent: 'Ready.' };
 const indicator = { textContent: 'STEP 0 OF 4' };
 const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Next example step' };
 const resetButton = {};
+const allFilter = { dataset: { category: 'all' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const careFilter = { dataset: { category: 'wellbeing' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const placeFilter = { dataset: { category: 'place' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const careService = { dataset: { category: 'wellbeing' }, hidden: false };
+const maintenanceService = { dataset: { category: 'place' }, hidden: false };
+const guideService = { dataset: { category: 'place' }, hidden: false };
 const document = {
   addEventListener: (name, handler) => { handlers[name] = handler; },
   querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-step-status]' ? status : selector === '[data-hara-step-indicator]' ? indicator : selector === '[data-hara-scenario]' ? demoButton : null,
-  querySelectorAll: () => []
+  querySelectorAll: (selector) => selector === '[data-hara-service]' ? [careService, maintenanceService, guideService] : selector === '[data-hara-filter]' ? [allFilter, careFilter, placeFilter] : []
 };
 const window = { addEventListener() {}, scrollTo() {} };
 runInNewContext(js, {
@@ -97,6 +108,13 @@ runInNewContext(js, {
   fetch: () => { throw new Error('The HARA demo must not make network requests.'); }
 });
 assert.match(main.innerHTML, /HARA desk/);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? careFilter : null } });
+assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [false, true, true]);
+assert.deepEqual([allFilter.pressed, careFilter.pressed, placeFilter.pressed], ['false', 'true', 'false']);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? placeFilter : null } });
+assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [true, false, false]);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? allFilter : null } });
+assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [false, false, false]);
 for (const expected of [
   'Example 1 of 4 — fictional resident selects a locally listed service. No identity is checked.',
   'Example 2 of 4 — fictional request contains only sample text. Nothing is submitted or saved.',

@@ -54,10 +54,15 @@ function elixirs() {
               <div><span>Updates</span><strong>Not connected</strong></div>
             </div>
             <h3>Household services</h3>
+            <div class="hara-widget__filters" role="group" aria-label="Filter proposed service examples">
+              <button type="button" data-hara-filter data-category="all" aria-pressed="true">All examples</button>
+              <button type="button" data-hara-filter data-category="wellbeing" aria-pressed="false">Care</button>
+              <button type="button" data-hara-filter data-category="place" aria-pressed="false">Place</button>
+            </div>
             <ul class="hara-widget__services">
-              <li><span class="hara-widget__icon" aria-hidden="true">＋</span><span><strong>Care &amp; wellbeing</strong><small>Discover locally defined support</small></span><span class="badge">PROPOSED</span></li>
-              <li><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
-              <li><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
+              <li data-hara-service data-category="wellbeing"><span class="hara-widget__icon" aria-hidden="true">＋</span><span><strong>Care &amp; wellbeing</strong><small>Discover locally defined support</small></span><span class="badge">PROPOSED</span></li>
+              <li data-hara-service data-category="place"><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
+              <li data-hara-service data-category="place"><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
             </ul>
             <details class="hara-widget__flow">
               <summary>How a future request might be handled</summary>
@@ -148,6 +153,17 @@ document.addEventListener('submit', (event) => {
   output.textContent = `UNVERIFIED — Evidence could not be established for “${reference}”. No authoritative verification service is connected. No access or authority is granted.`;
 });
 document.addEventListener('click', (event) => {
+  const filter = event.target.closest('[data-hara-filter]');
+  if (filter) {
+    const category = filter.dataset.category;
+    document.querySelectorAll('[data-hara-service]').forEach((service) => {
+      service.hidden = category !== 'all' && service.dataset.category !== category;
+    });
+    document.querySelectorAll('[data-hara-filter]').forEach((button) => {
+      button.setAttribute('aria-pressed', String(button === filter));
+    });
+    return;
+  }
   const advance = event.target.closest('[data-hara-scenario]');
   const reset = event.target.closest('[data-hara-reset]');
   if (!advance && !reset) return;
