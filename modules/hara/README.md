@@ -44,6 +44,14 @@ household-layer proposal.
 | Hannie B candidate, D-013 | Isolated SQLite transaction and crash-recovery candidate for one synthetic CREATE flow. | Specification draft; acceptance and independent review open; integration and production on hold. | [Candidate README](hannie-b-d013/README.md) · [Contract](hannie-b-d013/CONTRACT.md) |
 | R3-C Matriarch review | Evidence review of the proposed H∆R∆M → Matriarch → H∆R∆ relation. | Open review; relationship not established. | [R3-C review](../../docs/ecosystem/R3-C-Matriarch-Confirmation-Review.md) |
 
+### H∆R∆ Hannie agenda · D-012 candidate 0.3.3-d012.1
+
+Preparation, exact approval, permission checks, and historical recovery are
+available in the isolated candidate source. Agenda execution always refuses
+with `STORAGE_EFFECT_DEADLINE_UNSUPPORTED`. This status overview does not
+connect the candidate to the PALACO websites or a live calendar; integration
+and production remain on hold.
+
 These workstreams are separate. In particular, the D-012 agenda candidate and
 D-013 transaction candidate do not together constitute an integrated HARA
 system, and evidence from one is not evidence for the other.

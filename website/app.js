@@ -79,6 +79,10 @@ function elixirs() {
         </div>
         <footer class="hara-widget__footer"><span>LA-001 · Reference layout only</span><span>NO LIVE SERVICE</span></footer>
       </article>
+      <aside class="hara-d012" aria-labelledby="hara-d012-title">
+        <div><p class="eyebrow">ISOLATED CANDIDATE · 0.3.3-d012.1</p><h2 id="hara-d012-title">H∆R∆ Hannie agenda · D-012</h2><p>Preparation, exact approval, permission checks, and historical recovery are available in candidate source.</p></div>
+        <div><p><strong>Agenda execution</strong> <code>STORAGE_EFFECT_DEADLINE_UNSUPPORTED</code></p><p>Not connected to this website or a live calendar. Integration and production remain on hold.</p></div>
+      </aside>
       <section class="hara-scenario" aria-labelledby="hara-scenario-title">
         <div><p class="eyebrow">SYNTHETIC SCENARIO</p><h2 id="hara-scenario-title">A service request, safely bounded</h2><p>This separate preview uses fictional content only. Advancing it does not submit a request, contact an operator, store data, or trigger an action.</p></div>
         <div class="hara-scenario__panel">

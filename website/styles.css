@@ -80,6 +80,12 @@ header.hara-widget__header{position:static;display:flex;align-items:center;justi
 .hara-widget__boundary .badge{font-size:9px}
 .hara-widget__boundary p:not(.eyebrow){font-size:12px;line-height:1.65}
 .hara-widget__footer{display:flex;justify-content:space-between;gap:16px;padding:14px 32px;border-top:1px solid var(--line);color:var(--muted);font-size:9px;letter-spacing:.1em}
+.hara-d012{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.8fr);gap:30px;max-width:1120px;margin:18px auto 0;padding:22px 26px;border:1px solid var(--line);background:#f1f4ed}
+.hara-d012 .eyebrow{margin:0 0 8px;color:var(--accent);font-weight:650}
+.hara-d012 h2{margin:0;font-size:clamp(23px,2.6vw,32px)}
+.hara-d012 p{margin:9px 0 0;color:var(--muted);font-size:12px}
+.hara-d012 code{font-size:11px;overflow-wrap:anywhere}
+.hara-d012 strong{color:var(--ink)}
 .hara-scenario{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.9fr);gap:36px;align-items:center;max-width:1120px;margin:28px auto 0;padding:28px;background:#e8ede4;border:1px solid var(--line)}
 .hara-scenario h2{margin:0;font-size:clamp(26px,3vw,38px)}
 .hara-scenario>div:first-child>p:last-child{color:var(--muted);font-size:13px}
@@ -100,7 +106,7 @@ footer small,footer p{color:#c1cdc3}
 :focus-visible{outline-color:#9a802e}
 @media(max-width:900px){.hero{grid-template-columns:1fr minmax(250px,.8fr);gap:28px;padding:72px 6vw}.hero h1{font-size:clamp(56px,8vw,82px)}.section-heading{grid-template-columns:1fr;gap:15px}.section-intro{grid-column:1}.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){header{gap:14px;padding:18px 5vw}header nav{order:3;width:100%;overflow-x:auto;flex-wrap:nowrap;padding:2px 0 5px}header nav a{white-space:nowrap}.hero{min-height:0;grid-template-columns:1fr;padding:67px 7vw 55px}.hero-art{width:min(100%,400px);grid-row:1;margin-bottom:4px}.hero-copy{grid-row:2}.hero h1{font-size:clamp(58px,14vw,86px)}.hero-lede{font-size:16px}.hero-note{margin-top:28px}.section{padding:70px 7vw}.grid{grid-template-columns:1fr;margin-top:35px}.card{min-height:190px}}
-@media(max-width:760px){.hara-widget__body{grid-template-columns:1fr}.hara-widget__boundary{border-top:1px solid var(--line);border-left:0}.hara-widget__metrics{gap:7px}.hara-widget__metrics>div{padding:12px 9px}.hara-widget__services li{grid-template-columns:30px minmax(0,1fr);gap:10px}.hara-widget__services .badge{grid-column:2;justify-self:start}.hara-widget__footer{padding:14px 20px}.hara-scenario{grid-template-columns:1fr;gap:12px;padding:20px}}
+@media(max-width:760px){.hara-widget__body{grid-template-columns:1fr}.hara-widget__boundary{border-top:1px solid var(--line);border-left:0}.hara-widget__metrics{gap:7px}.hara-widget__metrics>div{padding:12px 9px}.hara-widget__services li{grid-template-columns:30px minmax(0,1fr);gap:10px}.hara-widget__services .badge{grid-column:2;justify-self:start}.hara-widget__footer{padding:14px 20px}.hara-d012{grid-template-columns:1fr;gap:8px;padding:20px}.hara-scenario{grid-template-columns:1fr;gap:12px;padding:20px}}
 @media(max-width:420px){header.hara-widget__header{padding:22px 20px}.hara-widget__main{padding:23px 20px}.hara-widget__metrics{grid-template-columns:1fr}.hara-widget__metrics>div{flex-direction:row;justify-content:space-between;align-items:center}.hara-widget__services li{padding:14px 0}.hara-widget__flow ol{grid-template-columns:1fr}.hara-scenario__progress{align-items:flex-start;flex-direction:column}.hara-scenario__panel .text-link{display:block;margin:8px 0 0}}
 @media(max-width:390px){.hero-actions{align-items:flex-start;flex-direction:column;gap:13px}.art-label-top{left:3%}.art-label-side{right:0}.art-caption{font-size:12px}}
 @media(prefers-reduced-motion:reduce){.button,.card,header nav a{transition:none}}
