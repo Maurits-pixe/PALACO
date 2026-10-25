@@ -4,6 +4,38 @@ This directory contains isolated HARA-related candidates, not a single
 integrated runtime. Candidate evidence is scoped to the specific code and
 controls that were run; it is not production acceptance or authority.
 
+## Proposed Citadel household layer
+
+The proposed direction is for HARA to provide a bounded “household” service
+layer for each Citadel: a local place to discover shared services, submit and
+track service requests, coordinate care or maintenance, and find Citadel
+information. These are design goals, not currently implemented or accepted
+capabilities.
+
+“Each Citadel” means a separately configured instance under that Citadel’s own
+service catalogue, data boundary, policy, consent, and accountable operators.
+It does not mean one HARA instance owns, governs, or automatically accesses
+every Citadel. Cross-Citadel sharing requires an explicit contract and review.
+
+The household function must remain distinct from both interface and
+authorization:
+
+- HARA household services do not themselves establish identity, authenticate
+  residents, authorize requests, execute actions, issue ELIXERS, or govern a
+  Citadel.
+- A request is not permission or execution. The applicable Citadel owner or
+  authorized service must make and record its own decision before any effect.
+- Each service must declare its inputs, data retention, access rules, consent,
+  provenance, operator, failure behavior, and revocation path before use.
+- HARA, H∆R∆, HARAM, H∆R∆M, and HARA-LAB-001 / H∆R∆ remain distinct names;
+  this proposal does not resolve their canonical identity or merge them.
+- H∆R∆M remains a presentation-layer candidate. A Matriarch relationship to
+  H∆R∆ remains `NOT_ESTABLISHED` under R3-C.
+
+Current state: `PROPOSED / NOT_IMPLEMENTED / NOT_AUTHORIZED`. The existing D-012
+and D-013 candidates below remain isolated and do not implement this
+household-layer proposal.
+
 ## Current workstreams
 
 | Workstream | Scope | Current status | Entry point |
