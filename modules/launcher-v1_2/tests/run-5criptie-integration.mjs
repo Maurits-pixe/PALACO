@@ -115,6 +115,7 @@ try {
       window.__fixtureRowsAtPrint = document.querySelectorAll('.events-panel tbody tr').length;
       window.__reportMetadataAtPrint = document.querySelector('.print-meta').textContent.trim();
       window.__printMetaDisplayAtPrint = getComputedStyle(document.querySelector('.print-meta')).display;
+      window.__printTitle = document.title;
       window.dispatchEvent(new Event('afterprint'));
     };
   });
@@ -126,9 +127,11 @@ try {
   assert.equal(await popup.evaluate(() => window.__fixtureRowsAtPrint), 6);
   assert.match(await popup.evaluate(() => window.__reportMetadataAtPrint), /^Afgedrukt op .+ · Synthetische voorbeelddata$/);
   assert.equal(await popup.evaluate(() => window.__printMetaDisplayAtPrint), 'none');
+  assert.match(await popup.evaluate(() => window.__printTitle), /^5CRIPTIE — Synthetisch rapport — .+$/);
   assert.equal(await eventRows.count(), 2, 'printing restores the on-screen filter after the dialog');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
   assert.equal(await popup.locator('.print-meta').count(), 0, 'print date metadata is cleared after printing');
+  assert.equal(await popup.title(), '5CRIPTIE — Synthetische preview');
   await popup.evaluate(() => {
     window.print = () => { throw new Error('print unavailable'); };
   });
@@ -138,6 +141,7 @@ try {
   assert.equal(await eventRows.count(), 2, 'failed printing restores the active filter');
   assert.equal(await reviewDetails.locator('table').isVisible(), false, 'failed printing restores disclosure state');
   assert.equal(await popup.locator('.print-meta').count(), 0, 'print date metadata is cleared after print failure');
+  assert.equal(await popup.title(), '5CRIPTIE — Synthetische preview');
   await popup.emulateMedia({ media: 'print' });
   assert.equal(await popup.locator('.print-meta').count(), 0);
   assert.equal(await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).isVisible(), false);

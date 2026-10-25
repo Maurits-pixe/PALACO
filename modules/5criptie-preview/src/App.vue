@@ -29,14 +29,17 @@ async function printReport() {
   const reviewDetails = document.querySelector('.review-details');
   const wasOpen = reviewDetails.open;
   const previousSeverity = selectedSeverity.value;
+  const previousTitle = document.title;
   reviewDetails.open = true;
   selectedSeverity.value = 'Alles';
   printDate.value = formatPrintDate(new Date());
+  document.title = `5CRIPTIE — Synthetisch rapport — ${printDate.value}`;
   await nextTick();
   const restoreReportState = () => {
     reviewDetails.open = wasOpen;
     selectedSeverity.value = previousSeverity;
     printDate.value = '';
+    document.title = previousTitle;
   };
   const handleAfterPrint = () => {
     window.removeEventListener('afterprint', handleAfterPrint);
