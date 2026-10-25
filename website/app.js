@@ -59,6 +59,16 @@ function elixirs() {
               <li><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
               <li><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
             </ul>
+            <details class="hara-widget__flow">
+              <summary>How a future request might be handled</summary>
+              <ol>
+                <li><strong>Describe</strong><span>A resident chooses a locally available service and provides only the information it requires.</span></li>
+                <li><strong>Review</strong><span>The responsible service reviews the request under its published policy and consent rules.</span></li>
+                <li><strong>Decide</strong><span>An accountable operator or authorized service records approval, refusal, or a request for clarification.</span></li>
+                <li><strong>Update</strong><span>The resident can inspect the recorded status and applicable retention or appeal information.</span></li>
+              </ol>
+              <p>Illustrative workflow only. No request can be created from this preview.</p>
+            </details>
           </section>
           <aside class="hara-widget__boundary"><p class="eyebrow">STATUS &amp; BOUNDARY</p><span class="badge">DRAFT / UNVERIFIED</span><p>This is a static layout concept. It reads no household data and submits no requests.</p><p>A request would not grant permission or execute an action. Each Citadel would define its own services, data, consent, access policy, and accountable operator.</p><p>HARA is not H∆R∆M. Identity, authority, and runtime execution are not established.</p></aside>
         </div>
