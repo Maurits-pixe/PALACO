@@ -73,6 +73,7 @@ function elixirs(requestedView = 'all') {
               <button type="button" data-hara-filter data-category="wellbeing" aria-pressed="false">Care</button>
               <button type="button" data-hara-filter data-category="place" aria-pressed="false">Place</button>
             </div>
+            <p data-hara-filter-status role="status" aria-live="polite">Showing all 3 proposed service examples.</p>
             <ul class="hara-widget__services">
               <li data-hara-service data-category="wellbeing"><span class="hara-widget__icon" aria-hidden="true">＋</span><span><strong>Care &amp; wellbeing</strong><small>Discover locally defined support</small></span><span class="badge">PROPOSED</span></li>
               <li data-hara-service data-category="place"><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
@@ -184,12 +185,19 @@ document.addEventListener('click', (event) => {
   const filter = event.target.closest('[data-hara-filter]');
   if (filter) {
     const category = filter.dataset.category;
-    document.querySelectorAll('[data-hara-service]').forEach((service) => {
+    const services = [...document.querySelectorAll('[data-hara-service]')];
+    services.forEach((service) => {
       service.hidden = category !== 'all' && service.dataset.category !== category;
     });
     document.querySelectorAll('[data-hara-filter]').forEach((button) => {
       button.setAttribute('aria-pressed', String(button === filter));
     });
+    const visibleCount = services.filter((service) => !service.hidden).length;
+    const status = document.querySelector('[data-hara-filter-status]');
+    const selection = filter.textContent.trim();
+    status.textContent = category === 'all'
+      ? `Showing all ${visibleCount} proposed service examples.`
+      : `Showing ${visibleCount} proposed service example${visibleCount === 1 ? '' : 's'} for ${selection}.`;
     return;
   }
   const advance = event.target.closest('[data-hara-scenario]');

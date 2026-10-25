@@ -111,12 +111,13 @@ const status = { textContent: 'Ready.' };
 const indicator = { textContent: 'STEP 0 OF 4' };
 const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Next example step' };
 const resetButton = {};
-const allFilter = { dataset: { category: 'all' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
-const careFilter = { dataset: { category: 'wellbeing' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
-const placeFilter = { dataset: { category: 'place' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const allFilter = { dataset: { category: 'all' }, textContent: 'All examples', pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const careFilter = { dataset: { category: 'wellbeing' }, textContent: 'Care', pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
+const placeFilter = { dataset: { category: 'place' }, textContent: 'Place', pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
 const careService = { dataset: { category: 'wellbeing' }, hidden: false };
 const maintenanceService = { dataset: { category: 'place' }, hidden: false };
 const guideService = { dataset: { category: 'place' }, hidden: false };
+const filterStatus = { textContent: 'Showing all 3 proposed service examples.' };
 const viewStatus = { textContent: 'Showing all.' };
 const overviewView = { dataset: { haraView: 'all' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
 const servicesView = { dataset: { haraView: 'services' }, pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
@@ -127,7 +128,7 @@ const candidatePanel = { dataset: { haraPanel: 'candidate' }, hidden: false };
 const scenarioPanel = { dataset: { haraPanel: 'scenario' }, hidden: false };
 const document = {
   addEventListener: (name, handler) => { handlers[name] = handler; },
-  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-step-status]' ? status : selector === '[data-hara-step-indicator]' ? indicator : selector === '[data-hara-scenario]' ? demoButton : selector === '[data-hara-view-status]' ? viewStatus : null,
+  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-step-status]' ? status : selector === '[data-hara-step-indicator]' ? indicator : selector === '[data-hara-scenario]' ? demoButton : selector === '[data-hara-view-status]' ? viewStatus : selector === '[data-hara-filter-status]' ? filterStatus : null,
   querySelectorAll: (selector) => selector === '[data-hara-service]' ? [careService, maintenanceService, guideService] : selector === '[data-hara-filter]' ? [allFilter, careFilter, placeFilter] : selector === '[data-hara-panel]' ? [servicesPanel, candidatePanel, scenarioPanel] : selector === '[data-hara-view]' ? [overviewView, candidateView] : []
 };
 const window = { addEventListener: (name, handler) => { handlers[`window:${name}`] = handler; }, scrollTo() {} };
@@ -167,10 +168,13 @@ assert.match(main.innerHTML, /Showing the complete proposal overview\./);
 handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? careFilter : null } });
 assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [false, true, true]);
 assert.deepEqual([allFilter.pressed, careFilter.pressed, placeFilter.pressed], ['false', 'true', 'false']);
+assert.equal(filterStatus.textContent, 'Showing 1 proposed service example for Care.');
 handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? placeFilter : null } });
 assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [true, false, false]);
+assert.equal(filterStatus.textContent, 'Showing 2 proposed service examples for Place.');
 handlers.click({ target: { closest: (selector) => selector === '[data-hara-filter]' ? allFilter : null } });
 assert.deepEqual([careService.hidden, maintenanceService.hidden, guideService.hidden], [false, false, false]);
+assert.equal(filterStatus.textContent, 'Showing all 3 proposed service examples.');
 for (const expected of [
   'Example 1 of 4 — fictional resident selects a locally listed service. No identity is checked.',
   'Example 2 of 4 — fictional request contains only sample text. Nothing is submitted or saved.',
