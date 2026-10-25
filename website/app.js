@@ -59,10 +59,6 @@ function elixirs() {
               <li><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
               <li><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
             </ul>
-            <div class="hara-widget__demo">
-              <button class="button" type="button" data-hara-demo data-step="0">Advance synthetic demo</button>
-              <p data-hara-demo-status role="status" aria-live="polite">Demo not started. Example only; nothing has been submitted.</p>
-            </div>
             <details class="hara-widget__flow">
               <summary>How a future request might be handled</summary>
               <ol>
@@ -78,6 +74,15 @@ function elixirs() {
         </div>
         <footer class="hara-widget__footer"><span>LA-001 · Reference layout only</span><span>NO LIVE SERVICE</span></footer>
       </article>
+      <section class="hara-scenario" aria-labelledby="hara-scenario-title">
+        <div><p class="eyebrow">SYNTHETIC SCENARIO</p><h2 id="hara-scenario-title">A service request, safely bounded</h2><p>This separate preview uses fictional content only. Advancing it does not submit a request, contact an operator, store data, or trigger an action.</p></div>
+        <div class="hara-scenario__panel">
+          <div class="hara-scenario__progress"><span data-hara-step-indicator>STEP 0 OF 4</span><span class="badge">SIMULATION ONLY</span></div>
+          <p data-hara-step-status role="status" aria-live="polite">Ready. Select “Next example step” to view the fictional lifecycle.</p>
+          <button class="button" type="button" data-hara-scenario data-step="0">Next example step</button>
+          <button class="text-link" type="button" data-hara-reset>Reset example</button>
+        </div>
+      </section>
     </section>`);
 }
 
@@ -143,20 +148,33 @@ document.addEventListener('submit', (event) => {
   output.textContent = `UNVERIFIED — Evidence could not be established for “${reference}”. No authoritative verification service is connected. No access or authority is granted.`;
 });
 document.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-hara-demo]');
-  if (!button) return;
-  const status = document.querySelector('[data-hara-demo-status]');
+  const advance = event.target.closest('[data-hara-scenario]');
+  const reset = event.target.closest('[data-hara-reset]');
+  if (!advance && !reset) return;
+  const button = advance || document.querySelector('[data-hara-scenario]');
+  const status = document.querySelector('[data-hara-step-status]');
+  const indicator = document.querySelector('[data-hara-step-indicator]');
   const examples = [
-    'Demo 1 of 3 — an example request would be prepared; it is not submitted.',
-    'Demo 2 of 3 — an authorized local review would be required; no reviewer is contacted.',
-    'Demo 3 of 3 — no decision is made and no service action occurs.'
+    'Example 1 of 4 — fictional resident selects a locally listed service. No identity is checked.',
+    'Example 2 of 4 — fictional request contains only sample text. Nothing is submitted or saved.',
+    'Example 3 of 4 — an independent authorized operator would review it under local policy. None is contacted.',
+    'Example 4 of 4 — the example ends with no decision, permission, or service action.'
   ];
+  if (reset) {
+    button.dataset.step = '0';
+    button.disabled = false;
+    button.textContent = 'Next example step';
+    status.textContent = 'Ready. Select “Next example step” to view the fictional lifecycle.';
+    indicator.textContent = 'STEP 0 OF 4';
+    return;
+  }
   const step = Number(button.dataset.step);
   status.textContent = examples[step];
   button.dataset.step = String(step + 1);
+  indicator.textContent = `STEP ${step + 1} OF 4`;
   if (step + 1 === examples.length) {
     button.disabled = true;
-    button.textContent = 'Synthetic demo complete';
+    button.textContent = 'Example complete';
   }
 });
 route();

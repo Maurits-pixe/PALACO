@@ -34,10 +34,14 @@ assert.match(js, /aria-labelledby="hara-widget-title"/);
 assert.match(js, /HARA desk/);
 assert.match(js, /Services[\s\S]*Requests[\s\S]*Updates/);
 assert.match(js, /This is a static layout concept\. It reads no household data and submits no requests\./);
-assert.match(js, /Advance synthetic demo/);
-assert.match(js, /data-hara-demo-status role="status" aria-live="polite"/);
-assert.match(js, /no reviewer is contacted/);
-assert.match(js, /no decision is made and no service action occurs/);
+assert.match(js, /data-hara-scenario data-step="0"/);
+assert.match(js, /data-hara-step-status role="status" aria-live="polite"/);
+assert.match(js, /data-hara-reset/);
+assert.match(js, /No identity is checked/);
+assert.match(js, /Nothing is submitted or saved/);
+assert.match(js, /None is contacted/);
+assert.match(js, /no decision, permission, or service action/);
+assert.match(js, /document\.addEventListener\('click'/);
 assert.match(js, /<details class="hara-widget__flow">/);
 assert.match(js, /How a future request might be handled/);
 assert.match(js, /Illustrative workflow only\. No request can be created from this preview\./);
@@ -55,6 +59,7 @@ assert.doesNotMatch(js, /Orient · Understand · Navigate · Verify · Act/);
 
 assert.match(css, /prefers-reduced-motion/);
 assert.match(css, /\.hara-widget__body\{display:grid/);
+assert.match(css, /\.hara-scenario\{display:grid/);
 assert.match(css, /@media\(max-width:760px\)\{\.hara-widget__body\{grid-template-columns:1fr\}/);
 assert.match(header, /href="#\/"[^>]*>PALACO/);
 assert.match(header, /href="#\/identity"/);
@@ -75,11 +80,13 @@ for (const directive of [
 
 const handlers = {};
 const main = { innerHTML: '', focus() {} };
-const status = { textContent: 'Demo not started.' };
-const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Advance synthetic demo' };
+const status = { textContent: 'Ready.' };
+const indicator = { textContent: 'STEP 0 OF 4' };
+const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Next example step' };
+const resetButton = {};
 const document = {
   addEventListener: (name, handler) => { handlers[name] = handler; },
-  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-demo-status]' ? status : null,
+  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-step-status]' ? status : selector === '[data-hara-step-indicator]' ? indicator : selector === '[data-hara-scenario]' ? demoButton : null,
   querySelectorAll: () => []
 };
 const window = { addEventListener() {}, scrollTo() {} };
@@ -91,14 +98,21 @@ runInNewContext(js, {
 });
 assert.match(main.innerHTML, /HARA desk/);
 for (const expected of [
-  'Demo 1 of 3 — an example request would be prepared; it is not submitted.',
-  'Demo 2 of 3 — an authorized local review would be required; no reviewer is contacted.',
-  'Demo 3 of 3 — no decision is made and no service action occurs.'
+  'Example 1 of 4 — fictional resident selects a locally listed service. No identity is checked.',
+  'Example 2 of 4 — fictional request contains only sample text. Nothing is submitted or saved.',
+  'Example 3 of 4 — an independent authorized operator would review it under local policy. None is contacted.',
+  'Example 4 of 4 — the example ends with no decision, permission, or service action.'
 ]) {
-  handlers.click({ target: { closest: (selector) => selector === '[data-hara-demo]' ? demoButton : null } });
+  handlers.click({ target: { closest: (selector) => selector === '[data-hara-scenario]' ? demoButton : null } });
   assert.equal(status.textContent, expected);
 }
 assert.equal(demoButton.disabled, true);
-assert.equal(demoButton.textContent, 'Synthetic demo complete');
+assert.equal(demoButton.textContent, 'Example complete');
+assert.equal(indicator.textContent, 'STEP 4 OF 4');
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-reset]' ? resetButton : null } });
+assert.equal(demoButton.disabled, false);
+assert.equal(demoButton.dataset.step, '0');
+assert.equal(demoButton.textContent, 'Next example step');
+assert.equal(indicator.textContent, 'STEP 0 OF 4');
 
 console.log('GO-6 smoke checks: PASS');
