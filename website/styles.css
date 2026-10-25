@@ -80,6 +80,10 @@ header.hara-widget__header{position:static;display:flex;align-items:center;justi
 .hara-widget__boundary .badge{font-size:9px}
 .hara-widget__boundary p:not(.eyebrow){font-size:12px;line-height:1.65}
 .hara-widget__footer{display:flex;justify-content:space-between;gap:16px;padding:14px 32px;border-top:1px solid var(--line);color:var(--muted);font-size:9px;letter-spacing:.1em}
+.hara-widget__views{display:flex;flex-wrap:wrap;gap:8px;margin:28px 0 0}
+.hara-widget__views button{padding:8px 13px;border:1px solid var(--line);background:transparent;color:var(--muted);font:600 10px/1.5 system-ui,sans-serif;cursor:pointer}
+.hara-widget__views button[aria-pressed=true]{border-color:var(--accent);background:#e8ede4;color:var(--ink)}
+.hara-widget__view-status{margin:8px 0 0;color:var(--muted);font-size:11px}
 .hara-d012{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,.8fr);gap:30px;max-width:1120px;margin:18px auto 0;padding:22px 26px;border:1px solid var(--line);background:#f1f4ed}
 .hara-d012 .eyebrow{margin:0 0 8px;color:var(--accent);font-weight:650}
 .hara-d012 h2{margin:0;font-size:clamp(23px,2.6vw,32px)}
