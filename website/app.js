@@ -183,7 +183,7 @@ let currentRoutePath = null;
 function route() {
   const raw = location.hash.replace(/^#\/?/, '').replace(/\/$/, '') || '';
   const [routePath, query = ''] = raw.split('?');
-  haraDemoRuntime.reset();
+  if (currentRoutePath === 'elixirs' && routePath !== 'elixirs') haraDemoRuntime.reset();
   const main = document.querySelector('#main');
   if (routePath === '' || routePath === 'enter') main.innerHTML = home();
   else if (routePath === 'citadels' || routePath === 'citadels/la-001') main.innerHTML = citadels(routePath);
@@ -196,6 +196,7 @@ function route() {
   else if (routePath === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
   else if (routePath === 'proof/watermerk') main.innerHTML = page(`${header('PALACO · PROOF', 'Watermerk', 'An identity-bearing authenticity layer.')}<section class="section"><p class="badge">UNVERIFIED</p><p>No Watermerk record is available to verify in this baseline.</p></section>`);
   else main.innerHTML = detail(routePath);
+  if (currentRoutePath !== 'elixirs' && routePath === 'elixirs') haraDemoRuntime.reset();
   if (routePath === 'elixirs') renderHaraRuntime();
   document.title = routePath ? `${routePath.split('/').pop().toUpperCase()} — PALACO` : 'PALACO — Constitutional infrastructure';
   syncNavigation(routePath);
