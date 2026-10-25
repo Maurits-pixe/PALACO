@@ -40,8 +40,19 @@ function proof() {
     <section class="section"><p class="eyebrow">Verify</p><h2>Search identity, Citadel, Watermerk or provenance reference.</h2><form data-verification><label for="reference">Reference</label><input id="reference" name="reference" autocomplete="off" placeholder="LA-001, identity or Watermerk"><button class="button" type="submit">Verify</button></form><output id="verification-result" aria-live="polite"></output></section>`);
 }
 
-function elixirs(requestedView = 'all') {
+function elixirs(requestedView = 'all', requestedCategory = 'all') {
   const view = ['all', 'services', 'candidate', 'scenario'].includes(requestedView) ? requestedView : 'all';
+  const category = ['all', 'wellbeing', 'place'].includes(requestedCategory) ? requestedCategory : 'all';
+  const categoryLabels = {all: 'all', wellbeing: 'Care', place: 'Place'};
+  const examples = [
+    {category: 'wellbeing', icon: '＋', name: 'Care &amp; wellbeing', description: 'Discover locally defined support'},
+    {category: 'place', icon: '⌂', name: 'Maintenance', description: 'Find the Citadel’s service contacts'},
+    {category: 'place', icon: '◇', name: 'Citadel guide', description: 'Understand spaces and shared resources'}
+  ];
+  const visibleExamples = examples.filter((example) => category === 'all' || example.category === category);
+  const filterSummary = category === 'all'
+    ? `Showing all ${visibleExamples.length} proposed service examples.`
+    : `Showing ${visibleExamples.length} proposed service example${visibleExamples.length === 1 ? '' : 's'} for ${categoryLabels[category]}.`;
   const labels = {
     all: 'Showing the complete proposal overview.',
     services: 'Showing proposed service examples only.',
@@ -69,15 +80,13 @@ function elixirs(requestedView = 'all') {
             </div>
             <h3>Household services</h3>
             <div class="hara-widget__filters" role="group" aria-label="Filter proposed service examples">
-              <button type="button" data-hara-filter data-category="all" aria-pressed="true">All examples</button>
-              <button type="button" data-hara-filter data-category="wellbeing" aria-pressed="false">Care</button>
-              <button type="button" data-hara-filter data-category="place" aria-pressed="false">Place</button>
+              <button type="button" data-hara-filter data-category="all" aria-pressed="${category === 'all'}">All examples</button>
+              <button type="button" data-hara-filter data-category="wellbeing" aria-pressed="${category === 'wellbeing'}">Care</button>
+              <button type="button" data-hara-filter data-category="place" aria-pressed="${category === 'place'}">Place</button>
             </div>
-            <p data-hara-filter-status role="status" aria-live="polite">Showing all 3 proposed service examples.</p>
+            <p data-hara-filter-status role="status" aria-live="polite">${filterSummary}</p>
             <ul class="hara-widget__services">
-              <li data-hara-service data-category="wellbeing"><span class="hara-widget__icon" aria-hidden="true">＋</span><span><strong>Care &amp; wellbeing</strong><small>Discover locally defined support</small></span><span class="badge">PROPOSED</span></li>
-              <li data-hara-service data-category="place"><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
-              <li data-hara-service data-category="place"><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
+              ${examples.map((example) => `<li data-hara-service data-category="${example.category}"${category !== 'all' && example.category !== category ? ' hidden' : ''}><span class="hara-widget__icon" aria-hidden="true">${example.icon}</span><span><strong>${example.name}</strong><small>${example.description}</small></span><span class="badge">PROPOSED</span></li>`).join('')}
             </ul>
             <details class="hara-widget__flow">
               <summary>How a future request might be handled</summary>
@@ -150,7 +159,10 @@ function route() {
   const main = document.querySelector('#main');
   if (routePath === '' || routePath === 'enter') main.innerHTML = home();
   else if (routePath === 'citadels' || routePath === 'citadels/la-001') main.innerHTML = citadels(routePath);
-  else if (routePath === 'elixirs') main.innerHTML = elixirs(new URLSearchParams(query).get('view') || 'all');
+  else if (routePath === 'elixirs') {
+    const params = new URLSearchParams(query);
+    main.innerHTML = elixirs(params.get('view') || 'all', params.get('category') || 'all');
+  }
   else if (routePath === 'haram') main.innerHTML = haram();
   else if (routePath === 'proof' || routePath === 'proof/verify') main.innerHTML = proof();
   else if (routePath === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
@@ -179,25 +191,22 @@ document.addEventListener('submit', (event) => {
 document.addEventListener('click', (event) => {
   const view = event.target.closest('[data-hara-view]');
   if (view) {
-    location.hash = `#/elixirs?view=${encodeURIComponent(view.dataset.haraView)}`;
+    const params = new URLSearchParams();
+    params.set('view', view.dataset.haraView);
+    const currentParams = new URLSearchParams(location.hash.split('?')[1] || '');
+    const currentCategory = currentParams.get('category');
+    if (view.dataset.haraView === 'services' && ['wellbeing', 'place'].includes(currentCategory)) {
+      params.set('category', currentCategory);
+    }
+    location.hash = `#/elixirs?${params}`;
     return;
   }
   const filter = event.target.closest('[data-hara-filter]');
   if (filter) {
-    const category = filter.dataset.category;
-    const services = [...document.querySelectorAll('[data-hara-service]')];
-    services.forEach((service) => {
-      service.hidden = category !== 'all' && service.dataset.category !== category;
-    });
-    document.querySelectorAll('[data-hara-filter]').forEach((button) => {
-      button.setAttribute('aria-pressed', String(button === filter));
-    });
-    const visibleCount = services.filter((service) => !service.hidden).length;
-    const status = document.querySelector('[data-hara-filter-status]');
-    const selection = filter.textContent.trim();
-    status.textContent = category === 'all'
-      ? `Showing all ${visibleCount} proposed service examples.`
-      : `Showing ${visibleCount} proposed service example${visibleCount === 1 ? '' : 's'} for ${selection}.`;
+    const params = new URLSearchParams();
+    params.set('view', 'services');
+    if (filter.dataset.category !== 'all') params.set('category', filter.dataset.category);
+    location.hash = `#/elixirs?${params}`;
     return;
   }
   const advance = event.target.closest('[data-hara-scenario]');
