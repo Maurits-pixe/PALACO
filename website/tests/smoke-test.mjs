@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { runInNewContext } from 'node:vm';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const js = await readFile(new URL('../app.js', import.meta.url), 'utf8');
@@ -33,6 +34,10 @@ assert.match(js, /aria-labelledby="hara-widget-title"/);
 assert.match(js, /HARA desk/);
 assert.match(js, /Services[\s\S]*Requests[\s\S]*Updates/);
 assert.match(js, /This is a static layout concept\. It reads no household data and submits no requests\./);
+assert.match(js, /Advance synthetic demo/);
+assert.match(js, /data-hara-demo-status role="status" aria-live="polite"/);
+assert.match(js, /no reviewer is contacted/);
+assert.match(js, /no decision is made and no service action occurs/);
 assert.match(js, /<details class="hara-widget__flow">/);
 assert.match(js, /How a future request might be handled/);
 assert.match(js, /Illustrative workflow only\. No request can be created from this preview\./);
@@ -67,5 +72,33 @@ for (const directive of [
 ]) {
   assert.ok(headers.includes(directive), `Missing security directive: ${directive}`);
 }
+
+const handlers = {};
+const main = { innerHTML: '', focus() {} };
+const status = { textContent: 'Demo not started.' };
+const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Advance synthetic demo' };
+const document = {
+  addEventListener: (name, handler) => { handlers[name] = handler; },
+  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-demo-status]' ? status : null,
+  querySelectorAll: () => []
+};
+const window = { addEventListener() {}, scrollTo() {} };
+runInNewContext(js, {
+  document,
+  window,
+  location: { hash: '#/elixirs' },
+  fetch: () => { throw new Error('The HARA demo must not make network requests.'); }
+});
+assert.match(main.innerHTML, /HARA desk/);
+for (const expected of [
+  'Demo 1 of 3 — an example request would be prepared; it is not submitted.',
+  'Demo 2 of 3 — an authorized local review would be required; no reviewer is contacted.',
+  'Demo 3 of 3 — no decision is made and no service action occurs.'
+]) {
+  handlers.click({ target: { closest: (selector) => selector === '[data-hara-demo]' ? demoButton : null } });
+  assert.equal(status.textContent, expected);
+}
+assert.equal(demoButton.disabled, true);
+assert.equal(demoButton.textContent, 'Synthetic demo complete');
 
 console.log('GO-6 smoke checks: PASS');

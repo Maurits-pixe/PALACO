@@ -59,6 +59,10 @@ function elixirs() {
               <li><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
               <li><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
             </ul>
+            <div class="hara-widget__demo">
+              <button class="button" type="button" data-hara-demo data-step="0">Advance synthetic demo</button>
+              <p data-hara-demo-status role="status" aria-live="polite">Demo not started. Example only; nothing has been submitted.</p>
+            </div>
             <details class="hara-widget__flow">
               <summary>How a future request might be handled</summary>
               <ol>
@@ -137,5 +141,22 @@ document.addEventListener('submit', (event) => {
   if (!reference) { input.setCustomValidity('Enter an identity, Citadel-ID or evidence reference.'); input.reportValidity(); return; }
   input.setCustomValidity('');
   output.textContent = `UNVERIFIED — Evidence could not be established for “${reference}”. No authoritative verification service is connected. No access or authority is granted.`;
+});
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-hara-demo]');
+  if (!button) return;
+  const status = document.querySelector('[data-hara-demo-status]');
+  const examples = [
+    'Demo 1 of 3 — an example request would be prepared; it is not submitted.',
+    'Demo 2 of 3 — an authorized local review would be required; no reviewer is contacted.',
+    'Demo 3 of 3 — no decision is made and no service action occurs.'
+  ];
+  const step = Number(button.dataset.step);
+  status.textContent = examples[step];
+  button.dataset.step = String(step + 1);
+  if (step + 1 === examples.length) {
+    button.disabled = true;
+    button.textContent = 'Synthetic demo complete';
+  }
 });
 route();
