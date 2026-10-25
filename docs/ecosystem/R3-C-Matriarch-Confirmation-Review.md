@@ -1,8 +1,8 @@
 # R3-C — Matriarch Confirmation Review
 
-review_id: R3-C-MATRIARCH-001  
-status: OPEN_REVIEW  
-version: 0.1  
+review_id: R3-C-MATRIARCH-001
+status: OPEN_REVIEW
+version: 0.1
 entity_scope: H∆R∆M, H∆R∆
 
 ## Review question
