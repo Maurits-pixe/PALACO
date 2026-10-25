@@ -15,6 +15,7 @@ const architecture = () => `<ol class="architecture" aria-label="Citadel archite
 const header = (eyebrow, title, text) => `<section class="intro"><p class="eyebrow">${eyebrow}</p><h1>${title}</h1><p>${text}</p></section>`;
 const card = (title, text, route) => `<article class="card"><p class="eyebrow">${title}</p><p>${text}</p>${route ? link(route, 'Explore') : ''}</article>`;
 const page = (content) => content;
+const haraDemoRuntime = window.PalacoHaraDemoRuntime.create();
 
 function home() {
   return page(`<section class="hero"><div class="hero-copy"><p class="eyebrow">PALACO.NL · PVD-001 · v1.0</p><p class="hero-kicker">A clearer way to build what comes next.</p><h1>Trust starts<br>with clarity.</h1><p class="hero-lede">Constitutional infrastructure for bounded digital environments — with identity, provenance and status in view.</p><div class="hero-actions"><a class="button button-primary" href="studio.html">Open PALACO Studio <span aria-hidden="true">↗</span></a><a class="text-link" href="#/citadels">Explore the architecture <span aria-hidden="true">↓</span></a></div><p class="hero-note"><span class="status-dot" aria-hidden="true"></span> PUBLIC BASELINE <span>·</span> DRAFT / UNVERIFIED</p></div><div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-core"><span>PALACO</span><strong>△</strong><small>BOUNDED BY DESIGN</small></div><div class="art-label art-label-top">IDENTITY <span>01</span></div><div class="art-label art-label-side">PROVENANCE <span>02</span></div><div class="art-caption">A framework for what matters.</div></div></section>
@@ -108,12 +109,22 @@ function elixirs(requestedView = 'all', requestedCategory = 'all') {
         <div><p><strong>Agenda execution</strong> <code>STORAGE_EFFECT_DEADLINE_UNSUPPORTED</code></p><p>Not connected to this website or a live calendar. Integration and production remain on hold.</p></div>
       </aside>
       <section id="hara-scenario-panel" class="hara-scenario" data-hara-panel="scenario" aria-labelledby="hara-scenario-title"${view !== 'all' && view !== 'scenario' ? ' hidden' : ''}>
-        <div><p class="eyebrow">SYNTHETIC SCENARIO</p><h2 id="hara-scenario-title">A service request, safely bounded</h2><p>This separate preview uses fictional content only. Advancing it does not submit a request, contact an operator, store data, or trigger an action.</p></div>
+        <div><p class="eyebrow">LOCAL SYNTHETIC RUNTIME</p><h2 id="hara-scenario-title">A service scenario, safely bounded</h2><p>This in-memory demonstration accepts only a listed fictional service. It creates no request, does not contact an operator, and makes no decision or service action.</p></div>
         <div class="hara-scenario__panel">
-          <div class="hara-scenario__progress"><span data-hara-step-indicator>STEP 0 OF 4</span><span class="badge">SIMULATION ONLY</span></div>
-          <p data-hara-step-status role="status" aria-live="polite">Ready. Select “Next example step” to view the fictional lifecycle.</p>
-          <button class="button" type="button" data-hara-scenario data-step="0">Next example step</button>
-          <button class="text-link" type="button" data-hara-reset>Reset example</button>
+          <span class="badge">LOCAL · SYNTHETIC · NO AUTHORITY</span>
+          <label for="hara-demo-service">Choose a fictional service</label>
+          <select id="hara-demo-service" data-hara-runtime-service>
+            <option value="care">Care &amp; wellbeing</option>
+            <option value="maintenance">Maintenance</option>
+            <option value="guide">Citadel guide</option>
+          </select>
+          <p data-hara-runtime-status role="status" aria-live="polite">Synthetic-only demo ready. Choose a fictional service; no request exists.</p>
+          <div class="hara-scenario__actions">
+            <button class="button" type="button" data-hara-runtime-prepare>Prepare preview</button>
+            <button class="button" type="button" data-hara-runtime-review disabled>Show review boundary</button>
+            <button class="button" type="button" data-hara-runtime-close disabled>End without action</button>
+            <button class="text-link" type="button" data-hara-runtime-reset disabled>Reset demonstration</button>
+          </div>
         </div>
       </section>
     </section>`);
@@ -152,10 +163,27 @@ function syncNavigation(routeName) {
   });
 }
 
+function renderHaraRuntime() {
+  const {phase, service} = haraDemoRuntime.snapshot();
+  const messages = {
+    READY: 'Synthetic-only demo ready. Choose a fictional service; no request exists.',
+    PREPARED: `Synthetic preview prepared for ${service}. This is not a request; nothing was sent or stored.`,
+    REVIEW_BOUNDARY: `Simulation paused at a hypothetical operator review for ${service}. No operator was contacted; no decision or permission was made.`,
+    CLOSED: 'Scenario ended without a decision, permission, or service action.'
+  };
+  document.querySelector('[data-hara-runtime-status]').textContent = messages[phase];
+  document.querySelector('[data-hara-runtime-service]').disabled = phase !== 'READY';
+  document.querySelector('[data-hara-runtime-prepare]').disabled = phase !== 'READY';
+  document.querySelector('[data-hara-runtime-review]').disabled = phase !== 'PREPARED';
+  document.querySelector('[data-hara-runtime-close]').disabled = phase !== 'REVIEW_BOUNDARY';
+  document.querySelector('[data-hara-runtime-reset]').disabled = phase === 'READY';
+}
+
 let currentRoutePath = null;
 function route() {
   const raw = location.hash.replace(/^#\/?/, '').replace(/\/$/, '') || '';
   const [routePath, query = ''] = raw.split('?');
+  haraDemoRuntime.reset();
   const main = document.querySelector('#main');
   if (routePath === '' || routePath === 'enter') main.innerHTML = home();
   else if (routePath === 'citadels' || routePath === 'citadels/la-001') main.innerHTML = citadels(routePath);
@@ -168,6 +196,7 @@ function route() {
   else if (routePath === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
   else if (routePath === 'proof/watermerk') main.innerHTML = page(`${header('PALACO · PROOF', 'Watermerk', 'An identity-bearing authenticity layer.')}<section class="section"><p class="badge">UNVERIFIED</p><p>No Watermerk record is available to verify in this baseline.</p></section>`);
   else main.innerHTML = detail(routePath);
+  if (routePath === 'elixirs') renderHaraRuntime();
   document.title = routePath ? `${routePath.split('/').pop().toUpperCase()} — PALACO` : 'PALACO — Constitutional infrastructure';
   syncNavigation(routePath);
   if (routePath !== currentRoutePath) {
@@ -209,33 +238,15 @@ document.addEventListener('click', (event) => {
     location.hash = `#/elixirs?${params}`;
     return;
   }
-  const advance = event.target.closest('[data-hara-scenario]');
-  const reset = event.target.closest('[data-hara-reset]');
-  if (!advance && !reset) return;
-  const button = advance || document.querySelector('[data-hara-scenario]');
-  const status = document.querySelector('[data-hara-step-status]');
-  const indicator = document.querySelector('[data-hara-step-indicator]');
-  const examples = [
-    'Example 1 of 4 — fictional resident selects a locally listed service. No identity is checked.',
-    'Example 2 of 4 — fictional request contains only sample text. Nothing is submitted or saved.',
-    'Example 3 of 4 — an independent authorized operator would review it under local policy. None is contacted.',
-    'Example 4 of 4 — the example ends with no decision, permission, or service action.'
-  ];
-  if (reset) {
-    button.dataset.step = '0';
-    button.disabled = false;
-    button.textContent = 'Next example step';
-    status.textContent = 'Ready. Select “Next example step” to view the fictional lifecycle.';
-    indicator.textContent = 'STEP 0 OF 4';
-    return;
-  }
-  const step = Number(button.dataset.step);
-  status.textContent = examples[step];
-  button.dataset.step = String(step + 1);
-  indicator.textContent = `STEP ${step + 1} OF 4`;
-  if (step + 1 === examples.length) {
-    button.disabled = true;
-    button.textContent = 'Example complete';
-  }
+  const prepare = event.target.closest('[data-hara-runtime-prepare]');
+  const review = event.target.closest('[data-hara-runtime-review]');
+  const close = event.target.closest('[data-hara-runtime-close]');
+  const runtimeReset = event.target.closest('[data-hara-runtime-reset]');
+  if (!prepare && !review && !close && !runtimeReset) return;
+  if (prepare) haraDemoRuntime.prepare(document.querySelector('[data-hara-runtime-service]').value);
+  if (review) haraDemoRuntime.showReviewBoundary();
+  if (close) haraDemoRuntime.close();
+  if (runtimeReset) haraDemoRuntime.reset();
+  renderHaraRuntime();
 });
 route();

@@ -1,8 +1,8 @@
 # HARA development map
 
 This directory contains isolated HARA-related candidates, not a single
-integrated runtime. Candidate evidence is scoped to the specific code and
-controls that were run; it is not production acceptance or authority.
+integrated or production runtime. Candidate evidence is scoped to the specific
+code and controls that were run; it is not production acceptance or authority.
 
 ## Proposed Citadel household layer
 
@@ -32,9 +32,14 @@ authorization:
 - H∆R∆M remains a presentation-layer candidate. A Matriarch relationship to
   H∆R∆ remains `NOT_ESTABLISHED` under R3-C.
 
-Current state: `PROPOSED / NOT_IMPLEMENTED / NOT_AUTHORIZED`. The existing D-012
-and D-013 candidates below remain isolated and do not implement this
-household-layer proposal.
+Current state: household capabilities remain
+`PROPOSED / NOT_IMPLEMENTED / NOT_AUTHORIZED`. The public website includes a
+separate, synthetic-only in-memory demonstration runtime at
+`website/hara-runtime.js`. It exercises a fictional service-preview flow; it
+does not create or submit requests, store data, contact operators, decide or
+execute actions, or connect the D-012/D-013 candidates. This demonstration is
+not the proposed household runtime and does not change the implementation or
+authorization status above.
 
 ## Current workstreams
 

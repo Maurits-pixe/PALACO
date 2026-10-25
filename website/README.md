@@ -26,6 +26,17 @@ The HTML carries a restrictive browser-enforced CSP and `no-referrer` policy. `w
 
 The repository file is **not deployment evidence**. Before publication, inspect the actual deployed HTTP response and verify that the hosting layer returns the required headers. Until that check succeeds, deployment-header status remains **UNVERIFIED**.
 
+## HARA synthetic demonstration
+
+`hara-runtime.js` provides an in-memory, synthetic-only state machine used by the
+HARA preview. It accepts only fixed service IDs and supports preview, review
+boundary, close-without-action, and reset transitions. It has no network,
+persistence, identity, operator, approval, or service-action integration. This
+is a demonstration runtime only; HARA household capabilities remain proposed,
+unimplemented, and unauthorized. Run its checks with
+`node --test website/tests/hara-runtime.test.mjs` and
+`node website/tests/smoke-test.mjs`.
+
 ## Consumer Studio · CX-001
 
 Open `/studio.html` from the local server. Start with a local ID and one blank sheet. Add document blocks or images, edit image roles/source notes, save retained revisions, restore earlier content into a new draft, or export/import `.palaco.json` copies. RIO offers deterministic local guidance and an explicit document-summary attachment.

@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 
 const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
 const js = await readFile(new URL('../app.js', import.meta.url), 'utf8');
+const haraRuntime = await readFile(new URL('../hara-runtime.js', import.meta.url), 'utf8');
 const css = await readFile(new URL('../styles.css', import.meta.url), 'utf8');
 const header = await readFile(new URL('../components/header.html', import.meta.url), 'utf8');
 const footer = await readFile(new URL('../components/footer.html', import.meta.url), 'utf8');
@@ -12,6 +13,7 @@ const headers = await readFile(new URL('../security-headers.conf', import.meta.u
 assert.match(html, /PALACO/);
 assert.match(html, /http-equiv="Content-Security-Policy"/);
 assert.match(html, /name="referrer" content="no-referrer"/);
+assert.match(html, /hara-runtime\.js" defer><\/script>[\s\S]*app\.js" defer/);
 for (const route of ['citadels','elixirs','proof','industrie','governance','evolution','identity']) {
   assert.match(html, new RegExp(`#/${route}`));
 }
@@ -48,13 +50,15 @@ assert.match(js, /data-hara-service data-category="\$\{example\.category\}"/);
 assert.match(js, /Showing \$\{visibleExamples\.length\} proposed service example/);
 assert.match(js, /Services[\s\S]*Requests[\s\S]*Updates/);
 assert.match(js, /This is a static layout concept\. It reads no household data and submits no requests\./);
-assert.match(js, /data-hara-scenario data-step="0"/);
-assert.match(js, /data-hara-step-status role="status" aria-live="polite"/);
-assert.match(js, /data-hara-reset/);
-assert.match(js, /No identity is checked/);
-assert.match(js, /Nothing is submitted or saved/);
-assert.match(js, /None is contacted/);
-assert.match(js, /no decision, permission, or service action/);
+assert.match(js, /LOCAL SYNTHETIC RUNTIME/);
+assert.match(js, /data-hara-runtime-status role="status" aria-live="polite"/);
+assert.match(js, /data-hara-runtime-prepare/);
+assert.match(js, /data-hara-runtime-review/);
+assert.match(js, /data-hara-runtime-close/);
+assert.match(js, /data-hara-runtime-reset/);
+assert.match(js, /No operator was contacted; no decision or permission was made/);
+assert.match(haraRuntime, /Object\.hasOwn\(services, serviceId\)/);
+assert.doesNotMatch(haraRuntime, /\b(?:fetch|localStorage|sessionStorage|indexedDB|XMLHttpRequest)\b/);
 assert.match(js, /document\.addEventListener\('click'/);
 assert.match(js, /<details class="hara-widget__flow">/);
 assert.match(js, /How a future request might be handled/);
@@ -108,10 +112,12 @@ const location = {
     handlers['window:hashchange']?.();
   }
 };
-const status = { textContent: 'Ready.' };
-const indicator = { textContent: 'STEP 0 OF 4' };
-const demoButton = { dataset: { step: '0' }, disabled: false, textContent: 'Next example step' };
-const resetButton = {};
+const runtimeStatus = { textContent: '' };
+const runtimeService = { value: 'care', disabled: false };
+const prepareButton = { disabled: false };
+const reviewButton = { disabled: true };
+const closeButton = { disabled: true };
+const runtimeResetButton = { disabled: true };
 const allFilter = { dataset: { category: 'all' }, textContent: 'All examples', pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
 const careFilter = { dataset: { category: 'wellbeing' }, textContent: 'Care', pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
 const placeFilter = { dataset: { category: 'place' }, textContent: 'Place', pressed: null, setAttribute(name, value) { if (name === 'aria-pressed') this.pressed = value; } };
@@ -127,12 +133,14 @@ const scenarioView = { dataset: { haraView: 'scenario' }, pressed: null, setAttr
 const servicesPanel = { dataset: { haraPanel: 'services' }, hidden: false };
 const candidatePanel = { dataset: { haraPanel: 'candidate' }, hidden: false };
 const scenarioPanel = { dataset: { haraPanel: 'scenario' }, hidden: false };
+const runtimeWindow = {};
+runInNewContext(haraRuntime, {window: runtimeWindow});
 const document = {
   addEventListener: (name, handler) => { handlers[name] = handler; },
-  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-step-status]' ? status : selector === '[data-hara-step-indicator]' ? indicator : selector === '[data-hara-scenario]' ? demoButton : selector === '[data-hara-view-status]' ? viewStatus : selector === '[data-hara-filter-status]' ? filterStatus : null,
+  querySelector: (selector) => selector === '#main' ? main : selector === '[data-hara-view-status]' ? viewStatus : selector === '[data-hara-filter-status]' ? filterStatus : selector === '[data-hara-runtime-service]' ? runtimeService : selector === '[data-hara-runtime-status]' ? runtimeStatus : selector === '[data-hara-runtime-prepare]' ? prepareButton : selector === '[data-hara-runtime-review]' ? reviewButton : selector === '[data-hara-runtime-close]' ? closeButton : selector === '[data-hara-runtime-reset]' ? runtimeResetButton : null,
   querySelectorAll: (selector) => selector === '[data-hara-service]' ? [careService, maintenanceService, guideService] : selector === '[data-hara-filter]' ? [allFilter, careFilter, placeFilter] : selector === '[data-hara-panel]' ? [servicesPanel, candidatePanel, scenarioPanel] : selector === '[data-hara-view]' ? [overviewView, candidateView] : []
 };
-const window = { addEventListener: (name, handler) => { handlers[`window:${name}`] = handler; }, scrollTo() {} };
+const window = { PalacoHaraDemoRuntime: runtimeWindow.PalacoHaraDemoRuntime, addEventListener: (name, handler) => { handlers[`window:${name}`] = handler; }, scrollTo() {} };
 runInNewContext(js, {
   document,
   window,
@@ -194,22 +202,17 @@ locationHash = historyEntries.at(-1);
 handlers['window:hashchange']();
 assert.equal(location.hash, '#/elixirs?view=services&category=place');
 assert.match(main.innerHTML, /data-hara-filter data-category="place" aria-pressed="true"/);
-for (const expected of [
-  'Example 1 of 4 — fictional resident selects a locally listed service. No identity is checked.',
-  'Example 2 of 4 — fictional request contains only sample text. Nothing is submitted or saved.',
-  'Example 3 of 4 — an independent authorized operator would review it under local policy. None is contacted.',
-  'Example 4 of 4 — the example ends with no decision, permission, or service action.'
-]) {
-  handlers.click({ target: { closest: (selector) => selector === '[data-hara-scenario]' ? demoButton : null } });
-  assert.equal(status.textContent, expected);
-}
-assert.equal(demoButton.disabled, true);
-assert.equal(demoButton.textContent, 'Example complete');
-assert.equal(indicator.textContent, 'STEP 4 OF 4');
-handlers.click({ target: { closest: (selector) => selector === '[data-hara-reset]' ? resetButton : null } });
-assert.equal(demoButton.disabled, false);
-assert.equal(demoButton.dataset.step, '0');
-assert.equal(demoButton.textContent, 'Next example step');
-assert.equal(indicator.textContent, 'STEP 0 OF 4');
+assert.match(runtimeStatus.textContent, /Synthetic-only demo ready/);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-runtime-prepare]' ? prepareButton : null } });
+assert.match(runtimeStatus.textContent, /This is not a request; nothing was sent or stored/);
+assert.deepEqual([runtimeService.disabled, prepareButton.disabled, reviewButton.disabled, closeButton.disabled, runtimeResetButton.disabled], [true, true, false, true, false]);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-runtime-review]' ? reviewButton : null } });
+assert.match(runtimeStatus.textContent, /No operator was contacted; no decision or permission was made/);
+assert.deepEqual([reviewButton.disabled, closeButton.disabled], [true, false]);
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-runtime-close]' ? closeButton : null } });
+assert.equal(runtimeStatus.textContent, 'Scenario ended without a decision, permission, or service action.');
+handlers.click({ target: { closest: (selector) => selector === '[data-hara-runtime-reset]' ? runtimeResetButton : null } });
+assert.match(runtimeStatus.textContent, /Synthetic-only demo ready/);
+assert.deepEqual([runtimeService.disabled, prepareButton.disabled, reviewButton.disabled, closeButton.disabled, runtimeResetButton.disabled], [false, false, true, true, true]);
 
 console.log('GO-6 smoke checks: PASS');

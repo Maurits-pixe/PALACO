@@ -94,11 +94,13 @@ header.hara-widget__header{position:static;display:flex;align-items:center;justi
 .hara-scenario h2{margin:0;font-size:clamp(26px,3vw,38px)}
 .hara-scenario>div:first-child>p:last-child{color:var(--muted);font-size:13px}
 .hara-scenario__panel{padding:20px;background:#fbfcf8;border:1px solid var(--line)}
-.hara-scenario__progress{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--muted);font-size:9px;letter-spacing:.1em}
 .hara-scenario__panel [role=status]{min-height:72px;margin:18px 0;color:var(--ink);font-size:14px}
+.hara-scenario__panel label{display:block;margin-top:18px;font-size:12px;font-weight:600}
+.hara-scenario__panel select{width:100%;margin-top:7px;padding:11px;border:1px solid var(--line);background:#fff;color:var(--ink);font:inherit}
+.hara-scenario__actions{display:flex;flex-wrap:wrap;gap:8px}
 .hara-scenario__panel .button{padding:10px 14px;font-size:10px}
 .hara-scenario__panel .button:disabled{cursor:default;opacity:.65}
-.hara-scenario__panel .text-link{margin-left:12px;padding:8px 0;border:0;background:transparent;cursor:pointer;font:inherit;font-size:11px}
+.hara-scenario__panel .text-link{padding:8px 0;border:0;background:transparent;cursor:pointer;font:inherit;font-size:11px}
 .dark{background:#183a2a;color:#f4f5ec}
 .dark .eyebrow{color:#d7ed71}
 .dark .button{border-color:#afc1b2}
