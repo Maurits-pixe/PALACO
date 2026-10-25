@@ -40,6 +40,33 @@ function proof() {
     <section class="section"><p class="eyebrow">Verify</p><h2>Search identity, Citadel, Watermerk or provenance reference.</h2><form data-verification><label for="reference">Reference</label><input id="reference" name="reference" autocomplete="off" placeholder="LA-001, identity or Watermerk"><button class="button" type="submit">Verify</button></form><output id="verification-result" aria-live="polite"></output></section>`);
 }
 
+function elixirs() {
+  return page(`${header('PALACO · ELIXERS', 'Elixirs', 'Curated experiences with origin, status, and provenance.')}
+    <section class="section"><p>No public Elixir records are registered in this baseline. The HARA widget below is a proposed layout preview, not a registered or connected Elixir.</p>
+      <article class="hara-widget" aria-labelledby="hara-widget-title">
+        <header class="hara-widget__header"><div><p class="eyebrow">HOUSEHOLD · WIDGET CONCEPT</p><h2 id="hara-widget-title">HARA desk</h2></div><span class="badge">PROPOSED</span></header>
+        <div class="hara-widget__body">
+          <section class="hara-widget__main" aria-label="Household overview preview">
+            <p class="hara-widget__welcome">A clearer view of this Citadel’s shared services.</p>
+            <div class="hara-widget__metrics">
+              <div><span>Services</span><strong>Not connected</strong></div>
+              <div><span>Requests</span><strong>Not connected</strong></div>
+              <div><span>Updates</span><strong>Not connected</strong></div>
+            </div>
+            <h3>Household services</h3>
+            <ul class="hara-widget__services">
+              <li><span class="hara-widget__icon" aria-hidden="true">＋</span><span><strong>Care &amp; wellbeing</strong><small>Discover locally defined support</small></span><span class="badge">PROPOSED</span></li>
+              <li><span class="hara-widget__icon" aria-hidden="true">⌂</span><span><strong>Maintenance</strong><small>Find the Citadel’s service contacts</small></span><span class="badge">PROPOSED</span></li>
+              <li><span class="hara-widget__icon" aria-hidden="true">◇</span><span><strong>Citadel guide</strong><small>Understand spaces and shared resources</small></span><span class="badge">PROPOSED</span></li>
+            </ul>
+          </section>
+          <aside class="hara-widget__boundary"><p class="eyebrow">STATUS &amp; BOUNDARY</p><span class="badge">DRAFT / UNVERIFIED</span><p>This is a static layout concept. It reads no household data and submits no requests.</p><p>A request would not grant permission or execute an action. Each Citadel would define its own services, data, consent, access policy, and accountable operator.</p><p>HARA is not H∆R∆M. Identity, authority, and runtime execution are not established.</p></aside>
+        </div>
+        <footer class="hara-widget__footer"><span>LA-001 · Reference layout only</span><span>NO LIVE SERVICE</span></footer>
+      </article>
+    </section>`);
+}
+
 function haram() {
   return page(`${header('PALACO · HUMAN INTERFACE', 'H∆R∆M', 'A presentation and interaction layer for the L.A. ecosystem.')}
     <section class="section"><p class="eyebrow">Role and scope</p><h2>Help people explore, understand, and inspect.</h2><ul><li>Explore the Citadel and orient within its spaces.</li><li>Explain architectural information.</li><li>Support provenance inspection and evidence visibility.</li><li>Facilitate interaction with ELIXERS.</li></ul><dl><dt>Capability</dt><dd>PRESENT — present, explain, guide, and make information accessible within applicable boundaries.</dd><dt>Authority</dt><dd>NOT ESTABLISHED</dd><dt>Runtime execution</dt><dd>NOT ESTABLISHED</dd><dt>Issuance and governance</dt><dd>NOT ESTABLISHED</dd></dl></section>
@@ -78,6 +105,7 @@ function route() {
   const main = document.querySelector('#main');
   if (raw === '' || raw === 'enter') main.innerHTML = home();
   else if (raw === 'citadels' || raw === 'citadels/la-001') main.innerHTML = citadels(raw);
+  else if (raw === 'elixirs') main.innerHTML = elixirs();
   else if (raw === 'haram') main.innerHTML = haram();
   else if (raw === 'proof' || raw === 'proof/verify') main.innerHTML = proof();
   else if (raw === 'proof/provenance') main.innerHTML = page(`${header('PALACO · PROOF', 'Provenance', 'A chain that can be inspected step by step.')}<section class="section"><ol class="architecture">${['Origin','Issuer','Citadel','Watermerk','Seal','Provenance','Validity'].map((x, i) => `<li><span class="eyebrow">0${i + 1}</span><strong>${x}</strong></li>`).join('')}</ol><p class="badge">UNVERIFIED</p><p>No authoritative chain is connected in this baseline.</p></section>`);
