@@ -1113,15 +1113,13 @@ fn valid_snapshot_registry(snapshot: &TrustSnapshotV01) -> bool {
             if !issuer.receipt_stages.is_empty() || !specialties.insert((issuer.side, specialty)) {
                 return false;
             }
-        } else {
-            if issuer.receipt_stages.is_empty()
-                || issuer
-                    .receipt_stages
-                    .iter()
-                    .any(|stage| !receipt_stages.insert((issuer.side, *stage)))
-            {
-                return false;
-            }
+        } else if issuer.receipt_stages.is_empty()
+            || issuer
+                .receipt_stages
+                .iter()
+                .any(|stage| !receipt_stages.insert((issuer.side, *stage)))
+        {
+            return false;
         }
     }
     [Side::Sender, Side::Receiver].into_iter().all(|side| {
