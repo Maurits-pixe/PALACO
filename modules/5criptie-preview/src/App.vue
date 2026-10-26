@@ -27,35 +27,40 @@ function barHeight(value) {
 }
 
 async function printReport() {
+  if (printStatus.value) return;
   const reviewDetails = document.querySelector('.review-details');
   const wasOpen = reviewDetails.open;
   const previousSeverity = selectedSeverity.value;
   const previousTitle = document.title;
   const previousFocus = document.activeElement;
-  reviewDetails.open = true;
-  selectedSeverity.value = 'Alles';
-  printDate.value = formatPrintDate(new Date());
-  document.title = `5CRIPTIE — Synthetisch rapport — ${printDate.value}`;
   printStatus.value = 'Rapport voorbereiden voor afdrukken.';
-  await nextTick();
-  const restoreReportState = () => {
+  let restored = false;
+  const restoreReportState = async () => {
+    if (restored) return;
+    restored = true;
     reviewDetails.open = wasOpen;
     selectedSeverity.value = previousSeverity;
     printDate.value = '';
     printStatus.value = '';
     document.title = previousTitle;
+    await nextTick();
     if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
   };
   const handleAfterPrint = () => {
     window.removeEventListener('afterprint', handleAfterPrint);
-    restoreReportState();
+    void restoreReportState();
   };
-  window.addEventListener('afterprint', handleAfterPrint);
   try {
+    reviewDetails.open = true;
+    selectedSeverity.value = 'Alles';
+    printDate.value = formatPrintDate(new Date());
+    document.title = `5CRIPTIE — Synthetisch rapport — ${printDate.value}`;
+    await nextTick();
+    window.addEventListener('afterprint', handleAfterPrint);
     window.print();
   } catch (error) {
     window.removeEventListener('afterprint', handleAfterPrint);
-    restoreReportState();
+    await restoreReportState();
     throw error;
   }
 }

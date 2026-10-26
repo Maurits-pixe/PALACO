@@ -109,7 +109,9 @@ try {
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
   const eventRows = popup.locator('.events-panel tbody tr');
   await popup.evaluate(() => {
+    window.__printCallCount = 0;
     window.print = () => {
+      window.__printCallCount++;
       window.__reviewTableWasOpenForPrint = document.querySelector('.review-details').open;
       window.__filterStatusAtPrint = document.querySelector('.events-panel [role="status"]').textContent.trim();
       window.__fixtureRowsAtPrint = document.querySelectorAll('.events-panel tbody tr').length;
@@ -118,7 +120,6 @@ try {
       window.__printTitle = document.title;
       window.__printStatusAtPrint = document.querySelector('.dashboard > [role="status"]').textContent.trim();
       window.__printButtonDisabledAtPrint = document.querySelector('.print-action').disabled;
-      window.dispatchEvent(new Event('afterprint'));
     };
   });
   await popup.getByRole('button', { name: 'Hoog', exact: true }).click();
@@ -132,6 +133,9 @@ try {
   assert.match(await popup.evaluate(() => window.__printTitle), /^5CRIPTIE — Synthetisch rapport — .+$/);
   assert.equal(await popup.evaluate(() => window.__printStatusAtPrint), 'Rapport voorbereiden voor afdrukken.');
   assert.equal(await popup.evaluate(() => window.__printButtonDisabledAtPrint), true);
+  await popup.getByRole('button', { name: 'Afdrukken / opslaan als PDF' }).dispatchEvent('click');
+  assert.equal(await popup.evaluate(() => window.__printCallCount), 1, 'repeated activation must not open another print dialog');
+  await popup.evaluate(() => window.dispatchEvent(new Event('afterprint')));
   assert.equal(await eventRows.count(), 2, 'printing restores the on-screen filter after the dialog');
   assert.equal(await reviewDetails.locator('table').isVisible(), false);
   assert.equal(await popup.locator('.print-meta').count(), 0, 'print date metadata is cleared after printing');
