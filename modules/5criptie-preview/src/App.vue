@@ -4,6 +4,7 @@ import { events, formatPrintDate, metrics, reviewBreakdown, reviewBreakdownLabel
 
 const selectedSeverity = ref('Alles');
 const printDate = ref('');
+const printStatus = ref('');
 const severities = ['Alles', 'Hoog', 'Middel', 'Laag'];
 const reviewTotal = reviewBreakdown.reduce((total, item) => total + item.count, 0);
 const reviewPercentages = calculateReviewPercentages(reviewBreakdown, reviewTotal);
@@ -30,16 +31,20 @@ async function printReport() {
   const wasOpen = reviewDetails.open;
   const previousSeverity = selectedSeverity.value;
   const previousTitle = document.title;
+  const previousFocus = document.activeElement;
   reviewDetails.open = true;
   selectedSeverity.value = 'Alles';
   printDate.value = formatPrintDate(new Date());
   document.title = `5CRIPTIE — Synthetisch rapport — ${printDate.value}`;
+  printStatus.value = 'Rapport voorbereiden voor afdrukken.';
   await nextTick();
   const restoreReportState = () => {
     reviewDetails.open = wasOpen;
     selectedSeverity.value = previousSeverity;
     printDate.value = '';
+    printStatus.value = '';
     document.title = previousTitle;
+    if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
   };
   const handleAfterPrint = () => {
     window.removeEventListener('afterprint', handleAfterPrint);
@@ -67,9 +72,10 @@ async function printReport() {
       <div class="topbar-meta">
         <span class="mode-pill"><span class="mode-dot"></span> SYNTHETISCHE PREVIEW</span>
         <span class="workspace">PALACO · LOKALE DEMO</span>
-        <button class="print-action" type="button" @click="printReport">Afdrukken / opslaan als PDF</button>
+        <button class="print-action" type="button" :disabled="Boolean(printStatus)" @click="printReport">Afdrukken / opslaan als PDF</button>
       </div>
     </header>
+    <p class="sr-only" role="status">{{ printStatus }}</p>
 
     <main>
       <section class="intro">
