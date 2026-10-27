@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "RIO_STAGING_PLAN_V1",
+  "mode": "PLAN_ONLY",
+  "source": {
+    "repository": "Maurits-pixe/PALACO",
+    "commit": "facf4f2c5bd0898da1dcf80bb80ec861aa70e062"
+  },
+  "endpoints": {
+    "bffOrigin": null,
+    "idpIssuer": null,
+    "callbackUrl": null,
+    "discoveryUrl": null,
+    "authorizationUrl": null,
+    "tokenUrl": null,
+    "jwksUrl": null
+  },
+  "artifacts": {
+    "idpImage": null,
+    "databaseImage": null
+  },
+  "oidc": {
+    "clientId": "rio-bff-staging",
+    "flow": "authorization_code",
+    "pkce": "S256",
+    "scope": [
+      "openid"
+    ],
+    "clientType": "CONFIDENTIAL",
+    "registration": false,
+    "directAccessGrants": false,
+    "serviceAccounts": false
+  },
+  "data": {
+    "actors": [
+      "TST-alpha",
+      "TST-beta"
+    ],
+    "personalData": false,
+    "smtp": false
+  },
+  "transport": {
+    "browserTls": "TRUSTED_CERT_REQUIRED",
+    "providerTls": "VERIFY_REQUIRED",
+    "databaseTls": "VERIFY_FULL_REQUIRED",
+    "forwardedHeaders": "REJECT_UNTIL_SEPARATELY_REVIEWED",
+    "secretPolicy": "VALUES_FORBIDDEN_IN_PLAN"
+  },
+  "boundary": {
+    "account1": "HOLD",
+    "personalAccounts": false,
+    "contact": false,
+    "operativeAuthority": "NONE",
+    "deployment": "HOLD"
+  }
+}
