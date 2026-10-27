@@ -4,6 +4,10 @@
 
 **Recommendation:** conditional go for a read-only 2D dashboard design.
 
+**Human architecture review:** requested; pending. The pull request remains a
+draft, and this request is for architecture review only—not merge,
+implementation, runtime, activation, or deployment approval.
+
 This is an architecture proposal, not an implementation plan approval. It
 authorizes no merge, activation, publication, deployment, external effects, or
 authority. A dashboard may show animation and reported state; neither is proof
@@ -43,6 +47,21 @@ Dashboard UI
   unique information unavailable elsewhere in the DOM.
 - Keep the base image static. Do not treat visual detail as a technical
   specification or evidence of live state.
+
+### Visual review record
+
+Static visual inspection completed 2026-10-27. The reference is a polished,
+dark navy/gold concept board: a landscape hero, a structural diagram, four
+region panels, seven landmark labels, and visual identity variants. The overall
+layout communicates the proposed structure, though small text in the dense
+panels may be difficult to read at reduced display sizes. It is a static
+illustration only; it shows no verifiable data source or operational controls
+and provides no evidence of World state, technical behavior, authority, or
+provenance.
+
+The accompanying `schemas/world-design-manifest.schema.json` is a
+**non-canonical structural stub**. Canonical schema alignment remains open; it
+must not be treated as a production validation or authorization contract.
 
 The repository currently has Vue-based previews, including
 `modules/launcher-v1_2`; no EVA dashboard or React/Next.js application exists.

@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://palaco.dev/schemas/world-design-manifest.schema.json",
-  "title": "OR6IT World Design Manifest",
+  "title": "OR6IT World Design Manifest (Non-Canonical Structural Stub)",
+  "description": "Non-canonical structural stub for design discussion only. This is not a PALACO canonical schema, production validation contract, or authorization contract; canonical schema alignment remains open.",
   "type": "object",
   "additionalProperties": false,
   "required": [
