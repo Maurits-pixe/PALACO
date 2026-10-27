@@ -72,6 +72,8 @@ services:
       - "127.0.0.1:8089:8089"
     volumes:
       - rio-runtime:/app/verification/rio-accounts/.runtime:ro
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
       rio-prepare: { condition: service_completed_successfully }
     healthcheck:
@@ -90,6 +92,9 @@ services:
     volumes:
       - rio-runtime:/app/verification/rio-accounts/.runtime
       - rio-realm:/realm
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE"]
+    security_opt: ["no-new-privileges:true"]
 
   rio-keycloak:
     image: quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741
@@ -102,6 +107,19 @@ services:
       - --http-port=8089
     volumes:
       - rio-realm:/opt/keycloak/data/import:ro
+    # No bootstrap admin is enabled; this demo only needs the imported realm.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - 'exec 3<>/dev/tcp/127.0.0.1/8089; printf "GET /realms/rio-synthetic/.well-known/openid-configuration HTTP/1.1\r\nHost: 127.0.0.1:8089\r\nConnection: close\r\n\r\n" >&3; head -n 1 <&3 | grep -q "200 OK"'
+      interval: 3s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
     depends_on:
       rio-prepare: { condition: service_completed_successfully }
       rio-loopback: { condition: service_started }
@@ -123,6 +141,7 @@ services:
     volumes:
       - rio-runtime:/app/verification/rio-accounts/.runtime:ro
       - rio-data:/var/lib/postgresql
+    security_opt: ["no-new-privileges:true"]
     healthcheck:
       test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "8090", "-U", "rio_dev", "-d", "rio_synthetic"]
       interval: 3s
@@ -139,8 +158,10 @@ services:
     network_mode: service:rio-loopback
     volumes:
       - rio-runtime:/app/verification/rio-accounts/.runtime:ro
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
     depends_on:
-      rio-keycloak: { condition: service_started }
+      rio-keycloak: { condition: service_healthy }
       rio-postgres: { condition: service_healthy }
     restart: on-failure:5
 

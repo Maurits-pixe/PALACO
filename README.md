@@ -29,7 +29,7 @@ Voer vanuit de repositoryroot uit:
 ```bash
 docker compose up --build
 # Of wacht aantoonbaar op de ingebouwde healthchecks:
-docker compose up --build --wait --wait-timeout 240
+docker compose up --build --wait --wait-timeout 600
 docker compose ps --all
 curl --fail http://localhost:5174/health
 curl --fail http://localhost:5175/health

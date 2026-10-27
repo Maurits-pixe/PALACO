@@ -74,7 +74,7 @@ jobs:
       - name: Validate Compose
         run: docker compose config --quiet
       - name: Build and verify ecosystem health
-        run: docker compose up --build --wait --wait-timeout 240
+        run: docker compose up --build --wait --wait-timeout 600
       - name: Service diagnostics
         if: failure()
         run: docker compose ps --all
