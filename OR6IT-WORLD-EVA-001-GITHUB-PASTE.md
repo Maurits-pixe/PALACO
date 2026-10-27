@@ -125,7 +125,6 @@ Unknown, conflicting or incomplete conditions fail closed and remain visible.
 
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "schema_version": "OR6IT-WORLD-0.1",
   "object_type": "world_design_manifest",
   "status": "DESIGN_DRAFT",
