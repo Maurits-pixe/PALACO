@@ -2310,6 +2310,129 @@ Empty upstream lists are allowed for roots; draft records can have pending
 approval. Validation alone never grants authority or establishes PCC-001
 `CANONICAL` status.
 
+### OR6IT — WORLD-EVA-001 dashboard architecture
+
+- **Status:** DRAFT / DESIGN REFERENCE / UNVERIFIED
+- **Version:** 0.1
+- **Last Updated:** 2026-10-27
+- **Owner:** Not assigned; human confirmation required
+- **Decision boundary:** ADVISORY — HUMAN DECISION REQUIRED
+
+This section proposes a read-only EVA dashboard architecture. It adds no OR6IT
+runtime, live dashboard, World API, World-eventstream, polling/SSE service or
+external-world integration. Runtime implementation is not provided here;
+activation and deployment are not authorized. Existing repository previews and
+offline reference models are not evidence that this proposed dashboard exists.
+
+#### Context and identifier boundaries
+
+| Reference | Proposed role and repository evidence |
+|---|---|
+| WORLD-EVA-001 | World design context; present as `world_id` in the [draft release contract](release-registry/contract.json). |
+| LA-001 | Proposed reference-Citadel binding; the [public Citadel metadata](website/data/citadels/la-001.json) labels it DRAFT and UNVERIFIED. |
+| EVA-LA-001 | Requested constitutional context label, not a verified constitutional instrument. The draft release contract actually uses this value as `citadel_id`; do not reinterpret or rename that field. |
+| OR6IT | Proposed development engine/workstream for this architecture; no engine implementation is introduced or asserted. |
+| RIO | Proposed communication layer, subject to the [RIO authority boundary](docs/standards/rio/governance/RIO-AUTH-BOUNDARY-001.md); communication does not grant authority. |
+| VORM9EVIN9 | Proposed presentation language, following the [CX-001 design reference](docs/PALACO-CX-001.md): black perimeter, ivory canvas, restrained gold and literal status labels. |
+
+LA-001 and EVA-LA-001 belong to different existing contexts; their mapping and
+any constitutional binding require explicit human review. They are not aliases
+established by this document. The [release registry](release-registry/README.md)
+remains a separate draft proposal with `production_release_enabled=false`.
+Its release states must not be conflated with dashboard animation or PMS lifecycle
+states.
+
+#### Proposed read-only data flow
+
+1. **Input boundary:** a future implementation first accepts explicitly selected,
+   synthetic/local snapshots. A network adapter requires a separate implementation
+   and authorization review; no endpoint, credentials or subscription is defined.
+2. **Validation boundary:** validate the selected contract before rendering;
+   reject unsupported versions and malformed records. Preserve source identifiers,
+   revisions, timestamps and validation errors without converting them into trust.
+3. **View model:** derive bounded presentation data from the accepted snapshot.
+   Keep reported facts, locally derived values and unknown prerequisites separate.
+   Do not treat imported status strings as authenticated release decisions.
+4. **Dashboard projection:** show a World/Citadel context header, source/provenance
+   inspector, observation-status panel and read-only event/history area. Label
+   synthetic data and missing sources visibly. Provide no activation, release,
+   signing, external-write or autonomous-action control.
+5. **Failure behavior:** invalid input must not appear as a successful refresh.
+   Missing data remains UNKNOWN; retained data must show its original source and
+   age, not acquire a new source timestamp. Ordering, replay, stale-data handling
+   and recovery contracts must be specified before any live adapter is built.
+
+The projection must not write back to a World, RIO, release registry or external
+system. A future adapter must render untrusted text as text, bound payload and
+history sizes, and avoid resolving arbitrary URLs or loading remote resources
+from snapshot fields. These are implementation requirements, not implemented
+security controls or a completed threat model.
+
+#### Three independent clocks
+
+| Clock | Intended responsibility | Must not imply |
+|---|---|---|
+| Animation clock | Local presentation timing for transitions or decorative motion. | New observations, source time, freshness, proof or authority. |
+| Data clock | Timing of a future snapshot fetch/import and the local receipt of data; keep receipt time distinct from source generation time. | That refresh succeeded, that a source is truthful, or that authorization was renewed. |
+| World clock | Source-reported World time or sequence, if a reviewed source contract provides it; otherwise UNKNOWN. | Trusted time, execution permission, or a running/active World. |
+
+No clock may overwrite another clock's provenance. Animation can continue while
+data is stale or absent, but the status label must remain unchanged. Pausing an
+animation does not pause a World. A local timer must not invent World events.
+Source freshness and release authorization remain separate dimensions; a green
+refresh indicator cannot enable an action.
+
+#### EVA visual reference and accessibility
+
+No EVA-specific image asset is linked or added: an approved visual source,
+repository-relative path, usage rights and descriptive alternative text remain
+unresolved. Until reviewed, use a clearly labelled text-only design placeholder,
+not a fabricated screenshot or authoritative seal. VORM9EVIN9 is a design
+reference, not proof that EVA has been implemented.
+
+A future dashboard must honor `prefers-reduced-motion` and provide an explicit
+pause/disable-motion control. Reduced motion must remove nonessential orbiting,
+parallax and continuous transitions without hiding status or data. Meaning must
+remain available in a static view, with keyboard navigation, visible focus,
+textual labels independent of color, legible contrast and semantic headings.
+Avoid flashing and continuously announced decorative changes; announce meaningful
+data/status updates without overwhelming assistive technology. These requirements
+need implementation-level accessibility checks in a separate PR.
+
+#### Canonical schema alignment
+
+[PMS-001](docs/schemas/palaco/PMS-001.schema.json) remains the canonical object
+contract; [PMS-002](docs/schemas/palaco/PMS-002.schema.json) types relationships and
+[PCR-000](docs/schemas/palaco/PCR-000.schema.json) describes closed snapshots.
+WORLD, CITADEL and OR6IT are not PMS-001 object families. WORLD-EVA-001, LA-001 and
+EVA-LA-001 do not satisfy its family-prefix/five-digit canonical identifier rule.
+Keep them as design-context labels, not canonical object IDs or typed references.
+Selecting an appropriate ARC/APP/SVC representation and an explicit context
+mapping is a remaining review gate. No executable schema stub, sample canonical
+record, new object family or schema change is introduced here.
+
+#### Review and handoff gates
+
+- [ ] Assign ownership and confirm the LA-001/EVA-LA-001 context mapping.
+- [ ] Review the constitutional reference and schema/context mapping.
+- [ ] Supply and review the EVA visual asset, rights and actual image path.
+- [ ] Perform a separate security/threat-model review and human architecture review.
+- [ ] Define source provenance, clock, freshness, ordering and failure contracts.
+- [ ] Make an explicit human merge decision for the documentation.
+- [ ] Use a separate implementation PR with tests and accessibility validation.
+- [ ] Obtain separate authorization before runtime activation or deployment.
+
+This change does not certify CI results, a feature branch, PR draft status or a
+source revision from a prior handoff. Such evidence must be verified for the exact
+revision under review. Existing conformance success does not validate this
+proposed dashboard's security, schema mapping or operational readiness.
+
+**CONDITIONAL GO:** documentation and architecture review only.
+
+**HOLD:** runtime implementation pending separate scope/review; security release,
+activation and deployment pending explicit authorization. A repository merge is
+not World activation. Unknown prerequisites remain visible.
+
 ### ERA-009 — process-local reference model
 
 ERA-009 is isolated in `palaco-citadel::InMemoryCommitGate`. It is not wired
