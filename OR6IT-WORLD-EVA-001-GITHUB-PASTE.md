@@ -20,7 +20,8 @@ Mundo World / Planet Engine Creator — first PALACO World reference package.
 
 ## Concept
 
-A place of memory, creation, life and proof.  
+A place of memory, creation, life and proof.
+
 Eva is not a planet. Eva is a promise.
 
 EVA is the first PALACO World reference. OR6IT is responsible for World creation and specification; PALACO constitutional infrastructure remains the governing boundary.
