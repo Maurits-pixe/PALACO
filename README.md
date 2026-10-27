@@ -12,6 +12,139 @@ Thank you for your interest in contributing to PALACO! This document outlines th
 
 For Vercel preview deployment setup and URLs for PALACO's web apps, see [Web preview deployments](docs/operations/Preview-Deployments.md).
 
+## PALACO-CITADEL — lokaal geïntegreerde demo
+
+Deze checkout bevatte de NEO-launcher en de gesloten Bastion-preview, maar geen
+Aether-broncode, 5CRIPTIE-app of aangesloten Bastion-API. `modules/aether-preview`
+voegt daarom een zelfstandige Vue-preview toe; `services/bastion-demo` is een
+afzonderlijke **lokale, niet-geauthenticeerde demo-API**, geen productiebackend.
+Gebruik uitsluitend synthetische berichten. Er worden geen D-013-bevoegdheden,
+uitvoering, agenda-integraties of productierijpheid geclaimd.
+
+### Docker quickstart
+
+Alleen Docker met Compose v2 is nodig, geen lokale Rust-, Node- of Python-installatie.
+Voer vanuit de repositoryroot uit:
+
+```bash
+docker compose up --build
+# Of wacht aantoonbaar op de ingebouwde healthchecks:
+docker compose up --build --wait --wait-timeout 240
+docker compose ps --all
+curl --fail http://localhost:5174/health
+curl --fail http://localhost:5175/health
+curl --fail http://localhost:5175/api/tasks
+```
+
+| Onderdeel | Lokale URL |
+| --- | --- |
+| NEO-launcher | http://localhost:5173 |
+| Aether | http://localhost:5174 |
+| Bastion (met afzonderlijke demotaken) | http://localhost:5175 |
+| Statische website/Studio | http://localhost:8080 |
+| RIO synthetische accounts | https://localhost:8088 |
+| Synthetische Keycloak-provider | http://127.0.0.1:8089 |
+
+Alle gepubliceerde poorten zijn aan host-loopback gebonden. De demo-API is niet
+rechtstreeks gepubliceerd: nginx bereikt haar via servicenaam `bastion-api`.
+De bestaande NEO-verifier blijft uitsluitend zijn toegestane HTTPS-origins
+vertrouwen; deze HTTP-Compose-demo schakelt die controle niet uit. Open de
+modules rechtstreeks via bovenstaande URLs. Een ontbrekende 5CRIPTIE-module
+wordt niet gesimuleerd.
+
+RIO behoudt zijn vaste TLS-, host-, OIDC- en databasebindings. RIO, Keycloak en
+PostgreSQL delen daarvoor de `rio-loopback`-netwerknamespace; een TCP-doorvoer
+behoudt TLS op hostpoort 8088. `rio-prepare` hergebruikt de bestaande fixture om
+certificaat, realm en willekeurige credentials **binnen Docker-volumes** te maken.
+Die initcontainer hoort met exitcode 0 te eindigen; de HTTP-services moeten
+`healthy` worden. Het zelfondertekende RIO-certificaat is één dag geldig.
+Voor een vertrouwde CLI-healthcheck (zonder TLS-validatie uit te schakelen):
+
+```bash
+docker compose exec rio-accounts curl --fail \
+  --cacert /app/verification/rio-accounts/.runtime/tls-cert.pem \
+  https://localhost:8088/healthz
+```
+
+RIO is een onafhankelijke synthetische accountdemo, geen login voor Aether/Bastion.
+Alle Rust-workspacecrates zijn bibliotheken, geen servers. Controleer die
+optioneel ook zonder lokale toolchain:
+
+```bash
+docker compose --profile checks run --build --rm rust-check
+docker compose down
+# Wis demotaken, RIO-database, credentials en certificaten (ook na certificaatexpiry):
+docker compose down --volumes
+```
+
+### Deep Link: Aether → Bastion
+
+1. Open Aether op **http://localhost:5174** (gebruik `localhost`, niet een LAN-IP).
+2. Vul een synthetisch bericht en een eigen passphrase van minimaal 12 tekens in.
+3. Kies **Versleutel**, vervolgens **Send to Bastion** bij het versleutelde resultaat.
+4. Wacht op de taakbevestiging. Open Bastion en kies **Vernieuw demotaken**.
+
+Web Crypto gebruikt AES-GCM-256, een willekeurige IV/salt en
+PBKDF2-SHA-256 (310.000 iteraties). De beschrijving bevat de JSON-envelop met
+ciphertext en ontsleutelparameters, nooit de passphrase of leesbare berichttekst.
+Bewaar de passphrase en envelop zelf; er is geen sleutelherstel of decryptie-UI.
+Web Crypto vereist een secure context (HTTPS of localhost). De passphrase wordt
+na encryptie uit het invoerveld gewist; de browserpagina is geen beveiligde kluis.
+
+`src/bastion.js` verzorgt validatie, een 10-seconden-timeout en de
+`POST /api/tasks`-call met een zinvolle titel. De UI blokkeert lege payloads en
+dubbele gelijktijdige klikken en toont loading-, succes- en foutmeldingen.
+Een timeout betekent **geen bevestiging**, niet bewezen rollback; controleer
+Bastion voordat je opnieuw probeert. De API hergebruikt dezelfde taak bij een
+identieke envelop, bewaart maximaal 1.000 taken en accepteert geen plaintext.
+Titels en ciphertext zijn lokaal gedeeld, zonder gebruikersisolatie.
+Deze API heeft geen routes voor completion/escalatie/uitvoering. De bestaande
+Bastion-guards en D-013-review blijven onverminderd gelden.
+
+**Configuratie:** `VITE_BASTION_API_URL` is een publieke **build-time** API-base-URL
+(zonder `/tasks`), standaard `/api`. Nooit secrets in `VITE_*` zetten.
+De Compose-proxy houdt de browsercall standaard same-origin; interne
+servicenamen horen niet in browser-URLs. Voor een externe API:
+
+```bash
+VITE_BASTION_API_URL=https://demo.example.org/api docker compose build aether
+```
+
+Een andere origin vereist daarnaast expliciete `connect-src`-toestemming in
+`docker/frontend.conf` en server-side CORS-toestemming. Voor een standalone
+Aether-devserver:
+
+```bash
+cd modules/aether-preview
+npm ci
+VITE_BASTION_API_URL=http://localhost:3000/api npm run dev
+# In een tweede terminal vanuit de root:
+BASTION_DEMO_MODE=local-only npm start --prefix services/bastion-demo
+```
+
+De API bindt buiten Compose standaard aan `127.0.0.1:3000`, gebruikt standaard
+geheugenopslag en accepteert alleen exacte origins `http://localhost:5174` en
+`http://localhost:5175`. `BASTION_ALLOWED_ORIGINS` is een komma-gescheiden
+allowlist; `BASTION_DATABASE` kan een SQLite-bestand aanwijzen. Compose bewaart
+dit bestand in `bastion-data`. Publiceer deze demo niet op een externe host.
+
+### CI-overzicht
+
+`.github/workflows/ecosystem.yml` draait op elke **push** en **pull_request**:
+
+- **Rust-matrix:** `cargo check --workspace --all-targets --locked` voor de
+  root-workspace en de afzonderlijke RIO-crate, met Cargo-cache.
+- **Node-matrix:** `npm test` voor Aether, Bastion, NEO, de demo-API en beide
+  Hannie-packages; lockfile-installaties waar aanwezig, plus NEO-guardtests.
+- **Frontendbuilds:** afzonderlijke buildstap voor alle drie Vue/Vite-apps.
+- **Compose:** configuratievalidatie, imagebuilds en startup met healthchecks;
+  opruimen van containers en geheime fixturevolumes gebeurt ook bij fouten.
+
+De bestaande gespecialiseerde workflows blijven behouden. Tests voor encryptie,
+de API-helper, echte HTTP-overdracht, persistente opslag, idempotentie en
+geblokkeerde uitvoeringsroutes gebruiken de bestaande Node-testinfrastructuur.
+Dit is kwaliteits-/integratie-CI, geen automatische productiedeployment.
+
 ---
 
 ## Code of Conduct
