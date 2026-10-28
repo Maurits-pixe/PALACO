@@ -131,7 +131,12 @@ jobs:
           python -c "print('RIO_MOBILE_LOGIN_PROBE_END case=RIO-MOBILE-02 repeats=8 surface=android-emulation')"
       - name: Mobile account and local Studio browser verification
         working-directory: verification/rio-accounts
-        run: npx playwright test --config=mobile/playwright.config.mjs
+        run: npx playwright test --config=mobile/playwright.config.mjs --grep-invert='RIO-MOBILE-05'
+      # Docker database restarts change host networking. Do not reuse that
+      # Chromium process for unrelated login/navigation checks afterwards.
+      - name: Mobile database outage and explicit recovery (isolated browser)
+        working-directory: verification/rio-accounts
+        run: npx playwright test --config=mobile/playwright.config.mjs --grep='RIO-MOBILE-05'
       - name: Execute isolated database backup and restoration
         run: |
           python verification/rio-accounts/fixture.py stop-bff
