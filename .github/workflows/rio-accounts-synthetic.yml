@@ -75,6 +75,7 @@ jobs:
         run: |
           npm ci --prefix verification/rio-accounts --ignore-scripts --no-audit --no-fund
           cd verification/rio-accounts
+          node --test test_account_readback.mjs
           npx playwright install --with-deps chromium
       - name: Start disposable real Keycloak and PostgreSQL
         run: |
