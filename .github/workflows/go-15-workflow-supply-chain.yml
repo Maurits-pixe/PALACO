@@ -3,7 +3,9 @@ name: GO-15 Workflow Supply-Chain Conformance
 on:
   push:
     branches:
+      - main
       - "go-15-workflow-supply-chain"
+      - "go-15-post-merge-continuity"
     paths:
       - ".github/workflows/**"
       - "tools/verify_go15_workflow_supply_chain.py"
