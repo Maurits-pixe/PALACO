@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
         env:
           POSTGRES_USER: postgres
           POSTGRES_DB: palaco
@@ -63,12 +63,12 @@ jobs:
       - name: Formatting regression
         run: cargo fmt --all -- --check
       - name: Clippy regression
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: Workspace check regression
-        run: cargo check --workspace --all-targets
+        run: cargo check --locked --workspace --all-targets
       - name: Workspace build regression
-        run: cargo build --workspace --all-targets
+        run: cargo build --locked --workspace --all-targets
       - name: Workspace test regression
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
       - name: Explicit PVS-002 integration test
-        run: cargo test -p palaco-kernel --test pvs002_cross_crate
+        run: cargo test --locked -p palaco-kernel --test pvs002_cross_crate
