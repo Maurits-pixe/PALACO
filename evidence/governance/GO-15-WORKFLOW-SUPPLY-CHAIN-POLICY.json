@@ -1,0 +1,14 @@
+{
+  "schema": "palaco.workflow-supply-chain.v1",
+  "default": {
+    "external_actions": "immutable_commit_sha_only",
+    "permissions": "explicit",
+    "write_permissions": "deny"
+  },
+  "write_exceptions": {
+    ".github/workflows/temporary-preview.yml": [
+      "id-token",
+      "pages"
+    ]
+  }
+}
