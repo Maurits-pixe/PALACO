@@ -44,3 +44,30 @@ The repair closes only when a pull-request GO-10 run demonstrates:
 - explicit PVS-002 integration PASS;
 - GO-09 Evidence Seal verification PASS;
 - GO-10 machine audit PASS.
+
+## Secondary audit-scope correction
+
+The repaired database-backed test run exposed a second issue in the GO-10
+machine audit: GO-10 was scanning every workflow added to the repository after
+Foundation v1.0.0, including later RIO, preview, consumer, Hannie and other
+post-release workflows.
+
+That behavior would allow future development to retroactively redefine the
+historical Foundation release audit.
+
+GO-10 is therefore now explicitly limited to the Foundation release-critical
+workflow set:
+
+- GO-04
+- GO-05
+- GO-06
+- GO-07
+- GO-08
+- GO-09
+- GO-10
+- GO-10R
+- GO-11
+
+Post-release workflow supply-chain conformance is intentionally left for a
+separate governance gate. This is a scope separation, not a waiver of those
+later workflows.
