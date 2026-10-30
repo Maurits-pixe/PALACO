@@ -19,6 +19,8 @@ on:
 permissions:
   contents: read
 
+# Parser coverage: list-form and named-step uses directives.
+
 jobs:
   workflow-supply-chain:
     runs-on: ubuntu-latest
