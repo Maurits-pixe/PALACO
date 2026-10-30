@@ -13,7 +13,7 @@ WORKFLOW_DIR = ROOT / ".github" / "workflows"
 POLICY_PATH = ROOT / "evidence" / "governance" / "GO-15-WORKFLOW-SUPPLY-CHAIN-POLICY.json"
 
 IMMUTABLE_ACTION = re.compile(r"^[^/@]+/[^/@]+@[0-9a-f]{40}$")
-USES = re.compile(r"^\\s*(?:-\\s*)?uses:\\s*([^\\s#]+)")
+USES = re.compile(r"^\s*(?:-\s*)?uses:\s*([^\s#]+)")
 TOP_LEVEL_PERMISSIONS = re.compile(r"^permissions:\s*$", re.MULTILINE)
 WRITE_SCOPE = re.compile(r"^\s{2}([A-Za-z0-9_-]+):\s*write\s*$", re.MULTILINE)
 
