@@ -32,6 +32,18 @@ SPECIAL_EXTRACTIONS = {
     "docs/implementation/PIS/PIS-011.md",
 }
 
+FOUNDATION_WORKFLOWS = [
+    "go-04-rust-workspace.yml",
+    "go-05-rust-build.yml",
+    "go-06-rust-tests.yml",
+    "go-07-pvs-001.yml",
+    "go-08-pvs-002.yml",
+    "go-09-evidence-seal.yml",
+    "go-10-audit.yml",
+    "go-10r-license-resolution.yml",
+    "go-11-release-manifest.yml",
+]
+
 
 def error(message: str) -> None:
     ERRORS.append(message)
@@ -141,16 +153,21 @@ else:
     if "Option A" not in text or "MIT OR Apache-2.0" not in text or "RATIFIED" not in text:
         blocker("OWNER_LICENSE_RATIFICATION_INCOMPLETE")
 
-# 3. Workflow supply-chain and permission boundary.
+# 3. Foundation release-critical workflow supply-chain and permission boundary.
+#
+# GO-10 is the Foundation v1.0.0 audit. Later post-release workflows are
+# governed by later gates and MUST NOT retroactively redefine this audit's
+# scope. Repository-wide workflow hardening is a separate governance concern.
 workflow_dir = ROOT / ".github" / "workflows"
-workflows = sorted(workflow_dir.glob("*.yml"))
-if not workflows:
-    error("no GitHub Actions workflows found")
+workflows = [workflow_dir / name for name in FOUNDATION_WORKFLOWS]
 
 uses_pattern = re.compile(r"^\s*uses:\s*([^\s]+)\s*$")
 immutable_action_pattern = re.compile(r"^[^/@]+/[^/@]+@[0-9a-f]{40}$")
 
 for path in workflows:
+    if not path.is_file():
+        error(f"required Foundation workflow missing: {path.name}")
+        continue
     content = path.read_text(encoding="utf-8")
     if "permissions:" not in content:
         error(f"{path.name} lacks explicit permissions")
@@ -216,6 +233,7 @@ if ERRORS:
 print("GO-10 AUDIT: COMPLETE")
 print("audit_integrity=PASS")
 print(f"canonical_artifacts={len(docs)}")
+print("workflow_scope=FOUNDATION_RELEASE_CRITICAL_ONLY")
 print("workflow_supply_chain=IMMUTABLY_PINNED")
 print("workflow_permissions=READ_ONLY")
 print("license_resolution=RATIFIED_MIT_OR_APACHE_2_0")

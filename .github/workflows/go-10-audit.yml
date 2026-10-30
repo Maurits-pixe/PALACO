@@ -15,6 +15,20 @@ on:
       - "evidence/**"
       - "tools/**"
       - ".github/workflows/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "LICENSE"
+      - "LICENSE-MIT"
+      - "LICENSE-APACHE"
+      - "crates/**"
+      - "docs/**"
+      - "tests/**"
+      - "evidence/**"
+      - "tools/**"
+      - ".github/workflows/**"
   workflow_dispatch:
 
 permissions:
@@ -24,6 +38,22 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: palaco
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/palaco
     steps:
       - name: Checkout audit commit with ancestry
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -34,6 +64,8 @@ jobs:
         with:
           toolchain: 1.98.1
           components: rustfmt, clippy
+      - name: Verify PostgreSQL readiness
+        run: pg_isready -h localhost -p 5432 -U postgres -d palaco
       - name: PVS-001 regression
         run: python3 tools/pvs001_workspace_integrity.py
       - name: PVS-002 regression
