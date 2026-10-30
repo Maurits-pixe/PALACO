@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -39,8 +39,8 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Check
-        run: cargo check --workspace
+        run: cargo check --locked --workspace
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --locked --workspace
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
