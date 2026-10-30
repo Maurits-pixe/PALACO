@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17
+        image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
         env:
           POSTGRES_USER: postgres
           POSTGRES_DB: palaco
@@ -54,6 +54,6 @@ jobs:
           rustc --version
           cargo --version
       - name: Test workspace all targets
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
       - name: Test workspace documentation examples
-        run: cargo test --workspace --doc
+        run: cargo test --locked --workspace --doc
