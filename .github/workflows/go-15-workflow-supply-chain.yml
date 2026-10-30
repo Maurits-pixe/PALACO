@@ -1,0 +1,32 @@
+name: GO-15 Workflow Supply-Chain Conformance
+
+on:
+  push:
+    branches:
+      - "go-15-workflow-supply-chain"
+    paths:
+      - ".github/workflows/**"
+      - "tools/verify_go15_workflow_supply_chain.py"
+      - "evidence/governance/GO-15-WORKFLOW-SUPPLY-CHAIN-POLICY.json"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/**"
+      - "tools/verify_go15_workflow_supply_chain.py"
+      - "evidence/governance/GO-15-WORKFLOW-SUPPLY-CHAIN-POLICY.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  workflow-supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify repository-wide workflow supply chain
+        run: python3 tools/verify_go15_workflow_supply_chain.py
