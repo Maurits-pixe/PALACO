@@ -224,7 +224,6 @@ def main() -> None:
         "creationInfo": {
             "created": utc_commit_time(),
             "creators": ["Tool: PALACO GO-17 deterministic SBOM generator"],
-            "licenseListVersion": "3.26",
         },
         "documentDescribes": [p["SPDXID"] for p in packages],
         "packages": packages,
