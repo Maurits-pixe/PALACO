@@ -1,0 +1,367 @@
+{
+  "schema": "rio-accounts-browser-evidence/v1",
+  "status": "passed",
+  "suiteErrors": 0,
+  "browser": "chromium",
+  "oidcProvider": "real-keycloak-loopback",
+  "credentials": "synthetic-runtime-only",
+  "productionAccounts": "HOLD",
+  "realInvitations": "HOLD",
+  "verificationScope": "synthetic-browser-emulation",
+  "physicalAndroidVerified": false,
+  "manualScreenReaderVerified": false,
+  "tests": [
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1612,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1055,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1063,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1035,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1065,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 984,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 986,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1065,
+      "surface": "android-emulation",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 746,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 1291,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 812,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 734,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 802,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 733,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 746,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    },
+    {
+      "id": "RIO-MOBILE-01",
+      "title": "Native consent controls preserve focus and reflow",
+      "status": "passed",
+      "durationMs": 737,
+      "surface": "desktop-keyboard",
+      "phases": [
+        {
+          "phase": "mobile-login-route",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-native-semantics",
+          "status": "passed"
+        },
+        {
+          "phase": "mobile-reflow",
+          "status": "passed"
+        }
+      ],
+      "failedLines": []
+    }
+  ]
+}
