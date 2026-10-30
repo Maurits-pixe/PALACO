@@ -1,0 +1,17 @@
+{
+  "gate": "GO-17",
+  "title": "Dependency Inventory & SBOM Provenance",
+  "spdx_version": "SPDX-2.3",
+  "sources": [
+    "Cargo.lock",
+    "**/package-lock.json",
+    ".github/workflows/*.{yml,yaml} image references"
+  ],
+  "requirements": {
+    "cargo_lock_required": true,
+    "npm_dependency_inventory_from_lockfiles_only": true,
+    "container_images_require_sha256_digest": true,
+    "license_conclusions_without_authoritative_evidence": "NOASSERTION",
+    "output_is_derived_evidence_not_authority": true
+  }
+}

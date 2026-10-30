@@ -1,0 +1,52 @@
+name: GO-17 SPDX SBOM Provenance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "**/package-lock.json"
+      - ".github/workflows/**"
+      - "tools/generate_go17_spdx_sbom.py"
+      - "tools/verify_go17_spdx_sbom.py"
+      - "evidence/governance/GO-17-SBOM-POLICY.json"
+      - "evidence/governance/GO-17-DEPENDENCY-INVENTORY-SBOM.md"
+      - ".github/workflows/go-17-spdx-sbom.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "**/package-lock.json"
+      - ".github/workflows/**"
+      - "tools/generate_go17_spdx_sbom.py"
+      - "tools/verify_go17_spdx_sbom.py"
+      - "evidence/governance/GO-17-SBOM-POLICY.json"
+      - "evidence/governance/GO-17-DEPENDENCY-INVENTORY-SBOM.md"
+      - ".github/workflows/go-17-spdx-sbom.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spdx-sbom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+      - name: Generate deterministic SPDX inventory
+        run: python3 tools/generate_go17_spdx_sbom.py
+      - name: Verify SPDX inventory
+        run: python3 tools/verify_go17_spdx_sbom.py
+      - name: Record SBOM checksum
+        run: sha256sum artifacts/go17/PALACO.spdx.json
+      - name: Upload GO-17 SPDX SBOM
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-17-spdx-sbom
+          path: artifacts/go17/PALACO.spdx.json
+          if-no-files-found: error
+          retention-days: 90
