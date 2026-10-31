@@ -1,0 +1,121 @@
+{
+  "schema_version": "OR6IT-WORLD-0.1",
+  "object_type": "world_design_manifest",
+  "status": "DESIGN_DRAFT",
+  "engine": {
+    "id": "OR6IT",
+    "role": "Mundo World/Planet Engine Creator",
+    "authority": "NON_AUTHORITATIVE",
+    "may_activate_world": false,
+    "may_execute_external_effects": false
+  },
+  "world": {
+    "id": "WORLD-EVA-001",
+    "name": "EVA",
+    "class": "PALACO_WORLD",
+    "sequence": 1,
+    "statement": "A place of memory, creation, life and proof. Eva is not a planet. Eva is a promise.",
+    "design_language": "VORM9EVIN9",
+    "communication_layer": "RIO"
+  },
+  "citadel": {
+    "binding_id": "LA-001",
+    "constitutional_reference": "EVA-LA-001"
+  },
+  "structure": {
+    "sequence": [
+      "HORIZON",
+      "GATE",
+      "RING",
+      "FOUR_REGIONS",
+      "CORE"
+    ],
+    "regions": [
+      {
+        "id": "MEMORY",
+        "label": "Memory",
+        "purpose": "Archive and lineage",
+        "verification_state": "UNSPECIFIED"
+      },
+      {
+        "id": "CREATION",
+        "label": "Creation",
+        "purpose": "Atelier and development",
+        "verification_state": "UNSPECIFIED"
+      },
+      {
+        "id": "LIFE",
+        "label": "Life",
+        "purpose": "Nature and habitation",
+        "verification_state": "UNSPECIFIED"
+      },
+      {
+        "id": "PROOF",
+        "label": "Proof",
+        "purpose": "Verification and provenance",
+        "verification_state": "UNSPECIFIED"
+      }
+    ],
+    "landmarks": [
+      {
+        "id": "THE_HORIZON",
+        "label": "The Horizon",
+        "meaning": "The vision"
+      },
+      {
+        "id": "THE_GATE",
+        "label": "The Gate",
+        "meaning": "The arrival"
+      },
+      {
+        "id": "THE_RING",
+        "label": "The Ring",
+        "meaning": "The connection"
+      },
+      {
+        "id": "THE_GARDENS",
+        "label": "The Gardens",
+        "meaning": "The living space"
+      },
+      {
+        "id": "THE_ATELIER",
+        "label": "The Atelier",
+        "meaning": "The creation space"
+      },
+      {
+        "id": "THE_ARCHIVE",
+        "label": "The Archive",
+        "meaning": "The memory"
+      },
+      {
+        "id": "THE_CORE",
+        "label": "The Core",
+        "meaning": "The essence"
+      }
+    ]
+  },
+  "lifecycle": {
+    "design_state": "DESIGN_DRAFT",
+    "execution_state": "NOT_AUTHORIZED",
+    "activation_requires": [
+      "IDENTITY_VALIDATION",
+      "PROVENANCE_BINDING",
+      "EVIDENCE_POLICY_EVALUATION",
+      "CONSTITUTIONAL_VALIDATION",
+      "HUMAN_DECISION",
+      "EXPLICIT_AUTHORIZATION",
+      "COMMIT_GATE"
+    ]
+  },
+  "visual_reference": {
+    "path": "assets/world-eva-001-reference.png",
+    "type": "CONCEPT_DESIGN_REFERENCE",
+    "technical_specification": false,
+    "constitutional_authority": false
+  },
+  "provenance": {
+    "source_class": "USER_SUPPLIED_DESIGN_REFERENCE",
+    "evidence_state": "DESIGN_EVIDENCE_ONLY",
+    "validation_state": "UNVALIDATED"
+  }
+}
