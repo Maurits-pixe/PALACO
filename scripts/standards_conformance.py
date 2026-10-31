@@ -918,6 +918,26 @@ def find_unverified_controls(instance, validator=None):
     }
 
 
+def find_palaco_reviews_due(instance, as_of, validator=None):
+    """Find scheduled review dates, not proof that reviews are incomplete."""
+    require(isinstance(as_of, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", as_of),
+            "review cutoff must be a valid YYYY-MM-DD calendar date")
+    try:
+        cutoff = date.fromisoformat(as_of)
+    except ValueError as error:
+        raise ConformanceError("review cutoff must be a valid YYYY-MM-DD calendar date") from error
+    validate_palaco_registry(instance, validator)
+    return {
+        "as_of": as_of,
+        "definition": "lifecycle.next_review is on or before as_of; all lifecycle states included",
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if date.fromisoformat(record["lifecycle"]["next_review"]) <= cutoff
+        ),
+        "scope": "supplied review-date metadata only; not proof of overdue work, compliance or authority",
+    }
+
+
 def summarize_palaco_registry(instance, validators=None):
     """Count validated snapshot metadata without asserting completeness or trust."""
     if validators is None:
@@ -1264,6 +1284,75 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_reviews_due():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, review_date in ((3, "2027-01-16"), (2, "2027-01-15"), (1, "2027-01-14")):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["lifecycle"]["next_review"] = review_date
+        fixture["objects"].append(record)
+    archived = fixture["objects"][-1]
+    archived["lifecycle"]["status"] = "Archived"
+    archived["lifecycle"]["approved"] = archived["lifecycle"]["created"]
+    archived["approval"] = {
+        "status": "Approved", "authority": "Synthetic review team",
+        "approval_ref": "Synthetic review-date fixture",
+    }
+    original = copy.deepcopy(fixture)
+    for as_of, expected in (
+        ("2027-01-13", []),
+        ("2027-01-14", ["FE-00001"]),
+        ("2027-01-15", ["FE-00001", "FE-00002"]),
+        ("2027-01-16", ["FE-00001", "FE-00002", "FE-00003"]),
+        ("2028-02-29", ["FE-00001", "FE-00002", "FE-00003"]),
+    ):
+        result = find_palaco_reviews_due(fixture, as_of, validator)
+        require(result == {
+            "as_of": as_of,
+            "definition": "lifecycle.next_review is on or before as_of; all lifecycle states included",
+            "object_ids": expected,
+            "scope": "supplied review-date metadata only; not proof of overdue work, compliance or authority",
+        }, f"unexpected review-date result: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_reviews_due(reordered, as_of, validator) == result,
+                "review-date query depends on record order")
+    require(fixture == original, "review-date query mutated input")
+    for as_of in ("2027-02-29", "2027-13-01", "0000-01-01", "20270115",
+                  "2027-1-15", "2027-01-15T00:00:00Z", "2027-01-15\n", "", None):
+        try:
+            find_palaco_reviews_due(fixture, as_of, validator)
+        except ConformanceError as error:
+            require("YYYY-MM-DD" in str(error), f"unexpected cutoff error: {error}")
+        else:
+            raise ConformanceError(f"invalid review cutoff accepted: {as_of!r}")
+    bad_ref = copy.deepcopy(fixture)
+    bad_ref["objects"][0]["traceability"]["upstream"] = ["FE-99999"]
+    bad_date = copy.deepcopy(fixture)
+    bad_date["objects"][0]["lifecycle"]["next_review"] = "2027-02-29"
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, diagnostic in (({}, "registry structure"), (bad_ref, "unresolved"),
+                                 (bad_date, "registry structure"), (duplicate, "duplicate object ID")):
+        try:
+            find_palaco_reviews_due(instance, "2027-01-13", validator)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected review-date diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid snapshot queried: {diagnostic}")
+    cli = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--registry",
+         str(PALACO_FIXTURE_DIR / "registry.fixture.json"), "--find-review-due", "2027-01-15"],
+        capture_output=True, text=True, timeout=30,
+    )
+    require(cli.returncode == 0, f"review-date CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout)["object_ids"] == ["CAP-00001", "FE-00001", "REQ-00001"],
+            "unexpected review-date CLI result")
+    return "5 inclusive/empty/leap-date queries + 13 rejections + nonmutation/order checks + CLI regression"
 
 
 def check_palaco_diff():
@@ -2064,6 +2153,7 @@ CHECKS = (
     ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),
     ("PALACO registry summary conformance", check_palaco_summary),
     ("PALACO registry snapshot diff conformance", check_palaco_diff),
+    ("PALACO registry review-date query conformance", check_palaco_reviews_due),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2085,6 +2175,8 @@ def main():
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
                         help="Return validated snapshot counts by object type and lifecycle status as JSON")
+    parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
+                        help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
                         help="Return IDs isolated in traceability.upstream as JSON")
     parser.add_argument("--find-unverified-controls", action="store_true",
@@ -2094,6 +2186,14 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_review_due is not None:
+        if args.registry is None:
+            parser.error("--find-review-due requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-review-due cannot be combined with other query or comparison modes")
     if args.diff:
         if args.registry is None or args.previous_registry is None:
             parser.error("--diff requires --registry and --previous-registry")
@@ -2147,7 +2247,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.diff:
+            if args.find_review_due is not None:
+                result = find_palaco_reviews_due(current, args.find_review_due)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.diff:
                 result = diff_palaco_registry(read_json(args.previous_registry), current)
                 print(json.dumps(result, indent=2))
                 return 0

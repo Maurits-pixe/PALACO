@@ -2297,6 +2297,26 @@ Invalid snapshots, including empty registries, fail nonzero without summary
 results. No records or files are modified. `--summary` requires `--registry` and
 cannot be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only review-date queries find scheduled reviews up to an explicit cutoff:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-review-due 2027-01-15
+```
+
+The cutoff must be a valid calendar date in exact `YYYY-MM-DD` form. No system
+clock, timezone conversion or implicit current date is used. After full snapshot
+validation, the query emits JSON with `as_of`, `definition`, sorted `object_ids`
+and a scope disclaimer. Matching is inclusive: `lifecycle.next_review <= as_of`.
+All lifecycle states, including Retired and Archived, are included; no review
+exemption is inferred. Results describe recorded scheduling metadata, not proof
+that work is overdue, a review is incomplete, or compliance/authority exists.
+No matches yields an empty array and exit 0. Invalid dates or snapshots fail
+nonzero without query results, including invalid records outside the date range.
+The query changes no records or files, requires `--registry` and cannot be
+combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
