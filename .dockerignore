@@ -1,0 +1,12 @@
+.git
+.github
+**/node_modules
+**/dist
+**/target
+**/.runtime
+**/certs
+**/.env*
+**/*.sqlite*
+**/*.log
+evidence
+*.zip
