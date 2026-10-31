@@ -177,6 +177,18 @@ impl RuntimeQueue {
         plan
     }
 
+    /// Lazily transfers at most `limit` pending plans in FIFO order.
+    ///
+    /// Each requested item delegates to [`Self::next_plan`]. Creating or dropping
+    /// the iterator transfers nothing else; unrequested plans remain pending.
+    /// A zero limit leaves the queue unchanged. Drain completes only when the
+    /// final pending plan is actually transferred. No plans are collected,
+    /// executed or authorized. Transferred plans cannot be rolled back by
+    /// dropping this iterator, and are outside the scope of [`Self::stop`].
+    pub fn next_plans(&mut self, limit: usize) -> impl Iterator<Item = RuntimePlan> + '_ {
+        std::iter::from_fn(move || self.next_plan()).take(limit)
+    }
+
     /// Permanently stops admission and discards pending local plans.
     ///
     /// Returns the number discarded. Repeated calls return zero. Already

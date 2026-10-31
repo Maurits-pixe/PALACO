@@ -75,6 +75,12 @@ contractvalidatie. `Held`, `Denied`, `Invalid`, `Full` en `Stopped` zijn explici
 toelatingsfouten; `RejectedPlan::into_plan()` geeft het oorspronkelijke plan terug.
 `next_plan()` draagt het oudste plan over zonder het uit te voeren. Vrijgekomen
 capaciteit kan opnieuw worden gebruikt; dubbele inzendingen tellen afzonderlijk.
+`next_plans(limit)` draagt lui maximaal `limit` plannen in FIFO-volgorde over,
+zonder vooraf verzamelen. Alleen daadwerkelijk opgevraagde items verdwijnen:
+een ongebruikte iterator, nulgrens of vroeg afgebroken batch laat de rest staan.
+Een drain voltooit pas bij de werkelijke laatste overdracht. Reeds opgehaalde
+plannen worden bij een fout of het laten vallen van de iterator niet teruggezet;
+de consument blijft verantwoordelijk voor hun verdere afhandeling.
 `stop()` stopt definitief, verwijdert wachtende lokale plannen en retourneert
 hun aantal. Reeds overgedragen plannen worden niet geannuleerd of gewijzigd.
 `begin_drain()` sluit toelating definitief maar bewaart wachtende plannen:

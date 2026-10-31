@@ -19,6 +19,72 @@ fn plan(id: &str, authority: AuthorityState) -> Result<RuntimePlan, ContractErro
 }
 
 #[test]
+fn bounded_transfers_are_lazy_and_preserve_unrequested_fifo_entries() -> Result<(), ContractError> {
+    let first = plan("BATCH-FIRST", AuthorityState::Authorized)?;
+    let second = plan("BATCH-SECOND", AuthorityState::Authorized)?;
+    let third = plan("BATCH-THIRD", AuthorityState::Authorized)?;
+    let mut queue = RuntimeQueue::new(3);
+    for pending in [&first, &second, &third] {
+        queue.submit(pending.clone()).expect("admission");
+    }
+    {
+        let _unused = queue.next_plans(usize::MAX);
+    }
+    assert_eq!(queue.len(), 3);
+    assert_eq!(queue.next_plans(0).next(), None);
+    assert_eq!(queue.len(), 3);
+    {
+        let mut batch = queue.next_plans(3);
+        assert_eq!(batch.next(), Some(first));
+    }
+    assert_eq!(queue.len(), 2);
+    assert_eq!(queue.state(), QueueState::Running);
+    assert_eq!(queue.next_plans(1).collect::<Vec<_>>(), vec![second]);
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.next_plan(), Some(third));
+    assert!(queue.is_empty());
+    Ok(())
+}
+
+#[test]
+fn bounded_drain_completes_only_on_actual_last_transfer() -> Result<(), ContractError> {
+    let first = plan("DRAIN-BATCH-FIRST", AuthorityState::Authorized)?;
+    let second = plan("DRAIN-BATCH-SECOND", AuthorityState::Authorized)?;
+    let mut queue = RuntimeQueue::new(2);
+    queue.submit(first.clone()).expect("admission");
+    queue.submit(second.clone()).expect("admission");
+    queue.begin_drain();
+    assert_eq!(queue.next_plans(0).next(), None);
+    assert_eq!(queue.state(), QueueState::Draining);
+    assert_eq!(queue.next_plans(1).collect::<Vec<_>>(), vec![first]);
+    assert_eq!(queue.state(), QueueState::Draining);
+    assert_eq!(queue.len(), 1);
+    assert_eq!(
+        queue.next_plans(usize::MAX).collect::<Vec<_>>(),
+        vec![second]
+    );
+    assert_eq!(queue.state(), QueueState::Stopped);
+    assert_eq!(queue.next_plans(1).next(), None);
+    assert_eq!(queue.stop(), 0);
+    Ok(())
+}
+
+#[test]
+fn stop_discards_only_unrequested_batch_remainder() -> Result<(), ContractError> {
+    let original = plan("TRANSFER-BEFORE-STOP", AuthorityState::Authorized)?;
+    let mut queue = RuntimeQueue::new(2);
+    queue.submit(original.clone()).expect("first");
+    queue.submit(original.clone()).expect("second");
+    queue.begin_drain();
+    let transferred = queue.next_plans(2).next().expect("first transfer");
+    assert_eq!(queue.len(), 1);
+    assert_eq!(queue.stop(), 1);
+    assert_eq!(transferred, original);
+    assert_eq!(queue.next_plans(usize::MAX).next(), None);
+    Ok(())
+}
+
+#[test]
 fn queue_preserves_fifo_and_reuses_freed_capacity() -> Result<(), ContractError> {
     let first = plan("FIRST", AuthorityState::Authorized)?;
     let second = plan("SECOND", AuthorityState::Authorized)?;
