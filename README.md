@@ -2559,6 +2559,28 @@ proof of recent activity or authority; future timestamps are not independently
 verified. No records or files are modified. The option requires `--registry`
 and cannot be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only direct-dependents queries identify records that depend on an object:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-dependents FE-00001
+```
+
+The exact object ID must exist in the supplied snapshot. After full snapshot
+validation, JSON contains `object_id`, `definition`, sorted unique `object_ids`
+and a scope disclaimer. Results are direct dependency sources from the union
+of `dependencies` and explicit `DEPENDS_ON` edges; representing the same
+dependency in both places returns its source once. Upstream links, other
+relationship types, dedicated references and transitive dependents are excluded.
+For the fixture, `FE-00001` returns only `CAP-00001`, not the indirectly dependent
+`REQ-00001`. An existing object without direct dependents returns an empty array
+and exit 0; unknown IDs or invalid snapshots fail nonzero without results,
+including invalid nonmatching records. Supplied dependency metadata is not
+complete impact analysis, runtime dependency discovery or authority.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
