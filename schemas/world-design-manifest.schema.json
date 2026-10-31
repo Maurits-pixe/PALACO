@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palaco.dev/schemas/world-design-manifest.schema.json",
+  "title": "OR6IT World Design Manifest (Non-Canonical Structural Stub)",
+  "description": "Non-canonical structural stub for design discussion only. This is not a PALACO canonical schema, production validation contract, or authorization contract; canonical schema alignment remains open.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "object_type",
+    "status",
+    "engine",
+    "world",
+    "citadel",
+    "structure",
+    "lifecycle",
+    "visual_reference",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "minLength": 1 },
+    "object_type": { "const": "world_design_manifest" },
+    "status": { "type": "string", "enum": ["DESIGN_DRAFT", "PROPOSED", "EVIDENCE_BOUND", "CONSTITUTIONALLY_VALIDATED", "HUMAN_DECISION", "AUTHORIZED", "COMMIT_ALLOWED", "ACTIVE"] },
+
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "authority", "may_activate_world", "may_execute_external_effects"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "authority": { "type": "string", "enum": ["NON_AUTHORITATIVE"] },
+        "may_activate_world": { "const": false },
+        "may_execute_external_effects": { "const": false }
+      }
+    },
+
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "class", "sequence", "statement", "design_language", "communication_layer"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^WORLD-[A-Z0-9-]+$" },
+        "name": { "type": "string", "minLength": 1 },
+        "class": { "type": "string", "enum": ["PALACO_WORLD"] },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "statement": { "type": "string", "minLength": 1 },
+        "design_language": { "type": "string", "minLength": 1 },
+        "communication_layer": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "citadel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_id", "constitutional_reference"],
+      "properties": {
+        "binding_id": { "type": "string", "minLength": 1 },
+        "constitutional_reference": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "structure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "regions", "landmarks"],
+      "properties": {
+        "sequence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "purpose", "verification_state"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "purpose": { "type": "string", "minLength": 1 },
+              "verification_state": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "landmarks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "meaning"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "meaning": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["design_state", "execution_state", "activation_requires"],
+      "properties": {
+        "design_state": { "type": "string", "minLength": 1 },
+        "execution_state": { "type": "string", "enum": ["NOT_AUTHORIZED", "AUTHORIZED", "ACTIVE"] },
+        "activation_requires": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "visual_reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "type", "technical_specification", "constitutional_authority"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^assets/.+\\.png$" },
+        "type": { "type": "string", "minLength": 1 },
+        "technical_specification": { "type": "boolean" },
+        "constitutional_authority": { "type": "boolean", "const": false }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_class", "evidence_state", "validation_state"],
+      "properties": {
+        "source_class": { "type": "string", "minLength": 1 },
+        "evidence_state": { "type": "string", "minLength": 1 },
+        "validation_state": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}
