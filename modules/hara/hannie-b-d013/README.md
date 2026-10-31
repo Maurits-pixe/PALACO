@@ -24,3 +24,33 @@ Provisioning gebeurt uitsluitend in tests/fixture.mjs. Geen productiegrant of ec
 Niet in deze slice: providers, D1, restore-/trustepoch, live identiteit, persona-reviewflow, integratie, productie, merge of PROOF. Lokale Date.now is geen geattesteerde ERA-tijd. Eén AI-builder; onafhankelijke review PENDING. Productie/integratie HOLD.
 
 B-R1 repair requires Linux `/usr/bin/flock` and a private canonical database path. Recovery from a new supervisor withholds historical content without a deadline witness. Release scope is locked worker IPC, not a consumer/network delivery guarantee. See CONTRACT.md.
+
+## BR06 evidence harness
+
+Recovery also validates the grant's calendar and CREATE action. Two corruption
+regressions bring the required suite to 22 controls. The supervisor-restart test
+reads its result from a fixture file written by the separate process; it does not
+depend on nested stdout capture.
+
+The evidence runner writes compiler/test output through file descriptors and
+records spawn errors, signals, and test isolation. PASS requires exactly 22
+passing controls, no skipped/cancelled/todo controls, successful processes and
+unchanged source hashes. The expected count must be updated when adding controls.
+
+Default isolation is `process`. For environments that cannot transport nested
+Node test output, run `B013_TEST_ISOLATION=none node tools/run-evidence.mjs`.
+This is explicit run metadata, not equivalent evidence for process isolation.
+Candidate writer, reader, revoke, and restart processes remain separate OS
+processes. CI is configured to check both isolation modes on both Node versions;
+configuration alone does not establish a CI PASS. Acceptance/integration remain HOLD.
+
+`node tools/check-evidence.mjs <summary.json>` separately checks the runner summary,
+current complete source inventory, raw TAP totals, process outcomes, and complete
+artifact inventory against the recorded hashes. CI runs it after the runner.
+Missing files, extra artifacts, changed source or inconsistent counts fail closed.
+This verifies consistency against the current checkout; it is not an attestation
+of origin or an independent acceptance review. A party replacing all evidence and
+the trusted checkout is outside this check's claim.
+`python3 tests/check-evidence.py <summary.json>` checks a valid copied run and six
+negative cases: changed TAP, forged counts, missing source, missing B12 trace,
+artifact symlink and run-path traversal. Disposable run copies are removed.
