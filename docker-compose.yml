@@ -1,0 +1,172 @@
+name: palaco-local
+services:
+  bastion-api:
+    build:
+      context: .
+      dockerfile: services/bastion-demo/Dockerfile
+    environment:
+      BASTION_DEMO_MODE: local-only
+      BASTION_ALLOWED_ORIGINS: http://localhost:5174,http://localhost:5175
+    volumes:
+      - bastion-data:/data
+    security_opt: ["no-new-privileges:true"]
+
+  aether:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        APP_PATH: modules/aether-preview
+        VITE_BASTION_API_URL: ${VITE_BASTION_API_URL:-/api}
+    ports: ["127.0.0.1:5174:80"]
+    depends_on:
+      bastion-api: { condition: service_healthy }
+
+  bastion:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        APP_PATH: modules/citadel-bastion-preview
+        VITE_BASTION_DEMO: "true"
+    ports: ["127.0.0.1:5175:80"]
+    depends_on:
+      bastion-api: { condition: service_healthy }
+
+  launcher:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        APP_PATH: modules/launcher-v1_2
+    ports: ["127.0.0.1:5173:80"]
+    depends_on:
+      bastion-api: { condition: service_healthy }
+
+  website:
+    image: nginx:stable-alpine
+    ports: ["127.0.0.1:8080:80"]
+    volumes:
+      - ./website:/usr/share/nginx/html:ro
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rust-check:
+    profiles: ["checks"]
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+
+  # RIO retains its fixed synthetic issuer/database loopback endpoints.
+  # Sharing this namespace avoids weakening its authority/host checks.
+  rio-loopback:
+    build:
+      context: .
+      dockerfile: services/rio-accounts/Dockerfile
+      target: gateway
+    ports:
+      - "127.0.0.1:8088:8087"
+      - "127.0.0.1:8089:8089"
+    volumes:
+      - rio-runtime:/app/verification/rio-accounts/.runtime:ro
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      rio-prepare: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--cacert", "/app/verification/rio-accounts/.runtime/tls-cert.pem", "https://localhost:8088/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
+
+  rio-prepare:
+    build:
+      context: .
+      dockerfile: services/rio-accounts/Dockerfile
+      target: fixture
+    command: ["sh", "-ec", "python verification/rio-accounts/fixture.py prepare; cp verification/rio-accounts/.runtime/rio-synthetic-realm.json /realm/; chown -R 1000:1000 verification/rio-accounts/.runtime"]
+    volumes:
+      - rio-runtime:/app/verification/rio-accounts/.runtime
+      - rio-realm:/realm
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE"]
+    security_opt: ["no-new-privileges:true"]
+
+  rio-keycloak:
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741
+    network_mode: service:rio-loopback
+    command:
+      - start-dev
+      - --import-realm
+      - --db=dev-mem
+      - --hostname=http://127.0.0.1:8089
+      - --http-port=8089
+    volumes:
+      - rio-realm:/opt/keycloak/data/import:ro
+    # No bootstrap admin is enabled; this demo only needs the imported realm.
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -ec
+        - 'exec 3<>/dev/tcp/127.0.0.1/8089; printf "GET /realms/rio-synthetic/.well-known/openid-configuration HTTP/1.1\r\nHost: 127.0.0.1:8089\r\nConnection: close\r\n\r\n" >&3; head -n 1 <&3 | grep -q "200 OK"'
+      interval: 3s
+      timeout: 3s
+      retries: 60
+      start_period: 30s
+    depends_on:
+      rio-prepare: { condition: service_completed_successfully }
+      rio-loopback: { condition: service_started }
+    mem_limit: 1g
+
+  rio-postgres:
+    image: postgres:18.6-bookworm@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c
+    network_mode: service:rio-loopback
+    entrypoint: ["sh", "-ec"]
+    command:
+      - >-
+        . /app/verification/rio-accounts/.runtime/compose.env;
+        export POSTGRES_PASSWORD="$$RIO_PG_PASSWORD";
+        exec docker-entrypoint.sh postgres -p 8090 -c max_connections=20 -c shared_buffers=64MB
+    environment:
+      POSTGRES_USER: rio_dev
+      POSTGRES_DB: rio_synthetic
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256 --auth-local=scram-sha-256
+    volumes:
+      - rio-runtime:/app/verification/rio-accounts/.runtime:ro
+      - rio-data:/var/lib/postgresql
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-p", "8090", "-U", "rio_dev", "-d", "rio_synthetic"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    depends_on:
+      rio-prepare: { condition: service_completed_successfully }
+      rio-loopback: { condition: service_started }
+
+  rio-accounts:
+    build:
+      context: .
+      dockerfile: services/rio-accounts/Dockerfile
+    network_mode: service:rio-loopback
+    volumes:
+      - rio-runtime:/app/verification/rio-accounts/.runtime:ro
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      rio-keycloak: { condition: service_healthy }
+      rio-postgres: { condition: service_healthy }
+    restart: on-failure:5
+
+volumes:
+  bastion-data:
+  rio-runtime:
+  rio-realm:
+  rio-data:
