@@ -2417,6 +2417,30 @@ records. Recorded criticality is not proof of risk assessment, compliance or
 authority. No records or files are modified. The query requires `--registry`
 and cannot be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only confidentiality queries filter exact classification labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-confidentiality Public
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Public`, `Internal`,
+`Confidential` and `Restricted`. Matching uses only
+`classification.confidentiality` and is exact, not a threshold or clearance
+comparison. After full snapshot validation, JSON contains `confidentiality`,
+sorted `object_ids` and a scope disclaimer. No matches returns an empty array
+and exit 0; unknown values or invalid snapshots fail nonzero without results,
+including invalid nonmatching records.
+
+This is local metadata filtering, **not access control or disclosure permission**.
+A Public label does not authorize publication; Restricted does not implement
+encryption or conceal IDs. The caller must already be permitted to read the
+snapshot, and output handling remains the caller's responsibility. No record
+contents are returned and no records or files are modified. The option requires
+`--registry` and cannot be combined with other queries, `--direction` or
+`--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
