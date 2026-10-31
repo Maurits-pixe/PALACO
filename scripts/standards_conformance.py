@@ -1122,6 +1122,26 @@ def find_palaco_reviews_due(instance, as_of, validator=None):
     }
 
 
+def find_palaco_updated_since(instance, since, validator=None):
+    """Filter recorded audit instants from midnight UTC, not update history."""
+    require(isinstance(since, str) and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", since),
+            "update cutoff must be a valid YYYY-MM-DD calendar date")
+    try:
+        cutoff = datetime.combine(date.fromisoformat(since), time.min, timezone.utc)
+    except ValueError as error:
+        raise ConformanceError("update cutoff must be a valid YYYY-MM-DD calendar date") from error
+    validate_palaco_registry(instance, validator)
+    return {
+        "since": since,
+        "definition": "audit.updated_at is on or after midnight UTC on since; all lifecycle states included",
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if audit_instant(record) >= cutoff
+        ),
+        "scope": "supplied audit-timestamp metadata only; not authenticated update history, activity or authority",
+    }
+
+
 def summarize_palaco_registry(instance, validators=None):
     """Count validated snapshot metadata without asserting completeness or trust."""
     if validators is None:
@@ -1468,6 +1488,108 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_updated_since():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    timestamps = (
+        "2026-10-15T23:59:59Z",
+        "2026-10-16T00:00:00Z",
+        "2026-10-16T00:00:00.000001Z",
+        "2026-10-16T01:00:00+02:00",
+        "2026-10-15T23:00:00-01:00",
+        "2026-10-16t00:00:00z",
+    )
+    for index, timestamp in enumerate(timestamps, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["audit"]["updated_at"] = timestamp
+        fixture["objects"].insert(0, record)
+    original = copy.deepcopy(fixture)
+    scope = "supplied audit-timestamp metadata only; not authenticated update history, activity or authority"
+    definition = "audit.updated_at is on or after midnight UTC on since; all lifecycle states included"
+    for since, expected in (
+        ("2026-10-16", ["FE-00002", "FE-00003", "FE-00005", "FE-00006"]),
+        ("2026-10-15", [f"FE-{index:05d}" for index in range(1, 7)]),
+        ("2026-10-17", []),
+        ("2024-02-29", [f"FE-{index:05d}" for index in range(1, 7)]),
+    ):
+        result = find_palaco_updated_since(fixture, since, validator)
+        require(result == {"since": since, "definition": definition, "object_ids": expected, "scope": scope},
+                f"incorrect updated-since query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_updated_since(reordered, since, validator) == result,
+                "updated-since query depends on record order")
+    require(fixture == original, "updated-since query mutated input")
+    approved = copy.deepcopy(fixture)
+    record = approved["objects"][0]
+    record["lifecycle"]["status"] = "Active"
+    record["lifecycle"]["approved"] = "2026-10-15"
+    record["approval"] = {"status": "Approved", "authority": "Example review team", "approval_ref": "Synthetic approval"}
+    require(find_palaco_updated_since(approved, "2026-10-16", validator)["object_ids"]
+            == ["FE-00002", "FE-00003", "FE-00005", "FE-00006"],
+            "updated-since query excludes approved lifecycle states")
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    invalid_timestamp = copy.deepcopy(fixture)
+    invalid_timestamp["objects"][-1]["audit"]["updated_at"] = "2026-10-15T23:00:00"
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, since, diagnostic in (
+        *((fixture, value, "update cutoff") for value in (
+            "", " ", "2026-1-16", "2026-10-16T00:00:00Z", "2026-02-29",
+            "0000-01-01", "2026-13-01", None, 42,
+        )),
+        ({}, "2026-10-16", "registry structure"),
+        (invalid_ref, "2026-10-16", "unresolved"),
+        (invalid_timestamp, "2026-10-16", "registry structure"),
+        (duplicate, "2026-10-16", "duplicate object ID"),
+    ):
+        try:
+            find_palaco_updated_since(instance, since, validator)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected updated-since error: {error}")
+        else:
+            raise ConformanceError(f"invalid updated-since query accepted: {diagnostic}")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    script = [sys.executable, str(Path(__file__).resolve())]
+    base = script + ["--registry", fixture_path]
+    for since, expected in (
+        ("2026-10-15", ["CAP-00001", "FE-00001", "REQ-00001"]),
+        ("2026-10-16", []),
+    ):
+        cli = subprocess.run(base + ["--find-updated-since", since],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 0, f"updated-since CLI failed: {cli.stdout}{cli.stderr}")
+        require(json.loads(cli.stdout) == {
+            "since": since, "definition": definition, "object_ids": expected, "scope": scope,
+        }, "incorrect updated-since CLI result")
+    for flags in (
+        ["--find-name", "Example accountable registry"], ["--find-updater", "Example registry team"],
+        ["--find-relationship", "DEPENDS_ON"], ["--find-availability", "Medium"],
+        ["--find-integrity", "High"], ["--find-confidentiality", "Public"],
+        ["--find-criticality", "High"], ["--find-owner", "custodian", "Example registry team"],
+        ["--find-approval", "Pending"], ["--find-verification", "Pending"],
+        ["--find-domain", "Governance"], ["--find-type", "FE"], ["--find-lifecycle", "Draft"],
+        ["--find-review-due", "2027-01-15"], ["--summary"], ["--trace", "FE-00001"],
+        ["--find-orphans"], ["--find-unverified-controls"], ["--find-unaudited-evidence"],
+        ["--previous-registry", fixture_path], ["--diff"], ["--direction", "upstream"],
+    ):
+        rejected = subprocess.run(base + ["--find-updated-since", "2026-10-16"] + flags,
+                                  capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == 2 and not rejected.stdout,
+                f"updated-since query accepted incompatible flags: {flags}")
+    for arguments, code in (
+        (script + ["--find-updated-since", "2026-10-16"], 2),
+        (base + ["--find-updated-since", "2026-02-29"], 1),
+    ):
+        rejected = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == code and '"object_ids"' not in rejected.stdout,
+                "updated-since CLI accepted missing registry or invalid date")
+    return "4 date queries + timezone/inclusive/lifecycle/nonmutation checks + 13 rejections + CLI/conflict regressions"
 
 
 def check_palaco_name():
@@ -3205,6 +3327,7 @@ CHECKS = (
     ("PALACO registry relationship-type query conformance", check_palaco_relationship),
     ("PALACO registry audit-updater query conformance", check_palaco_updater),
     ("PALACO registry name query conformance", check_palaco_name),
+    ("PALACO registry updated-since query conformance", check_palaco_updated_since),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -3244,6 +3367,8 @@ def main():
                         help="Return IDs matching exact audit.updated_by metadata; not authenticated identity")
     parser.add_argument("--find-name", metavar="NAME",
                         help="Return IDs matching exact case-sensitive metadata.name as JSON")
+    parser.add_argument("--find-updated-since", metavar="YYYY-MM-DD",
+                        help="Return IDs with audit.updated_at on or after an explicit date at midnight UTC")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -3259,6 +3384,20 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_updated_since is not None:
+        if args.registry is None:
+            parser.error("--find-updated-since requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_approval is not None or args.find_owner is not None
+                or args.find_criticality is not None or args.find_confidentiality is not None
+                or args.find_integrity is not None or args.find_availability is not None
+                or args.find_relationship is not None or args.find_updater is not None
+                or args.find_name is not None or args.find_review_due is not None
+                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-updated-since cannot be combined with other query or comparison modes")
     if args.find_name is not None:
         if args.registry is None:
             parser.error("--find-name requires --registry")
@@ -3444,7 +3583,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_name is not None:
+            if args.find_updated_since is not None:
+                result = find_palaco_updated_since(current, args.find_updated_since)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_name is not None:
                 result = find_palaco_name(current, args.find_name)
                 print(json.dumps(result, indent=2))
                 return 0

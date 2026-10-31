@@ -2539,6 +2539,26 @@ identity, canonical status or authority.
 No records or files are modified. The option requires `--registry` and cannot
 be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only updated-since queries filter recorded audit timestamps:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-updated-since 2026-10-15
+```
+
+Supply an explicit valid `YYYY-MM-DD` calendar date. Matching uses
+`audit.updated_at >= midnight UTC` on that date, inclusively, comparing instants
+with their timezone offsets rather than local calendar-date text. All lifecycle
+states are included; no system clock is consulted. After full snapshot
+validation, JSON contains `since`, `definition`, sorted `object_ids` and a scope
+disclaimer. No matches returns an empty array and exit 0; invalid dates or
+snapshots fail nonzero without results, including invalid nonmatching records.
+These are current snapshot timestamp claims, not authenticated update history,
+proof of recent activity or authority; future timestamps are not independently
+verified. No records or files are modified. The option requires `--registry`
+and cannot be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
