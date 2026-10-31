@@ -31,6 +31,10 @@ pub fn evaluate(
         return Err(DecisionEvaluationError::QuestionMismatch);
     }
 
+    if evidence.is_empty() && !threshold.basis.is_empty() {
+        return Err(DecisionEvaluationError::MissingThresholdEvidence);
+    }
+
     let assessed = assess(question.clone(), evidence, threshold)
         .map_err(DecisionEvaluationError::Assessment)?;
 
