@@ -19,6 +19,122 @@ fn plan(id: &str, authority: AuthorityState) -> Result<RuntimePlan, ContractErro
 }
 
 #[test]
+fn short_action_sequences_match_an_independent_fifo_lifecycle_model() -> Result<(), ContractError> {
+    const ACTIONS: usize = 11;
+    const DEPTH: u32 = 4;
+    let authorities = [
+        AuthorityState::Authorized,
+        AuthorityState::Revoked,
+        AuthorityState::Expired,
+        AuthorityState::InDoubt,
+    ];
+    for capacity in 0..=3 {
+        for sequence in 0..ACTIONS.pow(DEPTH) {
+            let mut queue = RuntimeQueue::new(capacity);
+            let mut expected = Vec::new();
+            let mut admission_closed = false;
+            let mut remaining_actions = sequence;
+            for step in 0..DEPTH {
+                let action = remaining_actions % ACTIONS;
+                remaining_actions /= ACTIONS;
+                let context = (capacity, sequence, step, action);
+                match action {
+                    0..=3 => {
+                        let supplied =
+                            plan(&format!("MODEL-{step}-{action}"), authorities[action])?;
+                        let reason = if admission_closed {
+                            Some(if expected.is_empty() {
+                                AdmissionError::Stopped
+                            } else {
+                                AdmissionError::Draining
+                            })
+                        } else {
+                            match action {
+                                1 | 2 => Some(AdmissionError::Denied),
+                                3 => Some(AdmissionError::Held),
+                                _ if expected.len() == capacity => Some(AdmissionError::Full),
+                                _ => None,
+                            }
+                        };
+                        match (queue.submit(supplied.clone()), reason) {
+                            (Ok(()), None) => expected.push(supplied),
+                            (Err(rejected), Some(reason)) => {
+                                assert_eq!(rejected.reason(), reason, "{context:?}");
+                                assert_eq!(rejected.into_plan(), supplied, "{context:?}");
+                            }
+                            (actual, reason) => {
+                                panic!("admission mismatch {context:?}: {actual:?}, {reason:?}");
+                            }
+                        }
+                    }
+                    4 => {
+                        let transferred = if expected.is_empty() {
+                            None
+                        } else {
+                            Some(expected.remove(0))
+                        };
+                        assert_eq!(queue.next_plan(), transferred, "{context:?}");
+                    }
+                    5..=7 => {
+                        let limit = match action {
+                            5 => 0,
+                            6 => 1,
+                            _ => usize::MAX,
+                        };
+                        let count = limit.min(expected.len());
+                        let transferred: Vec<_> = expected.drain(..count).collect();
+                        assert_eq!(
+                            queue.next_plans(limit).collect::<Vec<_>>(),
+                            transferred,
+                            "{context:?}"
+                        );
+                    }
+                    8 => {
+                        admission_closed = true;
+                        queue.begin_drain();
+                    }
+                    9 => {
+                        admission_closed = true;
+                        let discarded = expected.len();
+                        expected.clear();
+                        assert_eq!(queue.stop(), discarded, "{context:?}");
+                    }
+                    _ => {
+                        let summary =
+                            summarize_plan_iter(queue.pending()).expect("bounded summary");
+                        assert_eq!(summary.total, expected.len(), "{context:?}");
+                        assert_eq!(summary.execute, expected.len(), "{context:?}");
+                    }
+                }
+                let state = if !admission_closed {
+                    QueueState::Running
+                } else if expected.is_empty() {
+                    QueueState::Stopped
+                } else {
+                    QueueState::Draining
+                };
+                assert_eq!(queue.state(), state, "{context:?}");
+                assert_eq!(
+                    queue.is_stopped(),
+                    state == QueueState::Stopped,
+                    "{context:?}"
+                );
+                assert_eq!(queue.capacity(), capacity, "{context:?}");
+                assert_eq!(queue.len(), expected.len(), "{context:?}");
+                assert_eq!(queue.is_empty(), expected.is_empty(), "{context:?}");
+                assert!(queue.len() <= capacity, "{context:?}");
+                assert_eq!(
+                    queue.pending().collect::<Vec<_>>(),
+                    expected.iter().collect::<Vec<_>>(),
+                    "{context:?}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_transfers_are_lazy_and_preserve_unrequested_fifo_entries() -> Result<(), ContractError> {
     let first = plan("BATCH-FIRST", AuthorityState::Authorized)?;
     let second = plan("BATCH-SECOND", AuthorityState::Authorized)?;
