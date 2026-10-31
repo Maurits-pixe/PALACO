@@ -1,0 +1,46 @@
+{
+  "object_type": "REQ",
+  "metadata": {
+    "id": "REQ-00001",
+    "name": "Validate registry records",
+    "domain": "Registry",
+    "version": "0.1.0"
+  },
+  "ownership": {
+    "business": "Example governance team",
+    "architecture": "Example architecture team",
+    "technical": "Example platform team",
+    "verification": "Example assurance team",
+    "custodian": "Example registry team"
+  },
+  "lifecycle": {
+    "status": "Draft",
+    "created": "2026-10-15",
+    "next_review": "2027-01-15"
+  },
+  "approval": { "status": "Pending" },
+  "classification": {
+    "criticality": "High",
+    "confidentiality": "Internal",
+    "integrity": "High",
+    "availability": "Medium"
+  },
+  "traceability": {
+    "upstream": ["CAP-00001"],
+    "relationships": [
+      { "source": "REQ-00001", "relation": "SATISFIES", "target": "OBJ-00001" }
+    ]
+  },
+  "verification": {
+    "method": "Schema conformance tests",
+    "frequency": "On change",
+    "status": "Pending"
+  },
+  "audit": {
+    "updated_at": "2026-10-15T12:00:00Z",
+    "updated_by": "Example registry team",
+    "audit_refs": []
+  },
+  "capability_ref": "CAP-00001",
+  "acceptance_criteria": ["Reject records that omit mandatory ownership metadata."]
+}
