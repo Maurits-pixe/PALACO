@@ -2317,6 +2317,25 @@ nonzero without query results, including invalid records outside the date range.
 The query changes no records or files, requires `--registry` and cannot be
 combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only domain queries match exact `metadata.domain` values:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-domain Governance
+```
+
+Domain names are free-text metadata, not canonical object families. Matching is
+case-sensitive with no trimming, substring search or Unicode normalization; quote
+names containing spaces. Empty or whitespace-only search values are rejected.
+After validating the entire snapshot, the query emits JSON with `domain`,
+sorted `object_ids` and a scope disclaimer. A nonblank domain without matches
+returns an empty array and exit 0. Invalid snapshots fail nonzero without query
+results, even when invalid records belong to another domain.
+Results do not establish completeness, canonical status or authority. No records
+or files are modified. `--find-domain` requires `--registry` and cannot be combined
+with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

@@ -901,6 +901,21 @@ def find_palaco_lifecycle(instance, status, validators=None):
     }
 
 
+def find_palaco_domain(instance, domain, validator=None):
+    """Match exact domain metadata; domains are not canonical object families."""
+    require(isinstance(domain, str) and re.search(r"\S", domain),
+            "domain must be a non-empty string containing non-whitespace text")
+    validate_palaco_registry(instance, validator)
+    return {
+        "domain": domain,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["metadata"]["domain"] == domain
+        ),
+        "scope": "supplied domain metadata only; not a completeness, canonical-status or authority decision",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1284,6 +1299,65 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_domain():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    for index, domain in ((3, "Data Platform"), (2, "Data Platform"), (4, "governance"),
+                          (5, " Governance "), (6, "Données")):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["metadata"]["domain"] = domain
+        fixture["objects"].append(record)
+    original = copy.deepcopy(fixture)
+    for domain, expected in (
+        ("Governance", ["FE-00001"]),
+        ("Data Platform", ["FE-00002", "FE-00003"]),
+        ("governance", ["FE-00004"]),
+        (" Governance ", ["FE-00005"]),
+        ("Données", ["FE-00006"]),
+        ("Missing", []),
+    ):
+        result = find_palaco_domain(fixture, domain, validator)
+        require(result == {
+            "domain": domain, "object_ids": expected,
+            "scope": "supplied domain metadata only; not a completeness, canonical-status or authority decision",
+        }, f"unexpected domain query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_domain(reordered, domain, validator) == result,
+                "domain query depends on record order")
+    require(fixture == original, "domain query mutated input")
+    bad_ref = copy.deepcopy(fixture)
+    bad_ref["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    bad_domain = copy.deepcopy(fixture)
+    bad_domain["objects"][-1]["metadata"]["domain"] = ""
+    for instance, domain, diagnostic in (
+        (fixture, "", "non-empty string"), (fixture, None, "non-empty string"),
+        (fixture, " \t", "non-empty string"),
+        ({}, "Governance", "registry structure"),
+        (bad_ref, "Governance", "unresolved"),
+        (duplicate, "Governance", "duplicate object ID"),
+        (bad_domain, "Governance", "registry structure"),
+    ):
+        try:
+            find_palaco_domain(instance, domain, validator)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected domain query error: {error}")
+        else:
+            raise ConformanceError(f"invalid domain query accepted: {diagnostic}")
+    cli = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--registry",
+         str(PALACO_FIXTURE_DIR / "registry.fixture.json"), "--find-domain", "Governance"],
+        capture_output=True, text=True, timeout=30,
+    )
+    require(cli.returncode == 0, f"domain CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout)["object_ids"] == ["FE-00001"], "incorrect domain CLI result")
+    return "6 exact/sorted/empty domain queries + 7 rejections + nonmutation/order checks + CLI regression"
 
 
 def check_palaco_reviews_due():
@@ -2154,6 +2228,7 @@ CHECKS = (
     ("PALACO registry summary conformance", check_palaco_summary),
     ("PALACO registry snapshot diff conformance", check_palaco_diff),
     ("PALACO registry review-date query conformance", check_palaco_reviews_due),
+    ("PALACO registry domain query conformance", check_palaco_domain),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2171,6 +2246,8 @@ def main():
                         help="Return reachable IDs from traceability.upstream as JSON")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
+    parser.add_argument("--find-domain", metavar="DOMAIN",
+                        help="Return IDs matching exact case-sensitive metadata.domain as JSON")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -2186,6 +2263,15 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_domain is not None:
+        if args.registry is None:
+            parser.error("--find-domain requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_review_due is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-domain cannot be combined with other query or comparison modes")
     if args.find_review_due is not None:
         if args.registry is None:
             parser.error("--find-review-due requires --registry")
@@ -2247,7 +2333,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_review_due is not None:
+            if args.find_domain is not None:
+                result = find_palaco_domain(current, args.find_domain)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_review_due is not None:
                 result = find_palaco_reviews_due(current, args.find_review_due)
                 print(json.dumps(result, indent=2))
                 return 0
