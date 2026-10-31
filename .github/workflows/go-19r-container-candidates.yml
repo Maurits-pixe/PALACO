@@ -22,8 +22,12 @@ jobs:
         include:
           - id: postgres17-alpine324
             tag: postgres:17.11-alpine3.24
+          - id: postgres17-alpine323
+            tag: postgres:17.11-alpine3.23
           - id: postgres18-alpine324
             tag: postgres:18.6-alpine3.24
+          - id: postgres18-alpine323
+            tag: postgres:18.6-alpine3.23
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
@@ -35,9 +39,18 @@ jobs:
           IMAGE_TAG: ${{ matrix.tag }}
         run: |
           set -euo pipefail
-          digest="$(docker buildx imagetools inspect "$IMAGE_TAG" | awk '/^Digest:/ {print $2; exit}')"
-          test -n "$digest"
-          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1 ;; esac
+          digest=""
+          for attempt in 1 2 3; do
+            digest="$(docker buildx imagetools inspect "$IMAGE_TAG" 2>/dev/null | awk '/^Digest:/ {print $2; exit}')" || true
+            if test -n "$digest"; then break; fi
+            sleep "$attempt"
+          done
+          if test -z "$digest"; then
+            docker pull "$IMAGE_TAG"
+            repo_digest="$(docker image inspect "$IMAGE_TAG" --format '{{index .RepoDigests 0}}')"
+            digest="${repo_digest##*@}"
+          fi
+          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) echo "invalid digest: $digest"; exit 1 ;; esac
           resolved="${IMAGE_TAG}@${digest}"
           echo "ref=${resolved}" >> "$GITHUB_OUTPUT"
           printf '%s\n' "$resolved" > resolved-ref.txt
