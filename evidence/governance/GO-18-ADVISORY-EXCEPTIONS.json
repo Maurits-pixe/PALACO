@@ -1,0 +1,5 @@
+{
+  "schema": "palaco.advisory-exceptions.v1",
+  "gate": "GO-18",
+  "exceptions": []
+}
