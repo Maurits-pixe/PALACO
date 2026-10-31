@@ -197,7 +197,7 @@ class FixtureSecurityTests(unittest.TestCase):
         self.assertIn('"127.0.0.1:8089:8089"', compose)
         self.assertIn("--db=dev-mem", compose)
         self.assertIn("--verbose", compose)
-        self.assertIn("@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741", compose)
+        self.assertIn("@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b", compose)
         self.assertNotIn("internal: true", compose)
         self.assertIn("driver: bridge", compose)
         self.assertIn("postgres:18.6-bookworm@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c", compose)
