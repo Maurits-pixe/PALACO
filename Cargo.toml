@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
   "crates/palaco-foundation",
+  "crates/palaco-evidence",
   "crates/palaco-kernel",
   "crates/palaco-runtime",
   "crates/palaco-eventbus",

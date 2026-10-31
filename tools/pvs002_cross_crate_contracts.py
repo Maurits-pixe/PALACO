@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 EXPECTED = {
     "palaco-foundation": set(),
+    "palaco-evidence": {"palaco-foundation"},
     "palaco-eventbus": {"palaco-foundation"},
     "palaco-quay": {"palaco-foundation", "palaco-eventbus"},
     "palaco-citadel": {"palaco-foundation", "palaco-quay"},
@@ -68,6 +69,7 @@ for crate in EXPECTED:
 
 markers = {
     "crates/palaco-foundation/src/lib.rs": ["EvidenceRef", "AuthorityState", "ContractDisposition"],
+    "crates/palaco-evidence/src/lib.rs": ["ExecutionEvidence", "EvidenceChain", "ReplayMetadata"],
     "crates/palaco-eventbus/src/lib.rs": ["EventEnvelope", "EvidenceRef"],
     "crates/palaco-quay/src/lib.rs": ["ProvenanceRecord", "AuthorityState"],
     "crates/palaco-citadel/src/lib.rs": ["ExecutionBoundary", "disposition_for"],
