@@ -1038,6 +1038,23 @@ def find_palaco_availability(instance, availability, validators=None):
     }
 
 
+def find_palaco_relationship(instance, relation, validators=None):
+    """Find sources of explicit typed edges, without inferring relationships."""
+    if validators is None:
+        validators = palaco_validators()
+    values = validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"]
+    require(relation in values, f"unknown PALACO relationship: {relation}")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "relation": relation,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if any(edge["relation"] == relation for edge in record["traceability"]["relationships"])
+        ),
+        "scope": "supplied explicit relationship sources only; no inferred links or proof of compliance or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1421,6 +1438,96 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_relationship():
+    validators = palaco_validators()
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    objective = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    objective["object_type"] = "OBJ"
+    objective["metadata"]["id"] = "OBJ-00001"
+    fixture["objects"].append(objective)
+    requirement = fixture["objects"][2]
+    requirement["traceability"]["relationships"].extend([
+        {"source": "REQ-00001", "relation": "DEPENDS_ON", "target": "FE-00001"},
+        {"source": "REQ-00001", "relation": "SATISFIES", "target": "OBJ-00001"},
+    ])
+    original = copy.deepcopy(fixture)
+    scope = "supplied explicit relationship sources only; no inferred links or proof of compliance or authority"
+    values = validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"]
+    for relation in values:
+        expected = {"DEPENDS_ON": ["CAP-00001", "REQ-00001"], "SATISFIES": ["REQ-00001"]}.get(relation, [])
+        result = find_palaco_relationship(fixture, relation, validators)
+        require(result == {"relation": relation, "object_ids": expected, "scope": scope},
+                f"incorrect relationship query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        for record in reordered["objects"]:
+            record["traceability"]["relationships"].reverse()
+        require(find_palaco_relationship(reordered, relation, validators) == result,
+                "relationship query depends on record or edge order")
+    require(fixture == original, "relationship query mutated input")
+    implicit = copy.deepcopy(fixture)
+    for record in implicit["objects"]:
+        record["traceability"]["relationships"] = []
+    implicit["objects"][2]["dependencies"] = ["FE-00001"]
+    require(find_palaco_relationship(implicit, "DEPENDS_ON", validators)["object_ids"] == [],
+            "relationship query inferred edges from upstream or dependencies")
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    invalid_source = copy.deepcopy(fixture)
+    invalid_source["objects"][1]["traceability"]["relationships"][0]["source"] = "REQ-00001"
+    invalid_type = copy.deepcopy(fixture)
+    invalid_type["objects"][1]["traceability"]["relationships"][0]["relation"] = "SATISFIES"
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, relation, diagnostic in (
+        (fixture, "depends_on", "unknown PALACO relationship"),
+        (fixture, "RELATED_TO", "unknown PALACO relationship"),
+        (fixture, "", "unknown PALACO relationship"),
+        ({}, "DEPENDS_ON", "registry structure"),
+        (invalid_ref, "SATISFIES", "unresolved"),
+        (invalid_source, "SATISFIES", "source"),
+        (invalid_type, "SATISFIES", "registry structure"),
+        (duplicate, "SATISFIES", "duplicate object ID"),
+    ):
+        try:
+            find_palaco_relationship(instance, relation, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected relationship error: {error}")
+        else:
+            raise ConformanceError(f"invalid relationship query accepted: {diagnostic}")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    script = [sys.executable, str(Path(__file__).resolve())]
+    base = script + ["--registry", fixture_path]
+    for relation, expected in (("DEPENDS_ON", ["CAP-00001", "REQ-00001"]), ("SATISFIES", [])):
+        cli = subprocess.run(base + ["--find-relationship", relation],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 0, f"relationship CLI failed: {cli.stdout}{cli.stderr}")
+        require(json.loads(cli.stdout) == {"relation": relation, "object_ids": expected, "scope": scope},
+                "incorrect relationship CLI result")
+    for flags in (
+        ["--find-availability", "Medium"], ["--find-integrity", "High"],
+        ["--find-confidentiality", "Public"], ["--find-criticality", "High"],
+        ["--find-owner", "custodian", "Example registry team"], ["--find-approval", "Pending"],
+        ["--find-verification", "Pending"], ["--find-domain", "Governance"],
+        ["--find-type", "FE"], ["--find-lifecycle", "Draft"], ["--find-review-due", "2027-01-15"],
+        ["--summary"], ["--trace", "FE-00001"], ["--find-orphans"],
+        ["--find-unverified-controls"], ["--find-unaudited-evidence"],
+        ["--previous-registry", fixture_path], ["--diff"], ["--direction", "upstream"],
+    ):
+        rejected = subprocess.run(base + ["--find-relationship", "DEPENDS_ON"] + flags,
+                                  capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == 2 and not rejected.stdout,
+                f"relationship query accepted incompatible flags: {flags}")
+    for arguments, code in (
+        (script + ["--find-relationship", "DEPENDS_ON"], 2),
+        (base + ["--find-relationship", "depends_on"], 1),
+    ):
+        rejected = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == code and '"object_ids"' not in rejected.stdout,
+                "relationship CLI accepted missing registry or unknown relation")
+    return "10 relation labels + explicit-only/sorted/non-mutating checks + 8 rejections + CLI/conflict regressions"
 
 
 def check_palaco_availability():
@@ -2890,6 +2997,7 @@ CHECKS = (
     ("PALACO registry confidentiality query conformance", check_palaco_confidentiality),
     ("PALACO registry integrity-label query conformance", check_palaco_integrity),
     ("PALACO registry availability-label query conformance", check_palaco_availability),
+    ("PALACO registry relationship-type query conformance", check_palaco_relationship),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2923,6 +3031,8 @@ def main():
                         help="Return IDs matching exact PMS-001 integrity classification labels")
     parser.add_argument("--find-availability", metavar="AVAILABILITY",
                         help="Return IDs matching exact PMS-001 availability classification labels")
+    parser.add_argument("--find-relationship", metavar="RELATION",
+                        help="Return source IDs of explicit PMS-002 relationship types as JSON")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -2938,6 +3048,19 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_relationship is not None:
+        if args.registry is None:
+            parser.error("--find-relationship requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_approval is not None or args.find_owner is not None
+                or args.find_criticality is not None or args.find_confidentiality is not None
+                or args.find_integrity is not None or args.find_availability is not None
+                or args.find_review_due is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-relationship cannot be combined with other query or comparison modes")
     if args.find_availability is not None:
         if args.registry is None:
             parser.error("--find-availability requires --registry")
@@ -3083,7 +3206,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_availability is not None:
+            if args.find_relationship is not None:
+                result = find_palaco_relationship(current, args.find_relationship)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_availability is not None:
                 result = find_palaco_availability(current, args.find_availability)
                 print(json.dumps(result, indent=2))
                 return 0

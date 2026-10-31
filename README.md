@@ -2479,6 +2479,28 @@ authority; no runtime probe or network request is made.
 No records or files are modified. The option requires `--registry` and cannot
 be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only relationship-type queries identify sources of explicit typed edges:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-relationship DEPENDS_ON
+```
+
+Accepted values are the case-sensitive PMS-002 relationship labels `IMPLEMENTS`,
+`REALIZES`, `SATISFIES`, `CONSTRAINED_BY`, `DEFINED_BY`, `APPROVED_BY`,
+`VERIFIED_BY`, `PROVEN_BY`, `AUDITED_BY` and `DEPENDS_ON`.
+After full snapshot validation, JSON contains `relation`, sorted unique
+`object_ids` and a scope disclaimer. IDs identify source records, not targets;
+multiple matching edges on one record return its ID only once. Only explicit
+`traceability.relationships` edges match: upstream, dependencies, dedicated
+references and transitive paths do not create inferred edges.
+No matches returns an empty array and exit 0; unknown labels or invalid snapshots
+fail nonzero without results, including invalid nonmatching records. Relationship
+claims are not proof of implementation, verification, compliance or authority.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
