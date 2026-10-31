@@ -1,6 +1,6 @@
 use palaco_la::authority_assignment::{
     GrantState, LIFECYCLE_EVENT_SCHEMA_V01, LifecycleDecision, LifecycleEventV01,
-    LifecycleValidationError, validate_lifecycle_event,
+    LifecycleValidationError, validate_lifecycle_event, validate_lifecycle_history,
 };
 
 fn event(
@@ -198,4 +198,100 @@ fn lifecycle_contract_rejects_unknown_fields() {
     let with_unknown = serialized.trim_end_matches('}').to_owned() + ",\"effective\":true}";
 
     assert!(serde_json::from_str::<LifecycleEventV01>(&with_unknown).is_err());
+}
+
+#[test]
+fn history_validates_state_chain_and_event_order() {
+    let mut review = event(
+        GrantState::Effective,
+        GrantState::UnderReview,
+        LifecycleDecision::Review,
+    );
+    review.occurred_at = "2030-01-01T00:00:30Z".to_owned();
+
+    let mut suspend = event(
+        GrantState::UnderReview,
+        GrantState::Suspended,
+        LifecycleDecision::Suspend,
+    );
+    suspend.occurred_at = "2030-01-01T00:01:00Z".to_owned();
+
+    let mut revoke = event(
+        GrantState::Suspended,
+        GrantState::Revoked,
+        LifecycleDecision::Revoke,
+    );
+    revoke.occurred_at = "2030-01-01T00:01:30Z".to_owned();
+
+    assert_eq!(
+        validate_lifecycle_history(
+            "synthetic-grant-1",
+            GrantState::Effective,
+            PREVIOUS,
+            &[review, suspend, revoke],
+            EVALUATED
+        ),
+        Ok(())
+    );
+}
+
+#[test]
+fn history_rejects_state_discontinuity_and_grant_mismatch() {
+    let mut discontinuous = event(
+        GrantState::Effective,
+        GrantState::Suspended,
+        LifecycleDecision::Suspend,
+    );
+    discontinuous.occurred_at = "2030-01-01T00:00:30Z".to_owned();
+    let next = event(
+        GrantState::Effective,
+        GrantState::Revoked,
+        LifecycleDecision::Revoke,
+    );
+    assert_eq!(
+        validate_lifecycle_history(
+            "synthetic-grant-1",
+            GrantState::Effective,
+            PREVIOUS,
+            &[discontinuous.clone(), next],
+            EVALUATED
+        ),
+        Err(LifecycleValidationError::StateChainMismatch)
+    );
+
+    discontinuous.grant_ref = "different-grant".to_owned();
+    assert_eq!(
+        validate_lifecycle_history(
+            "synthetic-grant-1",
+            GrantState::Effective,
+            PREVIOUS,
+            &[discontinuous],
+            EVALUATED
+        ),
+        Err(LifecycleValidationError::GrantReferenceMismatch)
+    );
+}
+
+#[test]
+fn empty_history_is_valid_only_with_valid_evaluation_timestamps() {
+    assert_eq!(
+        validate_lifecycle_history(
+            "synthetic-grant-1",
+            GrantState::Effective,
+            PREVIOUS,
+            &[],
+            EVALUATED
+        ),
+        Ok(())
+    );
+    assert_eq!(
+        validate_lifecycle_history(
+            "synthetic-grant-1",
+            GrantState::Effective,
+            "2030-01-01T00:03:00Z",
+            &[],
+            EVALUATED
+        ),
+        Err(LifecycleValidationError::EventFromFuture)
+    );
 }

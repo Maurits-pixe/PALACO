@@ -50,6 +50,8 @@ pub enum LifecycleValidationError {
     TimestampNotMonotonic,
     EventFromFuture,
     InvalidTransition,
+    GrantReferenceMismatch,
+    StateChainMismatch,
 }
 
 /// Validates a proposed lifecycle event without applying or persisting it.
@@ -99,6 +101,45 @@ pub fn validate_lifecycle_event(
 
     if !transition_is_permitted(event.from_state, event.to_state, event.decision) {
         return Err(LifecycleValidationError::InvalidTransition);
+    }
+
+    Ok(())
+}
+
+/// Validates an ordered lifecycle history against caller-supplied initial state.
+///
+/// The supplied starting state and event history are not authenticated or loaded
+/// from a registry. A successful result does not apply the final state or establish
+/// that any authority is effective.
+pub fn validate_lifecycle_history(
+    grant_ref: &str,
+    initial_state: GrantState,
+    initial_event_at: &str,
+    events: &[LifecycleEventV01],
+    evaluated_at: &str,
+) -> Result<(), LifecycleValidationError> {
+    if !valid_identifier(grant_ref) {
+        return Err(LifecycleValidationError::InvalidIdentifier);
+    }
+
+    let initial_time = parse_timestamp(initial_event_at)?;
+    let evaluated_time = parse_timestamp(evaluated_at)?;
+    if initial_time > evaluated_time {
+        return Err(LifecycleValidationError::EventFromFuture);
+    }
+
+    let mut state = initial_state;
+    let mut previous_event_at = initial_event_at;
+    for event in events {
+        if event.grant_ref != grant_ref {
+            return Err(LifecycleValidationError::GrantReferenceMismatch);
+        }
+        if event.from_state != state {
+            return Err(LifecycleValidationError::StateChainMismatch);
+        }
+        validate_lifecycle_event(event, previous_event_at, evaluated_at)?;
+        state = event.to_state;
+        previous_event_at = &event.occurred_at;
     }
 
     Ok(())

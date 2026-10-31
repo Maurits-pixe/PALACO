@@ -373,6 +373,12 @@ RFC-3339 event timestamps, monotonic ordering, and that an event is not from
 the future. Revoked and expired states are terminal; suspension can return to
 effective only through an explicit reinstatement decision.
 
+`validate_lifecycle_history` additionally checks a supplied ordered list of
+events for consistent grant references, contiguous state transitions, and
+monotonic event time from a supplied starting state. Both the starting state
+and events remain caller assertions; this check does not load or authenticate a
+registry history.
+
 The function does not authenticate an actor, evidence, decision, or prior
 registry state. It does not append an event, change grant state, issue or revoke
 a grant, or determine that any authority is effective. Production AAP-1
