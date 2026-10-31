@@ -104,11 +104,7 @@ pub fn validate_lifecycle_event(
     Ok(())
 }
 
-fn transition_is_permitted(
-    from: GrantState,
-    to: GrantState,
-    decision: LifecycleDecision,
-) -> bool {
+fn transition_is_permitted(from: GrantState, to: GrantState, decision: LifecycleDecision) -> bool {
     matches!(
         (from, to, decision),
         (

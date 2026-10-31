@@ -73,7 +73,11 @@ fn revoked_and_expired_grants_are_terminal() {
     for terminal in [GrantState::Revoked, GrantState::Expired] {
         assert_eq!(
             validate_lifecycle_event(
-                &event(terminal, GrantState::Effective, LifecycleDecision::Reinstate),
+                &event(
+                    terminal,
+                    GrantState::Effective,
+                    LifecycleDecision::Reinstate
+                ),
                 PREVIOUS,
                 EVALUATED
             ),
