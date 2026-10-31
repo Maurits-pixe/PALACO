@@ -2198,6 +2198,30 @@ existing single-snapshot behavior remains unchanged. This comparison checks only
 the supplied pair; it does not authenticate a baseline, establish an immutable
 history, verify intermediate events or authorize transitions.
 
+Read-only snapshot differences describe changes without enforcing transitions:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --previous-registry /tmp/previous-registry.json \
+  --registry /tmp/current-registry.json \
+  --diff
+```
+
+`--diff` independently validates both closed snapshots before emitting JSON with
+sorted `added_ids`, `removed_ids`, `changed_ids`, `unchanged_ids` and a scope
+disclaimer. IDs are matched by `metadata.id`; shared IDs are changed when their
+complete parsed records differ. Registry object order and JSON object-key order
+are ignored; order within record arrays remains significant. Identical snapshots
+produce empty added/removed/changed arrays. No record values are included.
+
+This diagnostic may report removals, backward lifecycle changes or metadata
+changes without newer audit timestamps: it is **not** transition validation,
+authenticated history or authorization. Omit `--diff` to retain the stricter
+existing `--previous-registry` transition checks. Invalid inputs, including empty
+snapshots, fail nonzero without diff results. Both paths are required; other
+queries and `--direction` cannot be combined with `--diff`. No records or files
+are modified.
+
 Read-only trace queries return the transitive upstream or downstream object IDs:
 
 ```sh

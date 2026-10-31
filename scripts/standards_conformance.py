@@ -30,6 +30,7 @@ import argparse
 import copy
 import json
 import re
+import subprocess
 import sys
 from datetime import date, datetime, time, timezone
 from pathlib import Path
@@ -825,6 +826,27 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     }
 
 
+def diff_palaco_registry(previous, current, validator=None):
+    """Describe snapshot differences, without enforcing or authorizing transitions."""
+    if validator is None:
+        validator = palaco_validators()["PCR-000.schema.json"]
+    for label, instance in (("previous", previous), ("current", current)):
+        try:
+            validate_palaco_registry(instance, validator)
+        except ConformanceError as error:
+            raise ConformanceError(f"{label} registry: {error}") from error
+    before = {record["metadata"]["id"]: record for record in previous["objects"]}
+    after = {record["metadata"]["id"]: record for record in current["objects"]}
+    shared = before.keys() & after.keys()
+    return {
+        "added_ids": sorted(after.keys() - before.keys()),
+        "removed_ids": sorted(before.keys() - after.keys()),
+        "changed_ids": sorted(object_id for object_id in shared if before[object_id] != after[object_id]),
+        "unchanged_ids": sorted(object_id for object_id in shared if before[object_id] == after[object_id]),
+        "scope": "supplied snapshots only; diagnostic, not transition validation, authenticated history or authority",
+    }
+
+
 def find_palaco_objects(instance, object_type, validators=None):
     """Filter a validated snapshot by exact object_type, returning IDs only."""
     if validators is None:
@@ -1242,6 +1264,104 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_diff():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    previous = {"registry_version": "0.1.0", "objects": []}
+    for index in (3, 1, 2):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        previous["objects"].append(record)
+    current = copy.deepcopy(previous)
+    current["objects"] = [record for record in current["objects"] if record["metadata"]["id"] != "FE-00003"]
+    current["objects"][0]["metadata"]["description"] = "Changed synthetic metadata"
+    for index in (5, 4):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        current["objects"].append(record)
+    scope = "supplied snapshots only; diagnostic, not transition validation, authenticated history or authority"
+    expected = {
+        "added_ids": ["FE-00004", "FE-00005"],
+        "removed_ids": ["FE-00003"],
+        "changed_ids": ["FE-00001"],
+        "unchanged_ids": ["FE-00002"],
+        "scope": scope,
+    }
+    originals = copy.deepcopy((previous, current))
+    require(diff_palaco_registry(previous, current, validator) == expected, "incorrect mixed snapshot diff")
+    require((previous, current) == originals, "snapshot diff mutated input")
+    reversed_previous = copy.deepcopy(previous)
+    reversed_current = copy.deepcopy(current)
+    reversed_previous["objects"].reverse()
+    reversed_current["objects"].reverse()
+    require(diff_palaco_registry(reversed_previous, reversed_current, validator) == expected,
+            "snapshot diff depends on record order")
+    identical = {
+        "added_ids": [], "removed_ids": [], "changed_ids": [],
+        "unchanged_ids": ["FE-00001", "FE-00002", "FE-00003"], "scope": scope,
+    }
+    require(diff_palaco_registry(previous, reversed_previous, validator) == identical,
+            "identical snapshots must report unchanged IDs")
+    backwards = copy.deepcopy(previous)
+    backwards["objects"][1]["lifecycle"]["status"] = "Proposed"
+    require(diff_palaco_registry(previous, backwards, validator)["changed_ids"] == ["FE-00001"],
+            "diagnostic diff must not enforce lifecycle transitions")
+    key_reordered = copy.deepcopy(previous)
+    key_reordered["objects"][0] = dict(reversed(list(key_reordered["objects"][0].items())))
+    require(diff_palaco_registry(previous, key_reordered, validator) == identical,
+            "object key order must not count as a change")
+    nested = copy.deepcopy(previous)
+    nested["objects"][1]["traceability"]["upstream"] = ["FE-00002", "FE-00003"]
+    reordered_array = copy.deepcopy(nested)
+    reordered_array["objects"][1]["traceability"]["upstream"].reverse()
+    require(diff_palaco_registry(nested, reordered_array, validator)["changed_ids"] == ["FE-00001"],
+            "nested array order must count as a change")
+    disjoint = {"registry_version": "0.1.0", "objects": [copy.deepcopy(current["objects"][-1])]}
+    disjoint_result = diff_palaco_registry(previous, disjoint, validator)
+    require(disjoint_result["added_ids"] == ["FE-00004"]
+            and disjoint_result["removed_ids"] == identical["unchanged_ids"]
+            and disjoint_result["changed_ids"] == [] and disjoint_result["unchanged_ids"] == [],
+            "incorrect disjoint snapshot diff")
+    invalid_ref = copy.deepcopy(previous)
+    invalid_ref["objects"][0]["traceability"]["upstream"] = ["FE-99999"]
+    duplicate = copy.deepcopy(previous)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    cyclic = copy.deepcopy(previous)
+    cyclic["objects"][0]["traceability"]["upstream"] = ["FE-00001"]
+    cyclic["objects"][1]["traceability"]["upstream"] = ["FE-00003"]
+    unapproved = copy.deepcopy(previous)
+    unapproved["objects"][0]["lifecycle"]["status"] = "Active"
+    for invalid, diagnostic in (
+        ({}, "registry structure"),
+        ({"registry_version": "0.1.0", "objects": []}, "registry structure"),
+        (invalid_ref, "unresolved"),
+        (duplicate, "duplicate object ID"),
+        (cyclic, "upstream cycle"),
+        (unapproved, "requires approval.status Approved"),
+    ):
+        for label in ("previous", "current"):
+            pair = (invalid, current) if label == "previous" else (previous, invalid)
+            try:
+                diff_palaco_registry(*pair, validator)
+            except ConformanceError as error:
+                require(f"{label} registry:" in str(error) and diagnostic in str(error),
+                        f"unexpected snapshot diff diagnostic: {error}")
+            else:
+                raise ConformanceError(f"invalid {label} snapshot diff accepted")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    cli = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--registry", fixture_path,
+         "--previous-registry", fixture_path, "--diff"],
+        capture_output=True, text=True, timeout=30,
+    )
+    require(cli.returncode == 0, f"snapshot diff CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout) == {
+        "added_ids": [], "removed_ids": [], "changed_ids": [],
+        "unchanged_ids": ["CAP-00001", "FE-00001", "REQ-00001"], "scope": scope,
+    }, "unexpected snapshot diff CLI result")
+    return "7 deterministic/non-mutating diff cases + 12 invalid input rejections + CLI regression"
 
 
 def check_palaco_summary():
@@ -1943,6 +2063,7 @@ CHECKS = (
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),
     ("PALACO registry summary conformance", check_palaco_summary),
+    ("PALACO registry snapshot diff conformance", check_palaco_diff),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -1954,6 +2075,8 @@ def main():
     parser.add_argument("--registry", type=Path, help="Validate one closed PCR-000 registry snapshot")
     parser.add_argument("--previous-registry", type=Path,
                         help="Compare --registry against the preceding closed snapshot")
+    parser.add_argument("--diff", action="store_true",
+                        help="Return ID differences as JSON; requires --registry and --previous-registry")
     parser.add_argument("--trace", metavar="OBJECT_ID",
                         help="Return reachable IDs from traceability.upstream as JSON")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
@@ -1971,6 +2094,13 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.diff:
+        if args.registry is None or args.previous_registry is None:
+            parser.error("--diff requires --registry and --previous-registry")
+        if (args.trace is not None or args.find_type is not None or args.find_lifecycle is not None
+                or args.summary or args.find_orphans or args.find_unverified_controls
+                or args.find_unaudited_evidence or args.direction is not None):
+            parser.error("--diff cannot be combined with other query modes")
     if args.previous_registry is not None and args.registry is None:
         parser.error("--previous-registry requires --registry")
     if args.trace is not None and args.registry is None:
@@ -2017,7 +2147,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.summary:
+            if args.diff:
+                result = diff_palaco_registry(read_json(args.previous_registry), current)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.summary:
                 result = summarize_palaco_registry(current)
                 print(json.dumps(result, indent=2))
                 return 0
