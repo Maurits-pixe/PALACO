@@ -43,3 +43,14 @@ This is explicit run metadata, not equivalent evidence for process isolation.
 Candidate writer, reader, revoke, and restart processes remain separate OS
 processes. CI is configured to check both isolation modes on both Node versions;
 configuration alone does not establish a CI PASS. Acceptance/integration remain HOLD.
+
+`node tools/check-evidence.mjs <summary.json>` separately checks the runner summary,
+current complete source inventory, raw TAP totals, process outcomes, and complete
+artifact inventory against the recorded hashes. CI runs it after the runner.
+Missing files, extra artifacts, changed source or inconsistent counts fail closed.
+This verifies consistency against the current checkout; it is not an attestation
+of origin or an independent acceptance review. A party replacing all evidence and
+the trusted checkout is outside this check's claim.
+`python3 tests/check-evidence.py <summary.json>` checks a valid copied run and six
+negative cases: changed TAP, forged counts, missing source, missing B12 trace,
+artifact symlink and run-path traversal. Disposable run copies are removed.
