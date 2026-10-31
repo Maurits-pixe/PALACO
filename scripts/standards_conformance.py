@@ -1004,6 +1004,23 @@ def find_palaco_confidentiality(instance, confidentiality, validators=None):
     }
 
 
+def find_palaco_integrity(instance, integrity, validators=None):
+    """Filter integrity classification labels, not verified data integrity."""
+    if validators is None:
+        validators = palaco_validators()
+    values = validators["PMS-001.schema.json"].schema["$defs"]["Classification"]["properties"]["integrity"]["enum"]
+    require(integrity in values, f"unknown PALACO integrity: {integrity}")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "integrity": integrity,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["classification"]["integrity"] == integrity
+        ),
+        "scope": "supplied integrity-classification metadata only; not proof of data integrity, compliance or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1387,6 +1404,85 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_integrity():
+    validators = palaco_validators()
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    values = validators["PMS-001.schema.json"].schema["$defs"]["Classification"]["properties"]["integrity"]["enum"]
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, value in enumerate(values, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["classification"]["integrity"] = value
+        fixture["objects"].append(record)
+    extra = copy.deepcopy(fixture["objects"][0])
+    extra["metadata"]["id"] = "FE-00004"
+    fixture["objects"].insert(0, extra)
+    original = copy.deepcopy(fixture)
+    scope = "supplied integrity-classification metadata only; not proof of data integrity, compliance or authority"
+    for index, value in enumerate(values, 1):
+        expected = [f"FE-{index:05d}"]
+        if value == "Low":
+            expected.append("FE-00004")
+        result = find_palaco_integrity(fixture, value, validators)
+        require(result == {"integrity": value, "object_ids": expected, "scope": scope},
+                f"incorrect integrity query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_integrity(reordered, value, validators) == result,
+                "integrity query depends on record order")
+    require(fixture == original, "integrity query mutated input")
+    single = {"registry_version": "0.1.0", "objects": [copy.deepcopy(template)]}
+    require(find_palaco_integrity(single, "Low", validators)["object_ids"] == [],
+            "integrity query without matches must be empty")
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    invalid_value = copy.deepcopy(fixture)
+    invalid_value["objects"][-1]["classification"]["integrity"] = "Critical"
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, value, diagnostic in (
+        (fixture, "low", "unknown PALACO integrity"),
+        (fixture, "Critical", "unknown PALACO integrity"),
+        (fixture, "", "unknown PALACO integrity"),
+        ({}, "Low", "registry structure"),
+        (invalid_ref, "Low", "unresolved"),
+        (invalid_value, "Low", "registry structure"),
+        (duplicate, "Low", "duplicate object ID"),
+    ):
+        try:
+            find_palaco_integrity(instance, value, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected integrity error: {error}")
+        else:
+            raise ConformanceError(f"invalid integrity query accepted: {diagnostic}")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    script = [sys.executable, str(Path(__file__).resolve())]
+    base = script + ["--registry", fixture_path]
+    cli = subprocess.run(base + ["--find-integrity", "High"],
+                         capture_output=True, text=True, timeout=30)
+    require(cli.returncode == 0, f"integrity CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout) == {
+        "integrity": "High", "object_ids": ["CAP-00001", "FE-00001", "REQ-00001"], "scope": scope,
+    }, "incorrect integrity CLI result")
+    for flags in (
+        ["--find-confidentiality", "Public"], ["--find-criticality", "High"],
+        ["--find-owner", "custodian", "Example registry team"], ["--find-approval", "Pending"],
+        ["--find-verification", "Pending"], ["--find-domain", "Governance"], ["--find-type", "FE"],
+        ["--find-lifecycle", "Draft"], ["--find-review-due", "2027-01-15"], ["--summary"],
+        ["--trace", "FE-00001"], ["--find-orphans"], ["--find-unverified-controls"],
+        ["--find-unaudited-evidence"], ["--previous-registry", fixture_path],
+        ["--diff"], ["--direction", "upstream"],
+    ):
+        rejected = subprocess.run(base + ["--find-integrity", "High"] + flags,
+                                  capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == 2 and not rejected.stdout,
+                f"integrity query accepted incompatible flags: {flags}")
+    missing = subprocess.run(script + ["--find-integrity", "High"],
+                             capture_output=True, text=True, timeout=30)
+    require(missing.returncode == 2 and not missing.stdout, "integrity query accepted missing registry")
+    return "3 labels + empty/sorted/non-mutating checks + 7 rejections + CLI/conflict regressions"
 
 
 def check_palaco_confidentiality():
@@ -2696,6 +2792,7 @@ CHECKS = (
     ("PALACO registry ownership query conformance", check_palaco_owner),
     ("PALACO registry criticality query conformance", check_palaco_criticality),
     ("PALACO registry confidentiality query conformance", check_palaco_confidentiality),
+    ("PALACO registry integrity-label query conformance", check_palaco_integrity),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2725,6 +2822,8 @@ def main():
                         help="Return IDs matching exact PMS-001 classification.criticality as JSON")
     parser.add_argument("--find-confidentiality", metavar="CONFIDENTIALITY",
                         help="Return IDs matching exact PMS-001 confidentiality labels; not access control")
+    parser.add_argument("--find-integrity", metavar="INTEGRITY",
+                        help="Return IDs matching exact PMS-001 integrity classification labels")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -2740,6 +2839,18 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_integrity is not None:
+        if args.registry is None:
+            parser.error("--find-integrity requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_approval is not None or args.find_owner is not None
+                or args.find_criticality is not None or args.find_confidentiality is not None
+                or args.find_review_due is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-integrity cannot be combined with other query or comparison modes")
     if args.find_confidentiality is not None:
         if args.registry is None:
             parser.error("--find-confidentiality requires --registry")
@@ -2861,7 +2972,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_confidentiality is not None:
+            if args.find_integrity is not None:
+                result = find_palaco_integrity(current, args.find_integrity)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_confidentiality is not None:
                 result = find_palaco_confidentiality(current, args.find_confidentiality)
                 print(json.dumps(result, indent=2))
                 return 0

@@ -2441,6 +2441,25 @@ contents are returned and no records or files are modified. The option requires
 `--registry` and cannot be combined with other queries, `--direction` or
 `--previous-registry`.
 
+Read-only integrity-classification queries filter exact metadata labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-integrity High
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Low`, `Medium` and `High`.
+Matching uses only `classification.integrity`, not criticality, availability,
+verification results or a minimum threshold. After full snapshot validation,
+JSON contains `integrity`, sorted `object_ids` and a scope disclaimer.
+No matches returns an empty array and exit 0; unknown values or invalid snapshots
+fail nonzero without results, including invalid nonmatching records.
+A High label is not proof of data integrity, tamper resistance, compliance or
+authority; no checksum or signature is verified by this query.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
