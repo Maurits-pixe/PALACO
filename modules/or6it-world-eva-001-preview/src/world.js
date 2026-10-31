@@ -16,6 +16,14 @@ const expectedLandmarks = [
   'THE_ARCHIVE',
   'THE_CORE',
 ];
+const knownRegions = new Set(expectedRegions);
+const knownValidationStates = new Set([
+  'UNKNOWN',
+  'INCOMPLETE',
+  'CONFLICT',
+  'INVALID',
+  'STRUCTURALLY_VALID',
+]);
 
 function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -100,7 +108,14 @@ export function normalizeWorldManifest(manifest) {
 }
 
 export function applyFixtureEvent(readModel, event) {
-  if (!Number.isSafeInteger(event?.sequence) || typeof event?.eventType !== 'string') {
+  if (!isRecord(event) ||
+      !Number.isSafeInteger(event.sequence) ||
+      event.sequence < 1 ||
+      event.eventType !== 'RIO_SIGNAL_RECEIVED' ||
+      !knownRegions.has(event.region) ||
+      !knownValidationStates.has(event.validationState) ||
+      typeof event.traceRef !== 'string' ||
+      event.traceRef.trim() === '') {
     return { ...readModel, transportState: 'INVALID', issues: ['Fixture event is malformed.'] };
   }
 
