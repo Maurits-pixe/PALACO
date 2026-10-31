@@ -2520,6 +2520,25 @@ grant of authority. No identity lookup or network request is made.
 No records or files are modified. The option requires `--registry` and cannot
 be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only name queries filter exact object-name metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-name "Example accountable registry"
+```
+
+The name must contain non-whitespace text. Matching is case-sensitive against
+`metadata.name`, without trimming, normalization, substring or fuzzy matching.
+Identifiers and descriptions do not match. Names need not be unique: all matching
+records are returned as sorted `object_ids`, alongside `name` and a scope
+disclaimer, after full snapshot validation. No matches returns an empty array
+and exit 0; blank input or invalid snapshots fail nonzero without results,
+including invalid nonmatching records. A matching name does not establish unique
+identity, canonical status or authority.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

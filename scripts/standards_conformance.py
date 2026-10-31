@@ -1070,6 +1070,21 @@ def find_palaco_updater(instance, updater, validator=None):
     }
 
 
+def find_palaco_name(instance, name, validator=None):
+    """Match exact name metadata, not identifiers or descriptive text."""
+    require(isinstance(name, str) and re.search(r"\S", name),
+            "name must be a non-empty string containing non-whitespace text")
+    validate_palaco_registry(instance, validator)
+    return {
+        "name": name,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["metadata"]["name"] == name
+        ),
+        "scope": "supplied name metadata only; not unique identity, canonical status or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1453,6 +1468,96 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_name():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, name in enumerate(("Example registry", "Other registry", "Example registry", " Registry Δ "), 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["metadata"]["name"] = name
+        record["metadata"]["description"] = "Description-only label"
+        fixture["objects"].insert(0, record)
+    original = copy.deepcopy(fixture)
+    scope = "supplied name metadata only; not unique identity, canonical status or authority"
+    for name, expected in (
+        ("Example registry", ["FE-00001", "FE-00003"]),
+        ("Other registry", ["FE-00002"]),
+        ("example registry", []),
+        ("Example", []),
+        (" Example registry ", []),
+        ("FE-00001", []),
+        ("Description-only label", []),
+        (" Registry Δ ", ["FE-00004"]),
+        ("Registry Δ", []),
+    ):
+        result = find_palaco_name(fixture, name, validator)
+        require(result == {"name": name, "object_ids": expected, "scope": scope},
+                f"incorrect name query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_name(reordered, name, validator) == result,
+                "name query depends on record order")
+    require(fixture == original, "name query mutated input")
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][2]["traceability"]["upstream"] = ["FE-99999"]
+    invalid_name = copy.deepcopy(fixture)
+    invalid_name["objects"][2]["metadata"]["name"] = " "
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, name, diagnostic in (
+        (fixture, "", "name must"),
+        (fixture, " \t\n", "name must"),
+        (fixture, None, "name must"),
+        (fixture, 42, "name must"),
+        ({}, "Example registry", "registry structure"),
+        (invalid_ref, "Example registry", "unresolved"),
+        (invalid_name, "Example registry", "registry structure"),
+        (duplicate, "Example registry", "duplicate object ID"),
+    ):
+        try:
+            find_palaco_name(instance, name, validator)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected name error: {error}")
+        else:
+            raise ConformanceError(f"invalid name query accepted: {diagnostic}")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    script = [sys.executable, str(Path(__file__).resolve())]
+    base = script + ["--registry", fixture_path]
+    for name, expected in (
+        ("Example accountable registry", ["FE-00001"]),
+        ("Unknown registry", []),
+    ):
+        cli = subprocess.run(base + ["--find-name", name],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 0, f"name CLI failed: {cli.stdout}{cli.stderr}")
+        require(json.loads(cli.stdout) == {"name": name, "object_ids": expected, "scope": scope},
+                "incorrect name CLI result")
+    for flags in (
+        ["--find-updater", "Example registry team"], ["--find-relationship", "DEPENDS_ON"],
+        ["--find-availability", "Medium"], ["--find-integrity", "High"],
+        ["--find-confidentiality", "Public"], ["--find-criticality", "High"],
+        ["--find-owner", "custodian", "Example registry team"], ["--find-approval", "Pending"],
+        ["--find-verification", "Pending"], ["--find-domain", "Governance"],
+        ["--find-type", "FE"], ["--find-lifecycle", "Draft"], ["--find-review-due", "2027-01-15"],
+        ["--summary"], ["--trace", "FE-00001"], ["--find-orphans"],
+        ["--find-unverified-controls"], ["--find-unaudited-evidence"],
+        ["--previous-registry", fixture_path], ["--diff"], ["--direction", "upstream"],
+    ):
+        rejected = subprocess.run(base + ["--find-name", "Example accountable registry"] + flags,
+                                  capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == 2 and not rejected.stdout,
+                f"name query accepted incompatible flags: {flags}")
+    for arguments, code in (
+        (script + ["--find-name", "Example accountable registry"], 2),
+        (base + ["--find-name", " "], 1),
+    ):
+        rejected = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == code and '"object_ids"' not in rejected.stdout,
+                "name CLI accepted missing registry or blank name")
+    return "9 exact/empty/sorted/non-mutating queries + 8 rejections + CLI/conflict regressions"
 
 
 def check_palaco_updater():
@@ -3099,6 +3204,7 @@ CHECKS = (
     ("PALACO registry availability-label query conformance", check_palaco_availability),
     ("PALACO registry relationship-type query conformance", check_palaco_relationship),
     ("PALACO registry audit-updater query conformance", check_palaco_updater),
+    ("PALACO registry name query conformance", check_palaco_name),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -3136,6 +3242,8 @@ def main():
                         help="Return source IDs of explicit PMS-002 relationship types as JSON")
     parser.add_argument("--find-updater", metavar="UPDATER",
                         help="Return IDs matching exact audit.updated_by metadata; not authenticated identity")
+    parser.add_argument("--find-name", metavar="NAME",
+                        help="Return IDs matching exact case-sensitive metadata.name as JSON")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -3151,6 +3259,20 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_name is not None:
+        if args.registry is None:
+            parser.error("--find-name requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_approval is not None or args.find_owner is not None
+                or args.find_criticality is not None or args.find_confidentiality is not None
+                or args.find_integrity is not None or args.find_availability is not None
+                or args.find_relationship is not None or args.find_updater is not None
+                or args.find_review_due is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-name cannot be combined with other query or comparison modes")
     if args.find_updater is not None:
         if args.registry is None:
             parser.error("--find-updater requires --registry")
@@ -3322,7 +3444,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_updater is not None:
+            if args.find_name is not None:
+                result = find_palaco_name(current, args.find_name)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_updater is not None:
                 result = find_palaco_updater(current, args.find_updater)
                 print(json.dumps(result, indent=2))
                 return 0
