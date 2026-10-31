@@ -12,7 +12,7 @@
 | Category | Constitutional Governance Specification |
 | Parent specifications | ACCOUNT-1, IIP-1 |
 | Canonical adoption | Pending |
-| Implementation status | Not implemented |
+| Implementation status | Partial · synthetic lifecycle event validator only |
 | Operational authority effects | None |
 
 This document is a review candidate, not an adopted PALACO canon or a deployed
@@ -364,6 +364,21 @@ EFFECTIVE → EXPIRED
 Every transition MUST have a timestamp, actor, reason, evidence references, and
 registry update. Unknown or invalid transition history MUST fail closed.
 
+### 19.1 Reference lifecycle validator
+
+`palaco-la::authority_assignment::validate_lifecycle_event` implements a
+synthetic, pure validation of proposed transition shape. It checks the
+transition/decision pairing, required identifiers and evidence references,
+RFC-3339 event timestamps, monotonic ordering, and that an event is not from
+the future. Revoked and expired states are terminal; suspension can return to
+effective only through an explicit reinstatement decision.
+
+The function does not authenticate an actor, evidence, decision, or prior
+registry state. It does not append an event, change grant state, issue or revoke
+a grant, or determine that any authority is effective. Production AAP-1
+implementation remains unimplemented; acceptance and adoption gates remain
+open.
+
 ## 20. Effective-authority criteria
 
 A grant is `EFFECTIVE` only if all of the following are established from current
@@ -534,7 +549,8 @@ RFC-AAP-1
 Version: 0.9.0-RC1
 Status: REVIEW CANDIDATE
 Canonical Adoption: PENDING
-Implementation: NOT IMPLEMENTED
+Production Implementation: NOT IMPLEMENTED
+Reference Lifecycle Validator: SYNTHETIC ONLY
 Operational Authority Effects: NONE
 ```
 
