@@ -2336,6 +2336,27 @@ Results do not establish completeness, canonical status or authority. No records
 or files are modified. `--find-domain` requires `--registry` and cannot be combined
 with other queries, `--direction` or `--previous-registry`.
 
+Read-only verification-status queries filter each record's own status metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-verification Pending
+```
+
+`--find-verification` accepts the exact, case-sensitive PMS-001 values `Pending`,
+`Passed`, `Failed` and `NotApplicable`. It validates the entire snapshot before
+emitting JSON with `verification_status`, sorted `object_ids` and a scope
+disclaimer. Matching uses only the record's own `verification.status`: referenced
+VER statuses do not override it. Use `--find-unverified-controls` for the separate
+COM/VER diagnostic. No matches returns an empty array and exit 0.
+Unknown statuses and invalid snapshots fail nonzero without query results,
+including invalid records outside the filter. A recorded `Passed` value is not
+proof that verification happened, evidence is authentic, compliance exists or
+authority was granted. No records or files are modified. The query requires
+`--registry` and cannot be combined with other queries, `--direction` or
+`--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

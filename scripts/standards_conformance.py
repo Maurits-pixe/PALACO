@@ -916,6 +916,23 @@ def find_palaco_domain(instance, domain, validator=None):
     }
 
 
+def find_palaco_verification(instance, status, validators=None):
+    """Filter each record's own status metadata, not referenced verification results."""
+    if validators is None:
+        validators = palaco_validators()
+    statuses = validators["PMS-001.schema.json"].schema["$defs"]["Verification"]["properties"]["status"]["enum"]
+    require(status in statuses, f"unknown PALACO verification status: {status}")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "verification_status": status,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["verification"]["status"] == status
+        ),
+        "scope": "supplied verification-status metadata only; not proof of verification, compliance or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1299,6 +1316,79 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_verification():
+    validators = palaco_validators()
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    statuses = validators["PMS-001.schema.json"].schema["$defs"]["Verification"]["properties"]["status"]["enum"]
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, status in enumerate(statuses, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["verification"]["status"] = status
+        fixture["objects"].append(record)
+    extra = copy.deepcopy(fixture["objects"][0])
+    extra["metadata"]["id"] = "FE-00005"
+    fixture["objects"].insert(0, extra)
+    verifier = copy.deepcopy(template)
+    verifier["object_type"] = "VER"
+    verifier["metadata"]["id"] = "VER-00001"
+    verifier["verification"]["status"] = "Failed"
+    fixture["objects"].append(verifier)
+    next(record for record in fixture["objects"] if record["verification"]["status"] == "Passed")[
+        "verification"]["verification_ref"] = "VER-00001"
+    original = copy.deepcopy(fixture)
+    for index, status in enumerate(statuses, 1):
+        expected = [f"FE-{index:05d}"]
+        if status == "Pending":
+            expected.append("FE-00005")
+        if status == "Failed":
+            expected.append("VER-00001")
+        result = find_palaco_verification(fixture, status, validators)
+        require(result == {
+            "verification_status": status,
+            "object_ids": expected,
+            "scope": "supplied verification-status metadata only; not proof of verification, compliance or authority",
+        }, f"incorrect verification query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_verification(reordered, status, validators) == result,
+                "verification query depends on record order")
+    require(fixture == original, "verification query mutated input")
+    single = {"registry_version": "0.1.0", "objects": [copy.deepcopy(template)]}
+    require(find_palaco_verification(single, "Passed", validators)["object_ids"] == [],
+            "verification query without matches must be empty")
+    bad_ref = copy.deepcopy(fixture)
+    bad_ref["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    bad_status = copy.deepcopy(fixture)
+    bad_status["objects"][-1]["verification"]["status"] = "Unknown"
+    for instance, status, diagnostic in (
+        (fixture, "passed", "unknown PALACO verification status"),
+        (fixture, "Unknown", "unknown PALACO verification status"),
+        (fixture, "", "unknown PALACO verification status"),
+        ({}, "Passed", "registry structure"),
+        (bad_ref, "Passed", "unresolved"),
+        (duplicate, "Passed", "duplicate object ID"),
+        (bad_status, "Passed", "registry structure"),
+    ):
+        try:
+            find_palaco_verification(instance, status, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected verification query error: {error}")
+        else:
+            raise ConformanceError(f"invalid verification query accepted: {diagnostic}")
+    cli = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--registry",
+         str(PALACO_FIXTURE_DIR / "registry.fixture.json"), "--find-verification", "Pending"],
+        capture_output=True, text=True, timeout=30,
+    )
+    require(cli.returncode == 0, f"verification CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout)["object_ids"] == ["CAP-00001", "FE-00001", "REQ-00001"],
+            "incorrect verification CLI result")
+    return "4 status queries + empty/sorted/non-mutating/own-status checks + 7 rejections + CLI regression"
 
 
 def check_palaco_domain():
@@ -2229,6 +2319,7 @@ CHECKS = (
     ("PALACO registry snapshot diff conformance", check_palaco_diff),
     ("PALACO registry review-date query conformance", check_palaco_reviews_due),
     ("PALACO registry domain query conformance", check_palaco_domain),
+    ("PALACO registry verification-status query conformance", check_palaco_verification),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2248,6 +2339,8 @@ def main():
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--find-domain", metavar="DOMAIN",
                         help="Return IDs matching exact case-sensitive metadata.domain as JSON")
+    parser.add_argument("--find-verification", metavar="STATUS",
+                        help="Return IDs matching each record's own PMS-001 verification status as JSON")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -2263,6 +2356,15 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_verification is not None:
+        if args.registry is None:
+            parser.error("--find-verification requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_review_due is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-verification cannot be combined with other query or comparison modes")
     if args.find_domain is not None:
         if args.registry is None:
             parser.error("--find-domain requires --registry")
@@ -2333,7 +2435,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_domain is not None:
+            if args.find_verification is not None:
+                result = find_palaco_verification(current, args.find_verification)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_domain is not None:
                 result = find_palaco_domain(current, args.find_domain)
                 print(json.dumps(result, indent=2))
                 return 0
