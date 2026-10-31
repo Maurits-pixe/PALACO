@@ -1,0 +1,51 @@
+name: GO-16 Runtime Dependency Provenance
+
+on:
+  push:
+    branches:
+      - main
+      - "go-16-runtime-dependency-provenance"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "services/**/Cargo.toml"
+      - "services/**/Cargo.lock"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "verification/**/*compose*.yml"
+      - "verification/**/*compose*.yaml"
+      - ".github/workflows/**"
+      - "tools/verify_go16_runtime_dependency_provenance.py"
+      - "evidence/governance/GO-16-RUNTIME-DEPENDENCY-POLICY.json"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**/Cargo.toml"
+      - "services/**/Cargo.toml"
+      - "services/**/Cargo.lock"
+      - "**/package.json"
+      - "**/package-lock.json"
+      - "verification/**/*compose*.yml"
+      - "verification/**/*compose*.yaml"
+      - ".github/workflows/**"
+      - "tools/verify_go16_runtime_dependency_provenance.py"
+      - "evidence/governance/GO-16-RUNTIME-DEPENDENCY-POLICY.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-dependency-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Verify runtime dependency provenance
+        run: python3 tools/verify_go16_runtime_dependency_provenance.py
