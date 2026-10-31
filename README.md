@@ -2378,6 +2378,27 @@ Recorded approval is not proof of approval authenticity, activation or authority
 No records or files are modified. The query requires `--registry` and cannot be
 combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only ownership queries match one exact role and owner:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-owner custodian "Example registry team"
+```
+
+Roles are the exact PMS-001 keys `business`, `architecture`, `technical`,
+`verification` and `custodian`. Matching uses only `ownership[role]`, not other
+roles or `audit.updated_by`. Owner text is case-sensitive without trimming,
+substring search or Unicode normalization; quote values containing spaces.
+Empty or whitespace-only owner values and unknown roles are rejected.
+After full snapshot validation, output is JSON with `role`, `owner`, sorted
+`object_ids` and a scope disclaimer. No matches returns an empty array and exit 0.
+Invalid snapshots fail nonzero without results, including records outside the
+requested ownership. Assigned metadata is not proof of identity, accountability
+or authority. The read-only query modifies no records or files, requires
+`--registry` and cannot be combined with other queries, `--direction` or
+`--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

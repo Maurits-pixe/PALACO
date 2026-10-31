@@ -950,6 +950,26 @@ def find_palaco_approval(instance, status, validators=None):
     }
 
 
+def find_palaco_owner(instance, role, owner, validators=None):
+    """Match assigned ownership metadata, not authenticated identity or authority."""
+    if validators is None:
+        validators = palaco_validators()
+    roles = validators["PMS-001.schema.json"].schema["$defs"]["Ownership"]["properties"]
+    require(role in roles, f"unknown PALACO ownership role: {role}")
+    require(isinstance(owner, str) and re.search(r"\S", owner),
+            "owner must be a non-empty string containing non-whitespace text")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "role": role,
+        "owner": owner,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["ownership"][role] == owner
+        ),
+        "scope": "supplied ownership metadata only; not proof of identity, accountability or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1333,6 +1353,75 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_owner():
+    validators = palaco_validators()
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    roles = validators["PMS-001.schema.json"].schema["$defs"]["Ownership"]["properties"]
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index in (2, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        for role in roles:
+            record["ownership"][role] = f"Synthetic {role} team"
+        fixture["objects"].append(record)
+    other = copy.deepcopy(template)
+    other["metadata"]["id"] = "FE-00003"
+    other["ownership"]["business"] = "synthetic business team"
+    other["ownership"]["technical"] = "Synthetic business team"
+    fixture["objects"].append(other)
+    original = copy.deepcopy(fixture)
+    for role in roles:
+        result = find_palaco_owner(fixture, role, f"Synthetic {role} team", validators)
+        require(result == {
+            "role": role, "owner": f"Synthetic {role} team",
+            "object_ids": ["FE-00001", "FE-00002"],
+            "scope": "supplied ownership metadata only; not proof of identity, accountability or authority",
+        }, f"incorrect ownership query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_owner(reordered, role, f"Synthetic {role} team", validators) == result,
+                "ownership query depends on record order")
+    require(fixture == original, "ownership query mutated input")
+    for owner, expected in (
+        ("Missing", []), ("synthetic business team", ["FE-00003"]),
+        (" Synthetic business team ", []),
+    ):
+        require(find_palaco_owner(fixture, "business", owner, validators)["object_ids"] == expected,
+                "ownership matching must be exact and role-specific")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    missing_role = copy.deepcopy(fixture)
+    del missing_role["objects"][-1]["ownership"]["custodian"]
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, role, owner, diagnostic in (
+        (fixture, "Business", "Synthetic business team", "unknown PALACO ownership role"),
+        (fixture, "unknown", "Synthetic business team", "unknown PALACO ownership role"),
+        (fixture, "business", "", "non-empty string"),
+        (fixture, "business", " \t", "non-empty string"),
+        ({}, "business", "Synthetic business team", "registry structure"),
+        (invalid, "business", "Synthetic business team", "unresolved"),
+        (missing_role, "business", "Synthetic business team", "registry structure"),
+        (duplicate, "business", "Synthetic business team", "duplicate object ID"),
+    ):
+        try:
+            find_palaco_owner(instance, role, owner, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected ownership query error: {error}")
+        else:
+            raise ConformanceError(f"invalid ownership query accepted: {diagnostic}")
+    cli = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--registry",
+         str(PALACO_FIXTURE_DIR / "registry.fixture.json"),
+         "--find-owner", "custodian", "Example registry team"],
+        capture_output=True, text=True, timeout=30,
+    )
+    require(cli.returncode == 0, f"ownership CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout)["object_ids"] == ["CAP-00001", "FE-00001", "REQ-00001"],
+            "incorrect ownership CLI result")
+    return "5 role queries + exact/empty/non-mutating/order checks + 8 rejections + CLI regression"
 
 
 def check_palaco_approval():
@@ -2415,6 +2504,7 @@ CHECKS = (
     ("PALACO registry domain query conformance", check_palaco_domain),
     ("PALACO registry verification-status query conformance", check_palaco_verification),
     ("PALACO registry approval-status query conformance", check_palaco_approval),
+    ("PALACO registry ownership query conformance", check_palaco_owner),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2438,6 +2528,8 @@ def main():
                         help="Return IDs matching each record's own PMS-001 verification status as JSON")
     parser.add_argument("--find-approval", metavar="STATUS",
                         help="Return IDs matching PMS-001 approval.status metadata as JSON")
+    parser.add_argument("--find-owner", nargs=2, metavar=("ROLE", "OWNER"),
+                        help="Return IDs matching an exact ownership role and owner as JSON")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -2453,6 +2545,16 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_owner is not None:
+        if args.registry is None:
+            parser.error("--find-owner requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_approval is not None or args.find_review_due is not None
+                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-owner cannot be combined with other query or comparison modes")
     if args.find_approval is not None:
         if args.registry is None:
             parser.error("--find-approval requires --registry")
@@ -2542,7 +2644,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_approval is not None:
+            if args.find_owner is not None:
+                result = find_palaco_owner(current, *args.find_owner)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_approval is not None:
                 result = find_palaco_approval(current, args.find_approval)
                 print(json.dumps(result, indent=2))
                 return 0
