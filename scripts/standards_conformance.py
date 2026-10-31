@@ -933,6 +933,23 @@ def find_palaco_verification(instance, status, validators=None):
     }
 
 
+def find_palaco_approval(instance, status, validators=None):
+    """Filter recorded approval metadata, not authenticity or authorization."""
+    if validators is None:
+        validators = palaco_validators()
+    statuses = validators["PMS-001.schema.json"].schema["$defs"]["Approval"]["properties"]["status"]["enum"]
+    require(status in statuses, f"unknown PALACO approval status: {status}")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "approval_status": status,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["approval"]["status"] == status
+        ),
+        "scope": "supplied approval-status metadata only; not proof of approval authenticity, activation or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1316,6 +1333,83 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_approval():
+    validators = palaco_validators()
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    statuses = validators["PMS-001.schema.json"].schema["$defs"]["Approval"]["properties"]["status"]["enum"]
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, status in enumerate(statuses, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["approval"]["status"] = status
+        if status == "Approved":
+            record["approval"].update(
+                authority="Synthetic review team", approval_ref="Synthetic approval-query fixture",
+            )
+            record["lifecycle"]["approved"] = record["lifecycle"]["created"]
+        fixture["objects"].append(record)
+    extra = copy.deepcopy(fixture["objects"][0])
+    extra["metadata"]["id"] = "FE-00004"
+    fixture["objects"].insert(0, extra)
+    original = copy.deepcopy(fixture)
+    for index, status in enumerate(statuses, 1):
+        expected = [f"FE-{index:05d}"]
+        if status == "Pending":
+            expected.append("FE-00004")
+        result = find_palaco_approval(fixture, status, validators)
+        require(result == {
+            "approval_status": status,
+            "object_ids": expected,
+            "scope": "supplied approval-status metadata only; not proof of approval authenticity, activation or authority",
+        }, f"incorrect approval query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_approval(reordered, status, validators) == result,
+                "approval query depends on record order")
+    require(fixture == original, "approval query mutated input")
+    single = {"registry_version": "0.1.0", "objects": [copy.deepcopy(template)]}
+    require(find_palaco_approval(single, "Approved", validators)["object_ids"] == [],
+            "approval query without matches must be empty")
+    approved_index = next(i for i, record in enumerate(fixture["objects"])
+                          if record["approval"]["status"] == "Approved")
+    missing_authority = copy.deepcopy(fixture)
+    del missing_authority["objects"][approved_index]["approval"]["authority"]
+    missing_ref = copy.deepcopy(fixture)
+    del missing_ref["objects"][approved_index]["approval"]["approval_ref"]
+    missing_date = copy.deepcopy(fixture)
+    del missing_date["objects"][approved_index]["lifecycle"]["approved"]
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    for instance, status, diagnostic in (
+        (fixture, "approved", "unknown PALACO approval status"),
+        (fixture, "Unknown", "unknown PALACO approval status"),
+        (fixture, "", "unknown PALACO approval status"),
+        ({}, "Pending", "registry structure"),
+        (missing_authority, "Pending", "registry structure"),
+        (missing_ref, "Pending", "registry structure"),
+        (missing_date, "Pending", "approved approval requires lifecycle.approved"),
+        (invalid_ref, "Pending", "unresolved"),
+        (duplicate, "Pending", "duplicate object ID"),
+    ):
+        try:
+            find_palaco_approval(instance, status, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected approval query error: {error}")
+        else:
+            raise ConformanceError(f"invalid approval query accepted: {diagnostic}")
+    cli = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--registry",
+         str(PALACO_FIXTURE_DIR / "registry.fixture.json"), "--find-approval", "Pending"],
+        capture_output=True, text=True, timeout=30,
+    )
+    require(cli.returncode == 0, f"approval CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout)["object_ids"] == ["CAP-00001", "FE-00001", "REQ-00001"],
+            "incorrect approval CLI result")
+    return "3 status queries + empty/sorted/non-mutating checks + 9 rejections + CLI regression"
 
 
 def check_palaco_verification():
@@ -2320,6 +2414,7 @@ CHECKS = (
     ("PALACO registry review-date query conformance", check_palaco_reviews_due),
     ("PALACO registry domain query conformance", check_palaco_domain),
     ("PALACO registry verification-status query conformance", check_palaco_verification),
+    ("PALACO registry approval-status query conformance", check_palaco_approval),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -2341,6 +2436,8 @@ def main():
                         help="Return IDs matching exact case-sensitive metadata.domain as JSON")
     parser.add_argument("--find-verification", metavar="STATUS",
                         help="Return IDs matching each record's own PMS-001 verification status as JSON")
+    parser.add_argument("--find-approval", metavar="STATUS",
+                        help="Return IDs matching PMS-001 approval.status metadata as JSON")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -2356,6 +2453,16 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_approval is not None:
+        if args.registry is None:
+            parser.error("--find-approval requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_review_due is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-approval cannot be combined with other query or comparison modes")
     if args.find_verification is not None:
         if args.registry is None:
             parser.error("--find-verification requires --registry")
@@ -2435,7 +2542,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_verification is not None:
+            if args.find_approval is not None:
+                result = find_palaco_approval(current, args.find_approval)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_verification is not None:
                 result = find_palaco_verification(current, args.find_verification)
                 print(json.dumps(result, indent=2))
                 return 0

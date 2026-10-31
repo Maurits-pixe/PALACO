@@ -2357,6 +2357,27 @@ authority was granted. No records or files are modified. The query requires
 `--registry` and cannot be combined with other queries, `--direction` or
 `--previous-registry`.
 
+Read-only approval-status queries filter recorded `approval.status`:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-approval Pending
+```
+
+`--find-approval` accepts the exact, case-sensitive PMS-001 statuses `Pending`,
+`Approved` and `Rejected`. After full snapshot validation it emits JSON with
+`approval_status`, sorted `object_ids` and a scope disclaimer. Matching does not
+use `lifecycle.status` or `verification.status`; an Approved approval record may
+still have Draft lifecycle metadata. Existing structural requirements for
+Approved approval (authority, approval reference and approval date) remain enforced.
+Those fields are not authenticated by this query.
+No matches returns an empty array and exit 0. Unknown statuses or invalid
+snapshots fail nonzero without results, even when invalid records do not match.
+Recorded approval is not proof of approval authenticity, activation or authority.
+No records or files are modified. The query requires `--registry` and cannot be
+combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
