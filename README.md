@@ -2254,6 +2254,25 @@ This filters recorded metadata, not approval authenticity, runtime activation or
 authority. Records and files are not modified. The option requires `--registry`
 and cannot be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only registry summaries count object types and lifecycle-status metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --summary
+```
+
+After validating the entire snapshot, `--summary` emits JSON with
+`registry_version`, `total_objects`, `by_object_type`, `by_lifecycle_status` and
+a scope disclaimer. Every PMS-001 family and lifecycle status is included, with
+zero for absent values. Object-type keys are alphabetically ordered; lifecycle
+keys follow the PMS-001 lifecycle sequence. Output does not depend on record order.
+Each breakdown sums to `total_objects`; counts are metadata observations, not
+proof of completeness, approval, activation or authority.
+Invalid snapshots, including empty registries, fail nonzero without summary
+results. No records or files are modified. `--summary` requires `--registry` and
+cannot be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

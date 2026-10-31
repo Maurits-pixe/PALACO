@@ -896,6 +896,28 @@ def find_unverified_controls(instance, validator=None):
     }
 
 
+def summarize_palaco_registry(instance, validators=None):
+    """Count validated snapshot metadata without asserting completeness or trust."""
+    if validators is None:
+        validators = palaco_validators()
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    schema = validators["PMS-001.schema.json"].schema
+    by_type = {family: 0 for family in sorted(schema["properties"]["object_type"]["enum"])}
+    by_lifecycle = {
+        status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
+    }
+    for record in instance["objects"]:
+        by_type[record["object_type"]] += 1
+        by_lifecycle[record["lifecycle"]["status"]] += 1
+    return {
+        "registry_version": instance["registry_version"],
+        "total_objects": len(instance["objects"]),
+        "by_object_type": by_type,
+        "by_lifecycle_status": by_lifecycle,
+        "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
+    }
+
+
 def find_unaudited_evidence(instance, validator=None):
     """Find absent audit links, without claiming an audit has been performed."""
     validate_palaco_registry(instance, validator)
@@ -1220,6 +1242,68 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_summary():
+    validators = palaco_validators()
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    mixed = copy.deepcopy(fixture)
+    added = copy.deepcopy(template)
+    added["metadata"]["id"] = "FE-00002"
+    added["lifecycle"]["status"] = "Review"
+    mixed["objects"].append(added)
+    schema = validators["PMS-001.schema.json"].schema
+    families = sorted(schema["properties"]["object_type"]["enum"])
+    statuses = schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
+    for instance, expected_types, expected_states in (
+        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}),
+        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}),
+        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}),
+    ):
+        original = copy.deepcopy(instance)
+        result = summarize_palaco_registry(instance, validators)
+        require(result == {
+            "registry_version": "0.1.0",
+            "total_objects": len(instance["objects"]),
+            "by_object_type": {family: expected_types.get(family, 0) for family in families},
+            "by_lifecycle_status": {status: expected_states.get(status, 0) for status in statuses},
+            "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
+        }, f"unexpected registry summary: {result}")
+        require(list(result["by_object_type"]) == families, "summary type order changed")
+        require(list(result["by_lifecycle_status"]) == statuses, "summary lifecycle order changed")
+        require(sum(result["by_object_type"].values()) == result["total_objects"],
+                "summary type counts do not sum to total")
+        require(sum(result["by_lifecycle_status"].values()) == result["total_objects"],
+                "summary lifecycle counts do not sum to total")
+        require(instance == original, "summary mutated input")
+        reordered = copy.deepcopy(instance)
+        reordered["objects"].reverse()
+        require(json.dumps(summarize_palaco_registry(reordered, validators)) == json.dumps(result),
+                "summary serialization depends on object order")
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][0]["traceability"]["upstream"] = ["FE-99999"]
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    cyclic = copy.deepcopy(fixture)
+    cyclic["objects"][0]["traceability"]["upstream"] = ["REQ-00001"]
+    unapproved = copy.deepcopy(fixture)
+    unapproved["objects"][0]["lifecycle"]["status"] = "Active"
+    for instance, diagnostic in (
+        ({}, "registry structure"),
+        ({"registry_version": "0.1.0", "objects": []}, "registry structure"),
+        (invalid_ref, "unresolved"),
+        (duplicate, "duplicate object ID"),
+        (cyclic, "upstream cycle"),
+        (unapproved, "requires approval.status Approved"),
+    ):
+        try:
+            summarize_palaco_registry(instance, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected summary diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid snapshot summarized: {diagnostic}")
+    return "3 deterministic/non-mutating summaries with zero counts + 6 invalid snapshot rejections"
 
 
 def check_palaco_find_lifecycle():
@@ -1858,6 +1942,7 @@ CHECKS = (
     ("PALACO registry trace conformance", check_palaco_traces),
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),
+    ("PALACO registry summary conformance", check_palaco_summary),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -1875,6 +1960,8 @@ def main():
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
+    parser.add_argument("--summary", action="store_true",
+                        help="Return validated snapshot counts by object type and lifecycle status as JSON")
     parser.add_argument("--find-orphans", action="store_true",
                         help="Return IDs isolated in traceability.upstream as JSON")
     parser.add_argument("--find-unverified-controls", action="store_true",
@@ -1920,10 +2007,21 @@ def main():
                 or args.find_unverified_controls or args.find_unaudited_evidence
                 or args.previous_registry is not None):
             parser.error("--find-lifecycle cannot be combined with other query or comparison modes")
+    if args.summary:
+        if args.registry is None:
+            parser.error("--summary requires --registry")
+        if (args.trace is not None or args.find_type is not None or args.find_lifecycle is not None
+                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.previous_registry is not None):
+            parser.error("--summary cannot be combined with other query or comparison modes")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_lifecycle is not None:
+            if args.summary:
+                result = summarize_palaco_registry(current)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_lifecycle is not None:
                 result = find_palaco_lifecycle(current, args.find_lifecycle)
                 print(json.dumps(result, indent=2))
                 return 0
