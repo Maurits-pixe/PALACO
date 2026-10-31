@@ -33,7 +33,8 @@ process.once('message', async input => {
         r?.binding===canonical(b) && a?.binding===canonical(b) && a?.kind==='DECISION' && a?.operation_id===request.operationId && a?.grant_id===request.grantId &&
         e?.id===request.eventId && e?.calendar_id===request.calendarId && e?.revision===1 && e?.title===request.title &&
         v?.revision===1 && v?.snapshot_digest===b.snapshotDigest && ap?.consumed===1 && ap?.request_digest===rd && ap?.context_digest===cd &&
-        ap?.grant_id===request.grantId && g?.generation===request.generation && g?.owner===context.owner && g?.tenant===context.tenant && g?.session===context.session &&
+        ap?.grant_id===request.grantId && g?.calendar_id===request.calendarId && g?.action==='CREATE_OWN_EVENT' &&
+        g?.generation===request.generation && g?.owner===context.owner && g?.tenant===context.tenant && g?.session===context.session &&
         cal?.owner===context.owner && cal?.tenant===context.tenant;
       if (!good) { db.exec('ROLLBACK'); await tell({status:'RESULT_UNKNOWN',code:'BINDING_MISMATCH'}); return; }
       const effectAt=now(); // same committed transaction, a second readback observation, NOT a second commit

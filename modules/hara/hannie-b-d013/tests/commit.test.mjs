@@ -7,6 +7,24 @@ import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {execute,recover,revoke} from '../src/index.mjs';
 import {fixture,inspect,mutate,state,counts} from './fixture.mjs';
+for (const [field,value] of [['action','MOVE_OWN_EVENT'],['calendar_id','other-calendar']]) {
+ test('BR06 recovery rejects altered grant '+field+' without disclosure or replay',async t=>{
+  const f=fixture(t);
+  assert.equal((await execute(f.path,f.context,f.request)).status,'SUCCEEDED');
+  mutate(f.path,db=>{
+   if(field==='calendar_id') db.prepare('INSERT INTO calendars VALUES (?,?,?,1)').run(value,f.context.owner,f.context.tenant);
+   db.prepare('UPDATE grants SET '+field+'=? WHERE id=?').run(value,f.request.grantId);
+  });
+  const before=state(f.path),r=await recover(f.path,f.context,f.request);
+  assert.equal(r.status,'RESULT_UNKNOWN');
+  assert.equal(r.code,'BINDING_MISMATCH');
+  assert.equal(r.event,undefined);
+  assert.equal(r.receipt,undefined);
+  assert.equal((await execute(f.path,f.context,f.request)).code,'BINDING_MISMATCH');
+  assert.equal(state(f.path),before);
+  trace('BR06-'+field,r);
+ });
+}
 const trace=(n,r)=>{if(process.env.B013_TRACE_DIR)writeFileSync(join(process.env.B013_TRACE_DIR,n+'.json'),JSON.stringify(r,null,2)+'\n');};
 const zero={audit:0,decisions:0,events:0,versions:0,receipts:0},one={audit:1,decisions:1,events:1,versions:1,receipts:1};
 test('B01 actual SIGKILL after COMMIT and new process reconstruct all atomic rows before expiry',async t=>{
@@ -50,7 +68,7 @@ test('B14 actual SIGKILL inside native COMMIT WAL write cannot survive as succes
  test('BR01 altered audit grant cannot release content',async t=>{const f=fixture(t);assert.equal((await execute(f.path,f.context,f.request)).status,'SUCCEEDED');mutate(f.path,d=>{d.exec("INSERT INTO grants SELECT 'other',calendar_id,owner,tenant,session,generation,expires_at,state,action FROM grants LIMIT 1");d.prepare("UPDATE audit SET grant_id='other' WHERE kind='DECISION'").run();});const before=state(f.path);const r=await recover(f.path,f.context,f.request);assert.equal(r.code,'BINDING_MISMATCH');assert.equal(r.event,undefined);assert.equal(state(f.path),before);trace('BR01',r);});
 
  test('BR02 late durability cannot revive under wall clock rollback in supervisor and reader',async t=>{const f=fixture(t,450),env={LD_PRELOAD:process.env.B013_NATIVE_LIBRARY,B013_WAL_PATH:f.path+'-wal',B013_WAL_ARM:join(f.dir,'arm'),B013_NATIVE_TRACE:join(f.dir,'native.jsonl')};assert.equal((await execute(f.path,f.context,f.request,env)).status,'COMMITTED_RESULT_WITHHELD');const original=Date.now,options=process.env.NODE_OPTIONS;Date.now=()=>f.expiry-1000;process.env.NODE_OPTIONS='--import='+fileURLToPath(new URL('./rollback-clock.mjs',import.meta.url));try{const before=state(f.path),r=await recover(f.path,f.context,f.request);assert.equal(r.status,'COMMITTED_RESULT_WITHHELD');assert.equal(r.event,undefined);assert.equal(state(f.path),before);trace('BR02',r);}finally{Date.now=original;if(options===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=options;}});
- test('BR03 new supervisor has no deadline witness and read-only recovery withholds',async t=>{const f=fixture(t);assert.equal((await execute(f.path,f.context,f.request)).status,'SUCCEEDED');const before=state(f.path);const script=`import {recover} from ${JSON.stringify(new URL('../src/index.mjs',import.meta.url).href)};console.log(JSON.stringify(await recover(${JSON.stringify(f.path)},${JSON.stringify(f.context)},${JSON.stringify(f.request)})));`;const child=spawnSync(process.execPath,['--disable-warning=ExperimentalWarning','--input-type=module','-e',script],{encoding:'utf8'});assert.equal(child.status,0);const r=JSON.parse(child.stdout);assert.equal(r.status,'COMMITTED_RESULT_WITHHELD');assert.equal(r.code,'DEADLINE_NOT_PROVEN');assert.equal(r.event,undefined);assert.equal(state(f.path),before);trace('BR03',r);});
+ test('BR03 new supervisor has no deadline witness and read-only recovery withholds',async t=>{const f=fixture(t);assert.equal((await execute(f.path,f.context,f.request)).status,'SUCCEEDED');const before=state(f.path);const resultPath=join(f.dir,'new-supervisor-result.json');const script=`import {writeFileSync} from 'node:fs';import {recover} from ${JSON.stringify(new URL('../src/index.mjs',import.meta.url).href)};writeFileSync(${JSON.stringify(resultPath)},JSON.stringify(await recover(${JSON.stringify(f.path)},${JSON.stringify(f.context)},${JSON.stringify(f.request)})));`;const child=spawnSync(process.execPath,['--disable-warning=ExperimentalWarning','--input-type=module','-e',script],{encoding:'utf8'});assert.equal(child.status,0,child.stderr);assert.equal(child.signal,null);const r=JSON.parse(readFileSync(resultPath,'utf8'));assert.equal(r.status,'COMMITTED_RESULT_WITHHELD');assert.equal(r.code,'DEADLINE_NOT_PROVEN');assert.equal(r.event,undefined);assert.equal(state(f.path),before);trace('BR03',r);});
  test('BR04 revoke waits for locked IPC release and subsequent disclosure is blocked',async t=>{const f=fixture(t);await execute(f.path,f.context,f.request);const ready=join(f.dir,'read-ready');process.env.B013_READ_READY=ready;try{const reading=recover(f.path,f.context,f.request);for(let i=0;i<200&&!existsSync(ready);i++)await new Promise(r=>setTimeout(r,5));assert.ok(existsSync(ready));const revoking=revoke(f.path,f.context,f.request.grantId);await new Promise(r=>setTimeout(r,80));assert.equal(inspect(f.path,d=>d.prepare('SELECT state FROM grants').get().state),'ACTIVE');const r=await reading;assert.equal(r.status,'SUCCEEDED');assert.equal(r.releasePoint,'LOCKED_WORKER_IPC_SEND');const rev=await revoking;assert.equal(rev.writer.signal,'SIGKILL');const after=await recover(f.path,f.context,f.request);assert.equal(after.status,'COMMITTED_RESULT_WITHHELD');assert.equal(after.event,undefined);trace('BR04',{r,rev,after});}finally{delete process.env.B013_READ_READY;}});
 
  test('BR05 expiry during release wait withholds payload',async t=>{const f=fixture(t,500);await execute(f.path,f.context,f.request);const before=state(f.path);process.env.B013_READ_READY=join(f.dir,'expiry-ready');try{await new Promise(r=>setTimeout(r,200));const r=await recover(f.path,f.context,f.request);assert.equal(r.status,'COMMITTED_RESULT_WITHHELD');assert.equal(r.event,undefined);assert.equal(state(f.path),before);trace('BR05',r);}finally{delete process.env.B013_READ_READY;}});

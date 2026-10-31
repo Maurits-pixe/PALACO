@@ -1,0 +1,31 @@
+{
+  "baseline": "1b2065af0dfe82e25b3f62c80d9f9873563f6afd",
+  "sourceHashesAfterRun": {
+    "modules/hara/hannie-b-d013/CONTRACT.md": "148f34ad1662b5e2c9bd36a326a31ad305c929d2b6c0ec1e9c43bf417d48406a",
+    "modules/hara/hannie-b-d013/README.md": "ee5fe8980acb94f5ef5e271a7ace9bd4e2681d586907f798e5072f8530ab70ab",
+    "modules/hara/hannie-b-d013/package.json": "ee661a45cca373e4c16e22f55c27d7090430cad0402a27a815e2dcc75f87995c",
+    "modules/hara/hannie-b-d013/src/index.mjs": "296e51d25aa78351e7c842cf9f87f6a9fe171c74dbf2f872d7abedb8adfa3b82",
+    "modules/hara/hannie-b-d013/src/schema.sql": "2cc8c3c2d7d7b89231b6194da7f0f71fbab9a499f16e9e2dda9093f109dafdee",
+    "modules/hara/hannie-b-d013/src/value.mjs": "28dafa0e14cffaa73390632d22d14a81782f952db633cd4de8f2a83b139e5c3e",
+    "modules/hara/hannie-b-d013/src/worker.mjs": "459cf143833777aee34b28980d6da1a7651cbfb8a608eb7767062ed8901e67dc",
+    "modules/hara/hannie-b-d013/tests/commit.test.mjs": "735ac8301e1495237613afac2a61997a6218b825990b508fa721a4210c5c1a8a",
+    "modules/hara/hannie-b-d013/tests/fixture.mjs": "c1f4ef427ca7ea21f7748f4aa67397b12ddaca1b645d338893803ae91a85baee",
+    "modules/hara/hannie-b-d013/tests/rollback-clock.mjs": "c0b1ff008c38cb4eaad260b99974eada18b3827f61044552ebb8353ee129acc0",
+    "modules/hara/hannie-b-d013/tests/wal-stall.c": "70266baa2889188b555af36ce0fbea296bb555a2dbf93c780948678932342f54",
+    "modules/hara/hannie-b-d013/tools/run-evidence.mjs": "9a6fe760f8044056011c9b95a43b554e27c1df00e886c3cfc1d99b5c9635c9a9"
+  },
+  "artifacts": {
+    "after.tap": "816975606afbd5772c377898572da8a8deec467b634343d6f7e772d4134bec44",
+    "final.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "before.tap": "6c105d5bc77e08a33f76f3cb07c6b1f9681a4c9ed2c6064d89baeadc888792fd",
+    "after.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "final-file.tap": "d275c4600374c087642660f025ade1ba702049a25a2afe69aecf5c7fb27d9c71",
+    "final-file.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "final.tap": "0eb7cebc97656fd877edbbbad4775cfc4e2f3792a6cd242055a4557b33916d48",
+    "before.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "result": "22/22 PASS final-file.tap",
+  "measurement": "Hashes recorded after run, no before/after attestation",
+  "acceptance": "HOLD",
+  "independentReview": "PENDING"
+}

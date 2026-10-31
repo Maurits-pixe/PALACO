@@ -14,6 +14,7 @@ jobs:
     strategy:
       matrix:
         node: ['24.14.1', '24.19.0']
+        isolation: ['process', 'none']
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -21,9 +22,11 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: node tools/run-evidence.mjs
         working-directory: modules/hara/hannie-b-d013
+        env:
+          B013_TEST_ISOLATION: ${{ matrix.isolation }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: b-d013-${{ matrix.node }}
+          name: b-d013-${{ matrix.node }}-${{ matrix.isolation }}
           path: evidence/hara/b-d013/runs/
           if-no-files-found: error

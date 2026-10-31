@@ -1,0 +1,16 @@
+{
+  "baseline": "1b2065af0dfe82e25b3f62c80d9f9873563f6afd",
+  "positiveRun": "57116f39-86f2-40df-88c0-5d66f00b902b",
+  "negativeRun": "bce397cd-6ff3-42fc-b179-f42a25bd3f38",
+  "sourceSetSha256": "b53affe1abd9e022ea7f6396a94285e8e9ff4cbe6d0963e9dac93501441c0f77",
+  "patchSha256": "b4f3eb1857b1979d2772648cb2fea42e211cea2f41106c7e91b6e801ed0b91c6",
+  "checks": {
+    "completeSuite": "22/22 PASS (isolation none)",
+    "incompleteSuiteRejected": "PASS: default process mode returned one wrapper test and runner correctly reported FAIL",
+    "sourceAndArtifactHashes": "PASS, 21 artifacts checked against result.json",
+    "diffWhitespace": "PASS"
+  },
+  "ci": "CONFIGURED / NOT EXECUTED",
+  "independentReview": "PENDING",
+  "acceptance": "HOLD"
+}
