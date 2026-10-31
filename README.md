@@ -2501,6 +2501,25 @@ claims are not proof of implementation, verification, compliance or authority.
 No records or files are modified. The option requires `--registry` and cannot
 be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only audit-updater queries filter exact recorded updater labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-updater "Example registry team"
+```
+
+The updater must contain non-whitespace text. Matching is case-sensitive against
+`audit.updated_by`, without trimming or normalization; ownership roles and
+approval authority do not match. After full snapshot validation, JSON contains
+`updated_by`, sorted `object_ids` and a scope disclaimer. No matches returns an
+empty array and exit 0; blank input or invalid snapshots fail nonzero without
+results, including invalid nonmatching records. This is current snapshot
+metadata, not an update history, authenticated identity, audit evidence or a
+grant of authority. No identity lookup or network request is made.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
