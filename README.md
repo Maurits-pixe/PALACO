@@ -76,7 +76,10 @@ toelatingsfouten; `RejectedPlan::into_plan()` geeft het oorspronkelijke plan ter
 `next_plan()` draagt het oudste plan over zonder het uit te voeren. Vrijgekomen
 capaciteit kan opnieuw worden gebruikt; dubbele inzendingen tellen afzonderlijk.
 `next_plans(limit)` draagt lui maximaal `limit` plannen in FIFO-volgorde over,
-zonder vooraf verzamelen. Alleen daadwerkelijk opgevraagde items verdwijnen:
+zonder vooraf verzamelen. De iterator geeft via `len()` en `size_hint()` exact
+het resterende batchaantal (aanvankelijk het minimum van grens en queue-lengte),
+zonder overdracht. Een uitgeputte iterator blijft leeg (`FusedIterator`).
+Alleen daadwerkelijk opgevraagde items verdwijnen:
 een ongebruikte iterator, nulgrens of vroeg afgebroken batch laat de rest staan.
 Een drain voltooit pas bij de werkelijke laatste overdracht. Reeds opgehaalde
 plannen worden bij een fout of het laten vallen van de iterator niet teruggezet;

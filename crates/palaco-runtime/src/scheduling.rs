@@ -6,6 +6,7 @@
 use crate::RuntimePlan;
 use palaco_foundation::{ContractDisposition, ContractError, Validatable};
 use std::collections::VecDeque;
+use std::iter::FusedIterator;
 
 /// Reason a plan was not admitted, in precedence order: stopped, disposition,
 /// validation, capacity.
@@ -71,6 +72,35 @@ pub struct RuntimeQueue {
     capacity: usize,
     state: QueueState,
 }
+
+struct PlanBatch<'a> {
+    queue: &'a mut RuntimeQueue,
+    remaining: usize,
+}
+
+impl Iterator for PlanBatch<'_> {
+    type Item = RuntimePlan;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.remaining == 0 {
+            return None;
+        }
+        let plan = self.queue.next_plan();
+        self.remaining = if plan.is_some() {
+            self.remaining - 1
+        } else {
+            0
+        };
+        plan
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
+}
+
+impl ExactSizeIterator for PlanBatch<'_> {}
+impl FusedIterator for PlanBatch<'_> {}
 
 impl RuntimeQueue {
     /// Creates an empty queue. Zero capacity rejects every submission as full.
@@ -185,8 +215,20 @@ impl RuntimeQueue {
     /// final pending plan is actually transferred. No plans are collected,
     /// executed or authorized. Transferred plans cannot be rolled back by
     /// dropping this iterator, and are outside the scope of [`Self::stop`].
-    pub fn next_plans(&mut self, limit: usize) -> impl Iterator<Item = RuntimePlan> + '_ {
-        std::iter::from_fn(move || self.next_plan()).take(limit)
+    ///
+    /// `len()` and `size_hint()` report the exact number still available in
+    /// this batch, initially `min(limit, self.len())`, without transferring
+    /// plans. Once exhausted, repeated requests return `None`. The exclusive
+    /// borrow prevents admission or queue mutation while the batch is in use.
+    pub fn next_plans(
+        &mut self,
+        limit: usize,
+    ) -> impl ExactSizeIterator<Item = RuntimePlan> + FusedIterator + '_ {
+        let remaining = limit.min(self.len());
+        PlanBatch {
+            queue: self,
+            remaining,
+        }
     }
 
     /// Permanently stops admission and discards pending local plans.

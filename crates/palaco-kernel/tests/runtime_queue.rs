@@ -135,6 +135,68 @@ fn short_action_sequences_match_an_independent_fifo_lifecycle_model() -> Result<
 }
 
 #[test]
+fn batch_lengths_track_actual_transfers_without_consuming_on_inspection()
+-> Result<(), ContractError> {
+    fn assert_fused<I: std::iter::FusedIterator>(_: &I) {}
+    for draining in [false, true] {
+        for limit in [0, 1, 2, 3, usize::MAX] {
+            let plans = [
+                plan("SIZED-FIRST", AuthorityState::Authorized)?,
+                plan("SIZED-SECOND", AuthorityState::Authorized)?,
+            ];
+            let mut queue = RuntimeQueue::new(2);
+            for pending in &plans {
+                queue.submit(pending.clone()).expect("admission");
+            }
+            if draining {
+                queue.begin_drain();
+            }
+            let count = limit.min(plans.len());
+            {
+                let mut batch = queue.next_plans(limit);
+                assert_fused(&batch);
+                for (index, expected) in plans.iter().take(count).enumerate() {
+                    for _ in 0..2 {
+                        assert_eq!(batch.len(), count - index);
+                        assert_eq!(batch.size_hint(), (count - index, Some(count - index)));
+                    }
+                    assert_eq!(batch.next(), Some(expected.clone()));
+                }
+                for _ in 0..3 {
+                    assert_eq!(batch.len(), 0);
+                    assert_eq!(batch.size_hint(), (0, Some(0)));
+                    assert_eq!(batch.next(), None);
+                }
+            }
+            assert_eq!(queue.len(), plans.len() - count);
+            assert_eq!(
+                queue.state(),
+                if !draining {
+                    QueueState::Running
+                } else if count == plans.len() {
+                    QueueState::Stopped
+                } else {
+                    QueueState::Draining
+                }
+            );
+            assert_eq!(
+                queue.pending().collect::<Vec<_>>(),
+                plans[count..].iter().collect::<Vec<_>>()
+            );
+        }
+    }
+    for capacity in [0, usize::MAX] {
+        let mut queue = RuntimeQueue::new(capacity);
+        assert_eq!(queue.next_plans(usize::MAX).len(), 0);
+        assert_eq!(queue.state(), QueueState::Running);
+        queue.begin_drain();
+        assert_eq!(queue.next_plans(usize::MAX).len(), 0);
+        assert_eq!(queue.state(), QueueState::Stopped);
+    }
+    Ok(())
+}
+
+#[test]
 fn bounded_transfers_are_lazy_and_preserve_unrequested_fifo_entries() -> Result<(), ContractError> {
     let first = plan("BATCH-FIRST", AuthorityState::Authorized)?;
     let second = plan("BATCH-SECOND", AuthorityState::Authorized)?;
@@ -151,7 +213,9 @@ fn bounded_transfers_are_lazy_and_preserve_unrequested_fifo_entries() -> Result<
     assert_eq!(queue.len(), 3);
     {
         let mut batch = queue.next_plans(3);
+        assert_eq!(batch.len(), 3);
         assert_eq!(batch.next(), Some(first));
+        assert_eq!(batch.len(), 2);
     }
     assert_eq!(queue.len(), 2);
     assert_eq!(queue.state(), QueueState::Running);
