@@ -193,7 +193,7 @@ class FixtureSecurityTests(unittest.TestCase):
 
     def test_compose_and_ignore_contract(self):
         compose = MODULE_PATH.with_name("compose.yaml").read_text(encoding="utf-8")
-        self.assertIn("quay.io/keycloak/keycloak:26.8.0", compose)
+        self.assertIn("quay.io/keycloak/keycloak:26.8.1", compose)
         self.assertIn('"127.0.0.1:8089:8089"', compose)
         self.assertIn("--db=dev-mem", compose)
         self.assertIn("--verbose", compose)
