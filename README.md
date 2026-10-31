@@ -2581,6 +2581,29 @@ complete impact analysis, runtime dependency discovery or authority.
 No records or files are modified. The option requires `--registry` and cannot
 be combined with other queries, `--direction` or `--previous-registry`.
 
+Read-only direct-dependencies queries identify an object's dependency targets:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-dependencies REQ-00001
+```
+
+The exact object ID must exist in the supplied snapshot. After full snapshot
+validation, JSON contains `object_id`, `definition`, sorted unique `object_ids`
+and a scope disclaimer. Targets come from the union of the selected record's
+`dependencies` and explicit `DEPENDS_ON` edges; duplicate representations count
+once. Upstream links, other relationship types, dedicated references and
+transitive dependencies are excluded. For the fixture, `REQ-00001` returns only
+`CAP-00001`, not the indirectly required `FE-00001`. Unlike `--find-dependents`,
+this option returns targets, not dependency sources.
+An existing object without dependencies returns an empty array and exit 0;
+unknown IDs or invalid snapshots fail nonzero without results, including invalid
+nonmatching records. Supplied metadata is not complete impact analysis, runtime
+dependency discovery or authority. No records or files are modified. The option
+requires `--registry` and cannot be combined with other queries, `--direction`
+or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

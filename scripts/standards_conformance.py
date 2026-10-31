@@ -1162,6 +1162,25 @@ def find_palaco_dependents(instance, object_id, validator=None):
     }
 
 
+def find_palaco_dependencies(instance, object_id, validator=None):
+    """Return direct dependency targets, not transitive or upstream links."""
+    validate_palaco_registry(instance, validator)
+    objects = {record["metadata"]["id"]: record for record in instance["objects"]}
+    require(isinstance(object_id, str) and object_id in objects,
+            f"unknown PALACO object ID: {object_id}")
+    record = objects[object_id]
+    targets = set(record.get("dependencies", [])) | {
+        edge["target"] for edge in record["traceability"]["relationships"]
+        if edge["relation"] == "DEPENDS_ON"
+    }
+    return {
+        "object_id": object_id,
+        "definition": "direct dependencies from dependencies or explicit DEPENDS_ON edges",
+        "object_ids": sorted(targets),
+        "scope": "supplied direct dependency metadata only; not complete impact analysis or authority",
+    }
+
+
 def summarize_palaco_registry(instance, validators=None):
     """Count validated snapshot metadata without asserting completeness or trust."""
     if validators is None:
@@ -1508,6 +1527,108 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_dependencies():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index in range(1, 6):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        fixture["objects"].append(record)
+    fixture["objects"][0]["dependencies"] = ["FE-00003", "FE-00002"]
+    fixture["objects"][0]["traceability"]["relationships"] = [
+        {"source": "FE-00001", "relation": "DEPENDS_ON", "target": "FE-00003"},
+    ]
+    fixture["objects"][0]["traceability"]["upstream"] = ["FE-00005"]
+    fixture["objects"][1]["traceability"]["relationships"] = [
+        {"source": "FE-00002", "relation": "DEPENDS_ON", "target": "FE-00004"},
+    ]
+    original = copy.deepcopy(fixture)
+    definition = "direct dependencies from dependencies or explicit DEPENDS_ON edges"
+    scope = "supplied direct dependency metadata only; not complete impact analysis or authority"
+    for object_id, expected in (
+        ("FE-00001", ["FE-00002", "FE-00003"]),
+        ("FE-00002", ["FE-00004"]),
+        ("FE-00003", []),
+        ("FE-00005", []),
+    ):
+        result = find_palaco_dependencies(fixture, object_id, validator)
+        require(result == {
+            "object_id": object_id, "definition": definition, "object_ids": expected, "scope": scope,
+        }, f"incorrect dependencies query: {result}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        for record in reordered["objects"]:
+            record.get("dependencies", []).reverse()
+            record["traceability"]["relationships"].reverse()
+        require(find_palaco_dependencies(reordered, object_id, validator) == result,
+                "dependencies query depends on record or edge order")
+    require(fixture == original, "dependencies query mutated input")
+    references_only = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    for record in references_only["objects"]:
+        record["traceability"]["relationships"] = []
+    require(find_palaco_dependencies(references_only, "REQ-00001", validator)["object_ids"] == [],
+            "dependencies query included upstream or capability references")
+    invalid_ref = copy.deepcopy(fixture)
+    invalid_ref["objects"][-1]["dependencies"] = ["FE-99999"]
+    invalid_source = copy.deepcopy(fixture)
+    invalid_source["objects"][1]["traceability"]["relationships"][0]["source"] = "FE-00003"
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    cycle = copy.deepcopy(fixture)
+    cycle["objects"][3]["dependencies"] = ["FE-00001"]
+    for instance, object_id, diagnostic in (
+        *((fixture, value, "unknown PALACO object ID") for value in (
+            "", "fe-00001", "FE-0001", "FE-99999", None, 42, [],
+        )),
+        ({}, "FE-00001", "registry structure"),
+        (invalid_ref, "FE-00001", "unresolved"),
+        (invalid_source, "FE-00001", "source"),
+        (duplicate, "FE-00001", "duplicate object ID"),
+        (cycle, "FE-00001", "dependency cycle"),
+    ):
+        try:
+            find_palaco_dependencies(instance, object_id, validator)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected dependencies error: {error}")
+        else:
+            raise ConformanceError(f"invalid dependencies query accepted: {diagnostic}")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    script = [sys.executable, str(Path(__file__).resolve())]
+    base = script + ["--registry", fixture_path]
+    for object_id, expected in (("REQ-00001", ["CAP-00001"]), ("FE-00001", [])):
+        cli = subprocess.run(base + ["--find-dependencies", object_id],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 0, f"dependencies CLI failed: {cli.stdout}{cli.stderr}")
+        require(json.loads(cli.stdout) == {
+            "object_id": object_id, "definition": definition, "object_ids": expected, "scope": scope,
+        }, "incorrect dependencies CLI result")
+    for flags in (
+        ["--find-dependents", "FE-00001"], ["--find-updated-since", "2026-10-15"],
+        ["--find-name", "Example accountable registry"], ["--find-updater", "Example registry team"],
+        ["--find-relationship", "DEPENDS_ON"], ["--find-availability", "Medium"],
+        ["--find-integrity", "High"], ["--find-confidentiality", "Public"],
+        ["--find-criticality", "High"], ["--find-owner", "custodian", "Example registry team"],
+        ["--find-approval", "Pending"], ["--find-verification", "Pending"],
+        ["--find-domain", "Governance"], ["--find-type", "FE"], ["--find-lifecycle", "Draft"],
+        ["--find-review-due", "2027-01-15"], ["--summary"], ["--trace", "FE-00001"],
+        ["--find-orphans"], ["--find-unverified-controls"], ["--find-unaudited-evidence"],
+        ["--previous-registry", fixture_path], ["--diff"], ["--direction", "upstream"],
+    ):
+        rejected = subprocess.run(base + ["--find-dependencies", "REQ-00001"] + flags,
+                                  capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == 2 and not rejected.stdout,
+                f"dependencies query accepted incompatible flags: {flags}")
+    for arguments, code in (
+        (script + ["--find-dependencies", "FE-00001"], 2),
+        (base + ["--find-dependencies", "FE-99999"], 1),
+    ):
+        rejected = subprocess.run(arguments, capture_output=True, text=True, timeout=30)
+        require(rejected.returncode == code and '"object_ids"' not in rejected.stdout,
+                "dependencies CLI accepted missing registry or unknown ID")
+    return "4 direct/empty queries + deduplication/graph/nonmutation checks + 12 rejections + CLI/conflict regressions"
 
 
 def check_palaco_dependents():
@@ -3450,6 +3571,7 @@ CHECKS = (
     ("PALACO registry name query conformance", check_palaco_name),
     ("PALACO registry updated-since query conformance", check_palaco_updated_since),
     ("PALACO registry direct-dependents query conformance", check_palaco_dependents),
+    ("PALACO registry direct-dependencies query conformance", check_palaco_dependencies),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -3493,6 +3615,8 @@ def main():
                         help="Return IDs with audit.updated_at on or after an explicit date at midnight UTC")
     parser.add_argument("--find-dependents", metavar="OBJECT_ID",
                         help="Return direct dependency source IDs from dependencies and DEPENDS_ON edges")
+    parser.add_argument("--find-dependencies", metavar="OBJECT_ID",
+                        help="Return direct dependency target IDs from dependencies and DEPENDS_ON edges")
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
@@ -3508,6 +3632,21 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.find_dependencies is not None:
+        if args.registry is None:
+            parser.error("--find-dependencies requires --registry")
+        if (args.previous_registry is not None or args.diff or args.trace is not None
+                or args.find_type is not None or args.find_lifecycle is not None or args.summary
+                or args.find_domain is not None or args.find_verification is not None
+                or args.find_approval is not None or args.find_owner is not None
+                or args.find_criticality is not None or args.find_confidentiality is not None
+                or args.find_integrity is not None or args.find_availability is not None
+                or args.find_relationship is not None or args.find_updater is not None
+                or args.find_name is not None or args.find_updated_since is not None
+                or args.find_dependents is not None or args.find_review_due is not None
+                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.direction is not None):
+            parser.error("--find-dependencies cannot be combined with other query or comparison modes")
     if args.find_dependents is not None:
         if args.registry is None:
             parser.error("--find-dependents requires --registry")
@@ -3722,7 +3861,11 @@ def main():
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_dependents is not None:
+            if args.find_dependencies is not None:
+                result = find_palaco_dependencies(current, args.find_dependencies)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_dependents is not None:
                 result = find_palaco_dependents(current, args.find_dependents)
                 print(json.dumps(result, indent=2))
                 return 0
