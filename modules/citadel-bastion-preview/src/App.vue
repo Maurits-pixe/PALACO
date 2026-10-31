@@ -1,5 +1,25 @@
 <script setup>
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+
+const demoEnabled = import.meta.env.VITE_BASTION_DEMO === 'true';
+const importedTasks = ref([]);
+const importError = ref('');
+const importing = ref(false);
+
+async function loadDemoTasks() {
+  if (!demoEnabled || importing.value) return;
+  importing.value = true;
+  importError.value = '';
+  try {
+    const { readDemoTasks } = await import('./demo-tasks.js');
+    importedTasks.value = await readDemoTasks();
+  } catch {
+    importError.value = 'Lokale demotaken konden niet worden geladen.';
+  } finally {
+    importing.value = false;
+  }
+}
+onMounted(loadDemoTasks);
 
 const tasks = ref([
   { id: 1, title: 'Beveiliging Perimeter Oost', description: 'Controleer sensoren sector 4–9.', priority: 'HIGH', status: 'ACTIVE', assignee: 'Alpha Team', clearance: 3 },
@@ -56,6 +76,16 @@ onUnmounted(() => clearTimeout(timer));
 
     <div class="preview-banner" role="status"><strong>Mutaties zijn gesloten.</strong> Deze overdracht bevat alleen fixturedata. Bevestigen voert niets uit zolang de opslagdeadline niet bewezen is.</div>
     <p v-if="blockedMessage" class="blocked-banner" role="alert">{{ blockedMessage }}</p>
+    <section v-if="demoEnabled" class="panel" aria-labelledby="imports-title">
+      <h2 id="imports-title">AETHER — LOKALE DEMOTAKEN</h2>
+      <p>Alleen ciphertextopslag. Geen bevoegdheid, uitvoering of D-013-bewijs.</p>
+      <button @click="loadDemoTasks" :disabled="importing">{{ importing ? 'Laden…' : 'Vernieuw demotaken' }}</button>
+      <p v-if="importError" role="alert">{{ importError }}</p>
+      <p v-else-if="!importedTasks.length && !importing" role="status">Nog geen geïmporteerde demotaken.</p>
+      <article v-for="task in importedTasks" :key="task.id" class="task-card">
+        <h3>{{ task.title }}</h3><p class="task-desc" style="overflow-wrap: anywhere">{{ task.description }}</p>
+      </article>
+    </section>
 
     <main class="grid-layout">
       <section class="panel tasks-panel"><div class="panel-header"><h2>HUIDIGE OPERATIES</h2><span class="badge">{{ activeCount }} FIXTURES</span></div>

@@ -18,12 +18,25 @@ test('task controls cannot claim a successful mutation', () => {
 });
 
 test('source has no production endpoint or credentials', () => {
-  const files = ['src/App.vue', 'src/main.js', 'vite.config.js', 'public/.well-known/palaco-app.json'];
+  const files = ['src/App.vue', 'src/main.js', 'src/demo-tasks.js', 'vite.config.js', 'public/.well-known/palaco-app.json'];
   for (const file of files) {
     const content = fs.readFileSync(new URL(file, root), 'utf8');
     assert.doesNotMatch(content, /api\.post|fetch\(['"]https?:\/\//);
     assert.doesNotMatch(content, /BEGIN (RSA|OPENSSH) PRIVATE KEY/);
   }
+});
+
+test('local demo reads are same-origin and explicitly opt-in', async () => {
+  const source = fs.readFileSync(new URL('src/App.vue', root), 'utf8');
+  assert.match(source, /import\.meta\.env\.VITE_BASTION_DEMO === 'true'/);
+  const { readDemoTasks } = await import('../src/demo-tasks.js');
+  assert.deepEqual(await readDemoTasks(async (url, options) => {
+    assert.equal(url, '/api/tasks');
+    assert.equal(options.credentials, 'omit');
+    return Response.json([{ id: 'demo', title: 'ciphertext', description: 'encrypted' }]);
+  }), [{ id: 'demo', title: 'ciphertext', description: 'encrypted' }]);
+  await assert.rejects(readDemoTasks(async () => new Response('', { status: 503 })));
+  await assert.rejects(readDemoTasks(async () => Response.json({})));
 });
 
 test('static headers retain the default-deny policy', () => {
