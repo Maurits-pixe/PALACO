@@ -1,0 +1,66 @@
+name: GO-18 Dependency Advisory Evaluation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "**/package-lock.json"
+      - ".github/workflows/**"
+      - "tools/generate_go17_spdx_sbom.py"
+      - "tools/evaluate_go18_advisories.py"
+      - "tools/verify_go18_advisory_policy.py"
+      - "evidence/governance/GO-18-ADVISORY-POLICY.json"
+      - "evidence/governance/GO-18-ADVISORY-EXCEPTIONS.json"
+      - "evidence/governance/GO-18-DEPENDENCY-ADVISORY-EVALUATION.md"
+      - ".github/workflows/go-18-advisory-evaluation.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "**/package-lock.json"
+      - ".github/workflows/**"
+      - "tools/generate_go17_spdx_sbom.py"
+      - "tools/evaluate_go18_advisories.py"
+      - "tools/verify_go18_advisory_policy.py"
+      - "evidence/governance/GO-18-ADVISORY-POLICY.json"
+      - "evidence/governance/GO-18-ADVISORY-EXCEPTIONS.json"
+      - "evidence/governance/GO-18-DEPENDENCY-ADVISORY-EVALUATION.md"
+      - ".github/workflows/go-18-advisory-evaluation.yml"
+  schedule:
+    - cron: "43 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-evaluation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          fetch-depth: 0
+      - name: Generate GO-17 SPDX inventory
+        run: python3 tools/generate_go17_spdx_sbom.py
+      - name: Query GitHub advisory database
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/evaluate_go18_advisories.py
+      - name: Enforce GO-18 advisory policy
+        run: python3 tools/verify_go18_advisory_policy.py
+      - name: Record evidence checksum
+        if: always()
+        run: sha256sum artifacts/go18/PALACO-advisory-evaluation.json
+      - name: Upload GO-18 advisory evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-18-advisory-evidence
+          path: |
+            artifacts/go17/PALACO.spdx.json
+            artifacts/go18/PALACO-advisory-evaluation.json
+          if-no-files-found: error
+          retention-days: 90

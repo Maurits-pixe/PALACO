@@ -1,0 +1,24 @@
+{
+  "gate": "GO-18",
+  "title": "Dependency Vulnerability & Advisory Evaluation",
+  "source": {
+    "name": "GitHub Global Security Advisory Database",
+    "api": "https://api.github.com/advisories",
+    "api_version": "2026-03-10"
+  },
+  "scope": {
+    "ecosystems": ["rust", "npm"],
+    "advisory_types": ["reviewed", "malware"],
+    "withdrawn": false,
+    "container_images": "deferred_to_separate_container_vulnerability_gate",
+    "unreviewed_advisories": "not_blocking_in_GO-18"
+  },
+  "decision": {
+    "default": "DENY",
+    "any_matching_reviewed_or_malware_advisory": "BLOCK",
+    "source_unavailable_or_invalid": "BLOCK",
+    "exception": "exact_package_version_and_ghsa_only",
+    "exception_requires_expiry": true,
+    "unused_or_stale_exception": "BLOCK"
+  }
+}
