@@ -7,7 +7,7 @@
 //! authority, authenticity of an actor, or permission to execute or replay an
 //! operation.
 
-use std::{error::Error, fmt};
+use std::{collections::HashSet, error::Error, fmt};
 
 use palaco_foundation::EvidenceRef;
 use sha2::{Digest, Sha256};
@@ -344,14 +344,16 @@ impl ExecutionEvidence {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EvidenceChain {
     records: Vec<ExecutionEvidence>,
+    evidence_refs: HashSet<String>,
 }
 
 impl EvidenceChain {
     /// Creates an empty evidence chain.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             records: Vec::new(),
+            evidence_refs: HashSet::new(),
         }
     }
 
@@ -389,6 +391,11 @@ impl EvidenceChain {
                 }
             }
         }
+        if self.evidence_refs.contains(record.evidence_ref.as_str()) {
+            return Err(EvidenceError::DuplicateEvidenceRef);
+        }
+        self.evidence_refs
+            .insert(record.evidence_ref.as_str().to_owned());
         self.records.push(record);
         Ok(())
     }
@@ -406,6 +413,7 @@ impl EvidenceChain {
     /// Returns an error at the first invalid record or link.
     pub fn verify(&self) -> Result<(), EvidenceError> {
         let mut previous_hash = None;
+        let mut evidence_refs = HashSet::with_capacity(self.records.len());
         for (index, record) in self.records.iter().enumerate() {
             let expected = u64::try_from(index)
                 .ok()
@@ -416,6 +424,9 @@ impl EvidenceChain {
                     expected,
                     actual: record.sequence,
                 });
+            }
+            if !evidence_refs.insert(record.evidence_ref.as_str()) {
+                return Err(EvidenceError::DuplicateEvidenceRef);
             }
             if record.previous_evidence_hash != previous_hash {
                 return Err(EvidenceError::PreviousHashMismatch);
@@ -447,6 +458,8 @@ pub enum EvidenceError {
     },
     /// The predecessor hash does not match the previous record.
     PreviousHashMismatch,
+    /// An evidence reference is already present in the chain.
+    DuplicateEvidenceRef,
     /// The record hash or audit metadata does not verify.
     HashMismatch,
     /// No larger sequence number can be represented.
@@ -469,6 +482,9 @@ impl fmt::Display for EvidenceError {
             }
             Self::PreviousHashMismatch => {
                 formatter.write_str("previous evidence hash does not match the chain")
+            }
+            Self::DuplicateEvidenceRef => {
+                formatter.write_str("evidence reference already exists in the chain")
             }
             Self::HashMismatch => formatter.write_str("evidence hash or audit metadata is invalid"),
             Self::SequenceOverflow => formatter.write_str("evidence sequence overflow"),
@@ -549,6 +565,35 @@ mod tests {
             chain.append(evidence(2, None)?),
             Err(EvidenceError::InvalidGenesis)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn chain_rejects_duplicate_evidence_references_without_mutation() -> Result<(), Box<dyn Error>>
+    {
+        let first = evidence(1, None)?;
+        let first_hash = first.evidence_hash();
+        let duplicate = ExecutionEvidence::new(
+            first.evidence_ref().clone(),
+            "execution-2",
+            2,
+            2_000,
+            EvidenceDigest::calculate(b"contract"),
+            EvidenceDigest::calculate(b"input"),
+            InvariantStatus::Verified,
+            EvidenceDigest::calculate(b"result"),
+            Some(first_hash),
+            ReplayMetadata::Original,
+        )?;
+        let mut chain = EvidenceChain::new();
+        chain.append(first)?;
+
+        assert_eq!(
+            chain.append(duplicate),
+            Err(EvidenceError::DuplicateEvidenceRef)
+        );
+        assert_eq!(chain.records().len(), 1);
+        chain.verify()?;
         Ok(())
     }
 
