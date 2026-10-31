@@ -93,6 +93,10 @@ hun aantal. Reeds overgedragen plannen worden niet geannuleerd of gewijzigd.
 Herhaalde drainverzoeken heropenen niets. `stop()` kan een drain onderbreken en
 verwijdert dan de resterende plannen. Drainvoltooiing betekent uitsluitend dat
 alle plannen zijn overgedragen, **niet** dat externe uitvoering voltooid is.
+`front_plan()` leent alleen het eerstvolgende plan (`None` bij een lege queue).
+Rapportage via deze referentie, ook als schrijven mislukt, draagt niets over en
+voltooit geen drain. Het is geen reservering, uitvoertoestemming of actuele
+autoriteitscontrole; de referentie voorkomt queue-mutatie zolang zij in gebruik is.
 `pending()` leent de wachtende plannen in FIFO-volgorde zonder klonen,
 verwijderen of allocatie. De iterator werkt rechtstreeks met
 `summarize_plan_iter(queue.pending())` en

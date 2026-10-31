@@ -19,6 +19,64 @@ fn plan(id: &str, authority: AuthorityState) -> Result<RuntimePlan, ContractErro
 }
 
 #[test]
+fn head_inspection_and_failed_reporting_preserve_fifo_and_drain() -> Result<(), ContractError> {
+    struct FailingOutput;
+    impl Write for FailingOutput {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Err(io::ErrorKind::BrokenPipe.into())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            panic!("inspection must not flush");
+        }
+    }
+    for draining in [false, true] {
+        let first = plan("HEAD-FIRST", AuthorityState::Authorized)?;
+        let second = plan("HEAD-SECOND", AuthorityState::Authorized)?;
+        let mut queue = RuntimeQueue::new(2);
+        assert_eq!(queue.front_plan(), None);
+        queue.submit(first.clone()).expect("first admission");
+        queue.submit(second.clone()).expect("second admission");
+        if draining {
+            queue.begin_drain();
+        }
+        let state = queue.state();
+        for _ in 0..2 {
+            let head = queue.front_plan().expect("head");
+            assert_eq!(head, &first);
+            assert!(std::ptr::eq(
+                head,
+                queue.pending().next().expect("same head")
+            ));
+            let error =
+                write_plan_inspection_json(head, &mut FailingOutput).expect_err("report fails");
+            assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+            assert_eq!(queue.len(), 2);
+            assert_eq!(queue.state(), state);
+        }
+        assert_eq!(queue.next_plan(), Some(first));
+        assert_eq!(queue.front_plan(), Some(&second));
+        assert_eq!(queue.state(), state);
+        assert_eq!(queue.next_plans(1).next(), Some(second));
+        assert_eq!(queue.front_plan(), None);
+        assert_eq!(
+            queue.state(),
+            if draining {
+                QueueState::Stopped
+            } else {
+                QueueState::Running
+            }
+        );
+    }
+    let mut queue = RuntimeQueue::new(1);
+    queue
+        .submit(plan("DISCARDED-HEAD", AuthorityState::Authorized)?)
+        .expect("admission");
+    assert_eq!(queue.stop(), 1);
+    assert_eq!(queue.front_plan(), None);
+    Ok(())
+}
+
+#[test]
 fn short_action_sequences_match_an_independent_fifo_lifecycle_model() -> Result<(), ContractError> {
     const ACTIONS: usize = 11;
     const DEPTH: u32 = 4;
@@ -121,6 +179,7 @@ fn short_action_sequences_match_an_independent_fifo_lifecycle_model() -> Result<
                 );
                 assert_eq!(queue.capacity(), capacity, "{context:?}");
                 assert_eq!(queue.len(), expected.len(), "{context:?}");
+                assert_eq!(queue.front_plan(), expected.first(), "{context:?}");
                 assert_eq!(queue.is_empty(), expected.is_empty(), "{context:?}");
                 assert!(queue.len() <= capacity, "{context:?}");
                 assert_eq!(

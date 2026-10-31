@@ -131,6 +131,16 @@ impl RuntimeQueue {
         self.pending.is_empty()
     }
 
+    /// Borrows the next FIFO plan without transferring, cloning or executing it.
+    ///
+    /// Returns `None` when empty, including after stop. Inspection does not
+    /// complete a drain or refresh authority. The reference prevents queue
+    /// mutation while in use; it is not a reservation or detached snapshot.
+    #[must_use]
+    pub fn front_plan(&self) -> Option<&RuntimePlan> {
+        self.pending.front()
+    }
+
     /// Borrows pending plans in FIFO order without transferring or cloning them.
     ///
     /// Compatible with the inspection module's iterator APIs. Reading or
