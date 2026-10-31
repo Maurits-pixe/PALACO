@@ -20,6 +20,13 @@ fn plan(id: &str, authority: AuthorityState) -> Result<RuntimePlan, ContractErro
     )))
 }
 
+fn write_batch(queue: &mut RuntimeQueue, limit: usize, output: &mut impl Write) -> io::Result<()> {
+    for transferred in queue.next_plans(limit) {
+        write_plan_inspection_json(&transferred, output)?;
+    }
+    Ok(())
+}
+
 fn write_demo(output: &mut impl Write) -> Result<(), Box<dyn std::error::Error>> {
     let first = plan("SYNTHETIC-FIRST", AuthorityState::Authorized)?;
     let second = plan("SYNTHETIC-SECOND", AuthorityState::Authorized)?;
@@ -43,11 +50,11 @@ fn write_demo(output: &mut impl Write) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(queue.state(), QueueState::Draining);
     let rejected = queue.submit(first.clone()).expect_err("admission closed");
     assert_eq!(rejected.reason(), AdmissionError::Draining);
-    for expected in [first, second] {
-        let transferred = queue.next_plan().expect("pending plan");
-        assert_eq!(transferred, expected);
-        write_plan_inspection_json(&transferred, output)?;
-    }
+    assert_eq!(queue.pending().collect::<Vec<_>>(), vec![&first, &second]);
+    write_batch(&mut queue, 1, output)?;
+    assert_eq!(queue.state(), QueueState::Draining);
+    assert_eq!(queue.pending().collect::<Vec<_>>(), vec![&second]);
+    write_batch(&mut queue, usize::MAX, output)?;
     assert!(queue.is_empty());
     assert_eq!(queue.state(), QueueState::Stopped);
     assert_eq!(queue.next_plan(), None);
@@ -69,6 +76,78 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_batch_preserves_unrequested_plans_and_exact_output_prefix()
+    -> Result<(), ContractError> {
+        struct Destination {
+            bytes: Vec<u8>,
+            remaining: usize,
+            zero_progress: bool,
+        }
+        impl Write for Destination {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                if self.remaining == 0 {
+                    return if self.zero_progress {
+                        Ok(0)
+                    } else {
+                        Err(io::ErrorKind::BrokenPipe.into())
+                    };
+                }
+                let written = bytes.len().min(self.remaining).min(3);
+                self.bytes.extend_from_slice(&bytes[..written]);
+                self.remaining -= written;
+                Ok(written)
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                panic!("batch helper must leave flushing to the caller");
+            }
+        }
+        let first = plan("BATCH-FIRST", AuthorityState::Authorized)?;
+        let second = plan("BATCH-SECOND", AuthorityState::Authorized)?;
+        let third = plan("BATCH-THIRD", AuthorityState::Authorized)?;
+        let mut report = Vec::new();
+        write_plan_inspection_json(&first, &mut report).expect("reference report");
+        for zero_progress in [false, true] {
+            for budget in [0, 7, report.len(), report.len() + 7] {
+                let mut queue = RuntimeQueue::new(3);
+                for pending in [&first, &second, &third] {
+                    queue.submit(pending.clone()).expect("admission");
+                }
+                queue.begin_drain();
+                let mut output = Destination {
+                    bytes: Vec::new(),
+                    remaining: budget,
+                    zero_progress,
+                };
+                write_batch(&mut queue, 0, &mut output).expect("zero batch performs no I/O");
+                assert_eq!(queue.len(), 3);
+                let error =
+                    write_batch(&mut queue, usize::MAX, &mut output).expect_err("output fails");
+                assert_eq!(
+                    error.kind(),
+                    if zero_progress {
+                        io::ErrorKind::WriteZero
+                    } else {
+                        io::ErrorKind::BrokenPipe
+                    }
+                );
+                assert_eq!(output.bytes, report.repeat(2)[..budget]);
+                assert_eq!(queue.state(), QueueState::Draining);
+                let expected = if budget < report.len() {
+                    vec![&second, &third]
+                } else {
+                    vec![&third]
+                };
+                assert_eq!(queue.pending().collect::<Vec<_>>(), expected);
+                let mut resumed = Vec::new();
+                write_batch(&mut queue, usize::MAX, &mut resumed).expect("resume remaining plans");
+                assert_eq!(resumed, report.repeat(expected.len()));
+                assert_eq!(queue.state(), QueueState::Stopped);
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn demo_reports_only_two_transferred_synthetic_plans() -> Result<(), Box<dyn std::error::Error>>

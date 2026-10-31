@@ -101,8 +101,13 @@ autoriteitscontrole en kan bewijsgegevens via de geleende plannen blootleggen.
 Het uitvoerbare voorbeeld
 `cargo run --locked -p palaco-kernel --example synthetic_runtime_queue`
 doorloopt afwijzing van Hold/Deny, capaciteit, FIFO, drain en definitieve stop.
-Het schrijft alleen twee inspectierapporten van overgedragen synthetische
+Het gebruikt begrensde FIFO-batches en schrijft alleen twee inspectierapporten van overgedragen synthetische
 plannen; `execution_performed` en `authority_verified` blijven `false`.
+Bij een schrijffout is het huidige plan al overgedragen, maar wordt geen volgend
+plan opgehaald. De uitvoer kan een gedeeltelijk rapport bevatten; hervatten van
+de resterende wachtrij herstelt dat rapport niet. De batchhelper flusht niet:
+buffering en uiteindelijke aflevering blijven de verantwoordelijkheid van de
+aanroeper. Dit verschilt van geleende `pending()`-inspectie, die niets overdraagt.
 Onverwachte argumenten worden geweigerd. Het voorbeeld controleert de
 levenscyclus met assertions en propageert write- en flush-fouten; beoordeel
 output uitsluitend na succesvolle procesexit. De bestaande runtime-CI voert
