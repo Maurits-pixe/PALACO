@@ -55,6 +55,16 @@ pub struct Question {
     pub context: String,
 }
 
+impl Question {
+    pub fn new(id: QuestionId, subject: impl Into<String>, context: impl Into<String>) -> Self {
+        Self {
+            id,
+            subject: subject.into(),
+            context: context.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Evidence {
     pub id: EvidenceId,
@@ -113,7 +123,10 @@ impl Evidence {
         !self.source.is_empty()
             && !self.origin.is_empty()
             && !self.content_digest.is_empty()
-            && matches!(self.status, EpistemicStatus::Known | EpistemicStatus::Disputed)
+            && matches!(
+                self.status,
+                EpistemicStatus::Known | EpistemicStatus::Disputed
+            )
     }
 }
 
