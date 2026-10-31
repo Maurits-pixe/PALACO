@@ -1191,14 +1191,23 @@ def summarize_palaco_registry(instance, validators=None):
     by_lifecycle = {
         status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     }
+    by_relationship = {
+        relation: 0 for relation in sorted(
+            validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"]
+        )
+    }
     for record in instance["objects"]:
         by_type[record["object_type"]] += 1
         by_lifecycle[record["lifecycle"]["status"]] += 1
+        for edge in record["traceability"]["relationships"]:
+            by_relationship[edge["relation"]] += 1
     return {
         "registry_version": instance["registry_version"],
         "total_objects": len(instance["objects"]),
         "by_object_type": by_type,
         "by_lifecycle_status": by_lifecycle,
+        "total_relationships": sum(by_relationship.values()),
+        "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
 
@@ -2866,13 +2875,30 @@ def check_palaco_summary():
     added["metadata"]["id"] = "FE-00002"
     added["lifecycle"]["status"] = "Review"
     mixed["objects"].append(added)
+    linked = copy.deepcopy(mixed)
+    objective = copy.deepcopy(template)
+    objective["object_type"] = "OBJ"
+    objective["metadata"]["id"] = "OBJ-00001"
+    linked["objects"].append(objective)
+    linked["objects"][2]["traceability"]["relationships"].extend([
+        {"source": "REQ-00001", "relation": "DEPENDS_ON", "target": "FE-00001"},
+        {"source": "REQ-00001", "relation": "SATISFIES", "target": "OBJ-00001"},
+    ])
+    implicit = copy.deepcopy(fixture)
+    for record in implicit["objects"]:
+        record["traceability"]["relationships"] = []
+    implicit["objects"][2]["dependencies"] = ["CAP-00001"]
     schema = validators["PMS-001.schema.json"].schema
     families = sorted(schema["properties"]["object_type"]["enum"])
     statuses = schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
-    for instance, expected_types, expected_states in (
-        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}),
-        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}),
-        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}),
+    relations = sorted(validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"])
+    for instance, expected_types, expected_states, expected_relations in (
+        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}),
+        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}),
+        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}),
+        (linked, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
+         {"DEPENDS_ON": 3, "SATISFIES": 1}),
+        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}),
     ):
         original = copy.deepcopy(instance)
         result = summarize_palaco_registry(instance, validators)
@@ -2881,10 +2907,15 @@ def check_palaco_summary():
             "total_objects": len(instance["objects"]),
             "by_object_type": {family: expected_types.get(family, 0) for family in families},
             "by_lifecycle_status": {status: expected_states.get(status, 0) for status in statuses},
+            "total_relationships": sum(expected_relations.values()),
+            "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")
         require(list(result["by_object_type"]) == families, "summary type order changed")
         require(list(result["by_lifecycle_status"]) == statuses, "summary lifecycle order changed")
+        require(list(result["by_relationship_type"]) == relations, "summary relationship order changed")
+        require(sum(result["by_relationship_type"].values()) == result["total_relationships"],
+                "summary relationship counts do not sum to total")
         require(sum(result["by_object_type"].values()) == result["total_objects"],
                 "summary type counts do not sum to total")
         require(sum(result["by_lifecycle_status"].values()) == result["total_objects"],
@@ -2892,6 +2923,8 @@ def check_palaco_summary():
         require(instance == original, "summary mutated input")
         reordered = copy.deepcopy(instance)
         reordered["objects"].reverse()
+        for record in reordered["objects"]:
+            record["traceability"]["relationships"].reverse()
         require(json.dumps(summarize_palaco_registry(reordered, validators)) == json.dumps(result),
                 "summary serialization depends on object order")
     invalid_ref = copy.deepcopy(fixture)
@@ -2902,6 +2935,10 @@ def check_palaco_summary():
     cyclic["objects"][0]["traceability"]["upstream"] = ["REQ-00001"]
     unapproved = copy.deepcopy(fixture)
     unapproved["objects"][0]["lifecycle"]["status"] = "Active"
+    invalid_edge = copy.deepcopy(fixture)
+    invalid_edge["objects"][1]["traceability"]["relationships"][0]["relation"] = "RELATED_TO"
+    invalid_source = copy.deepcopy(fixture)
+    invalid_source["objects"][1]["traceability"]["relationships"][0]["source"] = "REQ-00001"
     for instance, diagnostic in (
         ({}, "registry structure"),
         ({"registry_version": "0.1.0", "objects": []}, "registry structure"),
@@ -2909,6 +2946,8 @@ def check_palaco_summary():
         (duplicate, "duplicate object ID"),
         (cyclic, "upstream cycle"),
         (unapproved, "requires approval.status Approved"),
+        (invalid_edge, "registry structure"),
+        (invalid_source, "source"),
     ):
         try:
             summarize_palaco_registry(instance, validators)
@@ -2916,7 +2955,14 @@ def check_palaco_summary():
             require(diagnostic in str(error), f"unexpected summary diagnostic: {error}")
         else:
             raise ConformanceError(f"invalid snapshot summarized: {diagnostic}")
-    return "3 deterministic/non-mutating summaries with zero counts + 6 invalid snapshot rejections"
+    cli = subprocess.run([
+        sys.executable, str(Path(__file__).resolve()), "--registry",
+        str(PALACO_FIXTURE_DIR / "registry.fixture.json"), "--summary",
+    ], capture_output=True, text=True, timeout=30)
+    require(cli.returncode == 0, f"summary CLI failed: {cli.stdout}{cli.stderr}")
+    require(json.loads(cli.stdout) == summarize_palaco_registry(fixture, validators),
+            "summary CLI differs from validated summary")
+    return "5 deterministic/non-mutating summaries + explicit edge/zero counts + 8 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
@@ -3620,7 +3666,7 @@ def main():
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
-                        help="Return validated snapshot counts by object type and lifecycle status as JSON")
+                        help="Return validated object, lifecycle and explicit relationship counts as JSON")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",

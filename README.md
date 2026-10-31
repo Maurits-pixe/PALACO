@@ -2278,7 +2278,7 @@ This filters recorded metadata, not approval authenticity, runtime activation or
 authority. Records and files are not modified. The option requires `--registry`
 and cannot be combined with other queries, `--direction` or `--previous-registry`.
 
-Read-only registry summaries count object types and lifecycle-status metadata:
+Read-only registry summaries count object types, lifecycle statuses and explicit relationships:
 
 ```sh
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
@@ -2291,7 +2291,16 @@ After validating the entire snapshot, `--summary` emits JSON with
 a scope disclaimer. Every PMS-001 family and lifecycle status is included, with
 zero for absent values. Object-type keys are alphabetically ordered; lifecycle
 keys follow the PMS-001 lifecycle sequence. Output does not depend on record order.
-Each breakdown sums to `total_objects`; counts are metadata observations, not
+The object-type and lifecycle breakdowns each sum to `total_objects`.
+The additive fields `total_relationships` and `by_relationship_type` count
+explicit `traceability.relationships` edges, not source objects. Every PMS-002
+relationship type is included with zero for absent values, in alphabetical key
+order; its breakdown sums to `total_relationships`. Multiple edges from one
+source count separately. Upstream links, `dependencies`, dedicated references
+and inferred or transitive links are not counted as extra relationships.
+The fixture has two explicit `DEPENDS_ON` edges and zero for all other types.
+Existing summary fields retain their meanings; consumers must allow these
+additional JSON fields. Counts are metadata observations, not
 proof of completeness, approval, activation or authority.
 Invalid snapshots, including empty registries, fail nonzero without summary
 results. No records or files are modified. `--summary` requires `--registry` and
