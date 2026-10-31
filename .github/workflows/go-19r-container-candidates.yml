@@ -1,0 +1,78 @@
+name: GO-19R Container Remediation Candidates
+
+on:
+  push:
+    branches:
+      - "go-19-container-vulnerability-evaluation"
+    paths:
+      - "tools/summarize_go19_candidate.py"
+      - ".github/workflows/go-19r-container-candidates.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: postgres17-alpine324
+            tag: postgres:17.11-alpine3.24
+          - id: postgres18-alpine324
+            tag: postgres:18.6-alpine3.24
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Resolve moving candidate tag to immutable registry digest
+        id: resolve
+        shell: bash
+        env:
+          IMAGE_TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          digest="$(docker buildx imagetools inspect "$IMAGE_TAG" | awk '/^Digest:/ {print $2; exit}')"
+          test -n "$digest"
+          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) exit 1 ;; esac
+          resolved="${IMAGE_TAG}@${digest}"
+          echo "ref=${resolved}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$resolved" > resolved-ref.txt
+          echo "resolved_ref=$resolved"
+
+      - name: Scan exact resolved candidate digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: image
+          image-ref: ${{ steps.resolve.outputs.ref }}
+          scanners: vuln
+          vuln-type: os,library
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: false
+          format: json
+          output: trivy-candidate.json
+          exit-code: "0"
+          version: v0.76.0
+          cache: true
+
+      - name: Summarize candidate without changing GO-19 policy
+        run: |
+          python3 tools/summarize_go19_candidate.py \
+            --report trivy-candidate.json \
+            --ref-file resolved-ref.txt
+
+      - name: Record candidate evidence checksums
+        run: sha256sum resolved-ref.txt trivy-candidate.json
+
+      - name: Upload candidate evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-19r-${{ matrix.id }}
+          path: |
+            resolved-ref.txt
+            trivy-candidate.json
+          if-no-files-found: error
+          retention-days: 30
