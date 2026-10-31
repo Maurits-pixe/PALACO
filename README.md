@@ -2399,6 +2399,24 @@ or authority. The read-only query modifies no records or files, requires
 `--registry` and cannot be combined with other queries, `--direction` or
 `--previous-registry`.
 
+Read-only criticality queries filter exact `classification.criticality` metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-criticality High
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Low`, `Medium`, `High`
+and `Critical`. Matching is exact, not a minimum-threshold comparison, and does
+not use integrity, availability or confidentiality labels. After full snapshot
+validation, output is JSON with `criticality`, sorted `object_ids` and a scope
+disclaimer. No matches returns an empty array and exit 0; unknown values or
+invalid snapshots fail nonzero without results, including invalid nonmatching
+records. Recorded criticality is not proof of risk assessment, compliance or
+authority. No records or files are modified. The query requires `--registry`
+and cannot be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
