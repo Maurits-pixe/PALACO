@@ -862,6 +862,23 @@ def find_palaco_orphans(instance, validator=None):
     }
 
 
+def find_palaco_lifecycle(instance, status, validators=None):
+    """Filter recorded lifecycle metadata, not actual approval or activation."""
+    if validators is None:
+        validators = palaco_validators()
+    statuses = validators["PMS-001.schema.json"].schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
+    require(status in statuses, f"unknown PALACO lifecycle status: {status}")
+    validate_palaco_registry(instance, validators["PCR-000.schema.json"])
+    return {
+        "lifecycle_status": status,
+        "object_ids": sorted(
+            record["metadata"]["id"] for record in instance["objects"]
+            if record["lifecycle"]["status"] == status
+        ),
+        "scope": "supplied lifecycle metadata only; not proof of approval, activation or authority",
+    }
+
+
 def find_unverified_controls(instance, validator=None):
     """Report non-passing status metadata, not actual verification or compliance."""
     validate_palaco_registry(instance, validator)
@@ -1203,6 +1220,68 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_find_lifecycle():
+    validators = palaco_validators()
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    statuses = validators["PMS-001.schema.json"].schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, status in enumerate(statuses, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["lifecycle"]["status"] = status
+        if status in ("Approved", "Active", "Deprecated", "Retired", "Archived"):
+            record["approval"] = {
+                "status": "Approved",
+                "authority": "Synthetic review team",
+                "approval_ref": "Synthetic lifecycle-query fixture",
+            }
+            record["lifecycle"]["approved"] = record["lifecycle"]["created"]
+        fixture["objects"].append(record)
+    duplicate_status = copy.deepcopy(fixture["objects"][1])
+    duplicate_status["metadata"]["id"] = "FE-00009"
+    fixture["objects"].insert(0, duplicate_status)
+    original = copy.deepcopy(fixture)
+    for index, status in enumerate(statuses, 1):
+        expected = [f"FE-{index:05d}"]
+        if status == statuses[1]:
+            expected.append("FE-00009")
+        result = find_palaco_lifecycle(fixture, status, validators)
+        require(result == {
+            "lifecycle_status": status,
+            "object_ids": expected,
+            "scope": "supplied lifecycle metadata only; not proof of approval, activation or authority",
+        }, f"incorrect lifecycle query: {status}")
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        require(find_palaco_lifecycle(reordered, status, validators) == result,
+                "lifecycle query depends on record order")
+    require(fixture == original, "lifecycle query mutated input")
+    single = {"registry_version": "0.1.0", "objects": [copy.deepcopy(template)]}
+    require(find_palaco_lifecycle(single, "Archived", validators)["object_ids"] == [],
+            "lifecycle query without matches must be empty")
+    invalid = copy.deepcopy(fixture)
+    invalid["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    unapproved = copy.deepcopy(fixture)
+    unapproved["objects"][-1]["approval"]["status"] = "Pending"
+    for instance, status, diagnostic in (
+        (fixture, "draft", "unknown PALACO lifecycle status"),
+        (fixture, "UNKNOWN", "unknown PALACO lifecycle status"),
+        ({}, "Draft", "registry structure"),
+        (invalid, "Draft", "unresolved"),
+        (duplicate, "Draft", "duplicate object ID"),
+        (unapproved, "Draft", "requires approval.status Approved"),
+    ):
+        try:
+            find_palaco_lifecycle(instance, status, validators)
+        except ConformanceError as error:
+            require(diagnostic in str(error), f"unexpected lifecycle query diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid lifecycle query accepted: {diagnostic}")
+    return f"{len(statuses)} lifecycle states + sorted/non-mutating/empty results + 6 rejections"
 
 
 def check_palaco_traces():
@@ -1778,6 +1857,7 @@ CHECKS = (
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
     ("PALACO registry object-type query conformance", check_palaco_find),
+    ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),
     ("PALACO registry orphan query conformance", check_palaco_orphans),
     ("PALACO control verification-status query conformance", check_unverified_controls),
     ("PALACO evidence audit-link query conformance", check_unaudited_evidence),
@@ -1793,6 +1873,8 @@ def main():
                         help="Return reachable IDs from traceability.upstream as JSON")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
+    parser.add_argument("--find-lifecycle", metavar="STATUS",
+                        help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--find-orphans", action="store_true",
                         help="Return IDs isolated in traceability.upstream as JSON")
     parser.add_argument("--find-unverified-controls", action="store_true",
@@ -1831,10 +1913,21 @@ def main():
         if (args.trace is not None or args.find_type is not None or args.find_orphans
                 or args.find_unverified_controls or args.previous_registry is not None):
             parser.error("--find-unaudited-evidence cannot be combined with other query or comparison modes")
+    if args.find_lifecycle is not None:
+        if args.registry is None:
+            parser.error("--find-lifecycle requires --registry")
+        if (args.trace is not None or args.find_type is not None or args.find_orphans
+                or args.find_unverified_controls or args.find_unaudited_evidence
+                or args.previous_registry is not None):
+            parser.error("--find-lifecycle cannot be combined with other query or comparison modes")
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.find_unaudited_evidence:
+            if args.find_lifecycle is not None:
+                result = find_palaco_lifecycle(current, args.find_lifecycle)
+                print(json.dumps(result, indent=2))
+                return 0
+            elif args.find_unaudited_evidence:
                 result = find_unaudited_evidence(current)
                 print(json.dumps(result, indent=2))
                 return 0

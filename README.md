@@ -2236,6 +2236,24 @@ contents, and make no completeness, authorization or canonical-status claim.
 The query is read-only and requires `--registry`; it cannot be combined with
 `--trace`, `--direction` or `--previous-registry`.
 
+Read-only lifecycle queries filter the exact `lifecycle.status` metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-lifecycle Draft
+```
+
+`--find-lifecycle` accepts the case-sensitive PMS-001 statuses: `Proposed`,
+`Draft`, `Review`, `Approved`, `Active`, `Deprecated`, `Retired`, `Archived`.
+It validates the entire snapshot before emitting JSON with `lifecycle_status`,
+sorted `object_ids` and a scope disclaimer. A known status without matches returns
+an empty array and exit 0. Unknown statuses and invalid snapshots fail nonzero
+without query results, even when the invalid record would not match the filter.
+This filters recorded metadata, not approval authenticity, runtime activation or
+authority. Records and files are not modified. The option requires `--registry`
+and cannot be combined with other queries, `--direction` or `--previous-registry`.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
