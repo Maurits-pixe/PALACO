@@ -1,0 +1,18 @@
+{
+  "schema": "palaco.runtime-dependency-provenance.v1",
+  "container_policy": {
+    "require_sha256_digest": true,
+    "postgres_17_ci_image": "postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f"
+  },
+  "cargo_policy": {
+    "require_root_lockfile": true,
+    "require_locked_ci_resolution": true,
+    "standalone_manifests": {
+      "services/rio-accounts/Cargo.toml": "services/rio-accounts/Cargo.lock"
+    }
+  },
+  "npm_policy": {
+    "dependency_projects_require_package_lock": true,
+    "ci_install": "npm ci preferred; isolated npm install must use exact package versions"
+  }
+}

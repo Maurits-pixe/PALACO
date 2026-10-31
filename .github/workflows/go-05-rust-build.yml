@@ -28,4 +28,4 @@ jobs:
           rustc --version
           cargo --version
       - name: Build workspace all targets
-        run: cargo build --workspace --all-targets
+        run: cargo build --locked --workspace --all-targets

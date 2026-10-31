@@ -98,10 +98,23 @@ export async function login(page, user, testInfo) {
 }
 
 export async function me(page) {
-  return page.evaluate(async () => {
-    const response = await fetch('/api/me', { credentials: 'same-origin', cache: 'no-store' });
-    return { status: response.status, data: response.ok ? await response.json() : null };
+  // Keep the original actor's cookie jar without depending on the page execution
+  // context while Chromium settles touch/keyboard anchor navigation.
+  const response = await page.context().request.get(BFF + '/api/me', {
+    timeout: 8000, maxRedirects: 0, failOnStatusCode: false,
+    headers: { 'Cache-Control': 'no-store' },
   });
+  try {
+    const status = response.status();
+    if (!response.ok()) return { status, data: null };
+    expect((response.headers()['content-type'] || '').split(';')[0].trim().toLowerCase())
+      .toBe('application/json');
+    const bytes = await response.body();
+    expect(bytes.byteLength).toBeLessThanOrEqual(16384);
+    return { status, data: JSON.parse(bytes.toString('utf8')) };
+  } finally {
+    await response.dispose();
+  }
 }
 
 export async function consent(page) {

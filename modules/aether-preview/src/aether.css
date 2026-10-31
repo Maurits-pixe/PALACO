@@ -1,0 +1,8 @@
+:root { font-family: system-ui, sans-serif; color: #e2e8f0; background: #101827; }
+main { max-width: 760px; margin: 3rem auto; padding: 1rem; }
+form, section { display: grid; gap: 1rem; margin-block: 2rem; }
+textarea, input, button { font: inherit; padding: .8rem; border-radius: .4rem; }
+textarea { min-height: 8rem; resize: vertical; }
+button { cursor: pointer; background: #9fffd2; color: #101827; }
+button:disabled { opacity: .6; cursor: default; }
+[role="alert"] { color: #ffb4b4; }

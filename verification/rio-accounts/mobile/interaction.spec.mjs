@@ -29,7 +29,7 @@ test('[RIO-MOBILE-01] Native consent controls preserve focus and reflow', async 
         const box = await link.boundingBox();
         expect(Boolean(box && box.width >= 44 && box.height >= 44)).toBe(true);
         await activate(page, link, testInfo);
-        expect(new URL(page.url()).hash).toBe(target);
+        await expect(page).toHaveURL(url => url.hash === target);
       }
       expect(writes.record.count).toBe(0);
       await noOverflow(page);

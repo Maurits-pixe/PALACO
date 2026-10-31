@@ -1,0 +1,23 @@
+{
+  "name": "or6it-world-eva-001-preview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fixture-only, read-only OR6IT / WORLD-EVA-001 interface preview",
+  "scripts": {
+    "dev": "vite --configLoader native",
+    "build": "vite build --configLoader native",
+    "preview": "vite preview --configLoader native",
+    "test": "node --test tests/preview.test.mjs"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "vue": "3.5.43"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "6.0.9",
+    "vite": "7.3.7"
+  }
+}
