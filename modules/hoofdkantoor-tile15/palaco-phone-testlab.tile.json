@@ -1,0 +1,40 @@
+{
+  "id": "palaco-phone-testlab",
+  "order": 15,
+  "name": "PALACO Phone — Testlab",
+  "kind": "development-lab",
+  "visibility": "private",
+  "status": "BROWSER_ACCEPTANCE_HOLD",
+  "production": "HOLD",
+  "description": "P.P. offline-first lokaal prototype. Een P.P.-identiteitsnummer is geen telecomnummer.",
+  "destinations": [
+    {
+      "id": "local",
+      "label": "Open lokale P.P.-app",
+      "url": "http://127.0.0.1:8765/",
+      "note": "Alleen hetzelfde apparaat met actieve lokale Python-server; geen extern bereik."
+    },
+    {
+      "id": "source",
+      "label": "Bekijk broncode",
+      "url": "https://github.com/Maurits-pixe/palaco-pp",
+      "note": "GitHub vereist internet."
+    },
+    {
+      "id": "evidence",
+      "label": "Browseracceptatie en blokkades",
+      "url": "https://github.com/Maurits-pixe/palaco-pp/pull/2",
+      "note": "Draft: browseracceptatie en productie nog HOLD."
+    }
+  ],
+  "evidence": {
+    "prebrowser": {
+      "status": "PASS",
+      "run_id": 41408764447
+    },
+    "ephemeralBrowser": {
+      "status": "FAIL",
+      "run_id": 41410806967
+    }
+  }
+}
