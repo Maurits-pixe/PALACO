@@ -12,9 +12,11 @@ test('tile identity and ordering remain stable', () => {
 
 test('authorization, issuance, and browser acceptance remain blocked', () => {
   assert.equal(tile.production, 'HOLD');
-  assert.equal(tile.status, 'BROWSER_ACCEPTANCE_HOLD');
+  assert.equal(tile.status, 'LOCAL_BROWSER_CI_PASS');
   assert.equal(tile.evidence.prebrowser.status, 'PASS');
-  assert.notEqual(tile.evidence.ephemeralBrowser.status, 'PASS');
+  assert.equal(tile.evidence.ephemeralBrowser.status, 'PASS');
+  assert.equal(tile.evidence.ephemeralBrowser.run_id, 41620060773);
+  assert.equal(tile.evidence.ephemeralBrowser.scope, 'ephemeral-local-test-only');
 });
 
 test('exactly three distinct, fixed destinations', () => {
