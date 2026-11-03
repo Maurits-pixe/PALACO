@@ -4,9 +4,9 @@
   "name": "PALACO Phone — Testlab",
   "kind": "development-lab",
   "visibility": "private",
-  "status": "BROWSER_ACCEPTANCE_HOLD",
+  "status": "LOCAL_BROWSER_CI_PASS",
   "production": "HOLD",
-  "description": "P.P. offline-first lokaal prototype. Een P.P.-identiteitsnummer is geen telecomnummer.",
+  "description": "P.P. offline-first lokaal prototype; Chromium-browseracceptatie PASS op synthetische CI-account. Geen telecomnummer of productie-identiteit.",
   "destinations": [
     {
       "id": "local",
@@ -24,7 +24,7 @@
       "id": "evidence",
       "label": "Browseracceptatie en blokkades",
       "url": "https://github.com/Maurits-pixe/palaco-pp/pull/2",
-      "note": "Draft: browseracceptatie en productie nog HOLD."
+      "note": "Chromium lokaal CI PASS; menselijke review en productie HOLD."
     }
   ],
   "evidence": {
@@ -33,8 +33,10 @@
       "run_id": 41408764447
     },
     "ephemeralBrowser": {
-      "status": "FAIL",
-      "run_id": 41410806967
+      "status": "PASS",
+      "run_id": 41620060773,
+      "commit": "81e4dd22c672e09bc3624573331001c88618aa61",
+      "scope": "ephemeral-local-test-only"
     }
   }
 }
