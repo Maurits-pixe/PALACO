@@ -1,6 +1,6 @@
 # PALACO Hoofdkantoor — PALACO Phone Testlab / tegel 15
 
-**Status: source-only integration candidate; PRIVATE / BROWSER ACCEPTANCE HOLD / PRODUCTION HOLD.**
+**Status: source-only integration candidate; PRIVATE / LOCAL BROWSER CI PASS / PRODUCTION HOLD.**
 
 The existing private ChatGPT Site already has 14 cards, including **PALACO PHONE (#08)**.
 This change proposes a **separate** #15 card. Do not replace or silently modify #08.
@@ -33,3 +33,20 @@ Existing URL: https://palaco-hoofdkantoor-tijdelijk.mauritsvang1.chatgpt.site
 The site must still have the existing 14 entries **unchanged**, plus exactly one #15 entry with stable ID. Verify keyboard, mobile, search, links, language switching, favorites, no access-control regression, and private-site access. Deploy only after authorized owner review.
 
 A separate self-contained preview and Node 7-case contract test suite is delivered as `palaco-hoofdkantoor-pp-tegel-v2.zip` in the conversation. This repository folder intentionally stores only the data/contract rather than pretending to be the live ChatGPT Site source.
+
+## Native Site catalog placement adapter (added in this PR)
+
+Use `site-adapter.mjs` inside the **original** Site project rather than rendering a parallel launcher. It contains a pure `appendPhoneTestlab(existingTiles, language)` function and 12 translated records. The function refuses any catalog other than the expected 14 entries, refuses duplicate IDs, preserves existing entries by reference and appends a new #15 item. This is a **manual source integration step**, not a runtime DOM patch or a live Site deployment.
+
+In the Site source's app catalog creation pipeline, before search, favorites and sorting run:
+
+```js
+import { appendPhoneTestlab, phoneTileForLanguage } from './site-adapter.mjs';
+const allApps = appendPhoneTestlab(existing14Apps, chosenLanguage);
+// The Site renderer must adapt the explicit links shape to its native card component.
+// On later language changes: update only tile palaco-phone-testlab from phoneTileForLanguage(nextLanguage).
+```
+
+**Important:** The private ChatGPT Site's editable catalog source is not available in this connected GitHub repository. Importing the adapter is not sufficient by itself; the Site's native card renderer must preserve the three actions, search, favorites, language switching, mobile layout and accessible focus. Do not merge this PR as a substitute for updating the actual Site. Before deploying, compare the live-site source revision; abort if tile count, schema or identity differs. Publish privately only through the authorized Site editor and verify a second unauthenticated browser cannot access the private app.
+
+Zero-dependency automated tests: `node --test modules/hoofdkantoor-tile15/*.test.mjs` from the PALACO repository root.
