@@ -72,7 +72,7 @@ onUnmounted(() => {
         <h2>Controleer je bestemming.</h2>
         <p>Vul een toegestane HTTPS-origin in. Open de module nadat de metadata is bevestigd.</p>
       </div>
-      <div class="modules-grid">
+      <div class="modules-grid">\n        <article class="module-card" data-module="earth" style="--module-color: #36c7ba">\n          <div class="card-header"><div class="icon-box" aria-hidden="true">🌍</div><span class="status-badge">ONTWIKKELING · HOLD</span></div>\n          <h2>EARTH — MUNDO</h2>\n          <p class="description">Geografische wereldregistratie en bronverificatie. De officiële Natural Earth-dataset is niet toegelaten; een geverifieerde privéapp-URL is nog onbekend.</p>\n          <p class="details">Bron: PALACO-Citadel PR #54. Deze tegel opent uitsluitend de ontwikkelstatus, niet een live applicatie.</p>\n          <a class="launch-btn" href="https://github.com/Maurits-pixe/PALACO-Citadel/pull/54" target="_blank" rel="noopener noreferrer" aria-label="Open EARTH ontwikkelstatus in GitHub">Bekijk project en bewijs</a>\n        </article>
         <article v-for="module in modules" :key="module.id" class="module-card"
           :class="module.status" :style="{ '--module-color': module.color }" :data-module="module.id">
           <div class="card-header">
