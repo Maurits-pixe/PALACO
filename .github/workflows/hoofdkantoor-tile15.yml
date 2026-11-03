@@ -16,4 +16,4 @@ jobs:
         with:
           node-version: '22'
       - name: Verify private/offline/HOLD contract
-        run: node --test modules/hoofdkantoor-tile15/tile.test.mjs
+        run: node --test modules/hoofdkantoor-tile15/*.test.mjs
