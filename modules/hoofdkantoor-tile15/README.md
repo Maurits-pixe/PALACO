@@ -18,14 +18,14 @@ Existing URL: https://palaco-hoofdkantoor-tijdelijk.mauritsvang1.chatgpt.site
 - Action A: `http://127.0.0.1:8765/` — the Python/SQLite local PP app **on the same physical device**. HTTPS launchers may block mixed-protocol navigation. No LAN binding, proxy, tunnel, embedded iframe or automatic data transfer.
 - Action B: the source GitHub repository; internet needed.
 - Action C: draft PR #2 with browser acceptance evidence and remaining blockers; internet needed.
-- State is permanently explicit: `BROWSER_ACCEPTANCE_HOLD`, `production=HOLD` until reviewed evidence supports a separate decision.
+- State is permanently explicit: `LOCAL_BROWSER_CI_PASS`, `production=HOLD` until reviewed evidence supports a separate decision.
 - Use 12-language launcher translations, adaptive card layout (390px), focus-visible keyboard interaction, favorites, search and dynamic card counts. Treat `navigator.onLine` only as network hint — not as proof that the local app server is running.
 - Do not create official identifiers or phone service. A P.P. identity choice is not a telephone number.
 
 ## Evidence / release gate
 
 - Prior pre-browser CI: **PASS**, run 41408764447 (73 tests on its commit).
-- Ephemeral Chromium browser CI: **FAIL**, run 41410806967; do not label browser acceptance PASS.
+- Ephemeral Chromium browser CI: **PASS**, run 41620060773 on commit `81e4dd22c672e09bc3624573331001c88618aa61`. Scope: synthetic localhost account and disposable SQLite database; this is not production validation.
 - Human acceptance **not recorded**; production and official issuance **HOLD**.
 
 ## Acceptance
