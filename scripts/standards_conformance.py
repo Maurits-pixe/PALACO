@@ -649,6 +649,11 @@ def direct_dependency_targets(record):
     }
 
 
+def direct_upstream_targets(record):
+    """Extract upstream targets from a structurally validated record."""
+    return set(record["traceability"]["upstream"])
+
+
 def require_acyclic(graph, label):
     """Iterative depth-first traversal; shared ancestors are not cycles."""
     finished = set()
@@ -752,7 +757,7 @@ def validate_palaco_registry(instance, validator=None):
         for object_id, record in objects.items()
     }
     upstream = {
-        object_id: set(record["traceability"]["upstream"])
+        object_id: direct_upstream_targets(record)
         for object_id, record in objects.items()
     }
     require_acyclic(dependencies, "dependency")
@@ -805,7 +810,7 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     require(direction in ("upstream", "downstream"), f"invalid trace direction: {direction}")
     validate_palaco_registry(instance, validator)
     graph = {
-        record["metadata"]["id"]: set(record["traceability"]["upstream"])
+        record["metadata"]["id"]: direct_upstream_targets(record)
         for record in instance["objects"]
     }
     require(object_id in graph, f"unknown trace object ID: {object_id}")
@@ -877,7 +882,7 @@ def find_palaco_orphans(instance, validator=None):
     for record in instance["objects"]:
         object_id = record["metadata"]["id"]
         object_ids.add(object_id)
-        upstream = record["traceability"]["upstream"]
+        upstream = direct_upstream_targets(record)
         if upstream:
             connected.add(object_id)
             connected.update(upstream)
@@ -1233,10 +1238,11 @@ def summarize_palaco_registry(instance, validators=None):
     }
     for record in instance["objects"]:
         by_type[record["object_type"]] += 1
-        total_upstream_edges += len(record["traceability"]["upstream"])
-        if record["traceability"]["upstream"]:
+        upstream = direct_upstream_targets(record)
+        total_upstream_edges += len(upstream)
+        if upstream:
             upstream_connected.add(record["metadata"]["id"])
-            upstream_connected.update(record["traceability"]["upstream"])
+            upstream_connected.update(upstream)
         domain = record["metadata"]["domain"]
         by_domain[domain] = by_domain.get(domain, 0) + 1
         for role, counts in by_ownership.items():
@@ -1693,6 +1699,50 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_upstream_contract():
+    validators = palaco_validators()
+    validator = validators["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    fixture["objects"][2]["traceability"]["upstream"].append("FE-00001")
+    original = copy.deepcopy(fixture)
+    expected = {
+        "FE-00001": set(),
+        "CAP-00001": {"FE-00001"},
+        "REQ-00001": {"FE-00001", "CAP-00001"},
+    }
+    validate_palaco_registry(fixture, validator)
+    for record in fixture["objects"]:
+        source = record["metadata"]["id"]
+        require(direct_upstream_targets(record) == expected[source],
+                f"incorrect shared upstream targets: {source}")
+        targets = direct_upstream_targets(record)
+        targets.clear()
+        require(direct_upstream_targets(record) == expected[source],
+                "upstream targets expose mutable input state")
+    require(trace_palaco_registry(fixture, "REQ-00001", validator=validator)["reachable_ids"]
+            == ["CAP-00001", "FE-00001"], "upstream trace differs from shared graph")
+    require(trace_palaco_registry(fixture, "FE-00001", "downstream", validator)["reachable_ids"]
+            == ["CAP-00001", "REQ-00001"], "downstream trace differs from shared graph")
+    summary = summarize_palaco_registry(fixture, validators)
+    require(summary["total_upstream_edges"] == 3 and summary["total_dependency_edges"] == 2,
+            "summary mixed upstream and dependency graphs")
+    require(find_palaco_orphans(fixture, validator)["object_ids"] == [],
+            "upstream orphan query differs from shared graph")
+    require(fixture == original, "shared upstream extraction mutated input")
+    for record in fixture["objects"]:
+        record["traceability"]["upstream"] = []
+    validate_palaco_registry(fixture, validator)
+    require(all(direct_upstream_targets(record) == set() for record in fixture["objects"]),
+            "shared upstream extraction included dependency or dedicated references")
+    require(trace_palaco_registry(fixture, "REQ-00001", validator=validator)["reachable_ids"] == [],
+            "upstream trace inferred dependency links")
+    require(len(find_palaco_orphans(fixture, validator)["object_ids"]) == 3,
+            "upstream orphan query inferred dependency links")
+    require(summarize_palaco_registry(fixture, validators)["total_upstream_edges"] == 0,
+            "summary inferred upstream links")
+    return "shared upstream targets + trace/summary/orphan consistency + fresh sets + graph-boundary checks"
 
 
 def check_palaco_dependency_contract():
@@ -4049,6 +4099,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO shared upstream graph contract", check_palaco_upstream_contract),
     ("PALACO shared dependency graph contract", check_palaco_dependency_contract),
     ("parser regression tests", run_regression_tests),
     ("standards metadata", check_metadata),
