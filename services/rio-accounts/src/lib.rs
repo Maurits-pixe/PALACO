@@ -3,6 +3,8 @@
 //! No production actor, enrollment, contact, identity issuance or external execution.
 /// Immutable endpoint adapter; staging plans have no runtime conversion.
 pub mod endpoint_policy;
+/// Refusal boundary: OIDC identity does not imply lifecycle activation authority.
+pub mod lifecycle_bridge;
 /// Durable synthetic storage; browser service admits only the primary loopback fixture.
 pub mod storage;
 use axum::{
@@ -739,10 +741,18 @@ async fn me(State(state): State<AppState>, headers: HeaderMap) -> Result<Json<Va
         #[cfg(not(test))]
         return Err(ApiError(StatusCode::SERVICE_UNAVAILABLE));
     };
+    let lifecycle = lifecycle_bridge::blocked_assurance();
     Ok(Json(json!({"accountId":account_id, "csrfToken":csrf,
-        "actorKind":"SYNTHETIC_DEV_ACTOR", "credentialControl":"VERIFIED_DEV_OIDC",
-        "accountActive":false,"mode":"SYNTHETIC_ONLY","operativeAuthority":"NONE",
-        "canOpenContact":false,"account1":"HOLD"})))
+    "actorKind":"SYNTHETIC_DEV_ACTOR", "credentialControl":"VERIFIED_DEV_OIDC",
+    "accountActive":false,"mode":"SYNTHETIC_ONLY","operativeAuthority":"NONE",
+    "canOpenContact":false,"account1":"HOLD",
+    "personalAccountControl":{
+        "schema":lifecycle.schema,
+        "strongAuthentication":lifecycle.strong_authentication,
+        "lifecycleAuthority":lifecycle.lifecycle_authority,
+        "activationEligible":lifecycle.activation_eligible,
+        "reason":lifecycle.reason
+    }})))
 }
 fn mutation_headers<'h>(
     headers: &'h HeaderMap,
@@ -1341,6 +1351,16 @@ mod tests {
         assert_eq!(me["canOpenContact"], false);
         assert_eq!(me["accountActive"], false);
         assert_eq!(me["account1"], "HOLD");
+        assert_eq!(
+            me["personalAccountControl"],
+            json!({
+                "schema":"rio-personal-account-boundary/v1",
+                "strongAuthentication":"UNKNOWN",
+                "lifecycleAuthority":"NONE",
+                "activationEligible":false,
+                "reason":"STRONG_AUTHENTICATION_EVIDENCE_MISSING"
+            })
+        );
         assert!(me.get("email").is_none());
         Ok(())
     }
