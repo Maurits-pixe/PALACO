@@ -45,3 +45,32 @@ export function appendPhoneTestlab(existingTiles, language = 'nl') {
   if (new Set(ids).size !== ids.length) throw new Error('Existing catalog contains duplicate IDs');
   return [...existingTiles, phoneTileForLanguage(language)];
 }
+
+/**
+ * Translate only the Testlab tile. Existing app objects and app state must remain
+ * untouched, including favorites, custom URLs and existing session state.
+ * Returns a fresh array and tile without mutating any caller-owned record.
+ */
+export function updatePhoneTestlabLanguage(tiles, language = 'nl') {
+  if (!Array.isArray(tiles)) throw new TypeError('Expected a catalog array');
+  const matches = tiles.filter(tile => tile?.id === TILE_ID);
+  if (matches.length !== 1 || tiles.length !== 15) {
+    throw new Error('Site catalog is not the accepted 15-tile layout; fail closed');
+  }
+  const original = matches[0];
+  if (original.order !== 15 || original.production !== 'HOLD' ||
+      original.status !== 'LOCAL_BROWSER_CI_PASS' || original.visibility !== 'private') {
+    throw new Error('P.P. tile integrity or authorization boundary changed');
+  }
+  const translated = phoneTileForLanguage(language);
+  // Only explicitly-localized fields change. Preserve native Site metadata,
+  // favorites and any user-supplied non-authority preferences in other keys.
+  const updated = {
+    ...original,
+    name: translated.name,
+    statusLabel: translated.statusLabel,
+    productionLabel: translated.productionLabel,
+    links: translated.links
+  };
+  return tiles.map(tile => tile?.id === TILE_ID ? updated : tile);
+}
