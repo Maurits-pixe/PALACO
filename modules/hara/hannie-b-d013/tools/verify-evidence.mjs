@@ -1,4 +1,4 @@
-import {readFileSync, realpathSync, readdirSync} from 'node:fs';
+import {readFileSync, realpathSync, readdirSync, lstatSync} from 'node:fs';
 import {resolve, relative, isAbsolute} from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
@@ -9,6 +9,18 @@ function inside(root, name) {
   const path = realpathSync(resolve(root, name)), rel = relative(root, path);
   requireThat(rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel), 'PATH_ESCAPE');
   return path;
+}
+function sourceInventory(repo) {
+  const module = inside(repo, 'modules/hara/hannie-b-d013');
+  function walk(dir) {
+    return readdirSync(dir).sort().flatMap(name => {
+      const path = resolve(dir, name), stat = lstatSync(path);
+      requireThat(!stat.isSymbolicLink(), 'SOURCE_SYMLINK');
+      return stat.isDirectory() ? walk(path) : [relative(repo, path)];
+    });
+  }
+  return [...walk(module), '.github/workflows/hannie-b-d013.yml',
+    'evidence/hara/b-d013/source-manifest.json'].sort();
 }
 export function verifyEvidence(directory, repository) {
   const dir = realpathSync(directory), repo = realpathSync(repository);
@@ -24,6 +36,8 @@ export function verifyEvidence(directory, repository) {
   requireThat(Object.keys(result.sourceHashes).length > 0, 'SOURCE_HASHES_MISSING');
   for (const [name, hash] of Object.entries(result.sourceHashes))
     requireThat(sha(readFileSync(inside(repo, name))) === hash, 'SOURCE_HASH_MISMATCH: ' + name);
+  requireThat(JSON.stringify(Object.keys(result.sourceHashes).sort()) ===
+    JSON.stringify(sourceInventory(repo)), 'SOURCE_INVENTORY_MISMATCH');
   const actual = readdirSync(dir).filter(n => n !== 'result.json').sort();
   requireThat(JSON.stringify(actual) === JSON.stringify(Object.keys(result.artifacts).sort()), 'ARTIFACT_SET_MISMATCH');
   requireThat(['tests.tap','tests.stderr','B12.json'].every(n => n in result.artifacts), 'REQUIRED_ARTIFACT_MISSING');

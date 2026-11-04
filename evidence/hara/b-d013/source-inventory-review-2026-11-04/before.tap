@@ -1,0 +1,97 @@
+TAP version 13
+# Subtest: valid bound run verifies while acceptance stays HOLD
+ok 1 - valid bound run verifies while acceptance stays HOLD
+  ---
+  duration_ms: 3.846582
+  type: 'test'
+  ...
+# Subtest: tampered artifact is rejected
+ok 2 - tampered artifact is rejected
+  ---
+  duration_ms: 1.381133
+  type: 'test'
+  ...
+# Subtest: tampered source is rejected
+ok 3 - tampered source is rejected
+  ---
+  duration_ms: 0.610952
+  type: 'test'
+  ...
+# Subtest: wrong run is rejected
+ok 4 - wrong run is rejected
+  ---
+  duration_ms: 0.567776
+  type: 'test'
+  ...
+# Subtest: unlisted module source is rejected
+not ok 5 - unlisted module source is rejected
+  ---
+  duration_ms: 1.636288
+  type: 'test'
+  location: '/workspace/PALACO/modules/hara/hannie-b-d013/tools/verify-evidence.test.mjs:36:4'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  operator: 'throws'
+  stack: |-
+    TestContext.<anonymous> (file:///workspace/PALACO/modules/hara/hannie-b-d013/tools/verify-evidence.test.mjs:37:48)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1382:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:960:18)
+    Test.postRun (node:internal/test_runner/test:1522:19)
+    Test.run (node:internal/test_runner/test:1447:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:960:7)
+  ...
+# Subtest: unlisted artifact is rejected
+ok 6 - unlisted artifact is rejected
+  ---
+  duration_ms: 0.82836
+  type: 'test'
+  ...
+# Subtest: partial run is rejected
+ok 7 - partial run is rejected
+  ---
+  duration_ms: 0.611212
+  type: 'test'
+  ...
+# Subtest: forged counters is rejected
+ok 8 - forged counters is rejected
+  ---
+  duration_ms: 0.805575
+  type: 'test'
+  ...
+# Subtest: removed counterevidence is rejected
+ok 9 - removed counterevidence is rejected
+  ---
+  duration_ms: 0.652925
+  type: 'test'
+  ...
+# Subtest: authority promotion is rejected
+ok 10 - authority promotion is rejected
+  ---
+  duration_ms: 0.687707
+  type: 'test'
+  ...
+# Subtest: source path escape is rejected
+ok 11 - source path escape is rejected
+  ---
+  duration_ms: 0.753426
+  type: 'test'
+  ...
+# Subtest: source symlink escape is rejected
+ok 12 - source symlink escape is rejected
+  ---
+  duration_ms: 0.66332
+  type: 'test'
+  ...
+1..12
+# tests 12
+# suites 0
+# pass 11
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 41.905769
