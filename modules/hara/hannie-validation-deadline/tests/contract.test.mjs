@@ -6,6 +6,7 @@ import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {execute,recover,revoke} from '../src/index.mjs';
+import {presentResult} from '../src/client.mjs';
 import {PROFILE,withinValidationWindow} from '../src/value.mjs';
 import {fixture,inspect,mutate,state,counts} from './fixture.mjs';
 const zero={audit:0,decisions:0,events:0,versions:0,receipts:0};
@@ -29,7 +30,7 @@ test('N03 approval expiry earlier than grant still denies mutation',async t=>{
 test('N04 new-profile opt-in allows late durable commit, separate read authority releases explicit receipt',async t=>{
  assert.ok(process.env.VD_NATIVE_LIBRARY);const f=fixture(t,{lifetime:450}),env=stall(f),r=await run(f,env),native=readFileSync(env.VD_NATIVE_TRACE,'utf8').trim().split('\n').map(JSON.parse);
  assert.equal(native.length,1);assert.equal(native[0].delayMs,900);assert.ok(native[0].startMs<f.expiry);assert.ok(native[0].endMs>f.expiry);assert.ok(native[0].endMs-native[0].startMs>=900);
- assert.equal(r.status,'COMMITTED');assert.ok(r.receipt.validatedAt<f.expiry);assert.equal(r.receipt.observedAfterExpiry,true);assert.equal(r.receipt.deadlineSatisfied,'VALIDATION_DEADLINE_ONLY');assert.equal(r.receipt.exactDurableAt,'UNKNOWN');assert.deepEqual(counts(f.path),one);const before=state(f.path);assert.equal((await read(f)).status,'COMMITTED');assert.equal(state(f.path),before);trace('N04',{r,native,expiry:f.expiry,lateEffectExists:true,d013Conformance:false,newProfile:true});
+ assert.equal(r.status,'COMMITTED');assert.ok(r.receipt.validatedAt<f.expiry);assert.equal(r.receipt.observedAfterExpiry,true);assert.equal(r.receipt.deadlineSatisfied,'VALIDATION_DEADLINE_ONLY');assert.equal(r.receipt.exactDurableAt,'UNKNOWN');assert.deepEqual(counts(f.path),one);const before=state(f.path);assert.equal((await read(f)).status,'COMMITTED');assert.equal(state(f.path),before);const clientView=presentResult(r,f.context,f.request);assert.equal(clientView.state,'CONFIRMED');assert.ok(clientView.timing.includes('na verlopen'));trace('N04',{r,native,expiry:f.expiry,lateEffectExists:true,d013Conformance:false,newProfile:true,clientView});
 });
 test('N05 SIGKILL after validation before commit leaves no durable effect or approval consumption',async t=>{
  const f=fixture(t),before=state(f.path),r=await run(f,{VD_TEST_PHASE:'beforeCommit'});assert.equal(r.status,'RESULT_UNKNOWN');assert.equal(r.writer.signal,'SIGKILL');assert.equal(state(f.path),before);assert.deepEqual(counts(f.path),zero);trace('N05',r);

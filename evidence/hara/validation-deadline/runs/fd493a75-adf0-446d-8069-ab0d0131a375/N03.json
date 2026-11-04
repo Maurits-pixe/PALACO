@@ -1,0 +1,14 @@
+{
+  "status": "DENIED",
+  "code": "VALIDATION_DEADLINE_EXPIRED",
+  "writer": {
+    "pid": 6945,
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "DENIED",
+      "code": "VALIDATION_DEADLINE_EXPIRED"
+    },
+    "stderr": ""
+  }
+}
