@@ -15,6 +15,7 @@ export function startAmbientAnimation(canvas, {
   let height = 0;
   let pixelRatio = 1;
   let particles = [];
+  let enabled = true;
 
   function resize() {
     const bounds = canvas.getBoundingClientRect();
@@ -66,7 +67,7 @@ export function startAmbientAnimation(canvas, {
   }
 
   function start() {
-    if (frameId || reducedMotion.matches || documentObject.hidden) return;
+    if (frameId || !enabled || reducedMotion.matches || documentObject.hidden) return;
     frameId = windowObject.requestAnimationFrame(draw);
   }
 
@@ -86,10 +87,18 @@ export function startAmbientAnimation(canvas, {
   documentObject.addEventListener('visibilitychange', onVisibilityChange);
   reducedMotion.addEventListener('change', onMotionChange);
 
-  return () => {
+  function setEnabled(nextEnabled) {
+    enabled = Boolean(nextEnabled);
+    if (enabled) start();
+    else stop();
+  }
+
+  function dispose() {
     stop();
     windowObject.removeEventListener('resize', resize);
     documentObject.removeEventListener('visibilitychange', onVisibilityChange);
     reducedMotion.removeEventListener('change', onMotionChange);
-  };
+  }
+
+  return { setEnabled, dispose };
 }

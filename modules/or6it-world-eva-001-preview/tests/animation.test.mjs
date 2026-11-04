@@ -57,7 +57,7 @@ function createHarness() {
 
 test('ambient motion pauses while hidden and resumes without replacing its loop', () => {
   const harness = createHarness();
-  const stop = startAmbientAnimation(harness.canvas, harness);
+  const animation = startAmbientAnimation(harness.canvas, harness);
   assert.equal(harness.callbacks.size, 1);
   harness.runFrame(17);
   assert.ok(harness.calls.arcs > 0);
@@ -72,7 +72,7 @@ test('ambient motion pauses while hidden and resumes without replacing its loop'
   harness.runFrame(1000);
   assert.ok(harness.calls.arcs > 1);
 
-  stop();
+  animation.dispose();
   assert.equal(harness.callbacks.size, 0);
   assert.equal(harness.documentListeners.size, 0);
   assert.equal(harness.mediaListeners.size, 0);
@@ -81,7 +81,7 @@ test('ambient motion pauses while hidden and resumes without replacing its loop'
 
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
-  const stop = startAmbientAnimation(harness.canvas, harness);
+  const animation = startAmbientAnimation(harness.canvas, harness);
   harness.mediaQuery.matches = true;
   harness.mediaListeners.get('change')();
   assert.equal(harness.callbacks.size, 0);
@@ -89,5 +89,28 @@ test('reduced motion disables the canvas loop and can be changed at runtime', ()
   harness.mediaQuery.matches = false;
   harness.mediaListeners.get('change')();
   assert.equal(harness.callbacks.size, 1);
-  stop();
+  animation.dispose();
+});
+
+test('manual pause stops rendering and resume respects system reduced motion', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.setEnabled(false);
+  assert.equal(harness.callbacks.size, 0);
+  animation.setEnabled(true);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.mediaQuery.matches = true;
+  harness.mediaListeners.get('change')();
+  assert.equal(harness.callbacks.size, 0);
+  animation.setEnabled(false);
+  animation.setEnabled(true);
+  assert.equal(harness.callbacks.size, 0);
+
+  harness.mediaQuery.matches = false;
+  harness.mediaListeners.get('change')();
+  assert.equal(harness.callbacks.size, 1);
+  animation.dispose();
 });

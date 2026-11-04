@@ -23,5 +23,6 @@ npm run dev
 
 Open the localhost URL printed by Vite. The fixture-event button replays one
 predefined synthetic event locally; it does not contact a service or mutate a
-World. Animation uses a separate `requestAnimationFrame` loop and pauses when
-the document is hidden or reduced motion is requested.
+World. The scene's decorative animation has a pause/resume control, uses a
+separate `requestAnimationFrame` loop, and pauses when the document is hidden
+or reduced motion is requested by the operating system.

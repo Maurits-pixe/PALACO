@@ -33,8 +33,12 @@ const nextEvent = {
 };
 const eventAvailable = computed(() => readModel.value.sequence < nextEvent.sequence);
 const eventPulse = ref(false);
+const motionEnabled = ref(true);
+const systemReducedMotion = ref(false);
 const canvas = ref(null);
-let stopAnimation = () => {};
+let animationController = { setEnabled() {}, dispose() {} };
+let reducedMotionQuery;
+const onReducedMotionChange = event => { systemReducedMotion.value = event.matches; };
 let pulseTimer;
 
 function replayFixtureEvent() {
@@ -44,12 +48,22 @@ function replayFixtureEvent() {
   pulseTimer = setTimeout(() => { eventPulse.value = false; }, 900);
 }
 
+function toggleMotion() {
+  if (systemReducedMotion.value) return;
+  motionEnabled.value = !motionEnabled.value;
+  animationController.setEnabled(motionEnabled.value);
+}
+
 onMounted(() => {
-  if (canvas.value) stopAnimation = startAmbientAnimation(canvas.value);
+  reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  systemReducedMotion.value = reducedMotionQuery.matches;
+  reducedMotionQuery.addEventListener('change', onReducedMotionChange);
+  if (canvas.value) animationController = startAmbientAnimation(canvas.value);
 });
 
 onUnmounted(() => {
-  stopAnimation();
+  animationController.dispose();
+  reducedMotionQuery?.removeEventListener('change', onReducedMotionChange);
   clearTimeout(pulseTimer);
 });
 </script>
@@ -84,7 +98,7 @@ onUnmounted(() => {
         </dl>
       </section>
 
-      <section class="scene" :class="{ 'event-pulse': eventPulse }" aria-labelledby="scene-title">
+      <section class="scene" :class="{ 'event-pulse': eventPulse, 'motion-paused': !motionEnabled || systemReducedMotion }" aria-labelledby="scene-title">
         <h2 id="scene-title" class="visually-hidden">Statische EVA-ontwerpreferentie met decoratieve beweging</h2>
         <img
           class="reference-image"
@@ -108,7 +122,18 @@ onUnmounted(() => {
         <canvas ref="canvas" class="ambient-canvas" aria-hidden="true"></canvas>
         <div class="scene-caption">
           <span>CONCEPT DESIGN REFERENCE</span>
-          <span>Beweging is decoratief; status blijft expliciet.</span>
+          <div class="scene-caption-controls">
+            <span>Beweging is decoratief; status blijft expliciet.</span>
+            <button
+              type="button"
+              class="motion-button"
+              :aria-pressed="motionEnabled && !systemReducedMotion"
+              :disabled="systemReducedMotion"
+              @click="toggleMotion"
+            >
+              {{ systemReducedMotion ? 'Beweging beperkt door systeem' : motionEnabled ? 'Pauzeer beweging' : 'Hervat beweging' }}
+            </button>
+          </div>
         </div>
       </section>
 
