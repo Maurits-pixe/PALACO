@@ -29,7 +29,7 @@ export function verifyEvidence(directory, repository) {
   requireThat(result.kind === 'VALIDATION_DEADLINE_EXECUTION_EVIDENCE' && result.checks === 'PASS', 'RUN_NOT_PASS');
   requireThat(result.counts.tests === 24 && result.counts.pass === 24 &&
     ['fail','cancelled','skipped','todo'].every(k => result.counts[k] === 0), 'INCOMPLETE_RUN');
-  requireThat(result.clientExit===0&&!result.clientError&&!result.clientSignal&&result.clientCounts?.tests===12&&result.clientCounts.pass===12&&['fail','cancelled','skipped','todo'].every(k=>result.clientCounts[k]===0), 'CLIENT_CONTROLS_INCOMPLETE');
+  requireThat(result.clientExit===0&&!result.clientError&&!result.clientSignal&&result.clientCounts?.tests===13&&result.clientCounts.pass===13&&['fail','cancelled','skipped','todo'].every(k=>result.clientCounts[k]===0), 'CLIENT_CONTROLS_INCOMPLETE');
   requireThat(result.sourceUnchangedAfterRun === true && result.compileExit === 0 && result.testExit === 0, 'EXECUTION_MISMATCH');
   requireThat(!result.compileError && !result.testError && !result.compileSignal && !result.testSignal, 'PROCESS_ERROR');
   requireThat(/^[a-f0-9]{40}$/.test(result.sourceCommitAtStart), 'COMMIT_MISSING');

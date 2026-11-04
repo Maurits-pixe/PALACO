@@ -24,7 +24,7 @@ test('C04 preview does not retain mutable caller request and expires at equality
 });
 test('C05 unknown and withheld outcomes never expose contents or invite automatic retry',t=>{
  const f=fixture(t),unknown=presentResult({status:'RESULT_UNKNOWN'},f.context,f.request);assert.equal(unknown.state,'UNKNOWN');assert.equal(unknown.canAutomaticallyRetry,false);assert.equal(unknown.title,undefined);
- const held=presentResult({status:'COMMITTED_RESULT_WITHHELD',contractProfile:f.request.contractProfile,operationId:f.request.operationId},f.context,f.request);assert.equal(held.state,'WITHHELD');assert.equal(held.title,undefined);
+ const held=presentResult({status:'COMMITTED_RESULT_WITHHELD',contractProfile:f.request.contractProfile,operationId:f.request.operationId,auditSequence:1},f.context,f.request);assert.equal(held.state,'WITHHELD');assert.equal(held.title,undefined);
  assert.throws(()=>presentResult({status:'RESULT_UNKNOWN',event:{title:'leak'}},f.context,f.request),/UNEXPECTED_PAYLOAD/);
 });
 test('C06 client decodes an actual new-worker receipt without claiming timely durability',async t=>{
@@ -55,5 +55,12 @@ test('C11 denied outcomes stay separate from unknown commits and cannot carry pa
  const f=fixture(t),view=presentResult({status:'DENIED',code:'VALIDATION_DEADLINE_EXPIRED'},f.context,f.request);assert.equal(view.state,'DENIED');assert.equal(view.canAutomaticallyRetry,false);assert.throws(()=>presentResult({status:'DENIED',receipt:{}},f.context,f.request),/UNEXPECTED_PAYLOAD/);
 });
 test('C12 missing historical trust never suggests that a fresh consent recreates it',t=>{
- const f=fixture(t),view=presentResult({status:'COMMITTED_RESULT_WITHHELD',code:'TIME_TRUST_UNAVAILABLE',contractProfile:f.request.contractProfile,operationId:f.request.operationId},f.context,f.request);assert.ok(view.explanation.includes('controle moet eerst'));assert.equal(view.explanation.includes('Nieuwe toestemming'),false);assert.equal(view.canAutomaticallyRetry,false);
+ const f=fixture(t),view=presentResult({status:'COMMITTED_RESULT_WITHHELD',code:'TIME_TRUST_UNAVAILABLE',contractProfile:f.request.contractProfile,operationId:f.request.operationId,auditSequence:1},f.context,f.request);assert.ok(view.explanation.includes('controle moet eerst'));assert.equal(view.explanation.includes('Nieuwe toestemming'),false);assert.equal(view.canAutomaticallyRetry,false);
+});
+
+test('C13 a withheld result requires a valid audit sequence before claiming a committed outcome',async t=>{
+ const f=fixture(t),held=await execute(f.path,f.context,f.request);assert.equal(held.status,'COMMITTED_RESULT_WITHHELD');assert.equal(presentResult(held,f.context,f.request).state,'WITHHELD');
+ for(const edit of [x=>{delete x.auditSequence;},x=>{x.auditSequence=0;},x=>{x.auditSequence='1';},x=>{x.auditSequence=1.5;}]){
+  const malformed=clone(held);edit(malformed);assert.throws(()=>presentResult(malformed,f.context,f.request),/RESULT_BINDING_MISMATCH/);
+ }
 });

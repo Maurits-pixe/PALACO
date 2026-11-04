@@ -30,7 +30,7 @@ export function presentResult(result,context,request) {
  }
  if(result.status==='COMMITTED_RESULT_WITHHELD') {
   requireThat(result.event===undefined&&result.receipt===undefined,'UNEXPECTED_PAYLOAD');
-  requireThat(result.contractProfile===PROFILE&&result.operationId===request.operationId,'RESULT_BINDING_MISMATCH');
+  requireThat(result.contractProfile===PROFILE&&result.operationId===request.operationId&&Number.isSafeInteger(result.auditSequence)&&result.auditSequence>0,'RESULT_BINDING_MISMATCH');
   return {state:'WITHHELD',heading:'Vastgelegde uitkomst',explanation:result.code==='READ_AUTHORITY_REQUIRED'?'Nieuwe toestemming is nodig om de inhoud te tonen.':'De vastgelegde uitkomst kan nog niet veilig worden getoond. De controle moet eerst worden hersteld.',canAutomaticallyRetry:false};
  }
  requireThat(result.status==='COMMITTED','UNSUPPORTED_RESULT_STATUS');

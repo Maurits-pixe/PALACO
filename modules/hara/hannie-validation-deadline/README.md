@@ -6,4 +6,4 @@ Linux, Node 24.14.1 or 24.19.0, gcc, glibc, /usr/bin/flock; no npm dependencies.
 
 No integration/production/merge release. New supervisor recovery, restore/trust epoch and genuine time/admission authority remain outside the demonstrated synthetic scope. See CONTRACT.md and the separate evidence report.
 
-`src/client.mjs` provides pure `prepareConsent`, `recordConsentSelection` and `presentResult` helpers. Consent selection remains unauthenticated and cannot execute or provision anything. The evidence runner records 12 client controls separately from the 24 runtime controls. No web renderer, real owner authentication or live client integration is supplied.
+`src/client.mjs` provides pure `prepareConsent`, `recordConsentSelection` and `presentResult` helpers. Consent selection remains unauthenticated and cannot execute or provision anything. The evidence runner records 13 client controls separately from the 24 runtime controls. No web renderer, real owner authentication or live client integration is supplied.

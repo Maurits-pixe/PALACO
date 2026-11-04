@@ -1,0 +1,35 @@
+{
+  "r": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "READ_AUTHORITY_REQUIRED",
+    "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 9549,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 9542,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true,
+        "validatedAt": 1793822683881
+      },
+      "stderr": ""
+    }
+  },
+  "blocked": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "READ_AUTHORITY_REQUIRED",
+    "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 9570,
+      "exit": 0
+    }
+  }
+}
