@@ -2442,6 +2442,16 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
+The additive `total_dependency_orphans` field counts objects with neither
+incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
+An object referenced by another dependency source is connected, even if it has
+no dependencies of its own. Duplicate representations of an edge do not change
+connectivity. Upstream links, other relationship types and dedicated references
+are excluded; this count is independent of `total_upstream_orphans`.
+The fixture reports zero dependency orphans. Isolation is a graph diagnostic,
+not proof that dependencies are missing, records are invalid or objects lack
+authority. Full snapshot validation still precedes counting; existing fields
+retain their meanings.
 The additive `total_upstream_orphans` field counts objects with neither incoming
 nor outgoing `traceability.upstream` links, using the same definition as
 `--find-orphans`. A root referenced by another object is not isolated; a

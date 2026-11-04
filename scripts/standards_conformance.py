@@ -1191,6 +1191,7 @@ def summarize_palaco_registry(instance, validators=None):
     by_domain = {}
     by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
     total_dependency_edges = 0
+    dependency_connected = set()
     total_upstream_edges = 0
     upstream_connected = set()
     by_lifecycle = {
@@ -1229,10 +1230,14 @@ def summarize_palaco_registry(instance, validators=None):
             counts[record["classification"][dimension]] += 1
         for edge in record["traceability"]["relationships"]:
             by_relationship[edge["relation"]] += 1
-        total_dependency_edges += len(set(record.get("dependencies", [])) | {
+        dependency_targets = set(record.get("dependencies", [])) | {
             edge["target"] for edge in record["traceability"]["relationships"]
             if edge["relation"] == "DEPENDS_ON"
-        })
+        }
+        total_dependency_edges += len(dependency_targets)
+        if dependency_targets:
+            dependency_connected.add(record["metadata"]["id"])
+            dependency_connected.update(dependency_targets)
     return {
         "registry_version": instance["registry_version"],
         "total_objects": len(instance["objects"]),
@@ -1245,6 +1250,7 @@ def summarize_palaco_registry(instance, validators=None):
         "by_classification": by_classification,
         "total_relationships": sum(by_relationship.values()),
         "total_dependency_edges": total_dependency_edges,
+        "total_dependency_orphans": len(instance["objects"]) - len(dependency_connected),
         "total_upstream_edges": total_upstream_edges,
         "total_upstream_orphans": len(instance["objects"]) - len(upstream_connected),
         "by_relationship_type": by_relationship,
@@ -2938,15 +2944,15 @@ def check_palaco_summary():
     approval_statuses = schema["$defs"]["Approval"]["properties"]["status"]["enum"]
     classifications = schema["$defs"]["Classification"]["properties"]
     relations = sorted(validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"])
-    for instance, expected_types, expected_states, expected_relations, expected_dependencies, expected_orphans in (
-        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}, 2, 0),
-        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}, 2, 1),
-        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}, 0, 1),
+    for instance, expected_types, expected_states, expected_relations, expected_dependencies, expected_orphans, expected_dependency_orphans in (
+        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}, 2, 0, 0),
+        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}, 2, 1, 1),
+        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}, 0, 1, 1),
         (linked, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
-         {"DEPENDS_ON": 3, "SATISFIES": 1}, 3, 2),
-        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}, 1, 0),
+         {"DEPENDS_ON": 3, "SATISFIES": 1}, 3, 2, 2),
+        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}, 1, 0, 1),
         (overlapping, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
-         {"DEPENDS_ON": 3, "SATISFIES": 1}, 4, 2),
+         {"DEPENDS_ON": 3, "SATISFIES": 1}, 4, 2, 1),
     ):
         original = copy.deepcopy(instance)
         result = summarize_palaco_registry(instance, validators)
@@ -2983,6 +2989,7 @@ def check_palaco_summary():
             },
             "total_relationships": sum(expected_relations.values()),
             "total_dependency_edges": expected_dependencies,
+            "total_dependency_orphans": expected_dependency_orphans,
             "total_upstream_edges": 0 if len(instance["objects"]) == 1 else 2,
             "total_upstream_orphans": expected_orphans,
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
@@ -3200,6 +3207,8 @@ def check_palaco_summary():
             "summary counted a connected root or leaf as an orphan")
     require(result["total_dependency_edges"] == 1 and result["total_relationships"] == 0,
             "summary mixed upstream and dependency graphs")
+    require(result["total_dependency_orphans"] == 2,
+            "summary included upstream-only connectivity in dependency graph")
     require(upstream_fixture == original, "upstream summary mutated input")
     upstream_fixture["objects"].reverse()
     for record in upstream_fixture["objects"]:
@@ -3222,6 +3231,8 @@ def check_palaco_summary():
             "summary inferred upstream edges from dependencies")
     require(cleared["total_upstream_orphans"] == 4,
             "summary treated dependency-connected objects as upstream-connected")
+    require(cleared["total_dependency_orphans"] == 2,
+            "clearing upstream links changed dependency isolation")
     isolated = copy.deepcopy(template)
     isolated["metadata"]["id"] = "FE-00005"
     original["objects"].append(isolated)
@@ -3233,7 +3244,26 @@ def check_palaco_summary():
     original["objects"].reverse()
     require(json.dumps(summarize_palaco_registry(original, validators)) == json.dumps(extended),
             "orphan summary depends on record order")
-    return "13 deterministic/non-mutating summaries + upstream orphan/query consistency + separate graph/metadata counts + 41 rejections + CLI regression"
+    dependency_fixture = copy.deepcopy(upstream_fixture)
+    by_id = {record["metadata"]["id"]: record for record in dependency_fixture["objects"]}
+    by_id["FE-00002"]["dependencies"] = ["FE-00001"]
+    by_id["FE-00002"]["traceability"]["relationships"] = [
+        {"source": "FE-00002", "relation": "DEPENDS_ON", "target": "FE-00001"},
+    ]
+    before = copy.deepcopy(dependency_fixture)
+    result = summarize_palaco_registry(dependency_fixture, validators)
+    require(result["total_dependency_orphans"] == 1 and result["total_dependency_edges"] == 2,
+            "summary failed to count incoming/outgoing dependency connectivity or deduplicate edges")
+    require(dependency_fixture == before, "dependency isolation summary mutated input")
+    dependency_fixture["objects"].reverse()
+    require(json.dumps(summarize_palaco_registry(dependency_fixture, validators)) == json.dumps(result),
+            "dependency isolation summary depends on record order")
+    for record in dependency_fixture["objects"]:
+        record.pop("dependencies", None)
+        record["traceability"]["relationships"] = []
+    require(summarize_palaco_registry(dependency_fixture, validators)["total_dependency_orphans"] == 4,
+            "summary failed to count all dependency-isolated objects")
+    return "15 deterministic/non-mutating summaries + separate dependency/upstream isolation + graph/metadata counts + 41 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
