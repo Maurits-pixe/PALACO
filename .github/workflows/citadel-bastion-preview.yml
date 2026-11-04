@@ -1,0 +1,45 @@
+name: Citadel Bastion Preview
+
+on:
+  push:
+    paths:
+      - "modules/citadel-bastion-preview/**"
+      - ".github/workflows/citadel-bastion-preview.yml"
+  pull_request:
+    paths:
+      - "modules/citadel-bastion-preview/**"
+      - ".github/workflows/citadel-bastion-preview.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "24.14.1"
+          cache: npm
+          cache-dependency-path: modules/citadel-bastion-preview/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: modules/citadel-bastion-preview
+      - name: Test and build preview
+        run: |
+          npm test
+          npm run build
+        working-directory: modules/citadel-bastion-preview
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: modules/citadel-bastion-preview
+      - name: Test built preview in Chromium
+        run: npm run test:browser
+        working-directory: modules/citadel-bastion-preview
