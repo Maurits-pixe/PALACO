@@ -1192,6 +1192,7 @@ def summarize_palaco_registry(instance, validators=None):
     by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
     total_dependency_edges = 0
     total_upstream_edges = 0
+    upstream_connected = set()
     by_lifecycle = {
         status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     }
@@ -1213,6 +1214,9 @@ def summarize_palaco_registry(instance, validators=None):
     for record in instance["objects"]:
         by_type[record["object_type"]] += 1
         total_upstream_edges += len(record["traceability"]["upstream"])
+        if record["traceability"]["upstream"]:
+            upstream_connected.add(record["metadata"]["id"])
+            upstream_connected.update(record["traceability"]["upstream"])
         domain = record["metadata"]["domain"]
         by_domain[domain] = by_domain.get(domain, 0) + 1
         for role, counts in by_ownership.items():
@@ -1242,6 +1246,7 @@ def summarize_palaco_registry(instance, validators=None):
         "total_relationships": sum(by_relationship.values()),
         "total_dependency_edges": total_dependency_edges,
         "total_upstream_edges": total_upstream_edges,
+        "total_upstream_orphans": len(instance["objects"]) - len(upstream_connected),
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
@@ -2933,15 +2938,15 @@ def check_palaco_summary():
     approval_statuses = schema["$defs"]["Approval"]["properties"]["status"]["enum"]
     classifications = schema["$defs"]["Classification"]["properties"]
     relations = sorted(validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"])
-    for instance, expected_types, expected_states, expected_relations, expected_dependencies in (
-        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}, 2),
-        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}, 2),
-        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}, 0),
+    for instance, expected_types, expected_states, expected_relations, expected_dependencies, expected_orphans in (
+        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}, 2, 0),
+        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}, 2, 1),
+        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}, 0, 1),
         (linked, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
-         {"DEPENDS_ON": 3, "SATISFIES": 1}, 3),
-        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}, 1),
+         {"DEPENDS_ON": 3, "SATISFIES": 1}, 3, 2),
+        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}, 1, 0),
         (overlapping, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
-         {"DEPENDS_ON": 3, "SATISFIES": 1}, 4),
+         {"DEPENDS_ON": 3, "SATISFIES": 1}, 4, 2),
     ):
         original = copy.deepcopy(instance)
         result = summarize_palaco_registry(instance, validators)
@@ -2979,9 +2984,13 @@ def check_palaco_summary():
             "total_relationships": sum(expected_relations.values()),
             "total_dependency_edges": expected_dependencies,
             "total_upstream_edges": 0 if len(instance["objects"]) == 1 else 2,
+            "total_upstream_orphans": expected_orphans,
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")
+        require(result["total_upstream_orphans"] == len(find_palaco_orphans(
+            instance, validators["PCR-000.schema.json"]
+        )["object_ids"]), "summary and orphan query disagree")
         require(list(result["by_object_type"]) == families, "summary type order changed")
         require(list(result["by_lifecycle_status"]) == statuses, "summary lifecycle order changed")
         require(list(result["by_relationship_type"]) == relations, "summary relationship order changed")
@@ -3187,6 +3196,8 @@ def check_palaco_summary():
     original = copy.deepcopy(upstream_fixture)
     result = summarize_palaco_registry(upstream_fixture, validators)
     require(result["total_upstream_edges"] == 4, "summary miscounted direct upstream edges")
+    require(result["total_upstream_orphans"] == 0,
+            "summary counted a connected root or leaf as an orphan")
     require(result["total_dependency_edges"] == 1 and result["total_relationships"] == 0,
             "summary mixed upstream and dependency graphs")
     require(upstream_fixture == original, "upstream summary mutated input")
@@ -3209,7 +3220,20 @@ def check_palaco_summary():
     cleared = summarize_palaco_registry(upstream_fixture, validators)
     require(cleared["total_upstream_edges"] == 0 and cleared["total_dependency_edges"] == 1,
             "summary inferred upstream edges from dependencies")
-    return "12 deterministic/non-mutating summaries + separate upstream/dependency/owner/domain/status/classification/edge counts + 41 rejections + CLI regression"
+    require(cleared["total_upstream_orphans"] == 4,
+            "summary treated dependency-connected objects as upstream-connected")
+    isolated = copy.deepcopy(template)
+    isolated["metadata"]["id"] = "FE-00005"
+    original["objects"].append(isolated)
+    extended = summarize_palaco_registry(original, validators)
+    require(extended["total_upstream_orphans"] == 1 and extended["total_upstream_edges"] == 4,
+            "summary failed to distinguish an isolated node from a connected root")
+    require(find_palaco_orphans(original, validators["PCR-000.schema.json"])["object_ids"] == ["FE-00005"],
+            "orphan summary fixture disagrees with existing query")
+    original["objects"].reverse()
+    require(json.dumps(summarize_palaco_registry(original, validators)) == json.dumps(extended),
+            "orphan summary depends on record order")
+    return "13 deterministic/non-mutating summaries + upstream orphan/query consistency + separate graph/metadata counts + 41 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():

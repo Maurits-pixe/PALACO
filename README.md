@@ -2442,6 +2442,14 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
+The additive `total_upstream_orphans` field counts objects with neither incoming
+nor outgoing `traceability.upstream` links, using the same definition as
+`--find-orphans`. A root referenced by another object is not isolated; a
+standalone object is. Dependency lists and typed relationships do not make an
+object upstream-connected. The fixture reports zero upstream orphans.
+This is a graph diagnostic, not proof of missing required links, invalid records,
+incomplete governance or non-canonical status. Existing summary fields remain
+unchanged, and the complete snapshot is validated before counting.
 The additive `total_upstream_edges` field counts direct
 `traceability.upstream` source-target pairs only. Several sources referencing
 the same upstream object count separately; transitive paths do not add edges.
