@@ -2442,6 +2442,15 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
+The additive `total_dependency_edges` field counts direct source-target pairs
+from the union of each record's `dependencies` and explicit `DEPENDS_ON` edges.
+The same dependency represented in both places counts once; different sources
+depending on the same target count separately. Upstream links, other relationship
+types, dedicated references and transitive paths do not add dependency edges.
+The fixture reports two dependency edges. Unlike `total_relationships`, this
+total includes dependency-list entries even without explicit typed edges, but
+excludes all other relationship types. It is not complete impact analysis,
+runtime dependency discovery or authority; existing summary fields are unchanged.
 The additive `by_domain` field counts exact `metadata.domain` labels, with
 case, whitespace and Unicode normalization differences preserved. Only labels
 present in the supplied snapshot are included; unlike schema enums, domains

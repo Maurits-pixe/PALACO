@@ -1190,6 +1190,7 @@ def summarize_palaco_registry(instance, validators=None):
     by_type = {family: 0 for family in sorted(schema["properties"]["object_type"]["enum"])}
     by_domain = {}
     by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
+    total_dependency_edges = 0
     by_lifecycle = {
         status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     }
@@ -1222,6 +1223,10 @@ def summarize_palaco_registry(instance, validators=None):
             counts[record["classification"][dimension]] += 1
         for edge in record["traceability"]["relationships"]:
             by_relationship[edge["relation"]] += 1
+        total_dependency_edges += len(set(record.get("dependencies", [])) | {
+            edge["target"] for edge in record["traceability"]["relationships"]
+            if edge["relation"] == "DEPENDS_ON"
+        })
     return {
         "registry_version": instance["registry_version"],
         "total_objects": len(instance["objects"]),
@@ -1233,6 +1238,7 @@ def summarize_palaco_registry(instance, validators=None):
         "by_approval_status": by_approval,
         "by_classification": by_classification,
         "total_relationships": sum(by_relationship.values()),
+        "total_dependency_edges": total_dependency_edges,
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
@@ -2914,6 +2920,9 @@ def check_palaco_summary():
     for record in implicit["objects"]:
         record["traceability"]["relationships"] = []
     implicit["objects"][2]["dependencies"] = ["CAP-00001"]
+    overlapping = copy.deepcopy(linked)
+    overlapping["objects"][2]["dependencies"] = ["CAP-00001", "FE-00001"]
+    overlapping["objects"][3]["dependencies"] = ["FE-00001"]
     schema = validators["PMS-001.schema.json"].schema
     families = sorted(schema["properties"]["object_type"]["enum"])
     statuses = schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
@@ -2921,13 +2930,15 @@ def check_palaco_summary():
     approval_statuses = schema["$defs"]["Approval"]["properties"]["status"]["enum"]
     classifications = schema["$defs"]["Classification"]["properties"]
     relations = sorted(validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"])
-    for instance, expected_types, expected_states, expected_relations in (
-        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}),
-        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}),
-        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}),
+    for instance, expected_types, expected_states, expected_relations, expected_dependencies in (
+        (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}, 2),
+        (mixed, {"FE": 2, "CAP": 1, "REQ": 1}, {"Draft": 3, "Review": 1}, {"DEPENDS_ON": 2}, 2),
+        ({"registry_version": "0.1.0", "objects": [template]}, {"FE": 1}, {"Draft": 1}, {}, 0),
         (linked, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
-         {"DEPENDS_ON": 3, "SATISFIES": 1}),
-        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}),
+         {"DEPENDS_ON": 3, "SATISFIES": 1}, 3),
+        (implicit, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {}, 1),
+        (overlapping, {"FE": 2, "CAP": 1, "REQ": 1, "OBJ": 1}, {"Draft": 4, "Review": 1},
+         {"DEPENDS_ON": 3, "SATISFIES": 1}, 4),
     ):
         original = copy.deepcopy(instance)
         result = summarize_palaco_registry(instance, validators)
@@ -2963,6 +2974,7 @@ def check_palaco_summary():
                 for dimension, definition in classifications.items()
             },
             "total_relationships": sum(expected_relations.values()),
+            "total_dependency_edges": expected_dependencies,
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")
@@ -2980,6 +2992,7 @@ def check_palaco_summary():
         reordered["objects"].reverse()
         for record in reordered["objects"]:
             record["traceability"]["relationships"].reverse()
+            record.get("dependencies", []).reverse()
         require(json.dumps(summarize_palaco_registry(reordered, validators)) == json.dumps(result),
                 "summary serialization depends on object order")
     status_fixture = {"registry_version": "0.1.0", "objects": []}
@@ -3158,7 +3171,7 @@ def check_palaco_summary():
         record["ownership"] = dict(reversed(list(record["ownership"].items())))
     require(json.dumps(summarize_palaco_registry(ownership_fixture, validators)) == json.dumps(result),
             "ownership summary serialization depends on record or role order")
-    return "9 deterministic/non-mutating summaries + exact owner/domain/status/classification/edge counts + 38 rejections + CLI regression"
+    return "10 deterministic/non-mutating summaries + deduplicated dependency/owner/domain/status/classification/edge counts + 38 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
