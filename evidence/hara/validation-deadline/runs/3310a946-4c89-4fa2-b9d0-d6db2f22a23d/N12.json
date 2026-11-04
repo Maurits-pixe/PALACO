@@ -1,0 +1,11 @@
+{
+  "stateUnchangedBeforeCorruption": true,
+  "result": {
+    "status": "RESULT_UNKNOWN",
+    "code": "BINDING_MISMATCH",
+    "readProcess": {
+      "pid": 4555,
+      "exit": 0
+    }
+  }
+}

@@ -1,0 +1,124 @@
+TAP version 13
+# Subtest: N01 exact new profile, one crash-surviving decision/effect and versioned receipt
+ok 1 - N01 exact new profile, one crash-surviving decision/effect and versioned receipt
+  ---
+  duration_ms: 74.845543
+  type: 'test'
+  ...
+# Subtest: N02 real SQLite lockwait crosses write expiry: entire transaction rolled back
+ok 2 - N02 real SQLite lockwait crosses write expiry: entire transaction rolled back
+  ---
+  duration_ms: 404.422517
+  type: 'test'
+  ...
+# Subtest: N03 approval expiry earlier than grant still denies mutation
+ok 3 - N03 approval expiry earlier than grant still denies mutation
+  ---
+  duration_ms: 77.894543
+  type: 'test'
+  ...
+# Subtest: N04 new-profile opt-in allows late durable commit, separate read authority releases explicit receipt
+ok 4 - N04 new-profile opt-in allows late durable commit, separate read authority releases explicit receipt
+  ---
+  duration_ms: 1001.752672
+  type: 'test'
+  ...
+# Subtest: N05 SIGKILL after validation before commit leaves no durable effect or approval consumption
+ok 5 - N05 SIGKILL after validation before commit leaves no durable effect or approval consumption
+  ---
+  duration_ms: 66.246685
+  type: 'test'
+  ...
+# Subtest: N06 lost ACK and replay reconstruct without second write or approval consumption
+ok 6 - N06 lost ACK and replay reconstruct without second write or approval consumption
+  ---
+  duration_ms: 180.735836
+  type: 'test'
+  ...
+# Subtest: N07 fake success ACK before durability is ignored
+ok 7 - N07 fake success ACK before durability is ignored
+  ---
+  duration_ms: 69.307781
+  type: 'test'
+  ...
+# Subtest: N08 durable revoke first blocks effects
+ok 8 - N08 durable revoke first blocks effects
+  ---
+  duration_ms: 102.33258
+  type: 'test'
+  ...
+# Subtest: N09 revoke requested during commit stall waits for ordering and blocks subsequent payload
+ok 9 - N09 revoke requested during commit stall waits for ordering and blocks subsequent payload
+  ---
+  duration_ms: 1042.449802
+  type: 'test'
+  ...
+# Subtest: N10 durable revoke after commit withholds new payload and retains history
+ok 10 - N10 durable revoke after commit withholds new payload and retains history
+  ---
+  duration_ms: 142.362213
+  type: 'test'
+  ...
+# Subtest: N11 independent read authority expiring during locked release wait blocks contents
+ok 11 - N11 independent read authority expiring during locked release wait blocks contents
+  ---
+  duration_ms: 1188.847482
+  type: 'test'
+  ...
+# Subtest: N12 digest, context, generation and corrupt receipt cannot produce payload
+ok 12 - N12 digest, context, generation and corrupt receipt cannot produce payload
+  ---
+  duration_ms: 265.678159
+  type: 'test'
+  ...
+# Subtest: N13 fresh supervisor cannot infer trusted validation from database timestamp
+ok 13 - N13 fresh supervisor cannot infer trusted validation from database timestamp
+  ---
+  duration_ms: 141.697931
+  type: 'test'
+  ...
+# Subtest: N14 no implicit upgrade: profile and opt-in required on request, grant and exact approval
+ok 14 - N14 no implicit upgrade: profile and opt-in required on request, grant and exact approval
+  ---
+  duration_ms: 140.175736
+  type: 'test'
+  ...
+# Subtest: N15 legacy request shape is rejected and new receipts never claim old durable deadline
+ok 15 - N15 legacy request shape is rejected and new receipts never claim old durable deadline
+  ---
+  duration_ms: 70.587482
+  type: 'test'
+  ...
+# Subtest: N16 API error after durable commit is reconstructed or withheld, never retried blindly
+ok 16 - N16 API error after durable commit is reconstructed or withheld, never retried blindly
+  ---
+  duration_ms: 137.327448
+  type: 'test'
+  ...
+# Subtest: N17 no read capability or revoked independent read grant cannot reveal event contents
+ok 17 - N17 no read capability or revoked independent read grant cannot reveal event contents
+  ---
+  duration_ms: 174.162875
+  type: 'test'
+  ...
+# Subtest: N18 native SIGKILL during WAL write is not a durable result
+ok 18 - N18 native SIGKILL during WAL write is not a durable result
+  ---
+  duration_ms: 72.470322
+  type: 'test'
+  ...
+# Subtest: N19 wall clock rollback cannot revive an expired independent read grant
+ok 19 - N19 wall clock rollback cannot revive an expired independent read grant
+  ---
+  duration_ms: 411.497379
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5782.981014

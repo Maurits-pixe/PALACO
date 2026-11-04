@@ -1,0 +1,32 @@
+{
+  "runId": "3310a946-4c89-4fa2-b9d0-d6db2f22a23d",
+  "sourceHashChecks": 15,
+  "artifactHashChecks": 26,
+  "negativeVerifierControls": [
+    {
+      "case": "artifact tamper",
+      "exit": 1,
+      "diagnostic": "ARTIFACT_HASH_MISMATCH: tests.tap",
+      "result": "REJECTED_AS_REQUIRED"
+    },
+    {
+      "case": "omitted source",
+      "exit": 1,
+      "diagnostic": "SOURCE_INVENTORY_MISMATCH",
+      "result": "REJECTED_AS_REQUIRED"
+    },
+    {
+      "case": "false late-profile claim",
+      "exit": 1,
+      "diagnostic": "NEW_PROFILE_LATE_COMMIT_EVIDENCE_MISSING",
+      "result": "REJECTED_AS_REQUIRED"
+    },
+    {
+      "case": "extra artifact",
+      "exit": 1,
+      "diagnostic": "ARTIFACT_SET_MISMATCH",
+      "result": "REJECTED_AS_REQUIRED"
+    }
+  ],
+  "authenticity": "UNSIGNED"
+}
