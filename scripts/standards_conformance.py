@@ -3193,6 +3193,29 @@ def check_palaco_components():
         record["traceability"]["upstream"].reverse()
     require(summarize_palaco_registry(reordered, validators) == result,
             "component counts depend on input ordering")
+    for graph_name in ("upstream", "dependency"):
+        bridged = copy.deepcopy(fixture)
+        if graph_name == "upstream":
+            bridged["objects"][3]["traceability"]["upstream"] = ["FE-00005"]
+        else:
+            bridged["objects"][0]["dependencies"].append("FE-00002")
+        before = copy.deepcopy(bridged)
+        summary = summarize_palaco_registry(bridged, validators)
+        for field in ("total_upstream_components", "total_dependency_components"):
+            expected = result[field] - (field == f"total_{graph_name}_components")
+            require(summary[field] == expected,
+                    f"{graph_name} bridge must merge only its own graph components")
+        require(bridged == before, "bridge summary mutated input")
+    reversed_fixture = copy.deepcopy(fixture)
+    reversed_upstream = {record["metadata"]["id"]: [] for record in fixture["objects"]}
+    for record in fixture["objects"]:
+        for target in record["traceability"]["upstream"]:
+            reversed_upstream[target].append(record["metadata"]["id"])
+    for record in reversed_fixture["objects"]:
+        record["traceability"]["upstream"] = reversed_upstream[record["metadata"]["id"]]
+    require(summarize_palaco_registry(reversed_fixture, validators) == result,
+            "weak component summary must ignore upstream edge direction")
+    require(fixture == original, "bridge or edge reversal checks mutated original input")
     for record in fixture["objects"]:
         record["traceability"]["upstream"] = []
         record["traceability"]["relationships"] = []
@@ -3207,7 +3230,24 @@ def check_palaco_components():
     require(singleton["total_upstream_components"] == 1
             and singleton["total_dependency_components"] == 1,
             "singleton snapshot must have one component per graph")
-    return "weak components: diamond, clusters, isolates, dependency union, ordering and non-mutation"
+    depth = sys.getrecursionlimit() + 100
+    chain = {f"FE-{index:05d}": {f"FE-{index + 1:05d}"} for index in range(depth)}
+    chain[f"FE-{depth:05d}"] = set()
+    chain["AUD-00001"] = set()
+    before = copy.deepcopy(chain)
+    require(count_weak_components(chain) == 2,
+            "deep chain plus isolate must have two components")
+    require(chain == before, "component traversal mutated deep graph")
+    reverse_chain = {source: set() for source in chain}
+    for source, targets in chain.items():
+        for target in targets:
+            reverse_chain[target].add(source)
+    reverse_chain = dict(reversed(list(reverse_chain.items())))
+    before = copy.deepcopy(reverse_chain)
+    require(count_weak_components(reverse_chain) == 2,
+            "deep component traversal depends on direction or root ordering")
+    require(reverse_chain == before, "component traversal mutated reversed deep graph")
+    return "weak components: clusters, isolates, bridges, reversal, deep traversal and non-mutation"
 
 
 def check_palaco_summary():
