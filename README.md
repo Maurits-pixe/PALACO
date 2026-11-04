@@ -2442,6 +2442,16 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
+The additive `total_upstream_edges` field counts direct
+`traceability.upstream` source-target pairs only. Several sources referencing
+the same upstream object count separately; transitive paths do not add edges.
+The fixture reports two upstream edges. Dependency lists, typed relationships
+and other references do not contribute, even when they name the same objects.
+This total remains separate from `total_dependency_edges` and
+`total_relationships`; the three totals must not be added as a unique-link count.
+Duplicate upstream entries remain invalid rather than being silently counted
+or repaired. Zero upstream links is valid. These counts do not prove complete
+lineage or authority; existing summary fields retain their meanings.
 The additive `total_dependency_edges` field counts direct source-target pairs
 from the union of each record's `dependencies` and explicit `DEPENDS_ON` edges.
 The same dependency represented in both places counts once; different sources

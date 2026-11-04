@@ -1191,6 +1191,7 @@ def summarize_palaco_registry(instance, validators=None):
     by_domain = {}
     by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
     total_dependency_edges = 0
+    total_upstream_edges = 0
     by_lifecycle = {
         status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     }
@@ -1211,6 +1212,7 @@ def summarize_palaco_registry(instance, validators=None):
     }
     for record in instance["objects"]:
         by_type[record["object_type"]] += 1
+        total_upstream_edges += len(record["traceability"]["upstream"])
         domain = record["metadata"]["domain"]
         by_domain[domain] = by_domain.get(domain, 0) + 1
         for role, counts in by_ownership.items():
@@ -1239,6 +1241,7 @@ def summarize_palaco_registry(instance, validators=None):
         "by_classification": by_classification,
         "total_relationships": sum(by_relationship.values()),
         "total_dependency_edges": total_dependency_edges,
+        "total_upstream_edges": total_upstream_edges,
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
@@ -2975,6 +2978,7 @@ def check_palaco_summary():
             },
             "total_relationships": sum(expected_relations.values()),
             "total_dependency_edges": expected_dependencies,
+            "total_upstream_edges": 0 if len(instance["objects"]) == 1 else 2,
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")
@@ -3171,7 +3175,41 @@ def check_palaco_summary():
         record["ownership"] = dict(reversed(list(record["ownership"].items())))
     require(json.dumps(summarize_palaco_registry(ownership_fixture, validators)) == json.dumps(result),
             "ownership summary serialization depends on record or role order")
-    return "10 deterministic/non-mutating summaries + deduplicated dependency/owner/domain/status/classification/edge counts + 38 rejections + CLI regression"
+    upstream_fixture = {"registry_version": "0.1.0", "objects": []}
+    for index in range(1, 5):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        upstream_fixture["objects"].append(record)
+    upstream_fixture["objects"][1]["traceability"]["upstream"] = ["FE-00001"]
+    upstream_fixture["objects"][2]["traceability"]["upstream"] = ["FE-00002", "FE-00001"]
+    upstream_fixture["objects"][3]["traceability"]["upstream"] = ["FE-00001"]
+    upstream_fixture["objects"][0]["dependencies"] = ["FE-00004"]
+    original = copy.deepcopy(upstream_fixture)
+    result = summarize_palaco_registry(upstream_fixture, validators)
+    require(result["total_upstream_edges"] == 4, "summary miscounted direct upstream edges")
+    require(result["total_dependency_edges"] == 1 and result["total_relationships"] == 0,
+            "summary mixed upstream and dependency graphs")
+    require(upstream_fixture == original, "upstream summary mutated input")
+    upstream_fixture["objects"].reverse()
+    for record in upstream_fixture["objects"]:
+        record["traceability"]["upstream"].reverse()
+    require(json.dumps(summarize_palaco_registry(upstream_fixture, validators)) == json.dumps(result),
+            "upstream summary depends on record or edge order")
+    for targets in (["FE-00001", "FE-00001"], ["FE-99999"], ["FE-00004"]):
+        invalid = copy.deepcopy(original)
+        invalid["objects"][-1]["traceability"]["upstream"] = targets
+        try:
+            summarize_palaco_registry(invalid, validators)
+        except ConformanceError:
+            pass
+        else:
+            raise ConformanceError("summary accepted duplicate, unresolved or self upstream links")
+    for record in upstream_fixture["objects"]:
+        record["traceability"]["upstream"] = []
+    cleared = summarize_palaco_registry(upstream_fixture, validators)
+    require(cleared["total_upstream_edges"] == 0 and cleared["total_dependency_edges"] == 1,
+            "summary inferred upstream edges from dependencies")
+    return "12 deterministic/non-mutating summaries + separate upstream/dependency/owner/domain/status/classification/edge counts + 41 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
