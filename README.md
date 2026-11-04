@@ -2442,7 +2442,18 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
-The additive `total_dependency_orphans` field counts objects with neither
+The additive `total_upstream_components` and `total_dependency_components`
+fields count weakly connected components in their respective graphs. For this
+diagnostic only, edge direction is ignored: connected roots, leaves and shared
+ancestors belong to the same component. Each isolated object counts as one
+component; disconnected multi-object clusters count separately. The upstream
+graph uses only `traceability.upstream`; the dependency graph uses the union of
+`dependencies` and explicit `DEPENDS_ON` edges. Duplicate representations of a
+dependency do not change the count, and other references do not connect clusters.
+The fixture reports one component in each graph. These counts do not establish
+completeness, invalidity or authority, and do not weaken directed cycle checks.
+The complete snapshot is validated before counting; existing fields are unchanged.
+The `total_dependency_orphans` field counts objects with neither
 incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
 An object referenced by another dependency source is connected, even if it has
 no dependencies of its own. Duplicate representations of an edge do not change

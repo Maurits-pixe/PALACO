@@ -654,6 +654,24 @@ def direct_upstream_targets(record):
     return set(record["traceability"]["upstream"])
 
 
+def count_weak_components(graph):
+    """Count undirected components of a validated closed graph, including isolates."""
+    neighbors = {source: set(targets) for source, targets in graph.items()}
+    for source, targets in graph.items():
+        for target in targets:
+            neighbors[target].add(source)
+    remaining = set(graph)
+    count = 0
+    while remaining:
+        count += 1
+        pending = [remaining.pop()]
+        while pending:
+            unseen = neighbors[pending.pop()] & remaining
+            remaining.difference_update(unseen)
+            pending.extend(unseen)
+    return count
+
+
 def require_acyclic(graph, label):
     """Iterative depth-first traversal; shared ancestors are not cycles."""
     finished = set()
@@ -1211,6 +1229,14 @@ def summarize_palaco_registry(instance, validators=None):
         validators = palaco_validators()
     validate_palaco_registry(instance, validators["PCR-000.schema.json"])
     schema = validators["PMS-001.schema.json"].schema
+    upstream_graph = {
+        record["metadata"]["id"]: direct_upstream_targets(record)
+        for record in instance["objects"]
+    }
+    dependency_graph = {
+        record["metadata"]["id"]: direct_dependency_targets(record)
+        for record in instance["objects"]
+    }
     by_type = {family: 0 for family in sorted(schema["properties"]["object_type"]["enum"])}
     by_domain = {}
     by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
@@ -1238,7 +1264,7 @@ def summarize_palaco_registry(instance, validators=None):
     }
     for record in instance["objects"]:
         by_type[record["object_type"]] += 1
-        upstream = direct_upstream_targets(record)
+        upstream = upstream_graph[record["metadata"]["id"]]
         total_upstream_edges += len(upstream)
         if upstream:
             upstream_connected.add(record["metadata"]["id"])
@@ -1255,7 +1281,7 @@ def summarize_palaco_registry(instance, validators=None):
             counts[record["classification"][dimension]] += 1
         for edge in record["traceability"]["relationships"]:
             by_relationship[edge["relation"]] += 1
-        dependency_targets = direct_dependency_targets(record)
+        dependency_targets = dependency_graph[record["metadata"]["id"]]
         total_dependency_edges += len(dependency_targets)
         if dependency_targets:
             dependency_connected.add(record["metadata"]["id"])
@@ -1273,8 +1299,10 @@ def summarize_palaco_registry(instance, validators=None):
         "total_relationships": sum(by_relationship.values()),
         "total_dependency_edges": total_dependency_edges,
         "total_dependency_orphans": len(instance["objects"]) - len(dependency_connected),
+        "total_dependency_components": count_weak_components(dependency_graph),
         "total_upstream_edges": total_upstream_edges,
         "total_upstream_orphans": len(instance["objects"]) - len(upstream_connected),
+        "total_upstream_components": count_weak_components(upstream_graph),
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
@@ -3122,6 +3150,66 @@ def check_palaco_diff():
     return "7 deterministic/non-mutating diff cases + 12 invalid input rejections + CLI regression"
 
 
+def check_palaco_components():
+    validators = palaco_validators()
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index in range(1, 8):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        fixture["objects"].append(record)
+    fixture["objects"][3]["object_type"] = "EVD"
+    fixture["objects"][3]["metadata"]["id"] = "EVD-00001"
+    fixture["objects"][3]["audit"]["audit_refs"] = ["AUD-00001"]
+    fixture["objects"][6]["object_type"] = "AUD"
+    fixture["objects"][6]["metadata"]["id"] = "AUD-00001"
+    fixture["objects"][6]["evidence"] = ["EVD-00001"]
+    for source, targets in ((1, [2, 3]), (2, [4]), (3, [4]), (5, [6])):
+        fixture["objects"][source - 1]["traceability"]["upstream"] = [
+            fixture["objects"][target - 1]["metadata"]["id"] for target in targets
+        ]
+    fixture["objects"][0]["dependencies"] = ["FE-00005"]
+    fixture["objects"][0]["traceability"]["relationships"] = [
+        {"source": "FE-00001", "relation": "DEPENDS_ON", "target": "FE-00005"},
+    ]
+    fixture["objects"][1]["traceability"]["relationships"] = [
+        {"source": "FE-00002", "relation": "DEPENDS_ON", "target": "FE-00006"},
+    ]
+    fixture["objects"][3]["traceability"]["relationships"] = [
+        {"source": "EVD-00001", "relation": "AUDITED_BY", "target": "AUD-00001"},
+    ]
+    original = copy.deepcopy(fixture)
+    result = summarize_palaco_registry(fixture, validators)
+    require(result["total_upstream_components"] == 3,
+            "upstream components must include diamond, disconnected pair and isolate")
+    require(result["total_dependency_components"] == 5,
+            "dependency components must use dependency union only")
+    require(result["total_upstream_orphans"] == 1 and result["total_dependency_orphans"] == 3,
+            "components must not be confused with isolated nodes")
+    require(fixture == original, "component summary mutated input")
+    reordered = copy.deepcopy(fixture)
+    reordered["objects"].reverse()
+    for record in reordered["objects"]:
+        record["traceability"]["upstream"].reverse()
+    require(summarize_palaco_registry(reordered, validators) == result,
+            "component counts depend on input ordering")
+    for record in fixture["objects"]:
+        record["traceability"]["upstream"] = []
+        record["traceability"]["relationships"] = []
+        record.pop("dependencies", None)
+    unlinked = summarize_palaco_registry(fixture, validators)
+    require(unlinked["total_upstream_components"] == 7
+            and unlinked["total_dependency_components"] == 7,
+            "every isolated node must count as one component")
+    singleton = summarize_palaco_registry(
+        {"registry_version": "0.1.0", "objects": [template]}, validators,
+    )
+    require(singleton["total_upstream_components"] == 1
+            and singleton["total_dependency_components"] == 1,
+            "singleton snapshot must have one component per graph")
+    return "weak components: diamond, clusters, isolates, dependency union, ordering and non-mutation"
+
+
 def check_palaco_summary():
     validators = palaco_validators()
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
@@ -3200,8 +3288,10 @@ def check_palaco_summary():
             "total_relationships": sum(expected_relations.values()),
             "total_dependency_edges": expected_dependencies,
             "total_dependency_orphans": expected_dependency_orphans,
+            "total_dependency_components": 1 if len(instance["objects"]) == 1 else 1 + expected_dependency_orphans,
             "total_upstream_edges": 0 if len(instance["objects"]) == 1 else 2,
             "total_upstream_orphans": expected_orphans,
+            "total_upstream_components": 1 if len(instance["objects"]) == 1 else 1 + expected_orphans,
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")
@@ -4099,6 +4189,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO registry component summary conformance", check_palaco_components),
     ("PALACO shared upstream graph contract", check_palaco_upstream_contract),
     ("PALACO shared dependency graph contract", check_palaco_dependency_contract),
     ("parser regression tests", run_regression_tests),
