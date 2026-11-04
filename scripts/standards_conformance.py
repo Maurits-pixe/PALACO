@@ -654,22 +654,29 @@ def direct_upstream_targets(record):
     return set(record["traceability"]["upstream"])
 
 
-def count_weak_components(graph):
-    """Count undirected components of a validated closed graph, including isolates."""
+def weak_component_sizes(graph):
+    """Return sorted undirected component sizes of a validated closed graph."""
     neighbors = {source: set(targets) for source, targets in graph.items()}
     for source, targets in graph.items():
         for target in targets:
             neighbors[target].add(source)
     remaining = set(graph)
-    count = 0
+    sizes = []
     while remaining:
-        count += 1
+        size = 1
         pending = [remaining.pop()]
         while pending:
             unseen = neighbors[pending.pop()] & remaining
+            size += len(unseen)
             remaining.difference_update(unseen)
             pending.extend(unseen)
-    return count
+        sizes.append(size)
+    return sorted(sizes)
+
+
+def count_weak_components(graph):
+    """Count undirected components of a validated closed graph, including isolates."""
+    return len(weak_component_sizes(graph))
 
 
 def require_acyclic(graph, label):
@@ -1237,6 +1244,8 @@ def summarize_palaco_registry(instance, validators=None):
         record["metadata"]["id"]: direct_dependency_targets(record)
         for record in instance["objects"]
     }
+    upstream_sizes = weak_component_sizes(upstream_graph)
+    dependency_sizes = weak_component_sizes(dependency_graph)
     by_type = {family: 0 for family in sorted(schema["properties"]["object_type"]["enum"])}
     by_domain = {}
     by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
@@ -1299,10 +1308,12 @@ def summarize_palaco_registry(instance, validators=None):
         "total_relationships": sum(by_relationship.values()),
         "total_dependency_edges": total_dependency_edges,
         "total_dependency_orphans": len(instance["objects"]) - len(dependency_connected),
-        "total_dependency_components": count_weak_components(dependency_graph),
+        "total_dependency_components": len(dependency_sizes),
+        "largest_dependency_component_size": max(dependency_sizes),
         "total_upstream_edges": total_upstream_edges,
         "total_upstream_orphans": len(instance["objects"]) - len(upstream_connected),
-        "total_upstream_components": count_weak_components(upstream_graph),
+        "total_upstream_components": len(upstream_sizes),
+        "largest_upstream_component_size": max(upstream_sizes),
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
@@ -3184,6 +3195,9 @@ def check_palaco_components():
             "upstream components must include diamond, disconnected pair and isolate")
     require(result["total_dependency_components"] == 5,
             "dependency components must use dependency union only")
+    require(result["largest_upstream_component_size"] == 4
+            and result["largest_dependency_component_size"] == 2,
+            "largest components must count distinct nodes in each separate graph")
     require(result["total_upstream_orphans"] == 1 and result["total_dependency_orphans"] == 3,
             "components must not be confused with isolated nodes")
     require(fixture == original, "component summary mutated input")
@@ -3205,6 +3219,9 @@ def check_palaco_components():
             expected = result[field] - (field == f"total_{graph_name}_components")
             require(summary[field] == expected,
                     f"{graph_name} bridge must merge only its own graph components")
+        require(summary["largest_upstream_component_size"] == (6 if graph_name == "upstream" else 4)
+                and summary["largest_dependency_component_size"] == (4 if graph_name == "dependency" else 2),
+                "bridge must enlarge only its own graph's largest component")
         require(bridged == before, "bridge summary mutated input")
     reversed_fixture = copy.deepcopy(fixture)
     reversed_upstream = {record["metadata"]["id"]: [] for record in fixture["objects"]}
@@ -3224,12 +3241,18 @@ def check_palaco_components():
     require(unlinked["total_upstream_components"] == 7
             and unlinked["total_dependency_components"] == 7,
             "every isolated node must count as one component")
+    require(unlinked["largest_upstream_component_size"] == 1
+            and unlinked["largest_dependency_component_size"] == 1,
+            "all-isolated graphs must have largest component size one")
     singleton = summarize_palaco_registry(
         {"registry_version": "0.1.0", "objects": [template]}, validators,
     )
     require(singleton["total_upstream_components"] == 1
             and singleton["total_dependency_components"] == 1,
             "singleton snapshot must have one component per graph")
+    require(singleton["largest_upstream_component_size"] == 1
+            and singleton["largest_dependency_component_size"] == 1,
+            "singleton snapshot must have largest component size one")
     depth = sys.getrecursionlimit() + 100
     chain = {f"FE-{index:05d}": {f"FE-{index + 1:05d}"} for index in range(depth)}
     chain[f"FE-{depth:05d}"] = set()
@@ -3237,6 +3260,8 @@ def check_palaco_components():
     before = copy.deepcopy(chain)
     require(count_weak_components(chain) == 2,
             "deep chain plus isolate must have two components")
+    require(weak_component_sizes(chain) == [1, depth + 1],
+            "deep traversal must count nodes rather than edges")
     require(chain == before, "component traversal mutated deep graph")
     reverse_chain = {source: set() for source in chain}
     for source, targets in chain.items():
@@ -3246,6 +3271,8 @@ def check_palaco_components():
     before = copy.deepcopy(reverse_chain)
     require(count_weak_components(reverse_chain) == 2,
             "deep component traversal depends on direction or root ordering")
+    require(weak_component_sizes(reverse_chain) == [1, depth + 1],
+            "component sizes depend on direction or root ordering")
     require(reverse_chain == before, "component traversal mutated reversed deep graph")
     return "weak components: clusters, isolates, bridges, reversal, deep traversal and non-mutation"
 
@@ -3329,9 +3356,13 @@ def check_palaco_summary():
             "total_dependency_edges": expected_dependencies,
             "total_dependency_orphans": expected_dependency_orphans,
             "total_dependency_components": 1 if len(instance["objects"]) == 1 else 1 + expected_dependency_orphans,
+            "largest_dependency_component_size": len(instance["objects"]) - expected_dependency_orphans
+            if expected_dependencies else 1,
             "total_upstream_edges": 0 if len(instance["objects"]) == 1 else 2,
             "total_upstream_orphans": expected_orphans,
             "total_upstream_components": 1 if len(instance["objects"]) == 1 else 1 + expected_orphans,
+            "largest_upstream_component_size": len(instance["objects"]) - expected_orphans
+            if len(instance["objects"]) > 1 else 1,
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")

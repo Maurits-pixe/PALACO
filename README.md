@@ -2453,6 +2453,13 @@ dependency do not change the count, and other references do not connect clusters
 The fixture reports one component in each graph. These counts do not establish
 completeness, invalidity or authority, and do not weaken directed cycle checks.
 The complete snapshot is validated before counting; existing fields are unchanged.
+The additive `largest_upstream_component_size` and
+`largest_dependency_component_size` fields report the number of distinct
+objects in the largest weakly connected component of each respective graph,
+not the number of edges or the longest directed path. Shared ancestors count
+once. The fixture reports three for each graph; a singleton or an all-isolated
+snapshot reports one. Empty registries remain invalid. Graph boundaries and
+the diagnostic-only scope are the same as for the component counts above.
 The `total_dependency_orphans` field counts objects with neither
 incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
 An object referenced by another dependency source is connected, even if it has
