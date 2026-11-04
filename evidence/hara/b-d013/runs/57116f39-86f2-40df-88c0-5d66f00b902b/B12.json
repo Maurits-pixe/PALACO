@@ -1,0 +1,35 @@
+{
+  "r": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "DEADLINE_NOT_PROVEN",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 7793,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 7786,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true
+      },
+      "stderr": ""
+    }
+  },
+  "native": [
+    {
+      "kind": "WAL_STALL",
+      "pathConfirmed": true,
+      "delayMs": 900,
+      "startMs": 1793428293462,
+      "endMs": 1793428294362
+    }
+  ],
+  "expiry": 1793428293864,
+  "precommitObservedAt": 1793428293461,
+  "lateEffectExists": true,
+  "acceptedTimelySuccess": false
+}

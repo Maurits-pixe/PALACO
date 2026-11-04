@@ -1,0 +1,49 @@
+{
+  "mutation": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "REVOKED",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 10666,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 10658,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true
+      },
+      "stderr": ""
+    }
+  },
+  "revocation": {
+    "status": "RECONSTRUCTION_REQUIRED",
+    "writer": {
+      "pid": 10659,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  },
+  "order": [
+    {
+      "kind": "DECISION"
+    },
+    {
+      "kind": "REVOKE"
+    }
+  ],
+  "r": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "REVOKED",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 10679,
+      "exit": 0
+    }
+  }
+}

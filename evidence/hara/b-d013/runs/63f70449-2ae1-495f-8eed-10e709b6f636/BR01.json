@@ -1,0 +1,8 @@
+{
+  "status": "RESULT_UNKNOWN",
+  "code": "BINDING_MISMATCH",
+  "readProcess": {
+    "pid": 10077,
+    "exit": 0
+  }
+}

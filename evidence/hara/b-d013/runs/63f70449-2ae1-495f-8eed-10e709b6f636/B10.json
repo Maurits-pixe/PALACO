@@ -1,0 +1,14 @@
+{
+  "status": "DENIED",
+  "code": "CONSENT_INACTIVE",
+  "writer": {
+    "pid": 9947,
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "DENIED",
+      "code": "CONSENT_INACTIVE"
+    },
+    "stderr": ""
+  }
+}
