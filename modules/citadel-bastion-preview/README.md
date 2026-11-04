@@ -8,7 +8,7 @@ De aangeleverde `const success = true` en lokale `applyMutation` zijn verwijderd
 
 De bron gebruikt Vue 3 en Vite. `npm test` controleert de identity-binding en de default-deny-eigenschap; `npm run build` maakt de statische preview. Lokale dev/preview gebruikt HTTPS op poort 5175 wanneer een wegwerpcertificaat in `certs/` aanwezig is. De statische preview bevat security headers via `public/_headers`.
 
-De volledige achterliggende Citadel-module is niet bewezen door deze preview. De voorgestelde 30-secondenafteltekst is daarom niet als bevoegdheidscontract opgenomen. `npm run test:browser` laadt de gebouwde preview in Edge, controleert de identity-route en headers en bevestigt dat een mutatieklikwflow geen taak verandert.
+De volledige achterliggende Citadel-module is niet bewezen door deze preview. De voorgestelde 30-secondenafteltekst is daarom niet als bevoegdheidscontract opgenomen. `npm run test:browser` laadt de gebouwde preview in Playwright Chromium, controleert de identity-route en headers en bevestigt dat een mutatieklikwflow geen taak verandert. Voer eerst `npm run build` en `npx playwright install chromium` uit; de test vereist ook een `openssl`-opdracht op `PATH` om een wegwerpcertificaat te maken.
 
 Voor automatische Vercel-PR-previews: [Web preview deployments](../../docs/operations/Preview-Deployments.md).
 
