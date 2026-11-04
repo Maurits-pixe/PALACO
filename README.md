@@ -2442,6 +2442,13 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
+The additive `by_classification` field contains separate breakdowns for
+`criticality`, `confidentiality`, `integrity` and `availability`. Each dimension
+includes all its PMS-001 labels in schema order, including zero counts, and
+sums to `total_objects`. Dimension keys also follow schema order. These are
+exact label counts, not thresholds, aggregate risk scores or a combined CIA
+rating. They do not establish access rights, data integrity, measured uptime
+or SLA compliance; no runtime probes or network requests are made.
 Counts are metadata observations, not
 proof of completeness, approval, activation or authority.
 Invalid snapshots, including empty registries, fail nonzero without summary

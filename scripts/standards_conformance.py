@@ -1197,6 +1197,10 @@ def summarize_palaco_registry(instance, validators=None):
     by_approval = {
         status: 0 for status in schema["$defs"]["Approval"]["properties"]["status"]["enum"]
     }
+    by_classification = {
+        dimension: {label: 0 for label in definition["enum"]}
+        for dimension, definition in schema["$defs"]["Classification"]["properties"].items()
+    }
     by_relationship = {
         relation: 0 for relation in sorted(
             validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"]
@@ -1207,6 +1211,8 @@ def summarize_palaco_registry(instance, validators=None):
         by_lifecycle[record["lifecycle"]["status"]] += 1
         by_verification[record["verification"]["status"]] += 1
         by_approval[record["approval"]["status"]] += 1
+        for dimension, counts in by_classification.items():
+            counts[record["classification"][dimension]] += 1
         for edge in record["traceability"]["relationships"]:
             by_relationship[edge["relation"]] += 1
     return {
@@ -1216,6 +1222,7 @@ def summarize_palaco_registry(instance, validators=None):
         "by_lifecycle_status": by_lifecycle,
         "by_verification_status": by_verification,
         "by_approval_status": by_approval,
+        "by_classification": by_classification,
         "total_relationships": sum(by_relationship.values()),
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
@@ -2903,6 +2910,7 @@ def check_palaco_summary():
     statuses = schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     verification_statuses = schema["$defs"]["Verification"]["properties"]["status"]["enum"]
     approval_statuses = schema["$defs"]["Approval"]["properties"]["status"]["enum"]
+    classifications = schema["$defs"]["Classification"]["properties"]
     relations = sorted(validators["PMS-002.schema.json"].schema["properties"]["relation"]["enum"])
     for instance, expected_types, expected_states, expected_relations in (
         (fixture, {"FE": 1, "CAP": 1, "REQ": 1}, {"Draft": 3}, {"DEPENDS_ON": 2}),
@@ -2926,6 +2934,13 @@ def check_palaco_summary():
             "by_approval_status": {
                 status: len(instance["objects"]) if status == "Pending" else 0
                 for status in approval_statuses
+            },
+            "by_classification": {
+                dimension: {
+                    label: sum(record["classification"][dimension] == label for record in instance["objects"])
+                    for label in definition["enum"]
+                }
+                for dimension, definition in classifications.items()
             },
             "total_relationships": sum(expected_relations.values()),
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
@@ -3022,7 +3037,42 @@ def check_palaco_summary():
     require(cli.returncode == 0, f"summary CLI failed: {cli.stdout}{cli.stderr}")
     require(json.loads(cli.stdout) == summarize_palaco_registry(fixture, validators),
             "summary CLI differs from validated summary")
-    return "6 deterministic/non-mutating summaries + all status/edge/zero counts + 10 rejections + CLI regression"
+    classification_fixture = {"registry_version": "0.1.0", "objects": []}
+    for index in range(4):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index + 1:05d}"
+        for dimension, definition in classifications.items():
+            labels = definition["enum"]
+            record["classification"][dimension] = labels[index % len(labels)]
+        classification_fixture["objects"].append(record)
+    original = copy.deepcopy(classification_fixture)
+    result = summarize_palaco_registry(classification_fixture, validators)
+    require(result["by_classification"] == {
+        "criticality": {"Low": 1, "Medium": 1, "High": 1, "Critical": 1},
+        "confidentiality": {"Public": 1, "Internal": 1, "Confidential": 1, "Restricted": 1},
+        "integrity": {"Low": 2, "Medium": 1, "High": 1},
+        "availability": {"Low": 2, "Medium": 1, "High": 1},
+    }, "summary classification counts confused dimensions or labels")
+    require(list(result["by_classification"]) == list(classifications),
+            "summary classification dimensions changed order")
+    for dimension, definition in classifications.items():
+        counts = result["by_classification"][dimension]
+        require(list(counts) == definition["enum"], f"summary {dimension} label order changed")
+        require(sum(counts.values()) == result["total_objects"],
+                f"summary {dimension} counts do not sum to total")
+        invalid = copy.deepcopy(classification_fixture)
+        invalid["objects"][-1]["classification"][dimension] = "Unknown"
+        try:
+            summarize_palaco_registry(invalid, validators)
+        except ConformanceError as error:
+            require("registry structure" in str(error), f"unexpected classification summary error: {error}")
+        else:
+            raise ConformanceError(f"summary accepted invalid {dimension}")
+    require(classification_fixture == original, "classification summary mutated input")
+    classification_fixture["objects"].reverse()
+    require(json.dumps(summarize_palaco_registry(classification_fixture, validators)) == json.dumps(result),
+            "classification summary serialization depends on object order")
+    return "7 deterministic/non-mutating summaries + all status/classification/edge/zero counts + 14 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
@@ -3726,7 +3776,7 @@ def main():
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
-                        help="Return validated object, lifecycle, verification, approval and explicit relationship counts as JSON")
+                        help="Return validated object, status, classification and explicit relationship counts as JSON")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
