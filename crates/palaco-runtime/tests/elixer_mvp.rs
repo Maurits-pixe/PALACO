@@ -161,6 +161,19 @@ fn consent_expiring_at_request_time_never_reaches_personas() -> Result<(), Box<d
 }
 
 #[test]
+fn data_at_maximum_age_boundary_remains_eligible() -> Result<(), Box<dyn Error>> {
+    let (manifest, policy, mut request) = fixture()?;
+    request.data_observed_at = Some(request.as_of - policy.max_data_age_seconds);
+
+    let result = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
+
+    assert_eq!(result.kind, ResultKind::ReadResult);
+    assert_eq!(result.status.freshness, FreshnessStatus::Current);
+    assert_eq!(result.personas.len(), 3);
+    Ok(())
+}
+
+#[test]
 fn stale_or_unknown_freshness_never_reaches_personas() -> Result<(), Box<dyn Error>> {
     let (manifest, policy, mut request) = fixture()?;
     request.data_observed_at = Some(800);
