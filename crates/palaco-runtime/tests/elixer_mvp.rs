@@ -143,6 +143,24 @@ fn expired_and_revoked_inputs_fail_closed() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn consent_expiring_at_request_time_never_reaches_personas() -> Result<(), Box<dyn Error>> {
+    let (manifest, policy, mut request) = fixture()?;
+    request
+        .consent
+        .as_mut()
+        .expect("fixture consent")
+        .expires_at = request.as_of;
+
+    let result = elixer::evaluate(&manifest, PACKAGE, &request, &policy);
+
+    assert_eq!(result.kind, ResultKind::Expired);
+    assert_eq!(result.status.consent, elixer::ConsentStatus::Expired);
+    assert_eq!(result.status.freshness, FreshnessStatus::Expired);
+    assert!(result.personas.is_empty());
+    Ok(())
+}
+
+#[test]
 fn stale_or_unknown_freshness_never_reaches_personas() -> Result<(), Box<dyn Error>> {
     let (manifest, policy, mut request) = fixture()?;
     request.data_observed_at = Some(800);
