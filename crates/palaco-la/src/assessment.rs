@@ -42,10 +42,16 @@ pub fn assess(
         .map(|item| item.relevance.clone())
         .collect();
 
+    let unknown = evidence
+        .iter()
+        .filter(|item| matches!(item.status, EpistemicStatus::Unknown))
+        .map(|item| item.relevance.clone())
+        .collect();
+
     let epistemic_state = EpistemicState {
         question_id: question.id,
         known,
-        unknown: Vec::new(),
+        unknown,
         disputed,
         assumptions: Vec::new(),
         contradictions: Vec::new(),
@@ -152,5 +158,26 @@ mod tests {
             assessment.map(|value| value.threshold.state),
             Ok(ThresholdState::Indeterminate)
         ));
+    }
+
+    #[test]
+    fn assessment_preserves_unknown_evidence() {
+        let q = question();
+        let mut unknown = evidence(q.id);
+        unknown.status = EpistemicStatus::Unknown;
+        unknown.relevance = "unresolved observation".to_owned();
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::NotEvaluated,
+            basis: Vec::new(),
+            rationale: "pending".to_owned(),
+        };
+
+        let assessment = assess(q, &[unknown], threshold).expect("matching evidence is assessed");
+
+        assert_eq!(
+            assessment.epistemic_state.unknown,
+            vec!["unresolved observation"]
+        );
     }
 }

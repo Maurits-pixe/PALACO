@@ -1217,7 +1217,11 @@ fn signing_bytes(domain: &[u8], body: &Value) -> Result<Vec<u8>, serde_json::Err
 }
 
 fn canonical_json(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
-    canonical_json_at_depth(value, 0)
+    let canonical = canonical_json_at_depth(value, 0)?;
+    if canonical.len() > MAX_CANONICAL_BODY_BYTES {
+        return Err(canonical_error("JSON body exceeds the contract limit"));
+    }
+    Ok(canonical)
 }
 
 fn canonical_json_at_depth(value: &Value, depth: usize) -> Result<Vec<u8>, serde_json::Error> {
@@ -1405,6 +1409,37 @@ mod tests {
         let second: Value = serde_json::from_str(r#"{"a":{"b":"x","y":true},"z":1}"#)?;
         assert_eq!(guard_signing_bytes(&first)?, guard_signing_bytes(&second)?);
         Ok(())
+    }
+
+    #[test]
+    fn canonical_json_enforces_encoded_body_limit_including_delimiters() {
+        let array_at_limit = Value::Array(vec![Value::String(
+            "x".repeat(MAX_CANONICAL_BODY_BYTES - 4),
+        )]);
+        assert_eq!(
+            canonical_json(&array_at_limit)
+                .expect("canonical JSON at the byte limit should succeed")
+                .len(),
+            MAX_CANONICAL_BODY_BYTES
+        );
+
+        let array_over_limit = Value::Array(vec![Value::String(
+            "x".repeat(MAX_CANONICAL_BODY_BYTES - 3),
+        )]);
+        assert!(canonical_json(&array_over_limit).is_err());
+
+        let object_over_limit = Value::Object(
+            [(
+                "a".to_owned(),
+                Value::String("x".repeat(MAX_CANONICAL_BODY_BYTES - 7)),
+            )]
+            .into_iter()
+            .collect(),
+        );
+        assert!(canonical_json(&object_over_limit).is_err());
+
+        let string_over_limit = Value::String("x".repeat(MAX_CANONICAL_BODY_BYTES - 1));
+        assert!(canonical_json(&string_over_limit).is_err());
     }
 
     struct Fixture {

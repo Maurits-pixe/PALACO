@@ -132,8 +132,9 @@ function renderLibrary(){
 }
 async function renderProof(){
   sync();const identity=state.identity,doc=M.clone(state.current),pending=state.dirty;
+  const docSnapshot=JSON.stringify(doc),computed=await M.digest(M.withoutDigest(doc));
+  if(state.current.id!==doc.id||JSON.stringify(state.current)!==docSnapshot||state.identity!==identity||state.dirty!==pending)return;
   $('#proof-id').innerHTML=identity?'<p><b>'+esc(identity.name)+'</b></p><p>'+esc(identity.palacoId)+'</p><p>LOCAL DRAFT · UNVERIFIED · AUTHORITY NONE</p><code>'+esc(identity.digest)+'</code>':'<p>No local identity.</p>';
-  const computed=await M.digest(M.withoutDigest(doc));if(state.current.id!==doc.id)return;
   $('#proof-doc').innerHTML='<p><b>'+esc(doc.title)+'</b></p><p>'+esc(doc.id)+' · REV '+doc.revision+'</p><p>LOCAL DRAFT · UNVERIFIED · AUTHORITY NONE</p><p>'+(pending?'Unsaved working content.':'Current local content.')+'</p><code>'+computed+'</code><p>Saved digest: '+esc(doc.digest||'none')+'</p>';
   if(doc.importedFrom)$('#proof-doc').innerHTML+='<p>Imported source reference (unverified): '+esc(doc.importedFrom.documentId)+'</p>';
 }

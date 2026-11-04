@@ -15,6 +15,7 @@ EXPECTED = [
     "palaco-citadel",
     "palaco-evolution",
 ]
+WORKSPACE_MEMBERS = EXPECTED + ["palaco-la"]
 
 errors = []
 root_cargo = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
@@ -24,7 +25,7 @@ for token in ('version = "1.0.0"', 'edition = "2024"', 'unsafe_code = "forbid"',
         errors.append(f"root Cargo.toml missing invariant: {token}")
 
 members = re.findall(r'"crates/([^"]+)"', root_cargo)
-if members != EXPECTED:
+if members != WORKSPACE_MEMBERS:
     errors.append(f"workspace members mismatch: {members!r}")
 
 for name in EXPECTED:

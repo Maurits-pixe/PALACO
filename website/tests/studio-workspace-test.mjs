@@ -64,3 +64,19 @@ test('saving without a cross-tab lock keeps the draft open for export',async()=>
   const w=workspace();delete w.context.navigator.locks;await w.input('title','Keep this');await w.click('[data-action]',{action:'save'});
   assert.equal(w.raw(),null);assert.equal(w.node('#title').value,'Keep this');assert.match(w.node('#doc-state').textContent,/UNSAVED/);assert.match(w.node('#workspace-message').textContent,/Export/);
 });
+
+test('proof rendering does not publish a stale digest after same-document edits',async()=>{
+  const w=workspace();await w.input('title','Initial proof title');
+  let releaseDigest,started;
+  const digestStarted=new Promise(resolve=>{started=resolve});
+  const pendingDigest=new Promise(resolve=>{releaseDigest=resolve});
+  w.context.PalacoDocuments.digest=async()=>{started();await pendingDigest;return 'stale-digest'};
+
+  await w.click('[data-view]',{view:'proof'});
+  await digestStarted;
+  await w.input('title','Updated while proof renders');
+  releaseDigest();
+  await new Promise(resolve=>setTimeout(resolve,20));
+
+  assert.doesNotMatch(w.node('#proof-doc').innerHTML,/Initial proof title|stale-digest/);
+});
