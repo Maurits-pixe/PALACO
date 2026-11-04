@@ -76,6 +76,10 @@ dd { margin: 0; font-family: var(--mono); font-size: .68rem; text-align: right; 
 .info-card dl div { align-items: baseline; }
 .info-card dd { max-width: 65%; }
 .info-card code { overflow-wrap: anywhere; color: #c6d9d8; font-size: .62rem; }
+.info-card dl .fingerprint-row { align-items: flex-start; flex-direction: column; gap: .35rem; }
+.info-card .fingerprint-row dd { max-width: 100%; text-align: left; }
+.fingerprint-row code { display: block; max-width: 100%; overflow-wrap: anywhere; }
+.fingerprint-note { margin: .7rem 0 0; color: var(--muted); font-size: .64rem; line-height: 1.5; }
 
 .structure-section { padding: clamp(2.5rem, 6vw, 4.5rem) 0; }
 .section-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: end; margin-bottom: 1.2rem; }

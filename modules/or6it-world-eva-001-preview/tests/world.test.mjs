@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { applyFixtureEvent, normalizeWorldManifest, validateWorldManifest } from '../src/world.js';
+import { applyFixtureEvent, digestWorldManifest, normalizeWorldManifest, validateWorldManifest } from '../src/world.js';
 
 const manifest = JSON.parse(fs.readFileSync(new URL('../src/manifest.json', import.meta.url), 'utf8'));
 
@@ -57,6 +57,30 @@ test('normalization is deterministic and does not mutate the source', () => {
   const second = normalizeWorldManifest(candidate);
   assert.equal(first, second);
   assert.equal(JSON.stringify(candidate), before);
+});
+
+test('normalized SHA-256 digest is deterministic and changes with fixture content', async () => {
+  const candidate = structuredClone(manifest);
+  const before = JSON.stringify(candidate);
+  const first = await digestWorldManifest(candidate);
+  const second = await digestWorldManifest(candidate);
+  assert.match(first, /^[a-f0-9]{64}$/);
+  assert.equal(first, second);
+  assert.equal(JSON.stringify(candidate), before);
+
+  const reordered = Object.fromEntries(Object.entries(candidate).reverse());
+  assert.equal(await digestWorldManifest(reordered), first);
+
+  const changed = structuredClone(candidate);
+  changed.world.sequence += 1;
+  assert.notEqual(await digestWorldManifest(changed), first);
+});
+
+test('fingerprint reports unavailable crypto instead of a success-shaped fallback', async () => {
+  await assert.rejects(
+    digestWorldManifest(manifest, null),
+    /Web Crypto SHA-256 is unavailable/,
+  );
 });
 
 test('fixture events advance monotonically and reject duplicates and gaps', () => {

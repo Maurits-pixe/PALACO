@@ -107,6 +107,16 @@ export function normalizeWorldManifest(manifest) {
   return JSON.stringify(sortKeys(manifest));
 }
 
+export async function digestWorldManifest(manifest, cryptoObject = globalThis.crypto) {
+  if (!cryptoObject?.subtle) {
+    throw new Error('Web Crypto SHA-256 is unavailable in this context.');
+  }
+
+  const bytes = new TextEncoder().encode(normalizeWorldManifest(manifest));
+  const digest = await cryptoObject.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 export function applyFixtureEvent(readModel, event) {
   if (!isRecord(event) ||
       !Number.isSafeInteger(event.sequence) ||

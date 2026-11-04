@@ -7,6 +7,8 @@ persistent store, credentials, activation, or external effects.
 The manifest is checked against the current structural schema stub plus EVA
 fixture-specific invariants. `STRUCTURALLY_VALID` describes document shape
 only; constitutional validation and evidence remain `UNKNOWN` / `UNVALIDATED`.
+The normalized fixture is also shown with a deterministic SHA-256 fingerprint.
+That digest is an integrity aid only, not identity, provenance, or authority.
 The image is served from the repository's canonical
 `assets/world-eva-001-reference.png` path and is not technical evidence.
 

@@ -2,10 +2,11 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import manifest from './manifest.json';
 import { startAmbientAnimation } from './animation.js';
-import { applyFixtureEvent, normalizeWorldManifest, validateWorldManifest } from './world.js';
+import { applyFixtureEvent, digestWorldManifest, normalizeWorldManifest, validateWorldManifest } from './world.js';
 
 const validation = validateWorldManifest(manifest);
 const normalizedManifest = normalizeWorldManifest(manifest);
+const fingerprint = ref({ state: 'COMPUTING', value: '', issue: '' });
 const referenceImage = '/assets/world-eva-001-reference.png';
 const readModel = ref({
   sequence: 41,
@@ -55,6 +56,16 @@ function toggleMotion() {
 }
 
 onMounted(() => {
+  digestWorldManifest(manifest).then(value => {
+    fingerprint.value = { state: 'AVAILABLE', value, issue: '' };
+  }).catch(error => {
+    fingerprint.value = {
+      state: 'UNAVAILABLE',
+      value: '',
+      issue: error instanceof Error ? error.message : 'Onbekende SHA-256-fout.',
+    };
+  });
+
   reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   systemReducedMotion.value = reducedMotionQuery.matches;
   reducedMotionQuery.addEventListener('change', onReducedMotionChange);
@@ -158,7 +169,15 @@ onUnmounted(() => {
             <div><dt>Evidence</dt><dd>{{ manifest.provenance.evidence_state }}</dd></div>
             <div><dt>Provenance</dt><dd>{{ manifest.provenance.validation_state }}</dd></div>
             <div><dt>Bronreferentie</dt><dd><code>{{ manifest.visual_reference.path }}</code></dd></div>
+            <div class="fingerprint-row">
+              <dt>Fixture fingerprint · SHA-256</dt>
+              <dd>
+                <code v-if="fingerprint.value">{{ fingerprint.value }}</code>
+                <span v-else>{{ fingerprint.state }}</span>
+              </dd>
+            </div>
           </dl>
+          <p class="fingerprint-note">Deterministische fixture-hash; geen identiteits-, provenance- of autorisatiebewijs.</p>
         </article>
       </section>
 
