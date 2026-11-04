@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import {appendPhoneTestlab,phoneTileForLanguage,LANGUAGE_CODES,TILE_ID} from './site-adapter.mjs';
+import {appendPhoneTestlab,phoneTileForLanguage,LANGUAGE_CODES,TILE_ID,updatePhoneTestlabLanguage} from './site-adapter.mjs';
 
 const original=()=>Array.from({length:14},(_,i)=>({id:'original-'+(i+1),name:i===7?'PALACO PHONE':'PALACO '+(i+1),position:i+1}));
 test('appends #15 while keeping all original references and positions',()=>{
@@ -41,4 +41,29 @@ test('unknown Site versions fail closed',()=>{
 test('does not create duplicate original entries',()=>{
   const before=original();before[3].id=before[2].id;
   assert.throws(()=>appendPhoneTestlab(before),/duplicate IDs/);
+});
+
+test('language change preserves original 14 tile identities and native favorites', () => {
+  const source = original();
+  const withTestlab = appendPhoneTestlab(source,'nl');
+  const last = {...withTestlab[14], favorite:true, nativeSelection:'kept'};
+  const existing=[...withTestlab.slice(0,14),last];
+  const translated=updatePhoneTestlabLanguage(existing,'ar');
+  assert.equal(translated.length,15);
+  for(let i=0;i<14;i++) assert.strictEqual(translated[i],source[i]);
+  assert.equal(translated[14].id,TILE_ID);
+  assert.equal(translated[14].favorite,true);
+  assert.equal(translated[14].nativeSelection,'kept');
+  assert.equal(translated[14].production,'HOLD');
+  assert.equal(translated[14].status,'LOCAL_BROWSER_CI_PASS');
+  assert.notEqual(translated[14].name,last.name);
+  assert.equal(last.name,phoneTileForLanguage('nl').name);
+});
+test('language change fails closed when catalog or authority has drifted',()=>{
+  const before=appendPhoneTestlab(original());
+  assert.throws(()=>updatePhoneTestlabLanguage(original(),'en'),/15-tile/);
+  const altered=[...before.slice(0,14),{...before[14],production:'ACTIVE'}];
+  assert.throws(()=>updatePhoneTestlabLanguage(altered,'en'),/authorization boundary/);
+  const duplicates=[...before.slice(0,13),before[14],before[14]];
+  assert.throws(()=>updatePhoneTestlabLanguage(duplicates,'en'),/15-tile/);
 });
