@@ -1,3 +1,4 @@
+PRAGMA journal_mode=WAL;
 PRAGMA user_version=13;
 CREATE TABLE calendars(id TEXT PRIMARY KEY, owner TEXT NOT NULL, tenant TEXT NOT NULL, write_acl INTEGER NOT NULL);
 CREATE TABLE grants(id TEXT PRIMARY KEY, calendar_id TEXT NOT NULL REFERENCES calendars(id), owner TEXT NOT NULL, tenant TEXT NOT NULL, session TEXT NOT NULL, generation INTEGER NOT NULL, expires_at INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('ACTIVE','REVOKED')), action TEXT NOT NULL);

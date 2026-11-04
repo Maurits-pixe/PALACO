@@ -7,7 +7,8 @@ export function fixture(t,lifetime=30000){
  const dir=mkdtempSync(join(tmpdir(),'palaco-b013-')),path=join(dir,'calendar.sqlite');t.after(()=>rmSync(dir,{recursive:true,force:true}));
  const context={owner:'synthetic-owner',tenant:'synthetic-tenant',session:'synthetic-session'};
  const request={operationId:'operation-1',calendarId:'calendar-1',eventId:'event-1',grantId:'grant-1',generation:1,approvalId:'approval-1',title:'Synthetic private event'};
- const db=new DatabaseSync(path);db.exec('PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');db.exec(readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8'));
+ const db=new DatabaseSync(path);db.exec('PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;');db.exec(readFileSync(new URL('../src/schema.sql',import.meta.url),'utf8'));
+ if(db.prepare('PRAGMA journal_mode').get().journal_mode!=='wal')throw Error('SCHEMA_OR_MODE_MISMATCH');
  const expiry=Date.now()+lifetime;db.prepare('INSERT INTO calendars VALUES (?,?,?,1)').run(request.calendarId,context.owner,context.tenant);
  db.prepare("INSERT INTO grants VALUES (?,?,?,?,?,1,?,'ACTIVE','CREATE_OWN_EVENT')").run(request.grantId,request.calendarId,context.owner,context.tenant,context.session,expiry);
  db.prepare('INSERT INTO approvals VALUES (?,?,?,?,?,0)').run(request.approvalId,request.grantId,digest(request),digest(context),expiry);db.close();return {dir,path,context,request,expiry};

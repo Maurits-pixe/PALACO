@@ -19,7 +19,7 @@ node tools/run-evidence.mjs
 
 Per run nieuwe ID, raw TAP, proces-/native traces, runtime- en binaryhash, bronset vóór/na en artifacthashes. Trusted harness env is uitsluitend voor crash-/stallinjectie in deze geïsoleerde candidate. Geen callerflag verleent grant, eigenaarrol of write-authority.
 
-Provisioning gebeurt uitsluitend in tests/fixture.mjs. Geen productiegrant of echte afspraak wordt aangemaakt. De exported execute/recover/revoke zijn lokale bouwinterfaces, geen live PALACO-service. Recovery opent de database read-only en schrijft geen receipt, event, approval of audit opnieuw.
+Provisioning gebeurt uitsluitend in tests/fixture.mjs, dat src/schema.sql uitvoert; die schema-initialisatie zet WAL-modus en schema-versie 13. Geen productiegrant of echte afspraak wordt aangemaakt. De exported execute/recover/revoke zijn lokale bouwinterfaces, geen live PALACO-service. Recovery opent de database read-only en schrijft geen receipt, event, approval of audit opnieuw.
 
 Niet in deze slice: providers, D1, restore-/trustepoch, live identiteit, persona-reviewflow, integratie, productie, merge of PROOF. Lokale Date.now is geen geattesteerde ERA-tijd. Eén AI-builder; onafhankelijke review PENDING. Productie/integratie HOLD.
 
