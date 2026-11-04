@@ -1,0 +1,42 @@
+{
+  "id": "palaco-phone-testlab",
+  "order": 15,
+  "name": "PALACO Phone — Testlab",
+  "kind": "development-lab",
+  "visibility": "private",
+  "status": "LOCAL_BROWSER_CI_PASS",
+  "production": "HOLD",
+  "description": "P.P. offline-first lokaal prototype; Chromium-browseracceptatie PASS op synthetische CI-account. Geen telecomnummer of productie-identiteit.",
+  "destinations": [
+    {
+      "id": "local",
+      "label": "Open lokale P.P.-app",
+      "url": "http://127.0.0.1:8765/",
+      "note": "Alleen hetzelfde apparaat met actieve lokale Python-server; geen extern bereik."
+    },
+    {
+      "id": "source",
+      "label": "Bekijk broncode",
+      "url": "https://github.com/Maurits-pixe/palaco-pp",
+      "note": "GitHub vereist internet."
+    },
+    {
+      "id": "evidence",
+      "label": "Browseracceptatie en blokkades",
+      "url": "https://github.com/Maurits-pixe/palaco-pp/pull/2",
+      "note": "Chromium lokaal CI PASS; menselijke review en productie HOLD."
+    }
+  ],
+  "evidence": {
+    "prebrowser": {
+      "status": "PASS",
+      "run_id": 41408764447
+    },
+    "ephemeralBrowser": {
+      "status": "PASS",
+      "run_id": 41620060773,
+      "commit": "81e4dd22c672e09bc3624573331001c88618aa61",
+      "scope": "ephemeral-local-test-only"
+    }
+  }
+}

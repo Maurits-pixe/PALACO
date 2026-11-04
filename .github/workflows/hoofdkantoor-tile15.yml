@@ -1,0 +1,19 @@
+name: Hoofdkantoor tile 15 contract
+on:
+  pull_request:
+    paths:
+      - 'modules/hoofdkantoor-tile15/**'
+      - '.github/workflows/hoofdkantoor-tile15.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+      - name: Verify private/offline/HOLD contract
+        run: node --test modules/hoofdkantoor-tile15/*.test.mjs
