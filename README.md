@@ -2411,7 +2411,8 @@ This filters recorded metadata, not approval authenticity, runtime activation or
 authority. Records and files are not modified. The option requires `--registry`
 and cannot be combined with other queries, `--direction` or `--previous-registry`.
 
-Read-only registry summaries count object types, lifecycle statuses and explicit relationships:
+Read-only registry summaries count object types, lifecycle, verification and
+approval statuses, and explicit relationships:
 
 ```sh
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
@@ -2433,7 +2434,15 @@ source count separately. Upstream links, `dependencies`, dedicated references
 and inferred or transitive links are not counted as extra relationships.
 The fixture has two explicit `DEPENDS_ON` edges and zero for all other types.
 Existing summary fields retain their meanings; consumers must allow these
-additional JSON fields. Counts are metadata observations, not
+additional JSON fields.
+The additive `by_verification_status` and `by_approval_status` breakdowns each
+sum to `total_objects`. They include every respective PMS-001 status in schema
+order, with zero for absent values. Verification counts use each record's own
+`verification.status`, not the status of a referenced VER object. Approval
+counts use `approval.status`, independently of `lifecycle.status`; for example,
+a Draft object can carry Approved approval metadata without becoming Active.
+These counts do not authenticate verification results or approval claims.
+Counts are metadata observations, not
 proof of completeness, approval, activation or authority.
 Invalid snapshots, including empty registries, fail nonzero without summary
 results. No records or files are modified. `--summary` requires `--registry` and
