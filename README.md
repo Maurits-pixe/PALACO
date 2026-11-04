@@ -2815,6 +2815,29 @@ dependency discovery or authority. No records or files are modified. The option
 requires `--registry` and cannot be combined with other queries, `--direction`
 or `--previous-registry`.
 
+Read-only dependency-orphan diagnostics return isolated dependency-graph nodes:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-dependency-orphans
+```
+
+After full snapshot validation, JSON contains `graph`, `definition`, sorted
+`object_ids` and a scope disclaimer. An object matches only if it has neither
+incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
+An incoming dependency alone prevents isolation; duplicate representations of
+an edge do not change connectivity. Disconnected multi-object components are
+not isolated nodes. Upstream links, other relationship types and dedicated
+references are excluded. The result count equals summary
+`total_dependency_orphans`; the fixture returns an empty array and exit 0.
+Invalid snapshots fail nonzero without results, including errors outside
+matching records. Isolation does not prove missing required dependencies,
+invalid objects or non-canonical status.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+Existing `--find-orphans` remains upstream-only.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh
