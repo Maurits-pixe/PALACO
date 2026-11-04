@@ -1,12 +1,27 @@
-import {readFileSync,readdirSync,lstatSync} from 'node:fs';
+import {readFileSync,readdirSync,lstatSync,mkdtempSync,rmSync,openSync,closeSync} from 'node:fs';
 import {resolve,relative,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {tmpdir} from 'node:os';
+import {spawnSync} from 'node:child_process';
 
 const root=fileURLToPath(new URL('../',import.meta.url));
 const repo=resolve(root,'../../..');
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const requireEvidence=(condition,code)=>{if(!condition)throw Error(code);};
+function checkoutCommit(){
+ const dir=mkdtempSync(join(tmpdir(),'hara-head-')),path=join(dir,'head');
+ const fd=openSync(path,'w');
+ let child;
+ try {
+  try {child=spawnSync('git',['-C',repo,'rev-parse','--verify','HEAD'],{stdio:['ignore',fd,'ignore']});}
+  finally {closeSync(fd);}
+  requireEvidence(child.status===0 && !child.signal && !child.error,'CHECKOUT_COMMIT_UNAVAILABLE');
+  const head=readFileSync(path,'utf8').trim();
+  requireEvidence(/^[0-9a-f]{40}$/.test(head),'CHECKOUT_COMMIT_UNAVAILABLE');
+  return head;
+ } finally {rmSync(dir,{recursive:true,force:true});}
+}
 function files(dir){
  return readdirSync(dir).sort().flatMap(name=>{
   const path=join(dir,name),stat=lstatSync(path);
@@ -34,6 +49,8 @@ try {
  requireEvidence(!lstatSync(dir).isSymbolicLink(),'EVIDENCE_SYMLINK');
  const result=JSON.parse(readFileSync(contained(dir,'result.json'),'utf8'));
  requireEvidence(result.kind==='B_D013_EXECUTION_EVIDENCE' && result.runId===summary.runId,'RUN_BINDING');
+ const sourceCommit=checkoutCommit();
+ requireEvidence(result.sourceCommitAtStart===sourceCommit,'SOURCE_COMMIT_MISMATCH');
  requireEvidence(result.checks==='PASS' && summary.checks==='PASS','RUN_NOT_PASS');
  requireEvidence(result.sourceUnchangedAfterRun===true,'SOURCE_CHANGED');
  requireEvidence(result.compileExit===0 && !result.compileSignal && !result.compileSpawnError && result.testExit===0 && !result.testSignal && !result.testSpawnError,'PROCESS_FAILURE');
@@ -62,7 +79,7 @@ try {
   requireEvidence(matches.length===1 && Number(matches[0][1])===value,'TAP_COUNT_MISMATCH');
  }
  requireEvidence(readFileSync(contained(dir,'compiler.stderr'),'utf8')==='' && readFileSync(contained(dir,'tests.stderr'),'utf8')==='','UNEXPECTED_STDERR');
- console.log(JSON.stringify({runId:result.runId,sourceSetSha256:sourceSet,artifacts:artifactNames.length,verification:'PASS',scope:'Local source and evidence consistency; no independent authority or acceptance'}));
+ console.log(JSON.stringify({runId:result.runId,sourceCommitAtStart:sourceCommit,sourceSetSha256:sourceSet,artifacts:artifactNames.length,verification:'PASS',scope:'Local checkout commit, source and evidence consistency; no independent authority or acceptance'}));
 } catch(error){
  console.error(JSON.stringify({verification:'FAIL',code:error.message}));
  process.exitCode=1;

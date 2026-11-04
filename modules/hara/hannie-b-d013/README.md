@@ -51,6 +51,10 @@ Missing files, extra artifacts, changed source or inconsistent counts fail close
 This verifies consistency against the current checkout; it is not an attestation
 of origin or an independent acceptance review. A party replacing all evidence and
 the trusted checkout is outside this check's claim.
-`python3 tests/check-evidence.py <summary.json>` checks a valid copied run and six
+The checker also binds `sourceCommitAtStart` to the current Git HEAD. A run from
+another commit is rejected even when its scoped source bytes happen to match.
+This does not assert a clean working tree: current source bytes are separately
+hashed, so local preparation with uncommitted changes remains identifiable.
+`python3 tests/check-evidence.py <summary.json>` checks a valid copied run and seven
 negative cases: changed TAP, forged counts, missing source, missing B12 trace,
-artifact symlink and run-path traversal. Disposable run copies are removed.
+artifact symlink, run-path traversal and a forged checkout commit. Disposable run copies are removed.

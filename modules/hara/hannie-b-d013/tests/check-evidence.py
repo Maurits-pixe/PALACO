@@ -43,6 +43,7 @@ def probe(name, expected, edit):
         shutil.rmtree(target)
 
 probe("valid complete copy", "PASS", lambda *_: None)
+probe("forged checkout commit", "SOURCE_COMMIT_MISMATCH", lambda path, candidate, manifest: manifest.update(sourceCommitAtStart="0" * 40))
 probe("changed TAP bytes", "ARTIFACT_HASH_MISMATCH", lambda path, *_: (path / "tests.tap").write_text("tampered"))
 def wrong_counts(path, candidate, manifest):
     candidate["counts"]["tests"] = manifest["counts"]["tests"] = 21
