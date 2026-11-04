@@ -2442,6 +2442,13 @@ order, with zero for absent values. Verification counts use each record's own
 counts use `approval.status`, independently of `lifecycle.status`; for example,
 a Draft object can carry Approved approval metadata without becoming Active.
 These counts do not authenticate verification results or approval claims.
+The additive `by_domain` field counts exact `metadata.domain` labels, with
+case, whitespace and Unicode normalization differences preserved. Only labels
+present in the supplied snapshot are included; unlike schema enums, domains
+have no closed vocabulary or zero-filled list. Keys use ascending Unicode
+code-point order, independently of record order or locale, and counts sum to
+`total_objects`. The fixture reports `Governance: 1` and `Registry: 2`.
+These labels do not establish canonical domains, domain ownership or completeness.
 The additive `by_classification` field contains separate breakdowns for
 `criticality`, `confidentiality`, `integrity` and `availability`. Each dimension
 includes all its PMS-001 labels in schema order, including zero counts, and

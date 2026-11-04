@@ -1188,6 +1188,7 @@ def summarize_palaco_registry(instance, validators=None):
     validate_palaco_registry(instance, validators["PCR-000.schema.json"])
     schema = validators["PMS-001.schema.json"].schema
     by_type = {family: 0 for family in sorted(schema["properties"]["object_type"]["enum"])}
+    by_domain = {}
     by_lifecycle = {
         status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     }
@@ -1208,6 +1209,8 @@ def summarize_palaco_registry(instance, validators=None):
     }
     for record in instance["objects"]:
         by_type[record["object_type"]] += 1
+        domain = record["metadata"]["domain"]
+        by_domain[domain] = by_domain.get(domain, 0) + 1
         by_lifecycle[record["lifecycle"]["status"]] += 1
         by_verification[record["verification"]["status"]] += 1
         by_approval[record["approval"]["status"]] += 1
@@ -1219,6 +1222,7 @@ def summarize_palaco_registry(instance, validators=None):
         "registry_version": instance["registry_version"],
         "total_objects": len(instance["objects"]),
         "by_object_type": by_type,
+        "by_domain": dict(sorted(by_domain.items())),
         "by_lifecycle_status": by_lifecycle,
         "by_verification_status": by_verification,
         "by_approval_status": by_approval,
@@ -2926,6 +2930,10 @@ def check_palaco_summary():
             "registry_version": "0.1.0",
             "total_objects": len(instance["objects"]),
             "by_object_type": {family: expected_types.get(family, 0) for family in families},
+            "by_domain": {
+                domain: sum(record["metadata"]["domain"] == domain for record in instance["objects"])
+                for domain in sorted({record["metadata"]["domain"] for record in instance["objects"]})
+            },
             "by_lifecycle_status": {status: expected_states.get(status, 0) for status in statuses},
             "by_verification_status": {
                 status: len(instance["objects"]) if status == "Pending" else 0
@@ -3072,7 +3080,33 @@ def check_palaco_summary():
     classification_fixture["objects"].reverse()
     require(json.dumps(summarize_palaco_registry(classification_fixture, validators)) == json.dumps(result),
             "classification summary serialization depends on object order")
-    return "7 deterministic/non-mutating summaries + all status/classification/edge/zero counts + 14 rejections + CLI regression"
+    domain_fixture = {"registry_version": "0.1.0", "objects": []}
+    for index, domain in enumerate(("Registry", "Registry", "registry", " Registry ", "Δ", "é", "e\u0301"), 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["metadata"]["domain"] = domain
+        domain_fixture["objects"].insert(0, record)
+    original = copy.deepcopy(domain_fixture)
+    result = summarize_palaco_registry(domain_fixture, validators)
+    expected_domains = {" Registry ": 1, "Registry": 2, "e\u0301": 1, "registry": 1, "é": 1, "Δ": 1}
+    require(result["by_domain"] == expected_domains, "summary normalized or miscounted domain labels")
+    require(list(result["by_domain"]) == list(expected_domains), "summary domain keys are not Unicode-sorted")
+    require(sum(result["by_domain"].values()) == result["total_objects"],
+            "summary domain counts do not sum to total")
+    require(domain_fixture == original, "domain summary mutated input")
+    domain_fixture["objects"].reverse()
+    require(json.dumps(summarize_palaco_registry(domain_fixture, validators)) == json.dumps(result),
+            "domain summary serialization depends on object order")
+    for value in ("", " \t\n", None, 42):
+        invalid = copy.deepcopy(domain_fixture)
+        invalid["objects"][-1]["metadata"]["domain"] = value
+        try:
+            summarize_palaco_registry(invalid, validators)
+        except ConformanceError as error:
+            require("registry structure" in str(error), f"unexpected domain summary error: {error}")
+        else:
+            raise ConformanceError("summary accepted invalid domain")
+    return "8 deterministic/non-mutating summaries + exact domain/status/classification/edge counts + 18 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
@@ -3776,7 +3810,7 @@ def main():
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
-                        help="Return validated object, status, classification and explicit relationship counts as JSON")
+                        help="Return validated object, domain, status, classification and explicit relationship counts as JSON")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
