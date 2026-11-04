@@ -1,0 +1,52 @@
+{
+  "kind": "STORAGE_CANCELLATION_RESEARCH",
+  "python": "3.12.14 (main, Aug 25 2026, 14:00:49) [Clang 22.1.3 ]",
+  "sqlite": "3.53.1",
+  "cases": [
+    {
+      "case": "normal",
+      "lateDurableEffectObserved": false,
+      "effectRows": 1,
+      "apiError": null
+    },
+    {
+      "case": "expired",
+      "lateDurableEffectObserved": false,
+      "effectRows": 0,
+      "apiError": {
+        "type": "OperationalError",
+        "text": "interrupted"
+      }
+    },
+    {
+      "case": "progress-stall",
+      "lateDurableEffectObserved": true,
+      "effectRows": 1,
+      "apiError": {
+        "type": "OperationalError",
+        "text": "interrupted"
+      }
+    },
+    {
+      "case": "interrupt-stall",
+      "lateDurableEffectObserved": true,
+      "effectRows": 1,
+      "apiError": null
+    },
+    {
+      "case": "combined-stall",
+      "lateDurableEffectObserved": true,
+      "effectRows": 1,
+      "apiError": {
+        "type": "OperationalError",
+        "text": "interrupted"
+      }
+    }
+  ],
+  "sources": {
+    "probe.py": "c0532c21ea2fe21fa01865414cc40b91a6e144d026862eb0c6ce3c925060f118",
+    "wal-stall.c": "70266baa2889188b555af36ce0fbea296bb555a2dbf93c780948678932342f54"
+  },
+  "scope": "One synthetic row, actual WAL stall and SIGKILL; no Hannie adapter, provider, grant or full D-013 acceptance",
+  "acceptance": "HOLD"
+}

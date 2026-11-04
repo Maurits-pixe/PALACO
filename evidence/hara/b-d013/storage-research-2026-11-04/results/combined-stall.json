@@ -1,0 +1,36 @@
+{
+  "sqlite": "3.53.1",
+  "expiry": 1793796247787,
+  "commitEnteredAt": 1793796247537,
+  "commitReturnedAt": 1793796248437,
+  "error": {
+    "type": "OperationalError",
+    "text": "interrupted"
+  },
+  "progressSamples": [
+    1793796247537,
+    1793796247537,
+    1793796248437
+  ],
+  "interruptSamples": [
+    1793796247787
+  ],
+  "case": "combined-stall",
+  "policy": "both",
+  "writerExit": -9,
+  "rowsAfterCrash": [
+    [
+      "synthetic"
+    ]
+  ],
+  "native": [
+    {
+      "kind": "WAL_STALL",
+      "pathConfirmed": true,
+      "delayMs": 900,
+      "startMs": 1793796247537,
+      "endMs": 1793796248437
+    }
+  ],
+  "stderr": ""
+}
