@@ -2449,6 +2449,15 @@ have no closed vocabulary or zero-filled list. Keys use ascending Unicode
 code-point order, independently of record order or locale, and counts sum to
 `total_objects`. The fixture reports `Governance: 1` and `Registry: 2`.
 These labels do not establish canonical domains, domain ownership or completeness.
+The additive `by_ownership` field counts exact owner labels separately for
+`business`, `architecture`, `technical`, `verification` and `custodian`, in
+PMS-001 schema order. Within each role, only observed labels are included,
+sorted by Unicode code point, with case, whitespace and Unicode normalization
+differences preserved. Every role's counts sum to `total_objects`; the same
+label in different roles is counted independently. Input role-key order does
+not affect output. Audit updaters and approval authorities are not owners for
+this breakdown. These counts do not authenticate identities, establish staffing
+levels or grant authority. Existing summary fields retain their meanings.
 The additive `by_classification` field contains separate breakdowns for
 `criticality`, `confidentiality`, `integrity` and `availability`. Each dimension
 includes all its PMS-001 labels in schema order, including zero counts, and

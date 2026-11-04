@@ -1189,6 +1189,7 @@ def summarize_palaco_registry(instance, validators=None):
     schema = validators["PMS-001.schema.json"].schema
     by_type = {family: 0 for family in sorted(schema["properties"]["object_type"]["enum"])}
     by_domain = {}
+    by_ownership = {role: {} for role in schema["$defs"]["Ownership"]["properties"]}
     by_lifecycle = {
         status: 0 for status in schema["$defs"]["Lifecycle"]["properties"]["status"]["enum"]
     }
@@ -1211,6 +1212,9 @@ def summarize_palaco_registry(instance, validators=None):
         by_type[record["object_type"]] += 1
         domain = record["metadata"]["domain"]
         by_domain[domain] = by_domain.get(domain, 0) + 1
+        for role, counts in by_ownership.items():
+            owner = record["ownership"][role]
+            counts[owner] = counts.get(owner, 0) + 1
         by_lifecycle[record["lifecycle"]["status"]] += 1
         by_verification[record["verification"]["status"]] += 1
         by_approval[record["approval"]["status"]] += 1
@@ -1223,6 +1227,7 @@ def summarize_palaco_registry(instance, validators=None):
         "total_objects": len(instance["objects"]),
         "by_object_type": by_type,
         "by_domain": dict(sorted(by_domain.items())),
+        "by_ownership": {role: dict(sorted(counts.items())) for role, counts in by_ownership.items()},
         "by_lifecycle_status": by_lifecycle,
         "by_verification_status": by_verification,
         "by_approval_status": by_approval,
@@ -2934,6 +2939,13 @@ def check_palaco_summary():
                 domain: sum(record["metadata"]["domain"] == domain for record in instance["objects"])
                 for domain in sorted({record["metadata"]["domain"] for record in instance["objects"]})
             },
+            "by_ownership": {
+                role: {
+                    owner: sum(record["ownership"][role] == owner for record in instance["objects"])
+                    for owner in sorted({record["ownership"][role] for record in instance["objects"]})
+                }
+                for role in schema["$defs"]["Ownership"]["properties"]
+            },
             "by_lifecycle_status": {status: expected_states.get(status, 0) for status in statuses},
             "by_verification_status": {
                 status: len(instance["objects"]) if status == "Pending" else 0
@@ -3106,7 +3118,47 @@ def check_palaco_summary():
             require("registry structure" in str(error), f"unexpected domain summary error: {error}")
         else:
             raise ConformanceError("summary accepted invalid domain")
-    return "8 deterministic/non-mutating summaries + exact domain/status/classification/edge counts + 18 rejections + CLI regression"
+    ownership_fixture = {"registry_version": "0.1.0", "objects": []}
+    owners = ("Example team", "Example team", "example team", " Example team ", "Δ", "é", "e\u0301")
+    roles = list(schema["$defs"]["Ownership"]["properties"])
+    for index, owner in enumerate(owners, 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        record["ownership"]["business"] = owner
+        record["ownership"]["technical"] = "Example team"
+        record["audit"]["updated_by"] = "Updater-only label"
+        ownership_fixture["objects"].insert(0, record)
+    original = copy.deepcopy(ownership_fixture)
+    result = summarize_palaco_registry(ownership_fixture, validators)
+    expected_owners = {" Example team ": 1, "Example team": 2, "e\u0301": 1, "example team": 1, "é": 1, "Δ": 1}
+    require(list(result["by_ownership"]) == roles, "summary ownership roles changed order")
+    require(result["by_ownership"]["business"] == expected_owners,
+            "summary normalized or miscounted owner labels")
+    require(result["by_ownership"]["technical"] == {"Example team": 7},
+            "summary mixed ownership roles")
+    for role, counts in result["by_ownership"].items():
+        require(list(counts) == sorted(counts), f"summary {role} owner keys are not Unicode-sorted")
+        require(sum(counts.values()) == result["total_objects"],
+                f"summary {role} counts do not sum to total")
+        require("Updater-only label" not in counts, "summary included audit updater as owner")
+        if role not in ("business", "technical"):
+            require(counts == {template["ownership"][role]: 7}, f"summary mixed {role} owners")
+        for value in ("", " \t\n", None, 42):
+            invalid = copy.deepcopy(ownership_fixture)
+            invalid["objects"][-1]["ownership"][role] = value
+            try:
+                summarize_palaco_registry(invalid, validators)
+            except ConformanceError as error:
+                require("registry structure" in str(error), f"unexpected ownership summary error: {error}")
+            else:
+                raise ConformanceError(f"summary accepted invalid {role} owner")
+    require(ownership_fixture == original, "ownership summary mutated input")
+    ownership_fixture["objects"].reverse()
+    for record in ownership_fixture["objects"]:
+        record["ownership"] = dict(reversed(list(record["ownership"].items())))
+    require(json.dumps(summarize_palaco_registry(ownership_fixture, validators)) == json.dumps(result),
+            "ownership summary serialization depends on record or role order")
+    return "9 deterministic/non-mutating summaries + exact owner/domain/status/classification/edge counts + 38 rejections + CLI regression"
 
 
 def check_palaco_find_lifecycle():
@@ -3810,7 +3862,7 @@ def main():
     parser.add_argument("--find-lifecycle", metavar="STATUS",
                         help="Return IDs with the exact PMS-001 lifecycle status as JSON (e.g. Draft)")
     parser.add_argument("--summary", action="store_true",
-                        help="Return validated object, domain, status, classification and explicit relationship counts as JSON")
+                        help="Return validated object, domain, ownership, status, classification and explicit relationship counts as JSON")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
