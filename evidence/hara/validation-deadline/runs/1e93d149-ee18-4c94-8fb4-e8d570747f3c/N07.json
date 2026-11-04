@@ -1,0 +1,20 @@
+{
+  "status": "RESULT_UNKNOWN",
+  "code": "NO_DURABLE_COMMIT",
+  "readProcess": {
+    "pid": 5168,
+    "exit": 0
+  },
+  "writer": {
+    "pid": 5161,
+    "code": null,
+    "signal": "SIGKILL",
+    "message": {
+      "status": "COMMITTED",
+      "created": true,
+      "validatedAt": 1793799692956,
+      "fakeAck": true
+    },
+    "stderr": ""
+  }
+}

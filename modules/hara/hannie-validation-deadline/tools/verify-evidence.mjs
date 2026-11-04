@@ -27,7 +27,7 @@ export function verifyEvidence(directory, repository) {
   const result = JSON.parse(readFileSync(resolve(dir, 'result.json'), 'utf8'));
   requireThat(result.runId === dir.split('/').at(-1), 'RUN_ID_MISMATCH');
   requireThat(result.kind === 'VALIDATION_DEADLINE_EXECUTION_EVIDENCE' && result.checks === 'PASS', 'RUN_NOT_PASS');
-  requireThat(result.counts.tests === 23 && result.counts.pass === 23 &&
+  requireThat(result.counts.tests === 24 && result.counts.pass === 24 &&
     ['fail','cancelled','skipped','todo'].every(k => result.counts[k] === 0), 'INCOMPLETE_RUN');
   requireThat(result.sourceUnchangedAfterRun === true && result.compileExit === 0 && result.testExit === 0, 'EXECUTION_MISMATCH');
   requireThat(!result.compileError && !result.testError && !result.compileSignal && !result.testSignal, 'PROCESS_ERROR');
@@ -40,7 +40,7 @@ export function verifyEvidence(directory, repository) {
     JSON.stringify(sourceInventory(repo)), 'SOURCE_INVENTORY_MISMATCH');
   const actual = readdirSync(dir).filter(n => n !== 'result.json').sort();
   requireThat(JSON.stringify(actual) === JSON.stringify(Object.keys(result.artifacts).sort()), 'ARTIFACT_SET_MISMATCH');
-  requireThat(['tests.tap','tests.stderr',...Array.from({length:23},(_,i)=>'N'+String(i+1).padStart(2,'0')+'.json')].every(n => n in result.artifacts), 'REQUIRED_ARTIFACT_MISSING');
+  requireThat(['tests.tap','tests.stderr',...Array.from({length:24},(_,i)=>'N'+String(i+1).padStart(2,'0')+'.json')].every(n => n in result.artifacts), 'REQUIRED_ARTIFACT_MISSING');
   for (const [name, hash] of Object.entries(result.artifacts))
     requireThat(sha(readFileSync(inside(dir, name))) === hash, 'ARTIFACT_HASH_MISMATCH: ' + name);
   const tap = readFileSync(resolve(dir, 'tests.tap'), 'utf8');

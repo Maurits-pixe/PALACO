@@ -48,8 +48,10 @@ process.once('message',async input=>{
    };
    let denied=permit();if(denied){await withheld(denied);return;}
    if(process.env.VD_READ_READY){writeFileSync(process.env.VD_READ_READY,'ready');await new Promise(r=>setTimeout(r,300));}
-   denied=permit();if(denied){await withheld(denied);return;}
+   // Observe reconstruction time before the final authority check, so a forward
+   // clock observation cannot invalidate read expiry after the last check.
    const durableObservedAt=now();
+   denied=permit();if(denied){await withheld(denied);return;}
    await tell({status:'COMMITTED',releasePoint:'LOCKED_WORKER_IPC_SEND',receipt:{...b,durability:'RECONSTRUCTED_COMMIT',durableObservedAt,durabilityMeasurement:'READBACK_UPPER_BOUND',exactDurableAt:'UNKNOWN',observedAfterExpiry:durableObservedAt>=Math.min(b.grantExpiresAt,b.approvalExpiresAt),deadlineSatisfied:'VALIDATION_DEADLINE_ONLY'},event:{...e}});return;
   }
   db.exec('PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL; BEGIN IMMEDIATE');

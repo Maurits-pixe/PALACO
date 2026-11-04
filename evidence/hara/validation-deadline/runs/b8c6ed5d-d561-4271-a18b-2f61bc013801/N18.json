@@ -1,0 +1,25 @@
+{
+  "r": {
+    "status": "RESULT_UNKNOWN",
+    "code": "NO_DURABLE_COMMIT",
+    "readProcess": {
+      "pid": 6065,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 6058,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true,
+        "validatedAt": 1793799724612
+      },
+      "stderr": ""
+    }
+  },
+  "native": {
+    "kind": "NATIVE_COMMIT_INTERRUPT",
+    "beforeWalWrite": true
+  }
+}

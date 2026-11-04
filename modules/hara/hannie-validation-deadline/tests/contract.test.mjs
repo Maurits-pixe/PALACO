@@ -110,3 +110,11 @@ test('N22 concurrent duplicate processes consume one approval and commit one eff
 test('N23 validation boundary is strictly less than both expiries, including equality',()=>{
  assert.equal(withinValidationWindow(999,1000,2000),true);assert.equal(withinValidationWindow(1000,1000,2000),false);assert.equal(withinValidationWindow(1001,1000,2000),false);assert.equal(withinValidationWindow(1000,2000,1000),false);assert.equal(withinValidationWindow(NaN,2000,2000),false);trace('N23',{strictBoundary:true});
 });
+
+test('N24 observed clock advance past read expiry before send must withhold payload',async t=>{
+ const f=fixture(t);assert.equal((await run(f)).status,'COMMITTED');
+ const bootstrap=join(f.dir,'advance-clock.mjs');
+ writeFileSync(bootstrap,`const original=Date.now;let count=0;Date.now=()=>{if(new Error().stack.includes('src/worker.mjs')&&++count>=3)return ${f.readExpiry+1000};return original();};`);
+ const previous=process.env.NODE_OPTIONS;process.env.NODE_OPTIONS='--import='+bootstrap;
+ try{const r=await read(f);assert.equal(r.status,'COMMITTED_RESULT_WITHHELD');assert.equal(r.code,'READ_AUTHORITY_REQUIRED');assert.equal(r.event,undefined);assert.equal(r.receipt,undefined);trace('N24',r);}finally{if(previous===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=previous;}
+});
