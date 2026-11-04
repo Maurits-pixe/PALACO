@@ -641,6 +641,14 @@ def reference_value(record, path):
     return value
 
 
+def direct_dependency_targets(record):
+    """Extract dependency targets from a structurally validated record."""
+    return set(record.get("dependencies", [])) | {
+        edge["target"] for edge in record["traceability"]["relationships"]
+        if edge["relation"] == "DEPENDS_ON"
+    }
+
+
 def require_acyclic(graph, label):
     """Iterative depth-first traversal; shared ancestors are not cycles."""
     finished = set()
@@ -740,10 +748,7 @@ def validate_palaco_registry(instance, validator=None):
                     require(edge["target"] in targets,
                             f"{object_id}: {edge['relation']} conflicts with {'.'.join(path)}")
     dependencies = {
-        object_id: set(record.get("dependencies", [])) | {
-            edge["target"] for edge in record["traceability"]["relationships"]
-            if edge["relation"] == "DEPENDS_ON"
-        }
+        object_id: direct_dependency_targets(record)
         for object_id, record in objects.items()
     }
     upstream = {
@@ -892,10 +897,7 @@ def find_palaco_dependency_orphans(instance, validator=None):
     for record in instance["objects"]:
         object_id = record["metadata"]["id"]
         object_ids.add(object_id)
-        targets = set(record.get("dependencies", [])) | {
-            edge["target"] for edge in record["traceability"]["relationships"]
-            if edge["relation"] == "DEPENDS_ON"
-        }
+        targets = direct_dependency_targets(record)
         if targets:
             connected.add(object_id)
             connected.update(targets)
@@ -1176,10 +1178,7 @@ def find_palaco_dependents(instance, object_id, validator=None):
         "definition": "direct dependents from dependencies or explicit DEPENDS_ON edges",
         "object_ids": sorted(
             record["metadata"]["id"] for record in instance["objects"]
-            if object_id in record.get("dependencies", []) or any(
-                edge["relation"] == "DEPENDS_ON" and edge["target"] == object_id
-                for edge in record["traceability"]["relationships"]
-            )
+            if object_id in direct_dependency_targets(record)
         ),
         "scope": "supplied direct dependency metadata only; not complete impact analysis or authority",
     }
@@ -1192,10 +1191,7 @@ def find_palaco_dependencies(instance, object_id, validator=None):
     require(isinstance(object_id, str) and object_id in objects,
             f"unknown PALACO object ID: {object_id}")
     record = objects[object_id]
-    targets = set(record.get("dependencies", [])) | {
-        edge["target"] for edge in record["traceability"]["relationships"]
-        if edge["relation"] == "DEPENDS_ON"
-    }
+    targets = direct_dependency_targets(record)
     return {
         "object_id": object_id,
         "definition": "direct dependencies from dependencies or explicit DEPENDS_ON edges",
@@ -1253,10 +1249,7 @@ def summarize_palaco_registry(instance, validators=None):
             counts[record["classification"][dimension]] += 1
         for edge in record["traceability"]["relationships"]:
             by_relationship[edge["relation"]] += 1
-        dependency_targets = set(record.get("dependencies", [])) | {
-            edge["target"] for edge in record["traceability"]["relationships"]
-            if edge["relation"] == "DEPENDS_ON"
-        }
+        dependency_targets = direct_dependency_targets(record)
         total_dependency_edges += len(dependency_targets)
         if dependency_targets:
             dependency_connected.add(record["metadata"]["id"])
@@ -1700,6 +1693,55 @@ def check_palaco_find():
         f"registry find: {len(families)} families, sorted multiple/empty results, "
         f"non-mutating output + {len(negatives)} rejections"
     )
+
+
+def check_palaco_dependency_contract():
+    validators = palaco_validators()
+    validator = validators["PCR-000.schema.json"]
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    requirement = fixture["objects"][2]
+    requirement["dependencies"] = ["CAP-00001", "FE-00001"]
+    original = copy.deepcopy(fixture)
+    expected = {
+        "FE-00001": set(),
+        "CAP-00001": {"FE-00001"},
+        "REQ-00001": {"CAP-00001", "FE-00001"},
+    }
+    for record in fixture["objects"]:
+        source = record["metadata"]["id"]
+        targets = direct_dependency_targets(record)
+        require(targets == expected[source], f"incorrect shared dependency targets: {source}")
+        require(find_palaco_dependencies(fixture, source, validator)["object_ids"] == sorted(targets),
+                "dependency query differs from shared graph")
+        for target in targets:
+            require(source in find_palaco_dependents(fixture, target, validator)["object_ids"],
+                    "dependency queries disagree on edge direction")
+    require(summarize_palaco_registry(fixture, validators)["total_dependency_edges"] == 3,
+            "summary differs from shared dependency graph")
+    require(find_palaco_dependency_orphans(fixture, validator)["object_ids"] == [],
+            "dependency orphan query differs from shared graph")
+    targets = direct_dependency_targets(requirement)
+    targets.clear()
+    require(direct_dependency_targets(requirement) == expected["REQ-00001"],
+            "dependency targets expose mutable input state")
+    require(fixture == original, "shared dependency extraction mutated input")
+    references_only = copy.deepcopy(fixture)
+    for record in references_only["objects"]:
+        record.pop("dependencies", None)
+        record["traceability"]["relationships"] = []
+        require(direct_dependency_targets(record) == set(),
+                "shared dependency extraction included upstream or dedicated references")
+    objective = copy.deepcopy(fixture["objects"][0])
+    objective["object_type"] = "OBJ"
+    objective["metadata"]["id"] = "OBJ-00001"
+    references_only["objects"].append(objective)
+    references_only["objects"][2]["traceability"]["relationships"] = [
+        {"source": "REQ-00001", "relation": "SATISFIES", "target": "OBJ-00001"},
+    ]
+    validate_palaco_registry(references_only, validator)
+    require(direct_dependency_targets(references_only["objects"][2]) == set(),
+            "shared dependency extraction included other relationship types")
+    return "shared targets + query/summary/orphan consistency + fresh sets + graph-boundary checks"
 
 
 def check_palaco_dependencies():
@@ -4007,6 +4049,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO shared dependency graph contract", check_palaco_dependency_contract),
     ("parser regression tests", run_regression_tests),
     ("standards metadata", check_metadata),
     ("RIO + VisitCard + PALACO schema $id uniqueness", check_schema_ids),
