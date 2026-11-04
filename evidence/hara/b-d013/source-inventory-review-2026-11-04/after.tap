@@ -1,0 +1,184 @@
+TAP version 13
+# Subtest: complete evidence passes
+ok 1 - complete evidence passes
+  ---
+  duration_ms: 0.970214
+  type: 'test'
+  ...
+# Subtest: filtered run cannot pass
+ok 2 - filtered run cannot pass
+  ---
+  duration_ms: 0.114573
+  type: 'test'
+  ...
+# Subtest: missing summary cannot pass
+ok 3 - missing summary cannot pass
+  ---
+  duration_ms: 0.123226
+  type: 'test'
+  ...
+# Subtest: missing cancellation count cannot pass
+ok 4 - missing cancellation count cannot pass
+  ---
+  duration_ms: 0.100442
+  type: 'test'
+  ...
+# Subtest: test failure cannot pass
+ok 5 - test failure cannot pass
+  ---
+  duration_ms: 0.080301
+  type: 'test'
+  ...
+# Subtest: spawn error despite zero exit cannot pass
+ok 6 - spawn error despite zero exit cannot pass
+  ---
+  duration_ms: 0.234093
+  type: 'test'
+  ...
+# Subtest: compiler error despite zero exit cannot pass
+ok 7 - compiler error despite zero exit cannot pass
+  ---
+  duration_ms: 0.191989
+  type: 'test'
+  ...
+# Subtest: killed child cannot pass
+ok 8 - killed child cannot pass
+  ---
+  duration_ms: 0.141613
+  type: 'test'
+  ...
+# Subtest: changed sources cannot pass
+ok 9 - changed sources cannot pass
+  ---
+  duration_ms: 0.147863
+  type: 'test'
+  ...
+# Subtest: missing commit cannot pass
+ok 10 - missing commit cannot pass
+  ---
+  duration_ms: 0.186281
+  type: 'test'
+  ...
+# Subtest: commit lookup error cannot pass
+ok 11 - commit lookup error cannot pass
+  ---
+  duration_ms: 0.137868
+  type: 'test'
+  ...
+# Subtest: fail cannot pass
+ok 12 - fail cannot pass
+  ---
+  duration_ms: 0.094663
+  type: 'test'
+  ...
+# Subtest: cancelled cannot pass
+ok 13 - cancelled cannot pass
+  ---
+  duration_ms: 0.045448
+  type: 'test'
+  ...
+# Subtest: skipped cannot pass
+ok 14 - skipped cannot pass
+  ---
+  duration_ms: 0.049585
+  type: 'test'
+  ...
+# Subtest: todo cannot pass
+ok 15 - todo cannot pass
+  ---
+  duration_ms: 0.038709
+  type: 'test'
+  ...
+# Subtest: valid bound run verifies while acceptance stays HOLD
+ok 16 - valid bound run verifies while acceptance stays HOLD
+  ---
+  duration_ms: 3.154909
+  type: 'test'
+  ...
+# Subtest: tampered artifact is rejected
+ok 17 - tampered artifact is rejected
+  ---
+  duration_ms: 1.265288
+  type: 'test'
+  ...
+# Subtest: tampered source is rejected
+ok 18 - tampered source is rejected
+  ---
+  duration_ms: 0.882111
+  type: 'test'
+  ...
+# Subtest: wrong run is rejected
+ok 19 - wrong run is rejected
+  ---
+  duration_ms: 0.816051
+  type: 'test'
+  ...
+# Subtest: unlisted module source is rejected
+ok 20 - unlisted module source is rejected
+  ---
+  duration_ms: 1.020309
+  type: 'test'
+  ...
+# Subtest: omitted source hash is rejected
+ok 21 - omitted source hash is rejected
+  ---
+  duration_ms: 0.777843
+  type: 'test'
+  ...
+# Subtest: removed workflow hash is rejected
+ok 22 - removed workflow hash is rejected
+  ---
+  duration_ms: 0.877974
+  type: 'test'
+  ...
+# Subtest: unlisted artifact is rejected
+ok 23 - unlisted artifact is rejected
+  ---
+  duration_ms: 1.7833
+  type: 'test'
+  ...
+# Subtest: partial run is rejected
+ok 24 - partial run is rejected
+  ---
+  duration_ms: 0.826136
+  type: 'test'
+  ...
+# Subtest: forged counters is rejected
+ok 25 - forged counters is rejected
+  ---
+  duration_ms: 1.024836
+  type: 'test'
+  ...
+# Subtest: removed counterevidence is rejected
+ok 26 - removed counterevidence is rejected
+  ---
+  duration_ms: 0.86876
+  type: 'test'
+  ...
+# Subtest: authority promotion is rejected
+ok 27 - authority promotion is rejected
+  ---
+  duration_ms: 1.966196
+  type: 'test'
+  ...
+# Subtest: source path escape is rejected
+ok 28 - source path escape is rejected
+  ---
+  duration_ms: 0.637802
+  type: 'test'
+  ...
+# Subtest: source symlink escape is rejected
+ok 29 - source symlink escape is rejected
+  ---
+  duration_ms: 0.953888
+  type: 'test'
+  ...
+1..29
+# tests 29
+# suites 0
+# pass 29
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 44.720102

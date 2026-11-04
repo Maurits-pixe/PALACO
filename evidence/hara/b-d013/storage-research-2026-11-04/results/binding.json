@@ -1,0 +1,16 @@
+{
+  "files": {
+    "probe.py": "c0532c21ea2fe21fa01865414cc40b91a6e144d026862eb0c6ce3c925060f118",
+    "results/combined-stall.json": "a2e1c1c095f56ef41699eb45a719d86400f3f8526f46772c36965bbce6022591",
+    "results/compiler.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "results/expired.json": "f89f4be56c4b08a6495f40d8305296f31be9beef1139f61ef184e4bef4be4cf6",
+    "results/interrupt-stall.json": "81fb9a9e2d78e80d3b1e8d77a194ebda66e451223f27e1dfbe1b58231f85eb93",
+    "results/normal.json": "6e4bb659d9e8d4c306a6d7039ccd0fbd4fea230ef2d759cb6b12979cb1eb7888",
+    "results/progress-stall.json": "0e5dbd11c348fae672f3652c59fbb4e254ffe46953d74adf3adccd39f278777f",
+    "results/summary.json": "f6c3b1ee85ab4c961c77aac8ae9779dd6911b6de258a89aaf07c7a20b9dd4873",
+    "wal-stall.c": "70266baa2889188b555af36ce0fbea296bb555a2dbf93c780948678932342f54"
+  },
+  "kind": "LOCAL_RESEARCH_HASH_BINDING",
+  "authenticity": "UNSIGNED",
+  "runtimeAcceptance": "HOLD"
+}

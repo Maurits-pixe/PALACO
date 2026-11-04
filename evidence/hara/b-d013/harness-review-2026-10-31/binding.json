@@ -1,0 +1,15 @@
+{
+  "runId": "e0c89b20-cd24-4eff-bdac-f3b0594ee333",
+  "sourceSetSha256": "c8956136f1a4da5af46202bd1974ab19c5aae3c4cbdee036f9cd636b3982f1b0",
+  "baseline": "1b2065af0dfe82e25b3f62c80d9f9873563f6afd",
+  "sourceChecks": 16,
+  "artifactChecks": 19,
+  "artifacts": {
+    "candidate.patch": "a5f10962bf7a59f6eeb4ee41da3c217249692df2a24b3b75b761a93278ef5534",
+    "evidence-guards.tap": "1c23893648dc866cb095be4441a3a2b97fa1fea81f1a4f3fce5d62fe75aa08f3"
+  },
+  "runtimeUnchanged": true,
+  "ci": "NOT EXECUTED",
+  "node24_14_1": "BLOCKED: proxy:8080 unreachable; curl exit 7",
+  "independentReview": "PENDING"
+}

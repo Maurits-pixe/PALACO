@@ -1,0 +1,23 @@
+{
+  "sqlite": "3.53.1",
+  "expiry": 1793796245880,
+  "commitEnteredAt": 1793796245630,
+  "commitReturnedAt": 1793796245630,
+  "error": null,
+  "progressSamples": [
+    1793796245630,
+    1793796245630,
+    1793796245630
+  ],
+  "interruptSamples": [],
+  "case": "normal",
+  "policy": "progress",
+  "writerExit": -9,
+  "rowsAfterCrash": [
+    [
+      "synthetic"
+    ]
+  ],
+  "native": [],
+  "stderr": ""
+}

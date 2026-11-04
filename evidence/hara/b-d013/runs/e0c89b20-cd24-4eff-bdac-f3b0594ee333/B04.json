@@ -1,0 +1,25 @@
+{
+  "rev": {
+    "status": "RECONSTRUCTION_REQUIRED",
+    "writer": {
+      "pid": 9561,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  },
+  "r": {
+    "status": "DENIED",
+    "code": "CONSENT_INACTIVE",
+    "writer": {
+      "pid": 9568,
+      "code": 0,
+      "signal": null,
+      "message": {
+        "status": "DENIED",
+        "code": "CONSENT_INACTIVE"
+      },
+      "stderr": ""
+    }
+  }
+}

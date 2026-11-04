@@ -1,0 +1,20 @@
+{
+  "sqlite": "3.53.1",
+  "expiry": 1793796245655,
+  "commitEnteredAt": 1793796245656,
+  "commitReturnedAt": 1793796245656,
+  "error": {
+    "type": "OperationalError",
+    "text": "interrupted"
+  },
+  "progressSamples": [
+    1793796245656
+  ],
+  "interruptSamples": [],
+  "case": "expired",
+  "policy": "progress",
+  "writerExit": -9,
+  "rowsAfterCrash": [],
+  "native": [],
+  "stderr": ""
+}
