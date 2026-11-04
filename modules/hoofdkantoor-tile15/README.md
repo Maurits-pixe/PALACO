@@ -41,10 +41,11 @@ Use `site-adapter.mjs` inside the **original** Site project rather than renderin
 In the Site source's app catalog creation pipeline, before search, favorites and sorting run:
 
 ```js
-import { appendPhoneTestlab, phoneTileForLanguage } from './site-adapter.mjs';
+import { appendPhoneTestlab, updatePhoneTestlabLanguage } from './site-adapter.mjs';
 const allApps = appendPhoneTestlab(existing14Apps, chosenLanguage);
 // The Site renderer must adapt the explicit links shape to its native card component.
-// On later language changes: update only tile palaco-phone-testlab from phoneTileForLanguage(nextLanguage).
+// On later language changes, preserve native favorite and user metadata:
+const translatedApps = updatePhoneTestlabLanguage(allApps, nextLanguage);
 ```
 
 **Important:** The private ChatGPT Site's editable catalog source is not available in this connected GitHub repository. Importing the adapter is not sufficient by itself; the Site's native card renderer must preserve the three actions, search, favorites, language switching, mobile layout and accessible focus. Do not merge this PR as a substitute for updating the actual Site. Before deploying, compare the live-site source revision; abort if tile count, schema or identity differs. Publish privately only through the authorized Site editor and verify a second unauthenticated browser cannot access the private app.
