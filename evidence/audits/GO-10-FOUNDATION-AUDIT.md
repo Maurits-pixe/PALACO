@@ -64,7 +64,7 @@ This closes the former licensing blockers:
 | PVS-002 explicit integration test | PASS |
 | GO-09 seal | PASS |
 | External GitHub Actions | immutable 40-hex commit SHA |
-| Workflow permissions | explicit read-only |
+| Workflow permissions | explicit least privilege; only the Pages deployment workflow may request `pages: write` and `id-token: write` |
 | Rust toolchain | pinned to 1.98.1 |
 | License | `MIT OR Apache-2.0`, owner-ratified |
 | License files | `LICENSE`, `LICENSE-MIT`, `LICENSE-APACHE` present |

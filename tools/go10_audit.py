@@ -154,8 +154,14 @@ for path in workflows:
     content = path.read_text(encoding="utf-8")
     if "permissions:" not in content:
         error(f"{path.name} lacks explicit permissions")
-    if re.search(r"^\s*[A-Za-z0-9_-]+:\s*write\s*$", content, re.MULTILINE):
-        error(f"{path.name} requests write permission")
+    write_permissions = set(
+        re.findall(r"^\s+([A-Za-z0-9_-]+):\s*write\s*$", content, re.MULTILINE)
+    )
+    expected_write_permissions = (
+        {"pages", "id-token"} if path.name == "temporary-preview.yml" else set()
+    )
+    if write_permissions != expected_write_permissions:
+        error(f"{path.name} has unexpected write permissions: {sorted(write_permissions)}")
 
     for line in content.splitlines():
         match = uses_pattern.match(line)
@@ -217,7 +223,7 @@ print("GO-10 AUDIT: COMPLETE")
 print("audit_integrity=PASS")
 print(f"canonical_artifacts={len(docs)}")
 print("workflow_supply_chain=IMMUTABLY_PINNED")
-print("workflow_permissions=READ_ONLY")
+print("workflow_permissions=EXPLICIT_MINIMAL")
 print("license_resolution=RATIFIED_MIT_OR_APACHE_2_0")
 print("publication_guard=FAIL_CLOSED")
 print(f"release_readiness={release_state}")
