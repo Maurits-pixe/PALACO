@@ -3161,6 +3161,42 @@ def check_palaco_diff():
     return "7 deterministic/non-mutating diff cases + 12 invalid input rejections + CLI regression"
 
 
+def check_palaco_component_partitions():
+    nodes = [f"FE-{index:05d}" for index in range(1, 6)]
+    edges = [(source, target) for index, source in enumerate(nodes)
+             for target in nodes[index + 1:]]
+    for mask in range(1 << len(edges)):
+        graph = {node: set() for node in nodes}
+        partitions = [{node} for node in nodes]
+        for bit, (source, target) in enumerate(edges):
+            if mask & (1 << bit):
+                graph[source].add(target)
+                joined = set()
+                separate = []
+                for partition in partitions:
+                    if source in partition or target in partition:
+                        joined.update(partition)
+                    else:
+                        separate.append(partition)
+                partitions = separate + [joined]
+        expected = sorted(len(partition) for partition in partitions)
+        original = copy.deepcopy(graph)
+        require(weak_component_sizes(graph) == expected,
+                f"component sizes differ from partition oracle for graph {mask}")
+        require(count_weak_components(graph) == len(partitions),
+                f"component count differs from partition oracle for graph {mask}")
+        require(graph == original, f"component traversal mutated graph {mask}")
+        reversed_graph = {node: set() for node in reversed(nodes)}
+        for source, targets in graph.items():
+            for target in targets:
+                reversed_graph[target].add(source)
+        original = copy.deepcopy(reversed_graph)
+        require(weak_component_sizes(reversed_graph) == expected,
+                f"component sizes depend on direction or ordering for graph {mask}")
+        require(reversed_graph == original, f"component traversal mutated reversed graph {mask}")
+    return "1,024 five-node forward graphs: independent partitions, reversal, counts and non-mutation"
+
+
 def check_palaco_components():
     validators = palaco_validators()
     template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
@@ -4260,6 +4296,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO exhaustive component partitions", check_palaco_component_partitions),
     ("PALACO registry component summary conformance", check_palaco_components),
     ("PALACO shared upstream graph contract", check_palaco_upstream_contract),
     ("PALACO shared dependency graph contract", check_palaco_dependency_contract),
