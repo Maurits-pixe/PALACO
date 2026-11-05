@@ -113,6 +113,7 @@ impl Evidence {
         !self.source.trim().is_empty()
             && !self.origin.trim().is_empty()
             && !self.content_digest.trim().is_empty()
+            && !self.relevance.trim().is_empty()
             && matches!(
                 self.status,
                 EpistemicStatus::Known | EpistemicStatus::Disputed
@@ -184,6 +185,10 @@ mod tests {
 
         evidence.origin = "origin".to_owned();
         evidence.content_digest = " \t\n".to_owned();
+        assert!(!evidence.is_usable());
+
+        evidence.content_digest = "digest".to_owned();
+        evidence.relevance = " \t\n".to_owned();
         assert!(!evidence.is_usable());
     }
 
