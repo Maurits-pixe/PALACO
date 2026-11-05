@@ -2492,6 +2492,16 @@ The modifier requires `--components`; it cannot be used with other query modes.
 The full snapshot is still validated, including objects outside the selected
 cluster. Omitting the modifier preserves the complete component listing.
 
+Add `--min-component-size N` to either component mode to show only clusters
+containing at least `N` objects. `N` must be a positive integer; the default is
+one, preserving the unfiltered listing. For example, two excludes isolated
+objects. Filtering retains complete clusters and their existing sort order,
+without changing graph edges, summary counts or snapshot validation.
+It can be combined with `--component-of`: a known object's cluster below the
+minimum returns `"components": []` with exit zero, while an unknown ID still
+fails. No matching clusters also returns an empty array, not an error.
+The modifier requires `--components`; it cannot be used with other query modes.
+
 For a reusable synthetic example, use
 `docs/fixtures/palaco/registry-clusters.fixture.json` as `SNAPSHOT`.
 It contains four Draft FE records, not approved canonical objects:

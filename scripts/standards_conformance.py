@@ -910,9 +910,10 @@ def find_palaco_objects(instance, object_type, validators=None):
     }
 
 
-def find_palaco_components(instance, graph_name, validator=None, object_id=None):
+def find_palaco_components(instance, graph_name, validator=None, object_id=None, min_size=1):
     """List snapshot clusters without inferring missing links or authority."""
     require(graph_name in ("upstream", "dependency"), f"unknown component graph: {graph_name}")
+    require(type(min_size) is int and min_size >= 1, "minimum component size must be a positive integer")
     validate_palaco_registry(instance, validator)
     extract = direct_upstream_targets if graph_name == "upstream" else direct_dependency_targets
     graph = {
@@ -920,7 +921,7 @@ def find_palaco_components(instance, graph_name, validator=None, object_id=None)
     }
     if object_id is not None:
         require(object_id in graph, f"unknown component object ID: {object_id}")
-    components = weak_components(graph, object_id)
+    components = [members for members in weak_components(graph, object_id) if len(members) >= min_size]
     return {
         "graph": "traceability.upstream" if graph_name == "upstream" else "dependencies + DEPENDS_ON",
         "definition": "weakly connected components; edge direction ignored; isolates included",
@@ -3318,6 +3319,75 @@ def check_palaco_component_distributions():
     return "component distributions: numeric CLI ordering, stable output, membership and summary invariants"
 
 
+def check_palaco_component_min_size():
+    path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
+    original_bytes = path.read_bytes()
+    fixture = read_json(path)
+    original = copy.deepcopy(fixture)
+    base = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
+    for graph_name in ("upstream", "dependency"):
+        full = find_palaco_components(fixture, graph_name)
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        for minimum in (1, 2, 3, 100):
+            expected_members = [members for members in full["components"] if len(members) >= minimum]
+            expected = {**full, "components": expected_members}
+            require(find_palaco_components(fixture, graph_name, min_size=minimum) == expected,
+                    "minimum size must filter whole components inclusively")
+            require(find_palaco_components(reordered, graph_name, min_size=minimum) == expected,
+                    "minimum-size query depends on input order")
+            cli = subprocess.run(base + ["--components", graph_name, "--min-component-size", str(minimum)],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 0 and not cli.stderr and json.loads(cli.stdout) == expected,
+                    f"minimum-size CLI failed: {cli.stdout}{cli.stderr}")
+        for object_id in ("FE-00002", "FE-00004"):
+            selected = find_palaco_components(fixture, graph_name, object_id=object_id)
+            expected = {**selected, "components": [members for members in selected["components"]
+                                                  if len(members) >= 2]}
+            require(find_palaco_components(fixture, graph_name, object_id=object_id, min_size=2) == expected,
+                    "minimum size must apply after object selection")
+            cli = subprocess.run(base + ["--components", graph_name, "--component-of", object_id,
+                                         "--min-component-size", "2"],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 0 and not cli.stderr and json.loads(cli.stdout) == expected,
+                    "combined component selection and size filter failed")
+        for minimum in (0, -1, True, 1.5, "2", None):
+            try:
+                find_palaco_components(fixture, graph_name, min_size=minimum)
+            except ConformanceError as error:
+                require("positive integer" in str(error), f"unexpected minimum-size error: {error}")
+            else:
+                raise ConformanceError("invalid minimum component size accepted")
+        cli = subprocess.run(base + ["--components", graph_name, "--component-of", "FE-99999",
+                                     "--min-component-size", "100"],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 1 and not cli.stdout and "unknown component object ID" in cli.stderr,
+                "minimum-size filter hid an unknown selected object")
+        invalid = copy.deepcopy(fixture)
+        invalid["objects"][-1]["dependencies"] = ["FE-99999"]
+        try:
+            find_palaco_components(invalid, graph_name, min_size=100)
+        except ConformanceError as error:
+            require("unresolved" in str(error), "size filter bypassed snapshot validation")
+        else:
+            raise ConformanceError("size filter hid invalid snapshot")
+    for flags in (
+        ["--min-component-size", "2"],
+        ["--summary", "--min-component-size", "2"],
+        ["--components", "upstream", "--min-component-size", "0"],
+        ["--components", "dependency", "--min-component-size", "-1"],
+        ["--components", "upstream", "--min-component-size", "1.5"],
+        ["--components", "upstream", "--min-component-size", "two"],
+        ["--components", "upstream", "--min-component-size", "2", "--summary"],
+    ):
+        cli = subprocess.run(base + flags, capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 2 and not cli.stdout and cli.stderr,
+                f"invalid minimum-size CLI accepted: {flags}")
+    require(fixture == original and path.read_bytes() == original_bytes,
+            "minimum-size queries modified snapshot")
+    return "minimum sizes: inclusive boundaries, empty matches, selection, ordering, CLI errors and validation"
+
+
 def check_palaco_cluster_fixture():
     path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
     original = path.read_bytes()
@@ -3389,7 +3459,9 @@ def check_palaco_components_fail_closed():
             original = path.read_bytes()
             for graph_name, selection in (
                 (graph, selector) for graph in ("upstream", "dependency")
-                for selector in ([], ["--component-of", "FE-00001"])
+                for selector in ([], ["--component-of", "FE-00001"],
+                                 ["--min-component-size", "100"],
+                                 ["--component-of", "FE-00001", "--min-component-size", "100"])
             ):
                 cli = subprocess.run(script + ["--components", graph_name] + selection,
                                      capture_output=True, text=True, timeout=30)
@@ -4654,6 +4726,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO minimum component size conformance", check_palaco_component_min_size),
     ("PALACO component size distribution conformance", check_palaco_component_distributions),
     ("PALACO multi-cluster fixture conformance", check_palaco_cluster_fixture),
     ("PALACO component CLI fail-closed conformance", check_palaco_components_fail_closed),
@@ -4745,6 +4818,8 @@ def main():
                         help="Return weakly connected object-ID groups as JSON; requires --registry")
     parser.add_argument("--component-of", metavar="OBJECT_ID",
                         help="Return only the cluster containing OBJECT_ID; requires --components")
+    parser.add_argument("--min-component-size", type=int, metavar="N",
+                        help="Return only clusters of at least N objects (positive integer); requires --components")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
@@ -4758,6 +4833,11 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.min_component_size is not None:
+        if args.components is None:
+            parser.error("--min-component-size requires --components")
+        if args.min_component_size < 1:
+            parser.error("--min-component-size must be a positive integer")
     if args.component_of is not None and args.components is None:
         parser.error("--component-of requires --components")
     if args.components is not None:
@@ -4765,7 +4845,7 @@ def main():
             parser.error("--components requires --registry")
         if any(value is not None and value is not False
                for name, value in vars(args).items()
-               if name not in ("registry", "components", "component_of")):
+               if name not in ("registry", "components", "component_of", "min_component_size")):
             parser.error("--components cannot be combined with other query or comparison modes")
     if args.find_dependency_orphans:
         if args.registry is None:
@@ -5013,7 +5093,10 @@ def main():
         try:
             current = read_json(args.registry)
             if args.components is not None:
-                result = find_palaco_components(current, args.components, object_id=args.component_of)
+                result = find_palaco_components(
+                    current, args.components, object_id=args.component_of,
+                    min_size=args.min_component_size if args.min_component_size is not None else 1,
+                )
                 print(json.dumps(result, indent=2))
                 return 0
             elif args.find_dependency_orphans:
