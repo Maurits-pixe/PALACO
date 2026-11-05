@@ -63,6 +63,11 @@ fn indoubt_authority_is_held_and_never_executes() -> Result<(), ContractError> {
 
     assert_eq!(cycle.disposition(), ContractDisposition::Hold);
     assert!(!cycle.can_execute());
+    assert_eq!(
+        cycle.plan().boundary().record().validate(),
+        Err(ContractError::AuthorityInDoubt)
+    );
+    cycle.validate()?;
 
     Ok(())
 }
