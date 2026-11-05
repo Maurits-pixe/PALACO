@@ -42,6 +42,18 @@ fn revoked_authority_remains_denied_across_all_downstream_boundaries() -> Result
 }
 
 #[test]
+fn expired_authority_is_denied_across_all_downstream_boundaries() -> Result<(), ContractError> {
+    let cycle = cycle(AuthorityState::Expired)?;
+
+    assert_eq!(cycle.disposition(), ContractDisposition::Deny);
+    assert!(!cycle.can_execute());
+    assert_eq!(cycle.fail_closed(), ContractDisposition::Deny);
+    assert_eq!(cycle.validate(), Err(ContractError::ExpiredAuthority));
+
+    Ok(())
+}
+
+#[test]
 fn indoubt_authority_is_held_and_never_executes() -> Result<(), ContractError> {
     let cycle = cycle(AuthorityState::InDoubt)?;
 
