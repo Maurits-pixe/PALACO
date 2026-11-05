@@ -27,8 +27,12 @@ Requires Node.js 22.12 or newer.
 npm ci
 npm test
 npm run build
+npm run test:preview
 npm run dev
 ```
+
+`npm run test:preview` builds the production bundle, starts it on an ephemeral
+localhost port, and checks the served security headers, app bundle, and image.
 
 Open the localhost URL printed by Vite. The fixture-event button replays one
 predefined synthetic event locally; it does not contact a service or mutate a

@@ -12,7 +12,8 @@
     "preview": "vite preview --configLoader native",
     "schema:generate": "node scripts/generate-validator.mjs",
     "schema:check": "node scripts/generate-validator.mjs --check",
-    "test": "npm run schema:check && node --test tests/*.test.mjs"
+    "test": "npm run schema:check && node --test tests/*.test.mjs",
+    "test:preview": "npm run build && node scripts/preview-smoke.mjs"
   },
   "dependencies": {
     "vue": "3.5.43"
