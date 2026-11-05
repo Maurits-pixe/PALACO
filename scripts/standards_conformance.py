@@ -655,16 +655,19 @@ def direct_upstream_targets(record):
     return set(record["traceability"]["upstream"])
 
 
-def weak_components(graph):
-    """Return sorted node groups of a validated closed graph, ignoring direction."""
+def weak_components(graph, object_id=None):
+    """Return sorted weak components, optionally only for a known object ID."""
     neighbors = {source: set(targets) for source, targets in graph.items()}
     for source, targets in graph.items():
         for target in targets:
             neighbors[target].add(source)
     remaining = set(graph)
     components = []
-    while remaining:
-        root = remaining.pop()
+    roots = (object_id,) if object_id is not None else graph
+    for root in roots:
+        if root not in remaining:
+            continue
+        remaining.remove(root)
         members = {root}
         pending = [root]
         while pending:
@@ -916,9 +919,7 @@ def find_palaco_components(instance, graph_name, validator=None, object_id=None)
     }
     if object_id is not None:
         require(object_id in graph, f"unknown component object ID: {object_id}")
-    components = weak_components(graph)
-    if object_id is not None:
-        components = [members for members in components if object_id in members]
+    components = weak_components(graph, object_id)
     return {
         "graph": "traceability.upstream" if graph_name == "upstream" else "dependencies + DEPENDS_ON",
         "definition": "weakly connected components; edge direction ignored; isolates included",
@@ -3216,6 +3217,10 @@ def check_palaco_component_partitions():
                 f"component sizes differ from partition oracle for graph {mask}")
         require(count_weak_components(graph) == len(partitions),
                 f"component count differs from partition oracle for graph {mask}")
+        for node in nodes:
+            selected = [members for members in expected_members if node in members]
+            require(weak_components(graph, node) == selected,
+                    f"selected members differ from partition oracle for graph {mask}, {node}")
         require(graph == original, f"component traversal mutated graph {mask}")
         reversed_graph = {node: set() for node in reversed(nodes)}
         for source, targets in graph.items():
@@ -3226,8 +3231,12 @@ def check_palaco_component_partitions():
                 f"component members depend on direction or ordering for graph {mask}")
         require(weak_component_sizes(reversed_graph) == expected,
                 f"component sizes depend on direction or ordering for graph {mask}")
+        for node in nodes:
+            selected = [members for members in expected_members if node in members]
+            require(weak_components(reversed_graph, node) == selected,
+                    f"selected members depend on direction or ordering for graph {mask}, {node}")
         require(reversed_graph == original, f"component traversal mutated reversed graph {mask}")
-    return "1,024 five-node forward graphs: independent partitions, reversal, counts and non-mutation"
+    return "1,024 five-node forward graphs: partitions, selected members, reversal, counts and non-mutation"
 
 
 def check_palaco_components_fail_closed():
