@@ -1,4 +1,4 @@
-# Personal Account Control — executable reference model v0.13
+# Personal Account Control — executable reference model v0.14
 
 Status: IMPLEMENTED / LOCAL MODEL TESTS PASS. Production and ACCOUNT-1: HOLD.
 Base inspected: PALACO 1b2065af0dfe82e25b3f62c80d9f9873563f6afd.
@@ -230,3 +230,12 @@ the concrete proposed public branch/draft PR and the permission boundary.
 The local HEAD is not rebased and no remote write or CI dispatch has occurred.
 Full RIO Rust and upstream Playwright checks remain dependency-blocked. New local
 evidence and review overlay supersede neither the old artifacts nor remote CI.
+
+## v0.14 real CI regression correction
+
+[CI-BOUNDARY-FIX.md](CI-BOUNDARY-FIX.md) records the first actual RIO CI result:
+Rust/build/storage checks passed, but the new response field was incompatible
+with the frontend and browser exact schemas. The corrected consumers still
+require the exact refusal boundary. Existing real-browser coverage now rejects
+malformed/promoted metadata and checks recovery to the genuine response. New
+head/run evidence is required; old success/failure records are not rewritten.

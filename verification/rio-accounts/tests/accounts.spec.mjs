@@ -127,9 +127,14 @@ async function assertOwnAccount(page, username) {
     expect(me.data.accountId).toBe(username);
     expect(me.data.actorKind).toBe('SYNTHETIC_DEV_ACTOR');
     expect(me.data.credentialControl).toBe('VERIFIED_DEV_OIDC');
+    expect(me.data.personalAccountControl).toEqual({
+      schema: 'rio-personal-account-boundary/v1',
+      strongAuthentication: 'UNKNOWN', lifecycleAuthority: 'NONE', activationEligible: false,
+      reason: 'STRONG_AUTHENTICATION_EVIDENCE_MISSING',
+    });
     expect(Object.keys(me.data).sort()).toEqual([
       'account1', 'accountActive', 'accountId', 'actorKind', 'canOpenContact',
-      'credentialControl', 'csrfToken', 'mode', 'operativeAuthority',
+      'credentialControl', 'csrfToken', 'mode', 'operativeAuthority', 'personalAccountControl',
     ]);
     expect(typeof me.data.csrfToken === 'string' && me.data.csrfToken.length >= 32).toBe(true);
     await test.step('hold-status', async () => {
@@ -267,6 +272,31 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
       await alpha.addCookies([replacementCookie]);
       await assertOwnAccount(alphaPage, credentials.alpha.username);
       await assertOwnAccount(betaPage, credentials.beta.username);
+    });
+    await test.step('hold-status', async () => {
+      const own = (await readMe(alphaPage)).data;
+      const boundary = own.personalAccountControl;
+      for (const changed of [null, { ...boundary, activationEligible: true },
+        { ...boundary, lifecycleAuthority: 'OWNER' },
+        { ...boundary, strongAuthentication: 'VERIFIED' },
+        { ...boundary, extraAuthority: true }]) {
+        await alphaPage.route(BFF + '/api/me', route => route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ ...own, personalAccountControl: changed }),
+        }));
+        try {
+          await alphaPage.reload();
+          await expect(alphaPage.locator('#account-id')).toHaveText('');
+          await expect(alphaPage.locator('#account')).toBeHidden();
+          await expect(alphaPage.locator('#feedback')).toHaveText(
+            'RIO is tijdelijk niet beschikbaar. Controleer je testsessie opnieuw.');
+        } finally {
+          await alphaPage.unroute(BFF + '/api/me');
+        }
+      }
+      await alphaPage.reload();
+      await expect(alphaPage.locator('#account-id')).toHaveText(credentials.alpha.username);
+      await assertOwnAccount(alphaPage, credentials.alpha.username);
     });
   } finally {
     await Promise.all([alpha.close(), beta.close()]);

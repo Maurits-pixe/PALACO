@@ -54,11 +54,16 @@ async function ownAccount(page, username) {
   const data = response.data;
   expect(Object.keys(data).sort()).toEqual([
     'account1', 'accountActive', 'accountId', 'actorKind', 'canOpenContact',
-    'credentialControl', 'csrfToken', 'mode', 'operativeAuthority',
+    'credentialControl', 'csrfToken', 'mode', 'operativeAuthority', 'personalAccountControl',
   ]);
   expect(data.accountId).toBe(username);
   expect(data.actorKind).toBe('SYNTHETIC_DEV_ACTOR');
   expect(data.credentialControl).toBe('VERIFIED_DEV_OIDC');
+  expect(data.personalAccountControl).toEqual({
+    schema: 'rio-personal-account-boundary/v1',
+    strongAuthentication: 'UNKNOWN', lifecycleAuthority: 'NONE', activationEligible: false,
+    reason: 'STRONG_AUTHENTICATION_EVIDENCE_MISSING',
+  });
   expect(typeof data.csrfToken === 'string' && /^[A-Za-z0-9_-]{43}$/.test(data.csrfToken)).toBe(true);
   expect(data.mode).toBe('SYNTHETIC_ONLY');
   expect(data.accountActive).toBe(false);

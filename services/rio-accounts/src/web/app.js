@@ -177,8 +177,16 @@
     function validMe(me) {
         return exactKeys(me, [
             'accountId', 'csrfToken', 'actorKind', 'credentialControl', 'accountActive',
-            'mode', 'operativeAuthority', 'canOpenContact', 'account1'
+            'mode', 'operativeAuthority', 'canOpenContact', 'account1', 'personalAccountControl'
         ]) && closedBoundary(me)
+            && exactKeys(me.personalAccountControl, [
+                'schema', 'strongAuthentication', 'lifecycleAuthority', 'activationEligible', 'reason'
+            ])
+            && me.personalAccountControl.schema === 'rio-personal-account-boundary/v1'
+            && me.personalAccountControl.strongAuthentication === 'UNKNOWN'
+            && me.personalAccountControl.lifecycleAuthority === 'NONE'
+            && me.personalAccountControl.activationEligible === false
+            && me.personalAccountControl.reason === 'STRONG_AUTHENTICATION_EVIDENCE_MISSING'
             && (me.accountId === 'TST-alpha' || me.accountId === 'TST-beta')
             && me.actorKind === 'SYNTHETIC_DEV_ACTOR'
             && me.credentialControl === 'VERIFIED_DEV_OIDC'

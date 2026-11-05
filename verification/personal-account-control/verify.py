@@ -43,7 +43,8 @@ def sources():
     paths=list(ROOT.glob('*.py'))+list(ROOT.glob('*.md'))+[ROOT/'test-inventory.json']
     paths += [ROOT.parent/'rio-accounts'/p for p in (
         'review_gate.py','test_review_gate.py','review/t04-review-template.json',
-        'test_account_readback.mjs','mobile/helpers.mjs','mobile/interaction.spec.mjs')]
+        'test_account_readback.mjs','mobile/helpers.mjs','mobile/interaction.spec.mjs',
+        'tests/accounts.spec.mjs','durable/durable.spec.mjs')]
     service=REPO/'services'/'rio-accounts'
     paths += [p for p in (service/'src').rglob('*') if p.is_file()]
     paths += list((service/'migrations').glob('*.sql'))
