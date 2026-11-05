@@ -2340,7 +2340,8 @@ invalid snapshots and unreadable files fail nonzero with diagnostics on stderr
 and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
-Choose one query mode at a time. `--direction` and `--trace-graph` modify `--trace`, while
+Choose one query mode at a time. `--direction`, `--trace-graph` and
+`--trace-max-depth` modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
 
@@ -2363,7 +2364,7 @@ changes without newer audit timestamps: it is **not** transition validation,
 authenticated history or authorization. Omit `--diff` to retain the stricter
 existing `--previous-registry` transition checks. Invalid inputs, including empty
 snapshots, fail nonzero without diff results. Both paths are required; other
-queries, `--direction` and `--trace-graph` cannot be combined with `--diff`. No records or files
+queries and trace modifiers cannot be combined with `--diff`. No records or files
 are modified.
 
 Read-only trace queries return the transitive upstream or downstream object IDs:
@@ -2376,6 +2377,10 @@ python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-clusters.fixture.json \
   --trace FE-00002 --trace-graph dependency --direction downstream
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --trace REQ-00001 --trace-max-depth 1
 ```
 
 `--trace` first validates the entire closed snapshot, then emits only a JSON object
@@ -2389,10 +2394,17 @@ an empty array. Unknown IDs and invalid registries fail nonzero without results.
 Trace errors, including unreadable snapshots, are written to stderr with empty
 stdout. Successful traces emit JSON on stdout and leave stderr empty in both
 directions, including when no nodes are reachable.
+`--trace-max-depth N` includes only IDs whose shortest path in the selected graph
+and direction is at most N hops. N must be a nonnegative integer; 0 returns no
+reachable IDs but still validates the entire snapshot and checks the starting ID.
+An explicit bound adds `max_depth` to the JSON result; omitting it preserves
+unlimited reachability and the existing JSON format. This bounds reachability,
+not snapshot validation cost. Bounded results are not exhaustive beyond that
+depth and do not establish completeness or authority.
 The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
-`--direction` and `--trace-graph` each require `--trace`, even when explicitly
+`--direction`, `--trace-graph` and `--trace-max-depth` each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
 
