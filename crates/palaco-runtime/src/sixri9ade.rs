@@ -1443,8 +1443,7 @@ mod tests {
     }
 
     #[test]
-    fn oversized_initiation_body_fails_closed_without_side_effects()
-    -> Result<(), Box<dyn Error>> {
+    fn oversized_initiation_body_fails_closed_without_side_effects() -> Result<(), Box<dyn Error>> {
         let mut fixture = Fixture::new()?;
         fixture.initiation.body = Value::String("x".repeat(MAX_CANONICAL_BODY_BYTES + 1));
 
@@ -1452,9 +1451,12 @@ mod tests {
         let result = fixture.result();
 
         assert_eq!(result.status, GateStatus::Hold);
-        assert!(result.reason_codes.iter().any(|reason| {
-            reason == "INITIATION_MISSING_OR_INVALID"
-        }));
+        assert!(
+            result
+                .reason_codes
+                .iter()
+                .any(|reason| { reason == "INITIATION_MISSING_OR_INVALID" })
+        );
         assert!(!result.can_open_contact);
         assert_eq!(result.operative_authority, "NONE");
         assert!(!result.runtime_connected);
