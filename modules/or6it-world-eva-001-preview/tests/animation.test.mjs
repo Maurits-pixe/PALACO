@@ -202,6 +202,25 @@ test('ambient motion throttles early frames without dropping its animation loop'
   animation.dispose();
 });
 
+test('high-refresh displays do not draw more frequently than the frame interval', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  harness.runFrame(17);
+  const firstFrameArcs = harness.calls.arcs;
+  assert.ok(firstFrameArcs > 0);
+
+  harness.runFrame(25);
+  assert.equal(harness.calls.arcs, firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(34);
+  assert.ok(harness.calls.arcs > firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.dispose();
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
