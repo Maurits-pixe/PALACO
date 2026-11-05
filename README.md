@@ -2590,7 +2590,10 @@ or SLA compliance; no runtime probes or network requests are made.
 Counts are metadata observations, not
 proof of completeness, approval, activation or authority.
 Invalid snapshots, including empty registries, fail nonzero without summary
-results. No records or files are modified. `--summary` requires `--registry` and
+results. Invalid or unreadable snapshot diagnostics are written to stderr;
+stdout remains empty rather than containing error text or partial JSON.
+Successful stdout remains the JSON summary, with empty stderr.
+No records or files are modified. `--summary` requires `--registry` and
 cannot be combined with other queries, `--direction` or `--previous-registry`.
 
 Read-only review-date queries find scheduled reviews up to an explicit cutoff:

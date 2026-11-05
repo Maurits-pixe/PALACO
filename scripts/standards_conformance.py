@@ -3564,38 +3564,37 @@ def check_palaco_components_fail_closed():
         ('{"registry_version": "0.1.0", "objects": [', "Expecting value"),
         ('{"objects": [], "objects": []}', "Duplicate JSON key"),
     ])
+    modes = [
+        ["--components", graph] + selector
+        for graph in ("upstream", "dependency")
+        for selector in ([], ["--component-of", "FE-00001"],
+                         ["--min-component-size", "100"],
+                         ["--component-of", "FE-00001", "--min-component-size", "100"],
+                         ["--max-component-size", "1"],
+                         ["--component-of", "FE-00001", "--max-component-size", "1"])
+    ] + [["--summary"]]
     with tempfile.TemporaryDirectory(prefix="palaco-components-", dir="/tmp") as directory:
         path = Path(directory) / "registry.json"
         script = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
         for content, diagnostic in cases:
             path.write_text(content, encoding="utf-8")
             original = path.read_bytes()
-            for graph_name, selection in (
-                (graph, selector) for graph in ("upstream", "dependency")
-                for selector in ([], ["--component-of", "FE-00001"],
-                                 ["--min-component-size", "100"],
-                                 ["--component-of", "FE-00001", "--min-component-size", "100"],
-                                 ["--max-component-size", "1"],
-                                 ["--component-of", "FE-00001", "--max-component-size", "1"])
-            ):
-                cli = subprocess.run(script + ["--components", graph_name] + selection,
+            for mode in modes:
+                cli = subprocess.run(script + mode,
                                      capture_output=True, text=True, timeout=30)
                 require(cli.returncode == 1 and not cli.stdout,
-                        f"{graph_name} emitted results for invalid snapshot: {cli.stdout}")
+                        f"{mode} emitted results for invalid snapshot: {cli.stdout}")
                 require("FAIL:" in cli.stderr and diagnostic in cli.stderr,
-                        f"{graph_name} missing expected diagnostic {diagnostic}: {cli.stderr}")
-                require(path.read_bytes() == original, "failed component query modified input")
+                        f"{mode} missing expected diagnostic {diagnostic}: {cli.stderr}")
+                require(path.read_bytes() == original, "failed JSON query modified input")
         path.unlink()
-        for graph_name, selection in (
-            (graph, selector) for graph in ("upstream", "dependency")
-            for selector in ([], ["--component-of", "FE-00001"])
-        ):
-            cli = subprocess.run(script + ["--components", graph_name] + selection,
+        for mode in modes:
+            cli = subprocess.run(script + mode,
                                  capture_output=True, text=True, timeout=30)
             require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
-                    "missing component snapshot did not fail cleanly")
-            require(not path.exists(), "failed component query created missing snapshot")
-    return "both component modes, selected/unfiltered: 8 invalid snapshots + missing file; fail-closed"
+                    f"missing snapshot did not fail cleanly: {mode}")
+            require(not path.exists(), "failed JSON query created missing snapshot")
+    return "summary and component modes: 8 invalid snapshots + missing file; JSON stdout remains empty"
 
 
 def check_palaco_components():
@@ -5328,7 +5327,7 @@ def main():
                 summary = validate_registry_transition(read_json(args.previous_registry), current)
         except Exception as error:  # fail closed, including unreadable files
             print(f"FAIL: {type(error).__name__}: {error}",
-                  file=sys.stderr if args.components is not None else sys.stdout)
+                  file=sys.stderr if args.components is not None or args.summary else sys.stdout)
             return 1
         print(f"PASS: {summary}")
         return 0
