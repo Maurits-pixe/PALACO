@@ -6,5 +6,5 @@ crates/palaco-runtime/tests/sixri9ade_bridge_vectors.rs:
 crates/palaco-runtime/tests/vectors/6ri9ade-node-reference-v0.1.json:
 Cargo.toml:
 
-# env-dep:CLIPPY_ARGS=-D__CLIPPY_HACKERY__warnings__CLIPPY_HACKERY__
+# env-dep:CLIPPY_ARGS=
 # env-dep:CLIPPY_CONF_DIR
