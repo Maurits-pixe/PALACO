@@ -44,7 +44,9 @@ set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path.
 
 The `EVA read-only preview` GitHub Actions workflow runs the unit contracts,
 production HTTP smoke check, and Chromium event/motion regression on relevant
-pull requests and pushes to `main`. Changes to the shared schema or canonical
+pull requests and pushes to `main` or `feat/or6it-world-eva-001-preview`.
+The feature-branch push trigger also works when merge conflicts prevent PR
+workflows from running. Changes to the shared schema or canonical
 image also trigger it. This workflow tests only local synthetic data; it has
 read-only repository permissions and does not deploy or authorize a World.
 

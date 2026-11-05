@@ -8,7 +8,7 @@ on:
       - 'assets/world-eva-001-reference.png'
       - '.github/workflows/eva-preview.yml'
   push:
-    branches: [main]
+    branches: [main, feat/or6it-world-eva-001-preview]
     paths:
       - 'modules/or6it-world-eva-001-preview/**'
       - 'schemas/world-design-manifest.schema.json'
