@@ -256,15 +256,15 @@ test('clock reset during frame throttling does not lock the loop', () => {
   assert.equal(harness.calls.arcs, firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
-  harness.runFrame(5);
+  harness.runFrame(0);
   assert.equal(harness.calls.arcs, firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
-  harness.runFrame(10);
+  harness.runFrame(16);
   assert.equal(harness.calls.arcs, firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
-  harness.runFrame(22);
+  harness.runFrame(17);
   assert.ok(harness.calls.arcs > firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
