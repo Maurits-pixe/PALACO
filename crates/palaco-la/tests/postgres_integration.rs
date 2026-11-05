@@ -135,6 +135,33 @@ async fn postgres_rejects_sequence_and_predecessor_conflicts() {
 }
 
 #[tokio::test]
+async fn postgres_rejects_payload_hash_mismatch_before_persisting() {
+    let store = store().await;
+    let aggregate_id = AggregateId::new(Uuid::new_v4());
+    let valid = event(aggregate_id, Sequence::genesis(), None, b"original-payload");
+    let tampered = EventEnvelope {
+        payload: CanonicalBytes::new(b"tampered-payload".to_vec()),
+        ..valid
+    };
+
+    assert_eq!(
+        store
+            .append(aggregate_id, Sequence::genesis(), None, tampered)
+            .await,
+        Err(EventStoreError::Persistence(
+            "event payload_hash does not match exact payload bytes".to_owned()
+        ))
+    );
+    assert_eq!(
+        store
+            .current_head(aggregate_id)
+            .await
+            .expect("head lookup must succeed"),
+        None
+    );
+}
+
+#[tokio::test]
 async fn postgres_rejects_event_sequence_mismatch() {
     let store = store().await;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
