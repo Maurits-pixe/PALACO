@@ -4978,7 +4978,162 @@ def run_regression_tests():
 
 # --------------------------------------------------------------------------
 
+def check_registry_cli_validation():
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from unittest.mock import patch
+
+    parser = registry_cli_parser()
+
+    class RaisingParser:
+        def error(self, message):
+            raise ConformanceError(message)
+
+    query_flags = {
+        "diff": ["--diff"],
+        "trace": ["--trace", "FE-00001"],
+        "find_type": ["--find-type", "FE"],
+        "find_domain": ["--find-domain", "Governance"],
+        "find_verification": ["--find-verification", "Pending"],
+        "find_approval": ["--find-approval", "Pending"],
+        "find_owner": ["--find-owner", "custodian", "Example registry team"],
+        "find_criticality": ["--find-criticality", "High"],
+        "find_confidentiality": ["--find-confidentiality", "Public"],
+        "find_integrity": ["--find-integrity", "High"],
+        "find_availability": ["--find-availability", "Medium"],
+        "find_relationship": ["--find-relationship", "DEPENDS_ON"],
+        "find_updater": ["--find-updater", "Example registry team"],
+        "find_name": ["--find-name", "Example accountable registry"],
+        "find_updated_since": ["--find-updated-since", "2026-10-15"],
+        "find_dependents": ["--find-dependents", "FE-00001"],
+        "find_dependencies": ["--find-dependencies", "FE-00001"],
+        "find_lifecycle": ["--find-lifecycle", "Draft"],
+        "summary": ["--summary"],
+        "components": ["--components", "upstream"],
+        "find_review_due": ["--find-review-due", "2027-01-15"],
+        "find_orphans": ["--find-orphans"],
+        "find_dependency_orphans": ["--find-dependency-orphans"],
+        "find_unverified_controls": ["--find-unverified-controls"],
+        "find_unaudited_evidence": ["--find-unaudited-evidence"],
+    }
+    defaults = vars(parser.parse_args([]))
+    require(set(query_flags) == {
+        name for name in defaults
+        if name.startswith("find_") or name in ("diff", "trace", "summary", "components")
+    }, "CLI validation matrix must cover every registered query mode")
+    fixture_path = str(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    registry = ["--registry", fixture_path]
+    previous = ["--previous-registry", fixture_path]
+    count = 0
+
+    def check(flags, expected=None, modes=()):
+        nonlocal count
+        args = parser.parse_args(flags)
+        if expected is None:
+            require(set(active_registry_query_modes(args)) == set(modes),
+                    f"incorrect active query modes: {flags}")
+        try:
+            result = validate_registry_cli(args, RaisingParser())
+        except ConformanceError as error:
+            require(expected is not None and expected in str(error),
+                    f"wrong CLI diagnostic for {flags}: {error}")
+        else:
+            require(expected is None, f"invalid CLI combination accepted: {flags}")
+            require(set(result) == set(modes), f"validation changed query classification: {flags}")
+        count += 1
+
+    check([])
+    check(registry)
+    check(registry + previous)
+    check(previous, "--previous-registry requires --registry")
+    for mode, flags in query_flags.items():
+        base = registry + (previous if mode == "diff" else [])
+        check(base + flags, modes=(mode,))
+        diagnostic = ("--diff requires --registry and --previous-registry" if mode == "diff"
+                      else f"{flags[0]} requires --registry")
+        check(flags, diagnostic)
+        if mode == "diff":
+            check(registry + flags, diagnostic)
+            check(previous + flags, diagnostic)
+        else:
+            check(base + previous + flags, "cannot be combined")
+        if mode != "trace":
+            check(base + flags + ["--direction", "upstream"], "--direction requires --trace")
+        for other, other_flags in query_flags.items():
+            if other != mode:
+                # Both ordered pairs are intentional: flag order must not select a winner.
+                pair_base = registry + (previous if "diff" in (mode, other) else [])
+                check(pair_base + flags + other_flags, "cannot be combined")
+
+    for direction in ("upstream", "downstream"):
+        check(registry + query_flags["trace"] + ["--direction", direction], modes=("trace",))
+        check(["--direction", direction], "--direction requires --trace")
+
+    modifiers = (["--component-of", "FE-00001"], ["--min-component-size", "2"],
+                 ["--max-component-size", "3"])
+    for graph in ("upstream", "dependency"):
+        for mask in range(1 << len(modifiers)):
+            flags = [value for index, modifier in enumerate(modifiers) if mask & (1 << index)
+                     for value in modifier]
+            check(registry + ["--components", graph] + flags, modes=("components",))
+    for modifier in modifiers:
+        expected = f"{modifier[0]} requires --components"
+        check(modifier, expected)
+        check(registry + modifier, expected)
+        for mode, flags in query_flags.items():
+            if mode != "components":
+                check(registry + (previous if mode == "diff" else []) + flags + modifier, expected)
+    for option in ("--min-component-size", "--max-component-size"):
+        for size in ("0", "-1"):
+            check(registry + query_flags["components"] + [option, size],
+                  f"{option} must be a positive integer")
+    check(registry + query_flags["components"] + ["--min-component-size", "3",
+                                                "--max-component-size", "2"],
+          "--max-component-size must be at least --min-component-size")
+    check(registry + query_flags["components"] + ["--min-component-size", "2",
+                                                "--max-component-size", "2"], modes=("components",))
+    for mode, flags in query_flags.items():
+        if mode == "trace" or (mode.startswith("find_") and len(flags) > 1):
+            empty_flags = [flags[0]] + [""] * (len(flags) - 1)
+            check(registry + empty_flags, modes=(mode,))
+            check(empty_flags, f"{flags[0]} requires --registry")
+            check(registry + empty_flags + previous, "cannot be combined")
+            for other_flags in (query_flags["summary"], query_flags["components"]):
+                check(registry + empty_flags + other_flags, "cannot be combined")
+                check(registry + other_flags + empty_flags, "cannot be combined")
+
+    def check_output(flags, code, stdout_prefix="", stderr_prefix=""):
+        nonlocal count
+        stdout, stderr = StringIO(), StringIO()
+        with patch.object(sys, "argv", [str(Path(__file__).resolve())] + flags):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main()
+        require(result == code, f"incorrect CLI exit code: {flags}")
+        for actual, prefix in ((stdout.getvalue(), stdout_prefix), (stderr.getvalue(), stderr_prefix)):
+            require(actual.startswith(prefix) if prefix else not actual,
+                    f"incorrect CLI output stream for {flags}: {actual!r}")
+        count += 1
+
+    with patch.dict(main.__globals__, CHECKS=(("in-process full-suite sentinel", lambda: "sentinel"),)):
+        check_output([], 0, "== in-process full-suite sentinel\nPASS: sentinel\n")
+    check_output(registry, 0, "PASS:")
+    check_output(registry + previous, 0, "PASS:")
+
+    def unreadable_registry(path):
+        raise ConformanceError("unreadable registry")
+
+    with patch.dict(main.__globals__, read_json=unreadable_registry):
+        check_output(registry, 1, "FAIL:")
+        check_output(registry + previous, 1, "FAIL:")
+        for mode, flags in query_flags.items():
+            check_output(registry + (previous if mode == "diff" else []) + flags,
+                         1, stderr_prefix="FAIL:")
+        check_output(registry + ["--find-name", ""], 1, stderr_prefix="FAIL:")
+    return f"{count} in-process CLI mode, modifier, required-input and output-stream checks"
+
+
 CHECKS = (
+    ("PALACO Registry CLI validation", check_registry_cli_validation),
     ("PALACO maximum component size conformance", check_palaco_component_max_size),
     ("PALACO minimum component size conformance", check_palaco_component_min_size),
     ("PALACO component size distribution conformance", check_palaco_component_distributions),
@@ -5025,7 +5180,7 @@ CHECKS = (
 )
 
 
-def main():
+def registry_cli_parser():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--registry", type=Path, help="Validate one closed PCR-000 registry snapshot")
     parser.add_argument("--previous-registry", type=Path,
@@ -5088,7 +5243,20 @@ def main():
                         help="Return EVD IDs without audit references or AUD evidence-package membership")
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
-    args = parser.parse_args()
+    return parser
+
+
+def active_registry_query_modes(args):
+    """Keep query validation and JSON error routing on the same mode definition."""
+    return tuple(
+        name for name, value in vars(args).items()
+        if (name.startswith("find_") or name in ("diff", "summary", "components", "trace"))
+        and value is not None and value is not False
+    )
+
+
+def validate_registry_cli(args, parser):
+    """Validate mode relationships without reading either registry."""
     if args.max_component_size is not None:
         if args.components is None:
             parser.error("--max-component-size requires --components")
@@ -5103,261 +5271,31 @@ def main():
             parser.error("--min-component-size must be a positive integer")
     if args.component_of is not None and args.components is None:
         parser.error("--component-of requires --components")
-    if args.components is not None:
-        if args.registry is None:
-            parser.error("--components requires --registry")
-        if any(value is not None and value is not False
-               for name, value in vars(args).items()
-               if name not in ("registry", "components", "component_of",
-                               "min_component_size", "max_component_size")):
-            parser.error("--components cannot be combined with other query or comparison modes")
-    if args.find_dependency_orphans:
-        if args.registry is None:
-            parser.error("--find-dependency-orphans requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_relationship is not None or args.find_updater is not None
-                or args.find_name is not None or args.find_updated_since is not None
-                or args.find_dependencies is not None or args.find_dependents is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-dependency-orphans cannot be combined with other query or comparison modes")
-    if args.find_dependencies is not None:
-        if args.registry is None:
-            parser.error("--find-dependencies requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_relationship is not None or args.find_updater is not None
-                or args.find_name is not None or args.find_updated_since is not None
-                or args.find_dependents is not None or args.find_review_due is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-dependencies cannot be combined with other query or comparison modes")
-    if args.find_dependents is not None:
-        if args.registry is None:
-            parser.error("--find-dependents requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_relationship is not None or args.find_updater is not None
-                or args.find_name is not None or args.find_updated_since is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-dependents cannot be combined with other query or comparison modes")
-    if args.find_updated_since is not None:
-        if args.registry is None:
-            parser.error("--find-updated-since requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_relationship is not None or args.find_updater is not None
-                or args.find_name is not None or args.find_review_due is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-updated-since cannot be combined with other query or comparison modes")
-    if args.find_name is not None:
-        if args.registry is None:
-            parser.error("--find-name requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_relationship is not None or args.find_updater is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-name cannot be combined with other query or comparison modes")
-    if args.find_updater is not None:
-        if args.registry is None:
-            parser.error("--find-updater requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_relationship is not None or args.find_review_due is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-updater cannot be combined with other query or comparison modes")
-    if args.find_relationship is not None:
-        if args.registry is None:
-            parser.error("--find-relationship requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_availability is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-relationship cannot be combined with other query or comparison modes")
-    if args.find_availability is not None:
-        if args.registry is None:
-            parser.error("--find-availability requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_integrity is not None or args.find_review_due is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-availability cannot be combined with other query or comparison modes")
-    if args.find_integrity is not None:
-        if args.registry is None:
-            parser.error("--find-integrity requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_confidentiality is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-integrity cannot be combined with other query or comparison modes")
-    if args.find_confidentiality is not None:
-        if args.registry is None:
-            parser.error("--find-confidentiality requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_criticality is not None or args.find_review_due is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-confidentiality cannot be combined with other query or comparison modes")
-    if args.find_criticality is not None:
-        if args.registry is None:
-            parser.error("--find-criticality requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_owner is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-criticality cannot be combined with other query or comparison modes")
-    if args.find_owner is not None:
-        if args.registry is None:
-            parser.error("--find-owner requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_approval is not None or args.find_review_due is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-owner cannot be combined with other query or comparison modes")
-    if args.find_approval is not None:
-        if args.registry is None:
-            parser.error("--find-approval requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_verification is not None
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-approval cannot be combined with other query or comparison modes")
-    if args.find_verification is not None:
-        if args.registry is None:
-            parser.error("--find-verification requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_domain is not None or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-verification cannot be combined with other query or comparison modes")
-    if args.find_domain is not None:
-        if args.registry is None:
-            parser.error("--find-domain requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_review_due is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-domain cannot be combined with other query or comparison modes")
-    if args.find_review_due is not None:
-        if args.registry is None:
-            parser.error("--find-review-due requires --registry")
-        if (args.previous_registry is not None or args.diff or args.trace is not None
-                or args.find_type is not None or args.find_lifecycle is not None or args.summary
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.direction is not None):
-            parser.error("--find-review-due cannot be combined with other query or comparison modes")
-    if args.diff:
+
+    modes = active_registry_query_modes(args)
+    options = ["--" + name.replace("_", "-") for name in modes]
+    if len(modes) > 1:
+        parser.error(f"{' and '.join(options)} cannot be combined with other query modes")
+    if "diff" in modes:
         if args.registry is None or args.previous_registry is None:
             parser.error("--diff requires --registry and --previous-registry")
-        if (args.trace is not None or args.find_type is not None or args.find_lifecycle is not None
-                or args.summary or args.find_orphans or args.find_unverified_controls
-                or args.find_unaudited_evidence or args.direction is not None):
-            parser.error("--diff cannot be combined with other query modes")
+    elif modes:
+        if args.registry is None:
+            parser.error(f"{options[0]} requires --registry")
+        if args.previous_registry is not None:
+            parser.error(f"{options[0]} cannot be combined with --previous-registry")
     if args.previous_registry is not None and args.registry is None:
         parser.error("--previous-registry requires --registry")
-    if args.trace is not None and args.registry is None:
-        parser.error("--trace requires --registry")
     if args.direction is not None and args.trace is None:
-        parser.error("--direction requires --trace")
-    if args.trace is not None and args.previous_registry is not None:
-        parser.error("--trace cannot be combined with --previous-registry")
-    if args.find_type is not None:
-        if args.registry is None:
-            parser.error("--find-type requires --registry")
-        if args.trace is not None or args.previous_registry is not None:
-            parser.error("--find-type cannot be combined with --trace or --previous-registry")
-    if args.find_orphans:
-        if args.registry is None:
-            parser.error("--find-orphans requires --registry")
-        if args.trace is not None or args.find_type is not None or args.previous_registry is not None:
-            parser.error("--find-orphans cannot be combined with --trace, --find-type or --previous-registry")
-    if args.find_unverified_controls:
-        if args.registry is None:
-            parser.error("--find-unverified-controls requires --registry")
-        if args.trace is not None or args.find_type is not None or args.find_orphans or args.previous_registry is not None:
-            parser.error("--find-unverified-controls cannot be combined with other query or comparison modes")
-    if args.find_unaudited_evidence:
-        if args.registry is None:
-            parser.error("--find-unaudited-evidence requires --registry")
-        if (args.trace is not None or args.find_type is not None or args.find_orphans
-                or args.find_unverified_controls or args.previous_registry is not None):
-            parser.error("--find-unaudited-evidence cannot be combined with other query or comparison modes")
-    if args.find_lifecycle is not None:
-        if args.registry is None:
-            parser.error("--find-lifecycle requires --registry")
-        if (args.trace is not None or args.find_type is not None or args.find_orphans
-                or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.previous_registry is not None):
-            parser.error("--find-lifecycle cannot be combined with other query or comparison modes")
-    if args.summary:
-        if args.registry is None:
-            parser.error("--summary requires --registry")
-        if (args.trace is not None or args.find_type is not None or args.find_lifecycle is not None
-                or args.find_orphans or args.find_unverified_controls or args.find_unaudited_evidence
-                or args.previous_registry is not None):
-            parser.error("--summary cannot be combined with other query or comparison modes")
+        parser.error("--direction requires --trace; cannot be combined with other query modes")
+    return modes
+
+
+def main():
+    parser = registry_cli_parser()
+    args = parser.parse_args()
+    json_query = bool(validate_registry_cli(args, parser))
     if args.registry is not None:
-        json_query = args.diff or args.summary or args.components is not None or args.trace is not None or any(
-            value is not None and value is not False
-            for name, value in vars(args).items() if name.startswith("find_")
-        )
         try:
             current = read_json(args.registry)
             if args.components is not None:

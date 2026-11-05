@@ -2340,6 +2340,9 @@ invalid snapshots and unreadable files fail nonzero with diagnostics on stderr
 and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
+Choose one query mode at a time. `--direction` modifies `--trace`, while
+`--component-of`, `--min-component-size` and `--max-component-size` modify
+`--components`; these modifiers are not query modes.
 
 ```sh
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
