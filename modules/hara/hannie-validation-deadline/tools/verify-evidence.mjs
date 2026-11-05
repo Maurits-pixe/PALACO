@@ -29,6 +29,7 @@ export function verifyEvidence(directory, repository) {
   requireThat(result.kind === 'VALIDATION_DEADLINE_EXECUTION_EVIDENCE' && result.checks === 'PASS', 'RUN_NOT_PASS');
   requireThat(result.counts.tests === 24 && result.counts.pass === 24 &&
     ['fail','cancelled','skipped','todo'].every(k => result.counts[k] === 0), 'INCOMPLETE_RUN');
+  requireThat(result.issuanceExit===0&&!result.issuanceError&&!result.issuanceSignal&&result.issuanceCounts?.tests===16&&result.issuanceCounts.pass===16&&['fail','cancelled','skipped','todo'].every(k=>result.issuanceCounts[k]===0),'ISSUANCE_CONTROLS_INCOMPLETE');
   requireThat(result.admissionExit===0&&!result.admissionError&&!result.admissionSignal&&result.admissionCounts?.tests===20&&result.admissionCounts.pass===20&&['fail','cancelled','skipped','todo'].every(k=>result.admissionCounts[k]===0),'ADMISSION_CONTROLS_INCOMPLETE');
   requireThat(result.clientExit===0&&!result.clientError&&!result.clientSignal&&result.clientCounts?.tests===13&&result.clientCounts.pass===13&&['fail','cancelled','skipped','todo'].every(k=>result.clientCounts[k]===0), 'CLIENT_CONTROLS_INCOMPLETE');
   requireThat(result.sourceUnchangedAfterRun === true && result.compileExit === 0 && result.testExit === 0, 'EXECUTION_MISMATCH');
@@ -42,7 +43,7 @@ export function verifyEvidence(directory, repository) {
     JSON.stringify(sourceInventory(repo)), 'SOURCE_INVENTORY_MISMATCH');
   const actual = readdirSync(dir).filter(n => n !== 'result.json').sort();
   requireThat(JSON.stringify(actual) === JSON.stringify(Object.keys(result.artifacts).sort()), 'ARTIFACT_SET_MISMATCH');
-  requireThat(['admission-tests.tap','admission-tests.stderr','client-tests.tap','client-tests.stderr','tests.tap','tests.stderr',...Array.from({length:24},(_,i)=>'N'+String(i+1).padStart(2,'0')+'.json')].every(n => n in result.artifacts), 'REQUIRED_ARTIFACT_MISSING');
+  requireThat(['I01.json','I02.json','I03.json','I04.json','I12.json','I13.json','I14.json','I15.json','I16.json','issuance-tests.tap','issuance-tests.stderr','admission-tests.tap','admission-tests.stderr','client-tests.tap','client-tests.stderr','tests.tap','tests.stderr',...Array.from({length:24},(_,i)=>'N'+String(i+1).padStart(2,'0')+'.json')].every(n => n in result.artifacts), 'REQUIRED_ARTIFACT_MISSING');
   for (const [name, hash] of Object.entries(result.artifacts))
     requireThat(sha(readFileSync(inside(dir, name))) === hash, 'ARTIFACT_HASH_MISMATCH: ' + name);
   const tap = readFileSync(resolve(dir, 'tests.tap'), 'utf8');
@@ -59,6 +60,11 @@ export function verifyEvidence(directory, repository) {
   for(const [name,count] of Object.entries(result.admissionCounts)) {
     const matches=[...admissionTap.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
     requireThat(matches.length===1&&Number(matches[0][1])===count,'ADMISSION_TAP_COUNT_MISMATCH');
+  }
+  const issuanceTap=readFileSync(resolve(dir,'issuance-tests.tap'),'utf8');
+  for(const [name,count] of Object.entries(result.issuanceCounts)) {
+    const matches=[...issuanceTap.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
+    requireThat(matches.length===1&&Number(matches[0][1])===count,'ISSUANCE_TAP_COUNT_MISMATCH');
   }
   const late = JSON.parse(readFileSync(resolve(dir, 'N04.json'), 'utf8'));
   requireThat(late.lateEffectExists === true && late.d013Conformance === false && late.newProfile === true &&

@@ -1,0 +1,74 @@
+{
+  "r": {
+    "status": "COMMITTED",
+    "releasePoint": "LOCKED_WORKER_IPC_SEND",
+    "receipt": {
+      "approvalExpiresAt": 1793857777428,
+      "approvalId": "approval-1",
+      "auditSequence": 1,
+      "calendarId": "calendar-1",
+      "contextDigest": "f6b6f8022d9aeb50f0e871358c471708cb3968a68fabb5c609f47308f56c4e6d",
+      "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+      "eventId": "event-1",
+      "finishAfterExpiry": true,
+      "generation": 1,
+      "grantExpiresAt": 1793857777428,
+      "grantId": "grant-1",
+      "operationId": "operation-1",
+      "receiptVersion": 1,
+      "requestDigest": "de21ef07b3acc1548921ba0ea77b22eaef162279f71f6e5a802b9405d9dfb90f",
+      "snapshotDigest": "6792436d1006010fc257febb30a65a49df550cbbec8d53d84683399478aabe24",
+      "timeTrustProfile": "SYNTHETIC_LIVE_SUPERVISOR_MONOTONE_V1",
+      "validatedAt": 1793857777014,
+      "validationMeasurement": "PRECOMMIT_VALIDATION_OBSERVATION",
+      "durability": "RECONSTRUCTED_COMMIT",
+      "durableObservedAt": 1793857777950,
+      "durabilityMeasurement": "READBACK_UPPER_BOUND",
+      "exactDurableAt": "UNKNOWN",
+      "observedAfterExpiry": true,
+      "deadlineSatisfied": "VALIDATION_DEADLINE_ONLY"
+    },
+    "event": {
+      "id": "event-1",
+      "calendar_id": "calendar-1",
+      "revision": 1,
+      "title": "Synthetic private event"
+    },
+    "readProcess": {
+      "pid": 13884,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 13877,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true,
+        "validatedAt": 1793857777014
+      },
+      "stderr": ""
+    }
+  },
+  "native": [
+    {
+      "kind": "WAL_STALL",
+      "pathConfirmed": true,
+      "delayMs": 900,
+      "startMs": 1793857777014,
+      "endMs": 1793857777914
+    }
+  ],
+  "expiry": 1793857777428,
+  "lateEffectExists": true,
+  "d013Conformance": false,
+  "newProfile": true,
+  "clientView": {
+    "state": "CONFIRMED",
+    "heading": "Opdracht vastgelegd",
+    "title": "Synthetic private event",
+    "explanation": "Je akkoord was geldig bij de laatste controle; de opslag kon later klaar zijn.",
+    "timing": "De vastgelegde uitkomst is na verlopen van het schrijfakkoord bevestigd.",
+    "canAutomaticallyRetry": false
+  }
+}
