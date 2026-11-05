@@ -910,10 +910,14 @@ def find_palaco_objects(instance, object_type, validators=None):
     }
 
 
-def find_palaco_components(instance, graph_name, validator=None, object_id=None, min_size=1):
+def find_palaco_components(instance, graph_name, validator=None, object_id=None, min_size=1, max_size=None):
     """List snapshot clusters without inferring missing links or authority."""
     require(graph_name in ("upstream", "dependency"), f"unknown component graph: {graph_name}")
     require(type(min_size) is int and min_size >= 1, "minimum component size must be a positive integer")
+    if max_size is not None:
+        require(type(max_size) is int and max_size >= 1,
+                "maximum component size must be a positive integer")
+        require(max_size >= min_size, "maximum component size must be at least minimum component size")
     validate_palaco_registry(instance, validator)
     extract = direct_upstream_targets if graph_name == "upstream" else direct_dependency_targets
     graph = {
@@ -921,7 +925,10 @@ def find_palaco_components(instance, graph_name, validator=None, object_id=None,
     }
     if object_id is not None:
         require(object_id in graph, f"unknown component object ID: {object_id}")
-    components = [members for members in weak_components(graph, object_id) if len(members) >= min_size]
+    components = [
+        members for members in weak_components(graph, object_id)
+        if len(members) >= min_size and (max_size is None or len(members) <= max_size)
+    ]
     return {
         "graph": "traceability.upstream" if graph_name == "upstream" else "dependencies + DEPENDS_ON",
         "definition": "weakly connected components; edge direction ignored; isolates included",
@@ -3319,6 +3326,74 @@ def check_palaco_component_distributions():
     return "component distributions: numeric CLI ordering, stable output, membership and summary invariants"
 
 
+def check_palaco_component_max_size():
+    path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
+    original_bytes = path.read_bytes()
+    fixture = read_json(path)
+    original = copy.deepcopy(fixture)
+    base = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
+    for graph_name in ("upstream", "dependency"):
+        full = find_palaco_components(fixture, graph_name)
+        reordered = copy.deepcopy(fixture)
+        reordered["objects"].reverse()
+        for minimum, maximum in ((1, 1), (1, 2), (2, 2), (3, 100)):
+            expected = {**full, "components": [
+                members for members in full["components"] if minimum <= len(members) <= maximum
+            ]}
+            require(find_palaco_components(fixture, graph_name, min_size=minimum, max_size=maximum)
+                    == expected, "size range must filter complete components inclusively")
+            require(find_palaco_components(reordered, graph_name, min_size=minimum, max_size=maximum)
+                    == expected, "bounded component results depend on input ordering")
+            flags = ["--components", graph_name, "--min-component-size", str(minimum),
+                     "--max-component-size", str(maximum)]
+            cli = subprocess.run(base + flags, capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 0 and not cli.stderr and json.loads(cli.stdout) == expected,
+                    f"bounded component CLI failed: {cli.stdout}{cli.stderr}")
+        for object_id in ("FE-00002", "FE-00004"):
+            selected = find_palaco_components(fixture, graph_name, object_id=object_id)
+            expected = {**selected, "components": [members for members in selected["components"]
+                                                  if len(members) <= 1]}
+            cli = subprocess.run(base + ["--components", graph_name, "--component-of", object_id,
+                                         "--max-component-size", "1"],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 0 and not cli.stderr and json.loads(cli.stdout) == expected,
+                    "maximum-size selection failed")
+        for maximum in (0, -1, True, 1.5, "2"):
+            try:
+                find_palaco_components(fixture, graph_name, max_size=maximum)
+            except ConformanceError as error:
+                require("positive integer" in str(error), f"unexpected maximum-size error: {error}")
+            else:
+                raise ConformanceError("invalid maximum size accepted")
+        try:
+            find_palaco_components(fixture, graph_name, min_size=2, max_size=1)
+        except ConformanceError as error:
+            require("at least minimum" in str(error), "unexpected inverted range diagnostic")
+        else:
+            raise ConformanceError("inverted component size range accepted")
+        cli = subprocess.run(base + ["--components", graph_name, "--component-of", "FE-99999",
+                                     "--max-component-size", "1"],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 1 and not cli.stdout and "unknown component object ID" in cli.stderr,
+                "maximum-size filter hid an unknown selected object")
+    for flags in (
+        ["--max-component-size", "2"],
+        ["--summary", "--max-component-size", "2"],
+        ["--components", "upstream", "--max-component-size", "0"],
+        ["--components", "dependency", "--max-component-size", "-1"],
+        ["--components", "upstream", "--max-component-size", "1.5"],
+        ["--components", "upstream", "--max-component-size", "two"],
+        ["--components", "upstream", "--min-component-size", "3", "--max-component-size", "2"],
+        ["--components", "dependency", "--max-component-size", "1", "--summary"],
+    ):
+        cli = subprocess.run(base + flags, capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 2 and not cli.stdout and cli.stderr,
+                f"invalid maximum-size CLI accepted: {flags}")
+    require(fixture == original and path.read_bytes() == original_bytes,
+            "maximum-size queries modified snapshot")
+    return "maximum sizes: inclusive/exact ranges, selection, empty results, ordering and CLI errors"
+
+
 def check_palaco_component_min_size():
     path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
     original_bytes = path.read_bytes()
@@ -3461,7 +3536,9 @@ def check_palaco_components_fail_closed():
                 (graph, selector) for graph in ("upstream", "dependency")
                 for selector in ([], ["--component-of", "FE-00001"],
                                  ["--min-component-size", "100"],
-                                 ["--component-of", "FE-00001", "--min-component-size", "100"])
+                                 ["--component-of", "FE-00001", "--min-component-size", "100"],
+                                 ["--max-component-size", "1"],
+                                 ["--component-of", "FE-00001", "--max-component-size", "1"])
             ):
                 cli = subprocess.run(script + ["--components", graph_name] + selection,
                                      capture_output=True, text=True, timeout=30)
@@ -4726,6 +4803,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO maximum component size conformance", check_palaco_component_max_size),
     ("PALACO minimum component size conformance", check_palaco_component_min_size),
     ("PALACO component size distribution conformance", check_palaco_component_distributions),
     ("PALACO multi-cluster fixture conformance", check_palaco_cluster_fixture),
@@ -4820,6 +4898,8 @@ def main():
                         help="Return only the cluster containing OBJECT_ID; requires --components")
     parser.add_argument("--min-component-size", type=int, metavar="N",
                         help="Return only clusters of at least N objects (positive integer); requires --components")
+    parser.add_argument("--max-component-size", type=int, metavar="N",
+                        help="Return only clusters of at most N objects (positive integer); requires --components")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
@@ -4833,6 +4913,13 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.max_component_size is not None:
+        if args.components is None:
+            parser.error("--max-component-size requires --components")
+        if args.max_component_size < 1:
+            parser.error("--max-component-size must be a positive integer")
+        if args.min_component_size is not None and args.max_component_size < args.min_component_size:
+            parser.error("--max-component-size must be at least --min-component-size")
     if args.min_component_size is not None:
         if args.components is None:
             parser.error("--min-component-size requires --components")
@@ -4845,7 +4932,8 @@ def main():
             parser.error("--components requires --registry")
         if any(value is not None and value is not False
                for name, value in vars(args).items()
-               if name not in ("registry", "components", "component_of", "min_component_size")):
+               if name not in ("registry", "components", "component_of",
+                               "min_component_size", "max_component_size")):
             parser.error("--components cannot be combined with other query or comparison modes")
     if args.find_dependency_orphans:
         if args.registry is None:
@@ -5096,6 +5184,7 @@ def main():
                 result = find_palaco_components(
                     current, args.components, object_id=args.component_of,
                     min_size=args.min_component_size if args.min_component_size is not None else 1,
+                    max_size=args.max_component_size,
                 )
                 print(json.dumps(result, indent=2))
                 return 0

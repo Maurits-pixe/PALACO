@@ -2502,6 +2502,15 @@ minimum returns `"components": []` with exit zero, while an unknown ID still
 fails. No matching clusters also returns an empty array, not an error.
 The modifier requires `--components`; it cannot be used with other query modes.
 
+`--max-component-size N` optionally adds an inclusive upper bound. With no
+upper bound, existing results are unchanged. The bound must be a positive
+integer and cannot be less than `--min-component-size`. Set both bounds to
+the same value to select an exact cluster size; an upper bound of one selects
+only isolated objects. It also works with `--component-of`, returning an empty
+array if the known object's cluster falls outside the range. Full snapshot
+validation and unknown-ID checks still precede filtering. Both size modifiers
+require `--components` and leave summaries unchanged.
+
 For a reusable synthetic example, use
 `docs/fixtures/palaco/registry-clusters.fixture.json` as `SNAPSHOT`.
 It contains four Draft FE records, not approved canonical objects:
