@@ -132,6 +132,29 @@ test('resize updates canvas backing scale without starting a second frame loop',
   assert.deepEqual(transforms.at(-1), [2, 0, 0, 2, 0, 0]);
   assert.equal(harness.callbacks.size, 1);
 
+  harness.documentObject.hidden = true;
+  harness.documentListeners.get('visibilitychange')();
+  harness.canvas.getBoundingClientRect = () => ({ width: 540, height: 300 });
+  harness.windowListeners.get('resize')();
+  assert.equal(harness.canvas.width, 1080);
+  assert.equal(harness.canvas.height, 600);
+  assert.equal(harness.callbacks.size, 0);
+
+  harness.documentObject.hidden = false;
+  harness.documentListeners.get('visibilitychange')();
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.mediaQuery.matches = true;
+  harness.mediaListeners.get('change')();
+  harness.canvas.getBoundingClientRect = () => ({ width: 270, height: 150 });
+  harness.windowListeners.get('resize')();
+  assert.equal(harness.canvas.width, 540);
+  assert.equal(harness.canvas.height, 300);
+  assert.equal(harness.callbacks.size, 0);
+
+  harness.mediaQuery.matches = false;
+  harness.mediaListeners.get('change')();
+  assert.equal(harness.callbacks.size, 1);
   animation.dispose();
 });
 
