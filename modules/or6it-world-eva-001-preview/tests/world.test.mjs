@@ -118,6 +118,17 @@ test('preview source has no live transport, external write, or activation path',
   }
 });
 
+test('hero reference image reserves layout space and decodes asynchronously at high priority', () => {
+  const app = fs.readFileSync(new URL('../src/App.vue', import.meta.url), 'utf8');
+  const image = app.match(/<img\s+class="reference-image"[\s\S]*?\/>/)?.[0];
+
+  assert.ok(image, 'EVA reference image should remain the dashboard hero visual.');
+  assert.match(image, /width="1312"/);
+  assert.match(image, /height="1199"/);
+  assert.match(image, /decoding="async"/);
+  assert.match(image, /fetchpriority="high"/);
+});
+
 test('static preview headers deny external content, embedding, and device permissions', () => {
   const headers = fs.readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
   assert.match(headers, /Content-Security-Policy: default-src 'self'/);

@@ -122,6 +122,8 @@ onUnmounted(() => {
           alt="Door de gebruiker aangeleverde conceptafbeelding voor WORLD-EVA-001: EVA, met de centrale toren, ringen, vier regio's en zeven landmarks."
           width="1312"
           height="1199"
+          decoding="async"
+          fetchpriority="high"
         />
         <div class="scene-shade" aria-hidden="true"></div>
         <svg class="scene-diagram" viewBox="0 0 1000 560" role="img" aria-labelledby="diagram-title diagram-description">
