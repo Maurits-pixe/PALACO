@@ -45,6 +45,10 @@ export function startAmbientAnimation(canvas, {
 
   function draw(now) {
     if (reducedMotion.matches || documentObject.hidden) return;
+    if (now < lastFrame) {
+      lastFrame = 0;
+      lastTimestamp = undefined;
+    }
     if (now - lastFrame < FRAME_INTERVAL) {
       frameId = windowObject.requestAnimationFrame(draw);
       return;

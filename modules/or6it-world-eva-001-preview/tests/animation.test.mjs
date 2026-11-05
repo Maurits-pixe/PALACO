@@ -244,6 +244,25 @@ test('slow frames do not cause the next frame to render early', () => {
   animation.dispose();
 });
 
+test('a clock reset does not leave animation throttled by the old timestamp', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  harness.runFrame(17);
+  const firstFrameArcs = harness.calls.arcs;
+  assert.ok(firstFrameArcs > 0);
+
+  harness.runFrame(12);
+  assert.equal(harness.calls.arcs, firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(20);
+  assert.ok(harness.calls.arcs > firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.dispose();
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
