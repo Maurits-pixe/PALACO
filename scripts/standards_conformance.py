@@ -3323,6 +3323,24 @@ def check_palaco_components():
             record["traceability"]["upstream"].reverse()
         require(find_palaco_components(reordered_query, graph_name) == query,
                 "component membership depends on input order")
+        with tempfile.TemporaryDirectory(prefix="palaco-component-clusters-", dir="/tmp") as directory:
+            path = Path(directory) / "registry.json"
+            command = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path),
+                       "--components", graph_name]
+            outputs = []
+            for snapshot in (fixture, reordered_query):
+                path.write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+                original_bytes = path.read_bytes()
+                cli = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                require(cli.returncode == 0 and not cli.stderr,
+                        f"multi-cluster {graph_name} CLI failed: {cli.stdout}{cli.stderr}")
+                require(json.loads(cli.stdout) == query,
+                        f"multi-cluster {graph_name} CLI returned incorrect members or scope")
+                require(path.read_bytes() == original_bytes,
+                        f"multi-cluster {graph_name} CLI modified snapshot")
+                outputs.append(cli.stdout)
+            require(outputs[0] == outputs[1],
+                    f"multi-cluster {graph_name} CLI output depends on input ordering")
     invalid = copy.deepcopy(fixture)
     invalid["objects"][-1]["traceability"]["upstream"] = ["FE-99999"]
     for instance, graph_name, diagnostic in (
@@ -3433,7 +3451,7 @@ def check_palaco_components():
     require(weak_component_sizes(reverse_chain) == [1, depth + 1],
             "component sizes depend on direction or root ordering")
     require(reverse_chain == before, "component traversal mutated reversed deep graph")
-    return "weak components: clusters, isolates, bridges, reversal, deep traversal and non-mutation"
+    return "weak components: multi-cluster CLI, isolates, bridges, reversal, deep traversal and non-mutation"
 
 
 def check_palaco_summary():
