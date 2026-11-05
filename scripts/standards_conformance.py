@@ -3239,6 +3239,43 @@ def check_palaco_component_partitions():
     return "1,024 five-node forward graphs: partitions, selected members, reversal, counts and non-mutation"
 
 
+def check_palaco_cluster_fixture():
+    path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
+    original = path.read_bytes()
+    fixture = read_json(path)
+    summary = summarize_palaco_registry(fixture)
+    require(summary["total_objects"] == 4, "cluster fixture must contain four synthetic objects")
+    base = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
+    for graph_name, expected, orphans in (
+        ("upstream", [["FE-00001", "FE-00002"], ["FE-00003"], ["FE-00004"]],
+         ["FE-00003", "FE-00004"]),
+        ("dependency", [["FE-00001"], ["FE-00002", "FE-00003"], ["FE-00004"]],
+         ["FE-00001", "FE-00004"]),
+    ):
+        query = find_palaco_components(fixture, graph_name)
+        require(query["components"] == expected, "cluster fixture graph boundaries changed")
+        require(summary[f"total_{graph_name}_components"] == 3
+                and summary[f"largest_{graph_name}_component_size"] == 2
+                and summary[f"total_{graph_name}_edges"] == 1
+                and summary[f"total_{graph_name}_orphans"] == 2,
+                "cluster fixture summary disagrees with documented example")
+        find_orphans = find_palaco_orphans if graph_name == "upstream" else find_palaco_dependency_orphans
+        require(find_orphans(fixture)["object_ids"] == orphans, "cluster fixture orphan IDs changed")
+        for selection in ([], ["--component-of", "FE-00002"], ["--component-of", "FE-00004"]):
+            cli = subprocess.run(base + ["--components", graph_name] + selection,
+                                 capture_output=True, text=True, timeout=30)
+            expected_query = query if not selection else find_palaco_components(
+                fixture, graph_name, object_id=selection[1],
+            )
+            require(cli.returncode == 0 and not cli.stderr and json.loads(cli.stdout) == expected_query,
+                    f"cluster fixture CLI failed: {cli.stdout}{cli.stderr}")
+    cli = subprocess.run(base + ["--summary"], capture_output=True, text=True, timeout=30)
+    require(cli.returncode == 0 and not cli.stderr and json.loads(cli.stdout) == summary,
+            "cluster fixture summary CLI differs from library result")
+    require(path.read_bytes() == original, "cluster fixture queries modified the file")
+    return "synthetic cluster fixture: both graphs, selected/isolated queries, summaries and orphan IDs"
+
+
 def check_palaco_components_fail_closed():
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
     cases = []
@@ -4526,6 +4563,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO multi-cluster fixture conformance", check_palaco_cluster_fixture),
     ("PALACO component CLI fail-closed conformance", check_palaco_components_fail_closed),
     ("PALACO exhaustive component partitions", check_palaco_component_partitions),
     ("PALACO registry component summary conformance", check_palaco_components),

@@ -1,0 +1,99 @@
+{
+  "registry_version": "0.1.0",
+  "objects": [
+    {
+      "object_type": "FE",
+      "metadata": {
+        "id": "FE-00001", "name": "Synthetic upstream root", "domain": "Registry",
+        "version": "0.1.0", "description": "Synthetic cluster example; not an approved canonical record."
+      },
+      "ownership": {
+        "business": "Example governance team", "architecture": "Example architecture team",
+        "technical": "Example platform team", "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": { "status": "Draft", "created": "2026-10-15", "next_review": "2027-01-15" },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High", "confidentiality": "Public", "integrity": "High", "availability": "Medium"
+      },
+      "traceability": { "upstream": [], "relationships": [] },
+      "verification": { "method": "Peer review", "frequency": "On change", "status": "Pending" },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z", "updated_by": "Example registry team", "audit_refs": []
+      }
+    },
+    {
+      "object_type": "FE",
+      "metadata": {
+        "id": "FE-00002", "name": "Synthetic upstream child", "domain": "Registry",
+        "version": "0.1.0", "description": "Synthetic cluster example; not an approved canonical record."
+      },
+      "ownership": {
+        "business": "Example governance team", "architecture": "Example architecture team",
+        "technical": "Example platform team", "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": { "status": "Draft", "created": "2026-10-15", "next_review": "2027-01-15" },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High", "confidentiality": "Public", "integrity": "High", "availability": "Medium"
+      },
+      "traceability": { "upstream": ["FE-00001"], "relationships": [] },
+      "verification": { "method": "Peer review", "frequency": "On change", "status": "Pending" },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z", "updated_by": "Example registry team", "audit_refs": []
+      }
+    },
+    {
+      "object_type": "FE",
+      "metadata": {
+        "id": "FE-00003", "name": "Synthetic dependency source", "domain": "Registry",
+        "version": "0.1.0", "description": "Synthetic cluster example; not an approved canonical record."
+      },
+      "ownership": {
+        "business": "Example governance team", "architecture": "Example architecture team",
+        "technical": "Example platform team", "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": { "status": "Draft", "created": "2026-10-15", "next_review": "2027-01-15" },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High", "confidentiality": "Public", "integrity": "High", "availability": "Medium"
+      },
+      "dependencies": ["FE-00002"],
+      "traceability": {
+        "upstream": [],
+        "relationships": [
+          { "source": "FE-00003", "relation": "DEPENDS_ON", "target": "FE-00002" }
+        ]
+      },
+      "verification": { "method": "Peer review", "frequency": "On change", "status": "Pending" },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z", "updated_by": "Example registry team", "audit_refs": []
+      }
+    },
+    {
+      "object_type": "FE",
+      "metadata": {
+        "id": "FE-00004", "name": "Synthetic isolated object", "domain": "Registry",
+        "version": "0.1.0", "description": "Synthetic cluster example; not an approved canonical record."
+      },
+      "ownership": {
+        "business": "Example governance team", "architecture": "Example architecture team",
+        "technical": "Example platform team", "verification": "Example assurance team",
+        "custodian": "Example registry team"
+      },
+      "lifecycle": { "status": "Draft", "created": "2026-10-15", "next_review": "2027-01-15" },
+      "approval": { "status": "Pending" },
+      "classification": {
+        "criticality": "High", "confidentiality": "Public", "integrity": "High", "availability": "Medium"
+      },
+      "traceability": { "upstream": [], "relationships": [] },
+      "verification": { "method": "Peer review", "frequency": "On change", "status": "Pending" },
+      "audit": {
+        "updated_at": "2026-10-15T12:00:00Z", "updated_by": "Example registry team", "audit_refs": []
+      }
+    }
+  ]
+}

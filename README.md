@@ -2483,6 +2483,22 @@ The modifier requires `--components`; it cannot be used with other query modes.
 The full snapshot is still validated, including objects outside the selected
 cluster. Omitting the modifier preserves the complete component listing.
 
+For a reusable synthetic example, use
+`docs/fixtures/palaco/registry-clusters.fixture.json` as `SNAPSHOT`.
+It contains four Draft FE records, not approved canonical objects:
+
+| Graph | Components |
+| --- | --- |
+| upstream | `[FE-00001, FE-00002]`, `[FE-00003]`, `[FE-00004]` |
+| dependency | `[FE-00001]`, `[FE-00002, FE-00003]`, `[FE-00004]` |
+
+Both graphs have three components, a largest component size of two, one edge
+and two isolated objects. `FE-00004` is isolated in both graphs.
+Selecting `FE-00002` demonstrates the different graph boundaries.
+The dependency from `FE-00003` to `FE-00002` appears in both `dependencies`
+and `DEPENDS_ON`, but still counts as one edge. The conformance gate exercises
+this fixture through both component modes, selected queries and summaries.
+
 The `total_dependency_orphans` field counts objects with neither
 incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
 An object referenced by another dependency source is connected, even if it has
