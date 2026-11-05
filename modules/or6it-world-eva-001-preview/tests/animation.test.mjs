@@ -244,7 +244,7 @@ test('slow frames do not cause the next frame to render early', () => {
   animation.dispose();
 });
 
-test('a clock reset does not leave animation throttled by the old timestamp', () => {
+test('clock reset during frame throttling does not lock the loop', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
 
@@ -252,11 +252,19 @@ test('a clock reset does not leave animation throttled by the old timestamp', ()
   const firstFrameArcs = harness.calls.arcs;
   assert.ok(firstFrameArcs > 0);
 
-  harness.runFrame(12);
+  harness.runFrame(20);
   assert.equal(harness.calls.arcs, firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
-  harness.runFrame(20);
+  harness.runFrame(5);
+  assert.equal(harness.calls.arcs, firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(10);
+  assert.equal(harness.calls.arcs, firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(22);
   assert.ok(harness.calls.arcs > firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
