@@ -164,6 +164,24 @@ mod tests {
     }
 
     #[test]
+    fn satisfied_threshold_with_empty_basis_fails_closed() {
+        let q = question();
+        let e = evidence(q.id);
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::Satisfied,
+            basis: Vec::new(),
+            rationale: "satisfied without evidence basis".to_owned(),
+        };
+
+        let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
+        assert_eq!(
+            result,
+            Err(DecisionEvaluationError::MissingThresholdEvidence)
+        );
+    }
+
+    #[test]
     fn missing_basis_evidence_fails_closed() {
         let q = question();
         let e = evidence(q.id);
