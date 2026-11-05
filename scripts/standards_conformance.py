@@ -4436,6 +4436,90 @@ def check_palaco_find_lifecycle():
     return f"{len(statuses)} lifecycle states + sorted/non-mutating/empty results + 6 rejections"
 
 
+def check_palaco_trace_distances_oracle():
+    validator = palaco_validators()["PCR-000.schema.json"]
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    ids = ["FE-00003", "FE-00001", "FE-00004", "FE-00002"]
+    # Keep explicit-only sources separate from list-backed sources: a present
+    # dependencies field must contain every explicit DEPENDS_ON target.
+    edges = ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))
+    count = 0
+    for mask in range(64):
+        matrix = [[0 if i == j else float("inf") for j in range(4)] for i in range(4)]
+        for index, (source, target) in enumerate(edges):
+            if mask & (1 << index):
+                matrix[source][target] = 1
+        # Independent Floyd-Warshall oracle, before any production query.
+        for via in range(4):
+            for source in range(4):
+                for target in range(4):
+                    matrix[source][target] = min(
+                        matrix[source][target], matrix[source][via] + matrix[via][target],
+                    )
+        for graph_name in ("upstream", "dependency"):
+            snapshot = {"registry_version": "0.1.0", "objects": []}
+            for object_id in ids:
+                record = copy.deepcopy(template)
+                record["metadata"]["id"] = object_id
+                snapshot["objects"].append(record)
+            for index, (source, target) in enumerate(edges):
+                selected = bool(mask & (1 << index))
+                upstream = selected if graph_name == "upstream" else not selected
+                record = snapshot["objects"][source]
+                if upstream:
+                    record["traceability"]["upstream"].append(ids[target])
+                else:
+                    # Cycle list-only, explicit-only, and duplicate representations.
+                    if index % 3 != 1:
+                        record.setdefault("dependencies", []).append(ids[target])
+                    if index % 3 != 0:
+                        record["traceability"]["relationships"].append({
+                            "source": ids[source], "relation": "DEPENDS_ON", "target": ids[target],
+                        })
+            original = copy.deepcopy(snapshot)
+            for direction in ("upstream", "downstream"):
+                for origin, object_id in enumerate(ids):
+                    for limit in (None, 0, 1, 2, 3):
+                        distances = {}
+                        for target in sorted(range(4), key=lambda index: ids[index]):
+                            hops = matrix[origin][target] if direction == "upstream" else matrix[target][origin]
+                            if 0 < hops < float("inf") and (limit is None or hops <= limit):
+                                distances[ids[target]] = hops
+                        expected = {
+                            "object_id": object_id, "direction": direction,
+                            "graph": ("traceability.upstream" if graph_name == "upstream"
+                                      else "dependencies + DEPENDS_ON"),
+                            "reachable_ids": list(distances), "distances": distances,
+                            "scope": "supplied snapshot only; not a completeness or authority decision",
+                        }
+                        if limit is not None:
+                            expected["max_depth"] = limit
+                        options = {"graph_name": graph_name, "max_depth": limit}
+                        result = trace_palaco_registry(
+                            snapshot, object_id, direction, validator, include_distances=True, **options,
+                        )
+                        context = f"mask={mask}, {graph_name}, {direction}, {object_id}, depth={limit}"
+                        require(result == expected and list(result["distances"]) == list(distances),
+                                f"distance oracle mismatch: {context}: {result}")
+                        count += 1
+                        if limit is None:
+                            plain = {key: value for key, value in expected.items() if key != "distances"}
+                            require(trace_palaco_registry(
+                                snapshot, object_id, direction, validator, **options,
+                            ) == plain, f"default distances changed result: {context}")
+                            require(trace_palaco_registry(
+                                snapshot, object_id, direction, validator, include_distances=False, **options,
+                            ) == plain, f"false distances changed result: {context}")
+                        if mask == 63 and origin == 0 and direction == "upstream" and limit is None:
+                            result["reachable_ids"].clear()
+                            result["distances"].clear()
+                            require(trace_palaco_registry(
+                                snapshot, object_id, direction, validator, include_distances=True, **options,
+                            ) == expected, f"distance result mutation leaked: {context}")
+            require(snapshot == original, f"distance queries mutated snapshot: mask={mask}, {graph_name}")
+    return f"{count} Floyd-Warshall distance oracle cases across 64 forward-edge subsets and both graphs"
+
+
 def check_palaco_traces():
     from contextlib import redirect_stderr, redirect_stdout
     from io import StringIO
@@ -5722,6 +5806,7 @@ CHECKS = (
     ("PALACO registry lifecycle conformance", check_palaco_lifecycle),
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
+    ("PALACO trace distances oracle", check_palaco_trace_distances_oracle),
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),
     ("PALACO registry summary conformance", check_palaco_summary),
