@@ -5,7 +5,7 @@ export function startAmbientAnimation(canvas, {
   documentObject = document,
 } = {}) {
   const context = canvas.getContext('2d');
-  if (!context) return () => {};
+  if (!context) return { setEnabled() {}, dispose() {} };
 
   const reducedMotion = windowObject.matchMedia('(prefers-reduced-motion: reduce)');
   let frameId = 0;

@@ -114,3 +114,16 @@ test('manual pause stops rendering and resume respects system reduced motion', (
   assert.equal(harness.callbacks.size, 1);
   animation.dispose();
 });
+
+test('missing canvas context keeps the animation controller contract', () => {
+  const harness = createHarness();
+  harness.canvas.getContext = () => null;
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  assert.equal(typeof animation.setEnabled, 'function');
+  assert.equal(typeof animation.dispose, 'function');
+  assert.doesNotThrow(() => animation.setEnabled(false));
+  assert.doesNotThrow(() => animation.dispose());
+  assert.equal(harness.callbacks.size, 0);
+  assert.equal(harness.windowListeners.size, 0);
+});
