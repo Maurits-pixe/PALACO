@@ -171,6 +171,12 @@ fn account_and_ownership_are_independent_gates() {
     let result = evaluate_reference(&wrong_owner);
     assert_eq!(result.owner_review, ReviewState::Fail);
     assert!(!result.identity_validated);
+
+    let mut wrong_owner_subject = valid_request();
+    wrong_owner_subject.owner_subject_ref = "another-subject".to_owned();
+    let result = evaluate_reference(&wrong_owner_subject);
+    assert_eq!(result.owner_review, ReviewState::Fail);
+    assert!(!result.identity_validated);
 }
 
 #[test]
