@@ -158,6 +158,24 @@ test('resize updates canvas backing scale without starting a second frame loop',
   animation.dispose();
 });
 
+test('zero-sized canvas does not schedule animation frames until it becomes visible', () => {
+  const harness = createHarness();
+  harness.canvas.getBoundingClientRect = () => ({ width: 0, height: 0 });
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  assert.equal(harness.canvas.width, 0);
+  assert.equal(harness.canvas.height, 0);
+  assert.equal(harness.callbacks.size, 0);
+
+  harness.canvas.getBoundingClientRect = () => ({ width: 360, height: 200 });
+  harness.windowListeners.get('resize')();
+  assert.equal(harness.canvas.width, 720);
+  assert.equal(harness.canvas.height, 400);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.dispose();
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);

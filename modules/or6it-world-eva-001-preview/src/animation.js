@@ -17,6 +17,7 @@ export function startAmbientAnimation(canvas, {
   let pixelRatio = 1;
   let particles = [];
   let enabled = true;
+  let disposed = false;
 
   function resize() {
     const bounds = canvas.getBoundingClientRect();
@@ -26,6 +27,12 @@ export function startAmbientAnimation(canvas, {
     canvas.width = Math.round(width * pixelRatio);
     canvas.height = Math.round(height * pixelRatio);
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+    if (width <= 0 || height <= 0) {
+      particles = [];
+      stop();
+      return;
+    }
 
     const count = Math.min(64, Math.max(12, Math.floor(width / 18)));
     particles = Array.from({ length: count }, (_, index) => ({
@@ -71,7 +78,8 @@ export function startAmbientAnimation(canvas, {
   }
 
   function start() {
-    if (frameId || !enabled || reducedMotion.matches || documentObject.hidden) return;
+    if (disposed || frameId || width <= 0 || height <= 0 || !enabled ||
+      reducedMotion.matches || documentObject.hidden) return;
     frameId = windowObject.requestAnimationFrame(draw);
   }
 
@@ -85,9 +93,14 @@ export function startAmbientAnimation(canvas, {
     else start();
   }
 
+  function onResize() {
+    resize();
+    start();
+  }
+
   resize();
   start();
-  windowObject.addEventListener('resize', resize);
+  windowObject.addEventListener('resize', onResize);
   documentObject.addEventListener('visibilitychange', onVisibilityChange);
   reducedMotion.addEventListener('change', onMotionChange);
 
@@ -98,8 +111,9 @@ export function startAmbientAnimation(canvas, {
   }
 
   function dispose() {
+    disposed = true;
     stop();
-    windowObject.removeEventListener('resize', resize);
+    windowObject.removeEventListener('resize', onResize);
     documentObject.removeEventListener('visibilitychange', onVisibilityChange);
     reducedMotion.removeEventListener('change', onMotionChange);
   }
