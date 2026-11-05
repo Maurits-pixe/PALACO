@@ -104,6 +104,8 @@ test('repeated visibility changes keep one frame loop and disposal while hidden 
   harness.documentListeners.get('visibilitychange')();
   animation.dispose();
   harness.documentObject.hidden = false;
+  animation.setEnabled(true);
+  animation.setEnabled(false);
   assert.equal(harness.documentListeners.size, 0);
   assert.equal(harness.callbacks.size, 0);
 });
