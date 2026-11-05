@@ -841,12 +841,14 @@ def validate_registry_transition(previous, current, validator=None):
     )
 
 
-def trace_palaco_registry(instance, object_id, direction="upstream", validator=None):
-    """Return reachable IDs in the upstream graph, not authority or completeness."""
+def trace_palaco_registry(instance, object_id, direction="upstream", validator=None, *, graph_name="upstream"):
+    """Return reachable IDs in one graph, not authority or completeness."""
     require(direction in ("upstream", "downstream"), f"invalid trace direction: {direction}")
+    require(graph_name in ("upstream", "dependency"), f"unknown trace graph: {graph_name}")
     validate_palaco_registry(instance, validator)
+    extract = direct_upstream_targets if graph_name == "upstream" else direct_dependency_targets
     graph = {
-        record["metadata"]["id"]: direct_upstream_targets(record)
+        record["metadata"]["id"]: extract(record)
         for record in instance["objects"]
     }
     require(object_id in graph, f"unknown trace object ID: {object_id}")
@@ -866,7 +868,7 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     return {
         "object_id": object_id,
         "direction": direction,
-        "graph": "traceability.upstream",
+        "graph": "traceability.upstream" if graph_name == "upstream" else "dependencies + DEPENDS_ON",
         "reachable_ids": sorted(visited - {object_id}),
         "scope": "supplied snapshot only; not a completeness or authority decision",
     }
@@ -3592,6 +3594,8 @@ def check_palaco_components_fail_closed():
                          ["--component-of", "FE-00001", "--max-component-size", "1"])
     ] + [["--summary"], ["--trace", "FE-00001"],
          ["--trace", "FE-00001", "--direction", "downstream"],
+         ["--trace", "FE-00001", "--trace-graph", "dependency"],
+         ["--trace", "FE-00001", "--trace-graph", "dependency", "--direction", "downstream"],
          ["--find-dependencies", "FE-00001"], ["--find-dependents", "FE-00001"],
          ["--find-dependency-orphans"], ["--find-orphans"],
          ["--find-unverified-controls"], ["--find-unaudited-evidence"]]
@@ -4419,6 +4423,10 @@ def check_palaco_find_lifecycle():
 
 
 def check_palaco_traces():
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from unittest.mock import patch
+
     validator = palaco_validators()["PCR-000.schema.json"]
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
     original = copy.deepcopy(fixture)
@@ -4465,6 +4473,119 @@ def check_palaco_traces():
     require(trace_palaco_registry(separate, "FE-00005", validator=validator)["reachable_ids"] == [],
             "trace incorrectly merges non-upstream references")
 
+    cluster_path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
+    cluster_bytes = cluster_path.read_bytes()
+    clusters = read_json(cluster_path)
+    original_clusters = copy.deepcopy(clusters)
+    expected_graphs = (
+        ("upstream", "traceability.upstream", {
+            "upstream": [[], ["FE-00001"], [], []],
+            "downstream": [["FE-00002"], [], [], []],
+        }),
+        ("dependency", "dependencies + DEPENDS_ON", {
+            "upstream": [[], [], ["FE-00002"], []],
+            "downstream": [[], ["FE-00003"], [], []],
+        }),
+    )
+
+    def cli_trace(flags, code=0, expected=None, diagnostic=None, path=cluster_path):
+        stdout, stderr = StringIO(), StringIO()
+        with patch.object(sys, "argv", [str(Path(__file__).resolve()), "--registry", str(path), *flags]):
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main()
+        require(result == code, f"incorrect trace CLI exit code: {flags}")
+        if code == 0:
+            require(not stderr.getvalue() and stdout.getvalue() == json.dumps(expected, indent=2) + "\n",
+                    f"incorrect trace CLI JSON/streams: {flags}")
+        else:
+            require(not stdout.getvalue() and diagnostic in stderr.getvalue(),
+                    f"trace CLI did not fail closed: {flags}")
+        return stdout.getvalue()
+
+    for graph_name, label, directions in expected_graphs:
+        for direction, reachable in directions.items():
+            for index, expected_ids in enumerate(reachable, 1):
+                object_id = f"FE-{index:05d}"
+                expected = {
+                    "object_id": object_id, "direction": direction, "graph": label,
+                    "reachable_ids": expected_ids,
+                    "scope": "supplied snapshot only; not a completeness or authority decision",
+                }
+                result = trace_palaco_registry(
+                    clusters, object_id, direction, validator, graph_name=graph_name,
+                )
+                require(result == expected, f"graphs merged or incorrect cluster trace: {result}")
+                flags = ["--trace", object_id, "--direction", direction]
+                explicit = cli_trace(flags + ["--trace-graph", graph_name], expected=expected)
+                if graph_name == "upstream":
+                    require(cli_trace(flags, expected=expected) == explicit,
+                            "explicit upstream changed default JSON bytes")
+                result["reachable_ids"].append("FE-99999")
+                require(trace_palaco_registry(
+                    clusters, object_id, direction, validator, graph_name=graph_name,
+                ) == expected, "trace result is not fresh")
+            for object_id in ("FE-99999", ""):
+                cli_trace(["--trace", object_id, "--direction", direction, "--trace-graph", graph_name],
+                          1, diagnostic="unknown trace object ID")
+            cli_trace(["--trace", "FE-00001", "--direction", direction, "--trace-graph", graph_name],
+                      1, diagnostic="FAIL:", path=cluster_path.with_name("missing-trace-registry.json"))
+    require(clusters == original_clusters and cluster_path.read_bytes() == cluster_bytes,
+            "cluster traces mutated input")
+
+    # The fixture represents one dependency twice; either representation must work alone too.
+    for representation in ("both", "list", "explicit"):
+        dependency = copy.deepcopy(clusters)
+        if representation == "list":
+            dependency["objects"][2]["traceability"]["relationships"] = []
+        elif representation == "explicit":
+            del dependency["objects"][2]["dependencies"]
+        for direction, origin, expected_ids in (
+            ("upstream", "FE-00003", ["FE-00002"]),
+            ("downstream", "FE-00002", ["FE-00003"]),
+        ):
+            require(trace_palaco_registry(
+                dependency, origin, direction, validator, graph_name="dependency",
+            )["reachable_ids"] == expected_ids, f"dependency deduplication failed: {representation}")
+
+    dependency_diamond = copy.deepcopy(diamond)
+    for record in dependency_diamond["objects"]:
+        record["dependencies"] = record["traceability"]["upstream"]
+        record["traceability"]["upstream"] = []
+    for direction, origin, expected_ids in (
+        ("upstream", "FE-00001", ["FE-00002", "FE-00003", "FE-00004"]),
+        ("downstream", "FE-00004", ["FE-00001", "FE-00002", "FE-00003"]),
+    ):
+        require(trace_palaco_registry(
+            dependency_diamond, origin, direction, validator, graph_name="dependency",
+        )["reachable_ids"] == expected_ids, "dependency diamond lost transitive or unique IDs")
+
+    depth = sys.getrecursionlimit() + 100
+    chain = {"registry_version": "0.1.0", "objects": []}
+    for index in range(depth + 1):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        targets = [f"FE-{index + 1:05d}"] if index < depth else []
+        record["traceability"]["upstream"] = targets[:]
+        record["dependencies"] = targets[:]
+        chain["objects"].append(record)
+    original_chain = copy.deepcopy(chain)
+    for graph_name in ("upstream", "dependency"):
+        for direction, origin, expected_ids in (
+            ("upstream", "FE-00000", [f"FE-{index:05d}" for index in range(1, depth + 1)]),
+            ("downstream", f"FE-{depth:05d}", [f"FE-{index:05d}" for index in range(depth)]),
+        ):
+            require(trace_palaco_registry(
+                chain, origin, direction, validator, graph_name=graph_name,
+            )["reachable_ids"] == expected_ids, "deep trace must be iterative, sorted and exclude origin")
+    require(chain == original_chain, "deep traces mutated input")
+    for graph_name in ("", "dependencies", "unknown", None):
+        try:
+            trace_palaco_registry(clusters, "FE-00001", validator=validator, graph_name=graph_name)
+        except ConformanceError as error:
+            require("unknown trace graph" in str(error), f"unexpected graph diagnostic: {error}")
+        else:
+            raise ConformanceError("invalid trace graph accepted")
+
     negatives = []
     negatives.append((fixture, "FE-99999", "upstream", "unknown trace object ID"))
     negatives.append((fixture, "FE-00001", "sideways", "invalid trace direction"))
@@ -4478,14 +4599,19 @@ def check_palaco_traces():
     duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
     negatives.append((duplicate, "FE-00001", "upstream", "duplicate object ID"))
     negatives.append(({}, "FE-00001", "upstream", "registry structure"))
-    for instance, object_id, direction, expected in negatives:
-        try:
-            trace_palaco_registry(instance, object_id, direction, validator)
-        except ConformanceError as error:
-            require(expected in str(error), f"unexpected trace diagnostic: {error}")
-        else:
-            raise ConformanceError(f"invalid trace query accepted: {expected}")
-    return "registry traces: 10 positive queries, deterministic/non-mutating output + 6 rejections"
+    unrelated = copy.deepcopy(clusters)
+    unrelated["objects"][-1]["dependencies"] = ["FE-99999"]
+    negatives.append((unrelated, "FE-00001", "upstream", "unresolved"))
+    for graph_name in ("upstream", "dependency"):
+        for instance, object_id, direction, expected in negatives:
+            try:
+                trace_palaco_registry(instance, object_id, direction, validator, graph_name=graph_name)
+            except ConformanceError as error:
+                require(expected in str(error), f"unexpected trace diagnostic: {error}")
+            else:
+                raise ConformanceError(f"invalid trace query accepted: {expected}")
+    return ("registry traces: separate graphs in both directions, default JSON compatibility, "
+            "deduplication, fresh/non-mutating results, deep iterative chains and fail-closed errors")
 
 
 def check_palaco_registry():
@@ -5017,6 +5143,7 @@ def check_registry_cli_validation():
         "find_unaudited_evidence": ["--find-unaudited-evidence"],
     }
     defaults = vars(parser.parse_args([]))
+    require(defaults["trace_graph"] is None, "trace graph default must distinguish an explicit modifier")
     require(set(query_flags) == {
         name for name in defaults
         if name.startswith("find_") or name in ("diff", "trace", "summary", "components")
@@ -5068,6 +5195,32 @@ def check_registry_cli_validation():
     for direction in ("upstream", "downstream"):
         check(registry + query_flags["trace"] + ["--direction", direction], modes=("trace",))
         check(["--direction", direction], "--direction requires --trace")
+
+    for graph_name in ("upstream", "dependency"):
+        modifier = ["--trace-graph", graph_name]
+        for base in ([], registry, previous, registry + previous):
+            check(base + modifier, "--trace-graph requires --trace")
+        for mode, flags in query_flags.items():
+            if mode != "trace":
+                check(registry + (previous if mode == "diff" else []) + flags + modifier,
+                      "--trace-graph requires --trace")
+        check(query_flags["trace"] + modifier, "--trace requires --registry")
+        check(registry + previous + query_flags["trace"] + modifier, "cannot be combined")
+        check(registry + query_flags["trace"] + modifier, modes=("trace",))
+        for direction in ("upstream", "downstream"):
+            check(registry + query_flags["trace"] + modifier + ["--direction", direction],
+                  modes=("trace",))
+    for invalid in ("unknown", "", "dependencies"):
+        stderr = StringIO()
+        with redirect_stderr(stderr):
+            try:
+                parser.parse_args(registry + query_flags["trace"] + ["--trace-graph", invalid])
+            except SystemExit as error:
+                require(error.code == 2 and "invalid choice" in stderr.getvalue(),
+                        "invalid trace graph must be rejected by argparse")
+            else:
+                raise ConformanceError("invalid CLI trace graph accepted")
+        count += 1
 
     modifiers = (["--component-of", "FE-00001"], ["--min-component-size", "2"],
                  ["--max-component-size", "3"])
@@ -5127,6 +5280,9 @@ def check_registry_cli_validation():
         check_output(registry + previous, 1, "FAIL:")
         for mode, flags in query_flags.items():
             check_output(registry + (previous if mode == "diff" else []) + flags,
+                         1, stderr_prefix="FAIL:")
+        for graph_name in ("upstream", "dependency"):
+            check_output(registry + query_flags["trace"] + ["--trace-graph", graph_name],
                          1, stderr_prefix="FAIL:")
         check_output(registry + ["--find-name", ""], 1, stderr_prefix="FAIL:")
     return f"{count} in-process CLI mode, modifier, required-input and output-stream checks"
@@ -5217,6 +5373,14 @@ def check_registry_cli_dispatch():
         for direction in ("upstream", "downstream"):
             check("trace", ["--trace", "FE-00001", "--direction", direction],
                   "trace_palaco_registry", ("FE-00001", direction), {})
+        for graph_name in ("upstream", "dependency"):
+            for direction_flags, direction in (
+                ([], "upstream"), (["--direction", "upstream"], "upstream"),
+                (["--direction", "downstream"], "downstream"),
+            ):
+                for object_id in ("FE-00001", ""):
+                    check("trace", ["--trace", object_id, "--trace-graph", graph_name, *direction_flags],
+                          "trace_palaco_registry", (object_id, direction), {"graph_name": graph_name})
         for graph in ("upstream", "dependency"):
             for mask in range(8):
                 flags = ["--components", graph]
@@ -5309,7 +5473,9 @@ def registry_cli_parser():
     parser.add_argument("--diff", action="store_true",
                         help="Return ID differences as JSON; requires --registry and --previous-registry")
     parser.add_argument("--trace", metavar="OBJECT_ID",
-                        help="Return reachable IDs from traceability.upstream as JSON")
+                        help="Return reachable IDs in the selected trace graph as JSON")
+    parser.add_argument("--trace-graph", choices=("upstream", "dependency"),
+                        help="Trace graph (default: upstream); dependency uses dependencies + DEPENDS_ON; requires --trace")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--find-domain", metavar="DOMAIN",
@@ -5378,6 +5544,8 @@ def active_registry_query_modes(args):
 
 def validate_registry_cli(args, parser):
     """Validate mode relationships without reading either registry."""
+    if args.trace_graph is not None and args.trace is None:
+        parser.error("--trace-graph requires --trace; cannot be combined with other query modes")
     if args.max_component_size is not None:
         if args.components is None:
             parser.error("--max-component-size requires --components")
@@ -5446,6 +5614,10 @@ def dispatch_registry_query(current, args, mode):
     if mode == "find_owner":
         return find_palaco_owner(current, *args.find_owner)
     if mode == "trace":
+        if args.trace_graph is not None:
+            return trace_palaco_registry(
+                current, args.trace, args.direction or "upstream", graph_name=args.trace_graph,
+            )
         return trace_palaco_registry(current, args.trace, args.direction or "upstream")
     if mode == "components":
         return find_palaco_components(

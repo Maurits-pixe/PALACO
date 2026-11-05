@@ -2340,7 +2340,7 @@ invalid snapshots and unreadable files fail nonzero with diagnostics on stderr
 and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
-Choose one query mode at a time. `--direction` modifies `--trace`, while
+Choose one query mode at a time. `--direction` and `--trace-graph` modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
 
@@ -2363,7 +2363,7 @@ changes without newer audit timestamps: it is **not** transition validation,
 authenticated history or authorization. Omit `--diff` to retain the stricter
 existing `--previous-registry` transition checks. Invalid inputs, including empty
 snapshots, fail nonzero without diff results. Both paths are required; other
-queries and `--direction` cannot be combined with `--diff`. No records or files
+queries, `--direction` and `--trace-graph` cannot be combined with `--diff`. No records or files
 are modified.
 
 Read-only trace queries return the transitive upstream or downstream object IDs:
@@ -2372,21 +2372,28 @@ Read-only trace queries return the transitive upstream or downstream object IDs:
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
   --trace REQ-00001 --direction upstream
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-clusters.fixture.json \
+  --trace FE-00002 --trace-graph dependency --direction downstream
 ```
 
 `--trace` first validates the entire closed snapshot, then emits only a JSON object
 containing `object_id`, `direction`, `graph`, sorted unique `reachable_ids` and a
-scope disclaimer. The default direction is upstream; downstream traverses the
-same graph in reverse. The starting ID is excluded, and no reachable nodes yields
+scope disclaimer. `--trace-graph upstream` (the default) uses only
+`traceability.upstream`; `--trace-graph dependency` uses the union of `dependencies`
+and explicit `DEPENDS_ON` edges, deduplicating repeated edges. The default
+direction is upstream (forward); downstream traverses the selected graph in
+reverse. The starting ID is excluded, and no reachable nodes yields
 an empty array. Unknown IDs and invalid registries fail nonzero without results.
 Trace errors, including unreadable snapshots, are written to stderr with empty
 stdout. Successful traces emit JSON on stdout and leave stderr empty in both
 directions, including when no nodes are reachable.
-Only `traceability.upstream` is traversed: dependency fields, embedded relationship
-edges and other references are not merged into the trace graph. Results describe
+The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
-`--direction` requires `--trace`; trace and previous-registry comparison modes
+`--direction` and `--trace-graph` each require `--trace`, even when explicitly
+selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
 
 Read-only object-type queries filter records by the exact canonical family:
