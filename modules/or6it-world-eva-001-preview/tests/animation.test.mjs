@@ -178,6 +178,21 @@ test('zero-sized canvas does not schedule animation frames until it becomes visi
   animation.dispose();
 });
 
+test('ambient motion throttles early frames without dropping its animation loop', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  harness.runFrame(10);
+  assert.equal(harness.calls.arcs, 0);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(17);
+  assert.ok(harness.calls.arcs > 0);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.dispose();
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
