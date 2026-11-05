@@ -2460,6 +2460,18 @@ not the number of edges or the longest directed path. Shared ancestors count
 once. The fixture reports three for each graph; a singleton or an all-isolated
 snapshot reports one. Empty registries remain invalid. Graph boundaries and
 the diagnostic-only scope are the same as for the component counts above.
+Use `--registry SNAPSHOT --components upstream` or
+`--registry SNAPSHOT --components dependency` to inspect actual cluster members.
+The read-only JSON result contains `graph`, `definition`, `components` and `scope`.
+Each component is a sorted array of object IDs; components are sorted
+lexicographically by their member arrays, not by size. Every object appears
+exactly once, including isolated objects as singleton arrays. Graph boundaries
+and weak connectivity follow the summary definitions above; no additional links
+are inferred. The entire snapshot must validate before any result is emitted.
+`--components` requires `--registry` and cannot be combined with any other query,
+comparison mode or `--direction`. These are snapshot diagnostics, not proof of
+completeness, canonical status or authority.
+
 The `total_dependency_orphans` field counts objects with neither
 incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
 An object referenced by another dependency source is connected, even if it has
