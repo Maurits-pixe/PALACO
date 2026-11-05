@@ -178,9 +178,12 @@ onUnmounted(() => {
             <div><dt>Bronreferentie</dt><dd><code>{{ manifest.visual_reference.path }}</code></dd></div>
             <div class="fingerprint-row">
               <dt>Fixture fingerprint · SHA-256</dt>
-              <dd>
+              <dd role="status" aria-atomic="true">
                 <code v-if="fingerprint.value">{{ fingerprint.value }}</code>
                 <span v-else>{{ fingerprint.state }}</span>
+                <p v-if="fingerprint.issue" class="fingerprint-note unknown">
+                  Fingerprint niet beschikbaar: {{ fingerprint.issue }}
+                </p>
               </dd>
             </div>
           </dl>

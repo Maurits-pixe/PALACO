@@ -16,6 +16,8 @@ validation works without runtime code evaluation. After changing the schema,
 run `npm run schema:generate`; tests and builds verify the generated validator.
 The normalized fixture is also shown with a deterministic SHA-256 fingerprint.
 That digest is an integrity aid only, not identity, provenance, or authority.
+If hashing fails, an accessible status displays `UNAVAILABLE` and the error
+reason instead of a fabricated digest; local fixture events remain usable.
 The image is served from the repository's canonical
 `assets/world-eva-001-reference.png` path and is not technical evidence.
 
@@ -45,6 +47,8 @@ has no horizontal overflow. Runtime preference changes are checked as well.
 The browser regression also checks that manual pause survives fixture events
 and reduced-motion preference changes, and resumes the original animations
 without losing their paused phase.
+It also injects a synthetic SHA-256 failure to check the visible error status
+and continued read-only fixture interaction.
 To use an existing Chrome/Chromium installation instead of downloading one,
 set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path.
 

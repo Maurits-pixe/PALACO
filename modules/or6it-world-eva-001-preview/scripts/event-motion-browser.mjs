@@ -179,6 +179,31 @@ try {
   assert.equal(await page.evaluate(() => window.__evaMotionProbe.frames), stoppedAt);
   assert.deepEqual(errors, []);
   console.log('Runtime reduced-motion preference change passed.');
+
+  const cryptoFailurePage = await browser.newPage({ reducedMotion: 'reduce' });
+  cryptoFailurePage.on('pageerror', error => errors.push(error.message));
+  cryptoFailurePage.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  await cryptoFailurePage.addInitScript(() => {
+    Object.defineProperty(crypto.subtle, 'digest', {
+      value: () => Promise.reject(new Error('Synthetic SHA-256 failure.')),
+    });
+  });
+  await cryptoFailurePage.goto(`http://127.0.0.1:${address.port}`);
+  const fingerprintStatus = cryptoFailurePage.locator('.fingerprint-row [role="status"]');
+  await fingerprintStatus.getByText('Fingerprint niet beschikbaar: Synthetic SHA-256 failure.', { exact: true }).waitFor();
+  assert.match(await fingerprintStatus.textContent(), /UNAVAILABLE/);
+  assert.equal(await fingerprintStatus.locator('code').count(), 0);
+  await cryptoFailurePage.getByRole('button', { name: 'Toon volgend fixture-event' }).click();
+  await cryptoFailurePage.waitForFunction(
+    () => document.querySelector('.sequence-badge').textContent.trim() === 'SEQUENCE 42',
+    null,
+    { polling: 20 },
+  );
+  assert.deepEqual(errors, []);
+  await cryptoFailurePage.close();
+  console.log('Fingerprint failure is visible without a fabricated digest; fixture events remain usable.');
 } finally {
   await browser?.close();
   await server.close();
