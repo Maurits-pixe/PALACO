@@ -220,6 +220,30 @@ try {
   console.log('Manual pause remains active across hide/show visibility changes until resumed.');
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByRole('button', { name: 'Beweging beperkt door systeem' }).waitFor();
+  const reducedMotionFrames = await page.evaluate(() => window.__evaMotionProbe.frames);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(150);
+  assert.equal(await page.evaluate(() => window.__evaMotionProbe.frames), reducedMotionFrames);
+  assert.equal(await page.getByRole('button', { name: 'Beweging beperkt door systeem' }).isDisabled(), true);
+  assert.equal(await page.evaluate(() =>
+    ['.ring-system', '.core-mark'].every(selector =>
+      getComputedStyle(document.querySelector(selector)).animationPlayState === 'paused')),
+  true);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(beforeFrames =>
+    window.__evaMotionProbe.frames > beforeFrames &&
+    ['.ring-system', '.core-mark'].every(selector =>
+      getComputedStyle(document.querySelector(selector)).animationPlayState === 'running'),
+  reducedMotionFrames, { polling: 20 });
+  console.log('System reduced motion remains active across hide/show until the preference changes.');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await page.reload();
