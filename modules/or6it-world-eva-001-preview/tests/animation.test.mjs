@@ -84,6 +84,30 @@ test('ambient motion pauses while hidden and resumes without replacing its loop'
   assert.equal(harness.windowListeners.size, 0);
 });
 
+test('repeated visibility changes keep one frame loop and disposal while hidden stays stopped', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  harness.documentObject.hidden = true;
+  harness.documentListeners.get('visibilitychange')();
+  harness.documentListeners.get('visibilitychange')();
+  assert.equal(harness.callbacks.size, 0);
+
+  harness.documentObject.hidden = false;
+  harness.documentListeners.get('visibilitychange')();
+  harness.documentListeners.get('visibilitychange')();
+  assert.equal(harness.callbacks.size, 1);
+  harness.runFrame(17);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.documentObject.hidden = true;
+  harness.documentListeners.get('visibilitychange')();
+  animation.dispose();
+  harness.documentObject.hidden = false;
+  assert.equal(harness.documentListeners.size, 0);
+  assert.equal(harness.callbacks.size, 0);
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
