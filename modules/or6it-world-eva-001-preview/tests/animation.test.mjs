@@ -221,6 +221,29 @@ test('high-refresh displays do not draw more frequently than the frame interval'
   animation.dispose();
 });
 
+test('slow frames do not cause the next frame to render early', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  harness.runFrame(17);
+  const firstFrameArcs = harness.calls.arcs;
+  assert.ok(firstFrameArcs > 0);
+
+  harness.runFrame(100);
+  assert.ok(harness.calls.arcs > firstFrameArcs);
+  const afterSlowFrameArcs = harness.calls.arcs;
+
+  harness.runFrame(105);
+  assert.equal(harness.calls.arcs, afterSlowFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(117);
+  assert.ok(harness.calls.arcs > afterSlowFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.dispose();
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
