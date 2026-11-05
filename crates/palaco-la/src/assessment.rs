@@ -161,6 +161,42 @@ mod tests {
     }
 
     #[test]
+    fn insufficient_evidence_threshold_fails_closed_to_indeterminate() {
+        let q = question();
+        let evidence = evidence(q.id);
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::InsufficientEvidence,
+            basis: vec![evidence.id],
+            rationale: "insufficient evidence".to_owned(),
+        };
+
+        let assessment = assess(q, &[evidence], threshold);
+        assert!(matches!(
+            assessment.map(|value| value.threshold.state),
+            Ok(ThresholdState::Indeterminate)
+        ));
+    }
+
+    #[test]
+    fn unsatisfied_threshold_fails_closed_to_indeterminate() {
+        let q = question();
+        let evidence = evidence(q.id);
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::Unsatisfied,
+            basis: vec![evidence.id],
+            rationale: "threshold not met".to_owned(),
+        };
+
+        let assessment = assess(q, &[evidence], threshold);
+        assert!(matches!(
+            assessment.map(|value| value.threshold.state),
+            Ok(ThresholdState::Indeterminate)
+        ));
+    }
+
+    #[test]
     fn assessment_preserves_unknown_evidence() {
         let q = question();
         let mut unknown = evidence(q.id);
