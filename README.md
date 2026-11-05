@@ -2469,7 +2469,9 @@ exactly once, including isolated objects as singleton arrays. Graph boundaries
 and weak connectivity follow the summary definitions above; no additional links
 are inferred. The entire snapshot must validate before any result is emitted.
 `--components` requires `--registry` and cannot be combined with any other query,
-comparison mode or `--direction`. These are snapshot diagnostics, not proof of
+comparison mode or `--direction`. Invalid or unreadable snapshots fail nonzero,
+with diagnostics on stderr and no stdout JSON or partial cluster results.
+Input files are never modified. These are snapshot diagnostics, not proof of
 completeness, canonical status or authority.
 
 The `total_dependency_orphans` field counts objects with neither

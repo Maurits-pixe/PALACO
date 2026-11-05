@@ -32,6 +32,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 
@@ -3224,6 +3225,50 @@ def check_palaco_component_partitions():
     return "1,024 five-node forward graphs: independent partitions, reversal, counts and non-mutation"
 
 
+def check_palaco_components_fail_closed():
+    fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    cases = []
+    duplicate = copy.deepcopy(fixture)
+    duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
+    cases.append((json.dumps(duplicate), "duplicate object ID"))
+    unresolved = copy.deepcopy(fixture)
+    unresolved["objects"][0]["dependencies"] = ["FE-99999"]
+    cases.append((json.dumps(unresolved), "unresolved"))
+    upstream_cycle = copy.deepcopy(fixture)
+    upstream_cycle["objects"][0]["traceability"]["upstream"] = ["REQ-00001"]
+    cases.append((json.dumps(upstream_cycle), "upstream cycle"))
+    dependency_cycle = copy.deepcopy(fixture)
+    dependency_cycle["objects"][0]["dependencies"] = ["REQ-00001"]
+    cases.append((json.dumps(dependency_cycle), "dependency cycle"))
+    cases.extend([
+        (json.dumps({"registry_version": "0.1.0", "objects": []}), "registry structure"),
+        ('{"registry_version": "0.1.0", "objects": [', "Expecting value"),
+        ('{"objects": [], "objects": []}', "Duplicate JSON key"),
+    ])
+    with tempfile.TemporaryDirectory(prefix="palaco-components-", dir="/tmp") as directory:
+        path = Path(directory) / "registry.json"
+        script = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
+        for content, diagnostic in cases:
+            path.write_text(content, encoding="utf-8")
+            original = path.read_bytes()
+            for graph_name in ("upstream", "dependency"):
+                cli = subprocess.run(script + ["--components", graph_name],
+                                     capture_output=True, text=True, timeout=30)
+                require(cli.returncode == 1 and not cli.stdout,
+                        f"{graph_name} emitted results for invalid snapshot: {cli.stdout}")
+                require("FAIL:" in cli.stderr and diagnostic in cli.stderr,
+                        f"{graph_name} missing expected diagnostic {diagnostic}: {cli.stderr}")
+                require(path.read_bytes() == original, "failed component query modified input")
+        path.unlink()
+        for graph_name in ("upstream", "dependency"):
+            cli = subprocess.run(script + ["--components", graph_name],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
+                    "missing component snapshot did not fail cleanly")
+            require(not path.exists(), "failed component query created missing snapshot")
+    return "both component modes: 7 invalid snapshots + missing file; empty stdout and unchanged input"
+
+
 def check_palaco_components():
     validators = palaco_validators()
     template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
@@ -4374,6 +4419,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO component CLI fail-closed conformance", check_palaco_components_fail_closed),
     ("PALACO exhaustive component partitions", check_palaco_component_partitions),
     ("PALACO registry component summary conformance", check_palaco_components),
     ("PALACO shared upstream graph contract", check_palaco_upstream_contract),
@@ -4829,7 +4875,8 @@ def main():
             else:
                 summary = validate_registry_transition(read_json(args.previous_registry), current)
         except Exception as error:  # fail closed, including unreadable files
-            print(f"FAIL: {type(error).__name__}: {error}")
+            print(f"FAIL: {type(error).__name__}: {error}",
+                  file=sys.stderr if args.components is not None else sys.stdout)
             return 1
         print(f"PASS: {summary}")
         return 0
