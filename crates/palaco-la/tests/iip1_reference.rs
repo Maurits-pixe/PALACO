@@ -216,6 +216,17 @@ fn issuer_scope_basis_expiry_and_revocation_are_required_for_reference_approval(
 }
 
 #[test]
+fn issuer_must_be_authorized_for_requested_scope() {
+    let mut wrong_scopes = valid_request();
+    wrong_scopes.issuer_scopes = vec!["identity:other".to_owned()];
+
+    assert_eq!(
+        evaluate_reference(&wrong_scopes).issuance_review,
+        IssuanceReviewState::Denied
+    );
+}
+
+#[test]
 fn strict_request_contract_rejects_unknown_fields() {
     let serialized = serde_json::to_string(&valid_request()).expect("serialize fixture");
     let with_unknown = serialized.trim_end_matches('}').to_owned() + ",\"account_activated\":true}";
