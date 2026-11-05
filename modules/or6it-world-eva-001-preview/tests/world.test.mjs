@@ -130,6 +130,21 @@ test('static preview headers deny external content, embedding, and device permis
   assert.match(headers, /Permissions-Policy: camera=\(\), geolocation=\(\), microphone=\(\)/);
 });
 
+test('Vercel applies the same strict security headers to deployed routes', () => {
+  const config = JSON.parse(fs.readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  const route = config.headers.find(entry => entry.source === '/(.*)');
+  assert.ok(route, 'Vercel must apply the security policy to every route.');
+  const headers = Object.fromEntries(route.headers.map(({ key, value }) => [key, value]));
+
+  assert.equal(config.outputDirectory, 'dist');
+  assert.equal(headers['Content-Security-Policy'],
+    "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'");
+  assert.equal(headers['Permissions-Policy'], 'camera=(), geolocation=(), microphone=()');
+  assert.equal(headers['Referrer-Policy'], 'no-referrer');
+  assert.equal(headers['X-Content-Type-Options'], 'nosniff');
+  assert.equal(headers['X-Frame-Options'], 'DENY');
+});
+
 test('generated schema validator does not require runtime code evaluation', () => {
   const validator = fs.readFileSync(new URL('../src/validate-manifest.generated.js', import.meta.url), 'utf8');
   assert.doesNotMatch(validator, /\bnew Function\b|\beval\s*\(|\brequire\s*\(/);

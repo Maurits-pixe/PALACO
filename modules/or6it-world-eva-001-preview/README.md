@@ -3,9 +3,10 @@
 This is a local, synthetic, read-only dashboard preview. It consumes the checked-in
 EVA design fixture only. It has no World API, polling, SSE, WebSocket, backend,
 persistent store, credentials, activation, or external effects.
-The static production preview ships a same-origin Content Security Policy,
-denies framing and plugins, disables unneeded device permissions, and sets
-baseline browser security headers.
+The Vercel deployment applies a same-origin Content Security Policy, denies
+framing and plugins, disables unneeded device permissions, and sets baseline
+browser security headers through `vercel.json`. `public/_headers` carries the
+same policy for static hosts that support that convention.
 
 The manifest is checked against the current structural schema stub plus EVA
 fixture-specific invariants. `STRUCTURALLY_VALID` describes document shape
