@@ -159,6 +159,12 @@ fn account_and_ownership_are_independent_gates() {
         ReviewState::Fail
     );
 
+    let mut revoked_account = valid_request();
+    revoked_account.account_revoked = true;
+    let result = evaluate_reference(&revoked_account);
+    assert_eq!(result.account_review, ReviewState::Fail);
+    assert!(!result.identity_validated);
+
     let mut non_provisional = valid_request();
     non_provisional.dossier_provisional = false;
     assert_eq!(
