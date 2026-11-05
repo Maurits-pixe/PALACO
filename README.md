@@ -2474,6 +2474,15 @@ with diagnostics on stderr and no stdout JSON or partial cluster results.
 Input files are never modified. These are snapshot diagnostics, not proof of
 completeness, canonical status or authority.
 
+Add `--component-of OBJECT_ID` to either component mode to return only the
+cluster containing that exact ID. The JSON structure is unchanged: `components`
+contains one member array, including the requested object itself. Isolated
+objects return a singleton cluster. Unknown IDs fail nonzero with diagnostics
+on stderr and empty stdout; no case folding or whitespace normalization occurs.
+The modifier requires `--components`; it cannot be used with other query modes.
+The full snapshot is still validated, including objects outside the selected
+cluster. Omitting the modifier preserves the complete component listing.
+
 The `total_dependency_orphans` field counts objects with neither
 incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
 An object referenced by another dependency source is connected, even if it has

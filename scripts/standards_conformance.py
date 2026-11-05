@@ -906,7 +906,7 @@ def find_palaco_objects(instance, object_type, validators=None):
     }
 
 
-def find_palaco_components(instance, graph_name, validator=None):
+def find_palaco_components(instance, graph_name, validator=None, object_id=None):
     """List snapshot clusters without inferring missing links or authority."""
     require(graph_name in ("upstream", "dependency"), f"unknown component graph: {graph_name}")
     validate_palaco_registry(instance, validator)
@@ -914,10 +914,15 @@ def find_palaco_components(instance, graph_name, validator=None):
     graph = {
         record["metadata"]["id"]: extract(record) for record in instance["objects"]
     }
+    if object_id is not None:
+        require(object_id in graph, f"unknown component object ID: {object_id}")
+    components = weak_components(graph)
+    if object_id is not None:
+        components = [members for members in components if object_id in members]
     return {
         "graph": "traceability.upstream" if graph_name == "upstream" else "dependencies + DEPENDS_ON",
         "definition": "weakly connected components; edge direction ignored; isolates included",
-        "components": weak_components(graph),
+        "components": components,
         "scope": "supplied snapshot only; diagnostic, not completeness, canonical status or authority",
     }
 
@@ -3314,6 +3319,11 @@ def check_palaco_components():
     ):
         query = find_palaco_components(fixture, graph_name, validators["PCR-000.schema.json"])
         require(query["components"] == expected, f"incorrect {graph_name} component members")
+        for members in expected:
+            for object_id in members:
+                selected = find_palaco_components(fixture, graph_name, object_id=object_id)
+                require(selected == {**query, "components": [members]},
+                        f"incorrect component selection for {graph_name} {object_id}")
         require(len(expected) == result[f"total_{graph_name}_components"]
                 and max(map(len, expected)) == result[f"largest_{graph_name}_component_size"],
                 "membership query and summary disagree")
@@ -3339,6 +3349,15 @@ def check_palaco_components():
                 require(path.read_bytes() == original_bytes,
                         f"multi-cluster {graph_name} CLI modified snapshot")
                 outputs.append(cli.stdout)
+                for object_id in ("FE-00002", "AUD-00001"):
+                    cli = subprocess.run(command + ["--component-of", object_id],
+                                         capture_output=True, text=True, timeout=30)
+                    require(cli.returncode == 0 and not cli.stderr
+                            and json.loads(cli.stdout) == find_palaco_components(
+                                fixture, graph_name, object_id=object_id),
+                            f"incorrect selected component CLI result: {cli.stdout}{cli.stderr}")
+                    require(path.read_bytes() == original_bytes,
+                            "selected component CLI modified snapshot")
             require(outputs[0] == outputs[1],
                     f"multi-cluster {graph_name} CLI output depends on input ordering")
     invalid = copy.deepcopy(fixture)
@@ -3355,6 +3374,21 @@ def check_palaco_components():
             require(diagnostic in str(error), f"unexpected component query error: {error}")
         else:
             raise ConformanceError(f"invalid component query accepted: {diagnostic}")
+    for graph_name in ("upstream", "dependency"):
+        for object_id in ("FE-99999", "fe-00001", "", " FE-00001"):
+            try:
+                find_palaco_components(fixture, graph_name, object_id=object_id)
+            except ConformanceError as error:
+                require("unknown component object ID" in str(error),
+                        f"unexpected selected component error: {error}")
+            else:
+                raise ConformanceError("unknown component object accepted")
+        try:
+            find_palaco_components(invalid, graph_name, object_id="FE-00001")
+        except ConformanceError as error:
+            require("unresolved" in str(error), "selection bypassed full snapshot validation")
+        else:
+            raise ConformanceError("component selection accepted invalid snapshot")
     script = [sys.executable, str(Path(__file__).resolve())]
     base = script + ["--registry", str(PALACO_FIXTURE_DIR / "registry.fixture.json")]
     for graph_name in ("upstream", "dependency"):
@@ -3363,6 +3397,10 @@ def check_palaco_components():
         require(cli.returncode == 0 and json.loads(cli.stdout) == find_palaco_components(
             read_json(PALACO_FIXTURE_DIR / "registry.fixture.json"), graph_name),
             f"incorrect component CLI result: {cli.stdout}{cli.stderr}")
+        cli = subprocess.run(base + ["--components", graph_name, "--component-of", "FE-99999"],
+                             capture_output=True, text=True, timeout=30)
+        require(cli.returncode == 1 and not cli.stdout and "unknown component object ID" in cli.stderr,
+                "unknown selected component CLI did not fail cleanly")
     for flags in (
         ["--summary"], ["--find-type", "FE"], ["--trace", "FE-00001"],
         ["--find-dependency-orphans"], ["--direction", "upstream"], ["--diff"],
@@ -3372,7 +3410,9 @@ def check_palaco_components():
                              capture_output=True, text=True, timeout=30)
         require(cli.returncode == 2 and not cli.stdout,
                 f"components accepted conflicting flags: {flags}")
-    for args in (["--components", "upstream"], base[2:] + ["--components", "unknown"]):
+    for args in (["--components", "upstream"], base[2:] + ["--components", "unknown"],
+                 ["--component-of", "FE-00001"], base[2:] + ["--component-of", "FE-00001"],
+                 base[2:] + ["--summary", "--component-of", "FE-00001"]):
         cli = subprocess.run(script + args, capture_output=True, text=True, timeout=30)
         require(cli.returncode == 2 and not cli.stdout, "invalid components CLI accepted")
     require(result["total_upstream_orphans"] == 1 and result["total_dependency_orphans"] == 3,
@@ -4524,6 +4564,8 @@ def main():
                         help="Return validated object, domain, ownership, status, classification and explicit relationship counts as JSON")
     parser.add_argument("--components", choices=("upstream", "dependency"),
                         help="Return weakly connected object-ID groups as JSON; requires --registry")
+    parser.add_argument("--component-of", metavar="OBJECT_ID",
+                        help="Return only the cluster containing OBJECT_ID; requires --components")
     parser.add_argument("--find-review-due", metavar="YYYY-MM-DD",
                         help="Return IDs with next_review on or before an explicit date; all lifecycle states")
     parser.add_argument("--find-orphans", action="store_true",
@@ -4537,11 +4579,14 @@ def main():
     parser.add_argument("--direction", choices=("upstream", "downstream"),
                         help="Trace direction (default: upstream); requires --trace")
     args = parser.parse_args()
+    if args.component_of is not None and args.components is None:
+        parser.error("--component-of requires --components")
     if args.components is not None:
         if args.registry is None:
             parser.error("--components requires --registry")
         if any(value is not None and value is not False
-               for name, value in vars(args).items() if name not in ("registry", "components")):
+               for name, value in vars(args).items()
+               if name not in ("registry", "components", "component_of")):
             parser.error("--components cannot be combined with other query or comparison modes")
     if args.find_dependency_orphans:
         if args.registry is None:
@@ -4789,7 +4834,7 @@ def main():
         try:
             current = read_json(args.registry)
             if args.components is not None:
-                result = find_palaco_components(current, args.components)
+                result = find_palaco_components(current, args.components, object_id=args.component_of)
                 print(json.dumps(result, indent=2))
                 return 0
             elif args.find_dependency_orphans:
