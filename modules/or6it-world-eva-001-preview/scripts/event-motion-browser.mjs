@@ -183,6 +183,42 @@ try {
   true);
   console.log('Synthetic visibilitychange pauses Canvas/SVG motion and resumes the same animations.');
 
+  await page.getByRole('button', { name: 'Pauzeer beweging' }).click();
+  const manualPauseFrames = await page.evaluate(() => window.__evaMotionProbe.frames);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(
+    () => document.querySelector('.scene').classList.contains('motion-paused'),
+    null,
+    { polling: 20 },
+  );
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(
+    () => document.querySelector('.scene').classList.contains('motion-paused'),
+    null,
+    { polling: 20 },
+  );
+  assert.equal(await page.getByRole('button', { name: 'Hervat beweging' }).getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.evaluate(() => window.__evaMotionProbe.frames), manualPauseFrames);
+  assert.equal(await page.evaluate(() =>
+    window.__evaVisibilityBefore.animations.every(animation => animation.playState === 'paused')), true);
+  await page.getByRole('button', { name: 'Hervat beweging' }).click();
+  await page.waitForFunction(beforeFrames =>
+    !document.querySelector('.scene').classList.contains('motion-paused') &&
+    window.__evaMotionProbe.frames > beforeFrames,
+  manualPauseFrames, { polling: 20 });
+  assert.equal(await page.evaluate(() =>
+    ['.ring-system', '.core-mark'].every((selector, index) =>
+      document.querySelector(selector).getAnimations()[0] === window.__evaVisibilityBefore.animations[index] &&
+      document.querySelector(selector).getAnimations()[0].playState === 'running')),
+  true);
+  console.log('Manual pause remains active across hide/show visibility changes until resumed.');
+
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });

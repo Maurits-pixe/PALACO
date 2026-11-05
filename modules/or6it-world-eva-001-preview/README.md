@@ -50,6 +50,8 @@ without losing their paused phase.
 It dispatches synthetic `visibilitychange` events to verify that Canvas frames
 stop and SVG motion pauses while hidden, then resumes the same animations.
 This tests the app's event handling, not browser tab-switching behavior.
+It also verifies that visibility changes do not override an explicit manual
+pause; motion stays paused until the user resumes it.
 It also injects a synthetic SHA-256 failure to check the visible error status
 and continued read-only fixture interaction.
 Keyboard-only checks cover the visible skip link, focus order, reduced-motion
