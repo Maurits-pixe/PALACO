@@ -2460,6 +2460,15 @@ not the number of edges or the longest directed path. Shared ancestors count
 once. The fixture reports three for each graph; a singleton or an all-isolated
 snapshot reports one. Empty registries remain invalid. Graph boundaries and
 the diagnostic-only scope are the same as for the component counts above.
+The summary fields `by_upstream_component_size` and `by_dependency_component_size`
+map component sizes to component counts. Keys are decimal strings in ascending
+numeric order (for example `1`, `2`, `10`), and only observed sizes appear.
+Counts sum to the corresponding component total; multiplying each size by its
+count and adding yields `total_objects`. The size-one count equals the orphan
+total, while the largest key equals the largest component size. Each graph keeps
+its existing boundaries and diagnostic-only scope. The four-object cluster
+fixture below reports `{"1": 2, "2": 1}` for both graphs despite different members.
+
 Use `--registry SNAPSHOT --components upstream` or
 `--registry SNAPSHOT --components dependency` to inspect actual cluster members.
 The read-only JSON result contains `graph`, `definition`, `components` and `scope`.

@@ -33,6 +33,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 
@@ -1339,10 +1340,16 @@ def summarize_palaco_registry(instance, validators=None):
         "total_dependency_orphans": len(instance["objects"]) - len(dependency_connected),
         "total_dependency_components": len(dependency_sizes),
         "largest_dependency_component_size": max(dependency_sizes),
+        "by_dependency_component_size": {
+            str(size): count for size, count in sorted(Counter(dependency_sizes).items())
+        },
         "total_upstream_edges": total_upstream_edges,
         "total_upstream_orphans": len(instance["objects"]) - len(upstream_connected),
         "total_upstream_components": len(upstream_sizes),
         "largest_upstream_component_size": max(upstream_sizes),
+        "by_upstream_component_size": {
+            str(size): count for size, count in sorted(Counter(upstream_sizes).items())
+        },
         "by_relationship_type": by_relationship,
         "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
     }
@@ -3239,6 +3246,52 @@ def check_palaco_component_partitions():
     return "1,024 five-node forward graphs: partitions, selected members, reversal, counts and non-mutation"
 
 
+def check_palaco_component_distributions():
+    template = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    fixture = {"registry_version": "0.1.0", "objects": []}
+    for index in range(1, 14):
+        record = copy.deepcopy(template)
+        record["metadata"]["id"] = f"FE-{index:05d}"
+        if 2 <= index <= 10 or index == 12:
+            record["traceability"]["upstream"] = [f"FE-{index - 1:05d}"]
+        if index <= 12:
+            record["dependencies"] = ["FE-00013"]
+        fixture["objects"].append(record)
+    original = copy.deepcopy(fixture)
+    result = summarize_palaco_registry(fixture)
+    require(result["by_upstream_component_size"] == {"1": 1, "2": 1, "10": 1},
+            "upstream distribution must count components, not nodes or edges")
+    require(result["by_dependency_component_size"] == {"13": 1},
+            "dependency distribution must remain independent of upstream")
+    for graph_name in ("upstream", "dependency"):
+        counts = result[f"by_{graph_name}_component_size"]
+        require(list(counts) == sorted(counts, key=int), "component sizes must be numerically ordered")
+        require(sum(counts.values()) == result[f"total_{graph_name}_components"],
+                "distribution counts differ from component total")
+        require(sum(int(size) * count for size, count in counts.items()) == result["total_objects"],
+                "distribution weighted sum differs from object total")
+        require(counts.get("1", 0) == result[f"total_{graph_name}_orphans"],
+                "singleton component count differs from orphan total")
+        require(max(map(int, counts)) == result[f"largest_{graph_name}_component_size"],
+                "distribution maximum differs from largest component")
+        members = find_palaco_components(fixture, graph_name)["components"]
+        require(counts == {str(size): count for size, count in sorted(
+            Counter(map(len, members)).items()
+        )}, "distribution differs from actual component membership")
+    fixture["objects"].reverse()
+    require(summarize_palaco_registry(fixture) == result, "distribution depends on record order")
+    fixture["objects"].reverse()
+    require(fixture == original, "distribution queries mutated input")
+    for record in fixture["objects"]:
+        record["traceability"]["upstream"] = []
+        record.pop("dependencies", None)
+    unlinked = summarize_palaco_registry(fixture)
+    require(unlinked["by_upstream_component_size"] == {"1": 13}
+            and unlinked["by_dependency_component_size"] == {"1": 13},
+            "all-isolated distribution must include every singleton")
+    return "component distributions: numeric ordering, graph boundaries, membership and summary invariants"
+
+
 def check_palaco_cluster_fixture():
     path = PALACO_FIXTURE_DIR / "registry-clusters.fixture.json"
     original = path.read_bytes()
@@ -3624,6 +3677,16 @@ def check_palaco_summary():
     ):
         original = copy.deepcopy(instance)
         result = summarize_palaco_registry(instance, validators)
+        expected_distributions = {}
+        for graph_name, orphans in (
+            ("upstream", expected_orphans), ("dependency", expected_dependency_orphans),
+        ):
+            if len(instance["objects"]) == 1:
+                counts = {"1": 1}
+            else:
+                counts = {"1": orphans} if orphans else {}
+                counts[str(len(instance["objects"]) - orphans)] = 1
+            expected_distributions[graph_name] = counts
         require(result == {
             "registry_version": "0.1.0",
             "total_objects": len(instance["objects"]),
@@ -3661,11 +3724,13 @@ def check_palaco_summary():
             "total_dependency_components": 1 if len(instance["objects"]) == 1 else 1 + expected_dependency_orphans,
             "largest_dependency_component_size": len(instance["objects"]) - expected_dependency_orphans
             if expected_dependencies else 1,
+            "by_dependency_component_size": expected_distributions["dependency"],
             "total_upstream_edges": 0 if len(instance["objects"]) == 1 else 2,
             "total_upstream_orphans": expected_orphans,
             "total_upstream_components": 1 if len(instance["objects"]) == 1 else 1 + expected_orphans,
             "largest_upstream_component_size": len(instance["objects"]) - expected_orphans
             if len(instance["objects"]) > 1 else 1,
+            "by_upstream_component_size": expected_distributions["upstream"],
             "by_relationship_type": {relation: expected_relations.get(relation, 0) for relation in relations},
             "scope": "supplied snapshot metadata only; not proof of completeness, approval, activation or authority",
         }, f"unexpected registry summary: {result}")
@@ -4563,6 +4628,7 @@ def run_regression_tests():
 # --------------------------------------------------------------------------
 
 CHECKS = (
+    ("PALACO component size distribution conformance", check_palaco_component_distributions),
     ("PALACO multi-cluster fixture conformance", check_palaco_cluster_fixture),
     ("PALACO component CLI fail-closed conformance", check_palaco_components_fail_closed),
     ("PALACO exhaustive component partitions", check_palaco_component_partitions),
