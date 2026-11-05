@@ -47,6 +47,9 @@ has no horizontal overflow. Runtime preference changes are checked as well.
 The browser regression also checks that manual pause survives fixture events
 and reduced-motion preference changes, and resumes the original animations
 without losing their paused phase.
+It dispatches synthetic `visibilitychange` events to verify that Canvas frames
+stop and SVG motion pauses while hidden, then resumes the same animations.
+This tests the app's event handling, not browser tab-switching behavior.
 It also injects a synthetic SHA-256 failure to check the visible error status
 and continued read-only fixture interaction.
 Keyboard-only checks cover the visible skip link, focus order, reduced-motion

@@ -140,6 +140,49 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Pauzeer beweging' }).getAttribute('aria-pressed'), 'true');
   console.log('Manual pause survives fixture events and preference changes; original animations resume.');
 
+  await page.evaluate(() => {
+    window.__evaVisibilityBefore = {
+      animations: ['.ring-system', '.core-mark'].map(selector =>
+        document.querySelector(selector).getAnimations()[0]),
+      times: ['.ring-system', '.core-mark'].map(selector =>
+        document.querySelector(selector).getAnimations()[0].currentTime),
+    };
+  });
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(
+    () => document.querySelector('.scene').classList.contains('motion-paused'),
+    null,
+    { polling: 20 },
+  );
+  const hiddenFrames = await page.evaluate(() => window.__evaMotionProbe.frames);
+  await page.waitForTimeout(150);
+  assert.equal(await page.evaluate(() => window.__evaMotionProbe.frames), hiddenFrames);
+  assert.equal(await page.evaluate(() =>
+    window.__evaVisibilityBefore.animations.every(animation => animation.playState === 'paused')), true);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(
+    () => !document.querySelector('.scene').classList.contains('motion-paused'),
+    null,
+    { polling: 20 },
+  );
+  await page.waitForFunction(beforeFrames =>
+    window.__evaMotionProbe.frames > beforeFrames &&
+    ['.ring-system', '.core-mark'].every(selector =>
+      document.querySelector(selector).getAnimations()[0].playState === 'running'),
+  hiddenFrames, { polling: 20 });
+  assert.equal(await page.evaluate(() =>
+    ['.ring-system', '.core-mark'].every((selector, index) =>
+      document.querySelector(selector).getAnimations()[0] === window.__evaVisibilityBefore.animations[index] &&
+      document.querySelector(selector).getAnimations()[0].currentTime > window.__evaVisibilityBefore.times[index])),
+  true);
+  console.log('Synthetic visibilitychange pauses Canvas/SVG motion and resumes the same animations.');
+
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
