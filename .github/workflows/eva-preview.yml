@@ -1,0 +1,51 @@
+name: EVA read-only preview
+
+on:
+  pull_request:
+    paths:
+      - 'modules/or6it-world-eva-001-preview/**'
+      - 'schemas/world-design-manifest.schema.json'
+      - 'assets/world-eva-001-reference.png'
+      - '.github/workflows/eva-preview.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'modules/or6it-world-eva-001-preview/**'
+      - 'schemas/world-design-manifest.schema.json'
+      - 'assets/world-eva-001-reference.png'
+      - '.github/workflows/eva-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eva-preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  eva-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: modules/or6it-world-eva-001-preview
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: modules/or6it-world-eva-001-preview/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check schema and unit contracts
+        run: npm test
+      - name: Verify built preview HTTP responses
+        run: npm run test:preview
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Verify event and animation clock separation in Chromium
+        run: npm run test:browser

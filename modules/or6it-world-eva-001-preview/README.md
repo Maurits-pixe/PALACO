@@ -42,6 +42,12 @@ the event pulse ends. This is a local browser check, not a live-service test.
 To use an existing Chrome/Chromium installation instead of downloading one,
 set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path.
 
+The `EVA read-only preview` GitHub Actions workflow runs the unit contracts,
+production HTTP smoke check, and Chromium event/motion regression on relevant
+pull requests and pushes to `main`. Changes to the shared schema or canonical
+image also trigger it. This workflow tests only local synthetic data; it has
+read-only repository permissions and does not deploy or authorize a World.
+
 Open the localhost URL printed by Vite. The fixture-event button replays one
 predefined synthetic event locally; it does not contact a service or mutate a
 World. The scene's decorative animation has a pause/resume control, uses a
