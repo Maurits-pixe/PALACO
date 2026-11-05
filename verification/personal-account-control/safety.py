@@ -49,12 +49,14 @@ class SafetyStore:
             if self.db.in_transaction: self.db.execute('ROLLBACK')
             raise
 
-    def run(self, account, now, action, *, actor=None, suspend_intent=False):
+    def run(self, account, now, action, *, actor=None, suspend_intent=False, restriction=False, intent_reason="SUSPENSION_INTENT"):
         """Serialize guards; all access requires writable safety storage.
 
         For suspension, persist deny intent before attempting the primary write.
         Primary exceptions trip the global circuit. Safety failure denies locally.
         """
+        if intent_reason not in {'SUSPENSION_INTENT','REVOCATION_INTENT','EXPIRY_INTENT'}:
+            raise Denied('INVALID_SAFETY_INTENT')
         if self.failed:
             raise Denied('SAFETY_UNAVAILABLE')
         primary_failed=False
@@ -64,13 +66,13 @@ class SafetyStore:
             if state is None or state[0]!='OPEN':
                 raise Denied('SAFETY_CIRCUIT_CLOSED')
             blocked=self.db.execute('SELECT 1 FROM denied_account WHERE account=?',(account,)).fetchone()
-            if blocked and not suspend_intent:
+            if blocked and not (suspend_intent or restriction):
                 raise Denied('SAFETY_ACCOUNT_BLOCKED')
             if suspend_intent:
                 self.db.execute('INSERT OR IGNORE INTO denied_account VALUES(?,?,?)',(account,actor,now))
                 if not blocked:
-                    self.db.execute("INSERT INTO incident VALUES(NULL,'SUSPENSION_INTENT',?,?,?)",
-                                    (account,actor,now))
+                    self.db.execute("INSERT INTO incident VALUES(NULL,?,?,?,?)",
+                                    (intent_reason,account,actor,now))
                 # Crash after this commit must not lose the deny intent.
                 self.db.execute('COMMIT')
                 self.db.execute('BEGIN IMMEDIATE')
@@ -131,6 +133,21 @@ class GuardedModel:
         def authorize():
             row=self.model.get(account)
             self.model.mandate(actor,'suspend',row['workspace'],row['scope'],now)
-        self.safety.run(account,now,authorize,actor=actor,suspend_intent=False)
+        self.safety.run(account,now,authorize,actor=actor,restriction=True)
         return self.safety.run(account,now,
             lambda:self.model.suspend(account,now,actor=actor),actor=actor,suspend_intent=True)
+
+    def revoke(self, account, now, actor='TST-revoker'):
+        return self._terminal(account,'REVOKED',now,actor)
+
+    def expire(self, account, now, actor='TST-expirer'):
+        return self._terminal(account,'EXPIRED',now,actor)
+
+    def _terminal(self, account, target, now, actor):
+        self.model.actor(actor,'revoke' if target=='REVOKED' else 'expire')
+        self.safety.run(account,now,
+            lambda:self.model.terminal_check(account,target,now,actor),actor=actor,restriction=True)
+        action=self.model.revoke if target=='REVOKED' else self.model.expire
+        return self.safety.run(account,now,lambda:action(account,now,actor),actor=actor,
+            suspend_intent=True,restriction=True,
+            intent_reason='REVOCATION_INTENT' if target=='REVOKED' else 'EXPIRY_INTENT')

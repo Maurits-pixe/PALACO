@@ -69,10 +69,10 @@ class RestartGuard:
             state=safety.db.execute('SELECT state FROM circuit WHERE id=1').fetchone()
             if state is None or state[0]!='OPEN':
                 raise Denied('SAFETY_RECOVERY_REQUIRED')
-            if primary.pending_suspensions():
+            if primary.pending_suspensions() or primary.pending_terminal_events():
                 raise Denied('AUDIT_RECONCILIATION_REQUIRED')
             for row in safety.db.execute('SELECT account FROM denied_account'):
-                if primary.get(row[0])['state']!='SUSPENDED':
+                if primary.get(row[0])['state'] not in {'SUSPENDED','REVOKED','EXPIRED'}:
                     raise Denied('ACCOUNT_RECONCILIATION_REQUIRED')
             yield safety,primary
             primary.db.execute('COMMIT')
@@ -91,7 +91,7 @@ class RestartGuard:
         data={}
         for prefix,connection,tables in (
             ('primary',self.guarded.model.db,('account','mandate','policy','review_evidence',
-                                            'suspension_outbox','audit','request')),
+                                            'suspension_outbox','terminal_outbox','audit','request')),
             ('safety',self.guarded.safety.db,('circuit','denied_account','incident'))):
             for table in tables:
                 rows=[tuple(row) for row in connection.execute(f'SELECT * FROM {table}')]
@@ -176,3 +176,13 @@ class RestartGuard:
         with self.lock:
             if now!=self.now(): raise Denied('SERVER_TIME_REQUIRED')
             return self.guarded.suspend(account,now,actor)
+
+    def revoke(self, account, now, actor='TST-revoker'):
+        with self.lock:
+            if now!=self.now(): raise Denied('SERVER_TIME_REQUIRED')
+            return self.guarded.revoke(account,now,actor)
+
+    def expire(self, account, now, actor='TST-expirer'):
+        with self.lock:
+            if now!=self.now(): raise Denied('SERVER_TIME_REQUIRED')
+            return self.guarded.expire(account,now,actor)

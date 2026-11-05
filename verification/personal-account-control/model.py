@@ -49,12 +49,26 @@ class Model:
           BEFORE UPDATE OF audit_sequence ON suspension_outbox
           WHEN OLD.audit_sequence IS NOT NULL OR NEW.audit_sequence IS NULL
           BEGIN SELECT RAISE(ABORT, 'immutable delivery receipt'); END;
+        CREATE TABLE IF NOT EXISTS terminal_outbox (
+          id INTEGER PRIMARY KEY, account TEXT NOT NULL UNIQUE, actor TEXT NOT NULL,
+          previous TEXT NOT NULL, current TEXT NOT NULL CHECK(current IN ('REVOKED','EXPIRED')),
+          occurred INTEGER NOT NULL, audit_sequence INTEGER);
+        CREATE TRIGGER IF NOT EXISTS preserve_terminal_delete BEFORE DELETE ON terminal_outbox
+          BEGIN SELECT RAISE(ABORT,'preserve terminal evidence'); END;
+        CREATE TRIGGER IF NOT EXISTS preserve_terminal_payload
+          BEFORE UPDATE OF id,account,actor,previous,current,occurred ON terminal_outbox
+          BEGIN SELECT RAISE(ABORT,'immutable terminal evidence'); END;
+        CREATE TRIGGER IF NOT EXISTS preserve_terminal_receipt
+          BEFORE UPDATE OF audit_sequence ON terminal_outbox
+          WHEN OLD.audit_sequence IS NOT NULL OR NEW.audit_sequence IS NULL
+          BEGIN SELECT RAISE(ABORT,'immutable terminal receipt'); END;
         CREATE TABLE IF NOT EXISTS request (
           key TEXT PRIMARY KEY, payload TEXT);
         ''')
         self.db.row_factory = sqlite3.Row
         self.roles = {'TST-inviter': 'invite', 'TST-reviewer': 'review',
-                      'TST-activator': 'activate', 'TST-support': 'suspend'}
+                      'TST-activator': 'activate', 'TST-support': 'suspend',
+                      'TST-revoker': 'revoke', 'TST-expirer': 'expire'}
 
     @contextmanager
     def transaction(self, finalize=None):
@@ -275,6 +289,68 @@ class Model:
         """Recovery queue; original actor/time remain in immutable payload columns."""
         return self.db.execute(
             'SELECT * FROM suspension_outbox WHERE audit_sequence IS NULL ORDER BY id').fetchall()
+
+    def terminal_check(self, account, target, now, actor):
+        """Trusted protective-operation check; never an admission operation."""
+        if target not in {'REVOKED', 'EXPIRED'} or type(now) is not int or now < 0:
+            raise Denied('INVALID_TERMINAL_REQUEST')
+        row = self.get(account)
+        role = 'revoke' if target == 'REVOKED' else 'expire'
+        self.mandate(actor, role, row['workspace'], row['scope'], now)
+        if row['state'] == target:
+            item = self.db.execute('SELECT id FROM terminal_outbox WHERE account=? AND current=?',
+                                   (account, target)).fetchone()
+            if item is None:
+                raise Denied('TERMINAL_EVIDENCE_MISSING')
+            return row
+        if row['state'] in {'REVOKED', 'EXPIRED'}:
+            raise Denied('TERMINAL_STATE_IS_FINAL')
+        if target == 'EXPIRED':
+            deadline = row['invite_until'] if row['state'] == 'INVITED' else row['expires']
+            if (row['state'] not in {'INVITED', 'ACTIVE'} or type(deadline) is not int
+                or now < deadline):
+                raise Denied('EXPIRY_NOT_DUE')
+        elif row['state'] not in {'INVITED', 'INVITATION_VERIFIED', 'ACCOUNT_STAGED',
+                'SAFETY_REVIEW_PENDING', 'APPROVED_FOR_ACTIVATION', 'ACTIVE', 'SUSPENDED'}:
+            raise Denied('INVALID_TRANSITION')
+        return row
+
+    def revoke(self, account, now, actor='TST-revoker'):
+        return self._terminal(account, 'REVOKED', now, actor)
+
+    def expire(self, account, now, actor='TST-expirer'):
+        return self._terminal(account, 'EXPIRED', now, actor)
+
+    def _terminal(self, account, target, now, actor):
+        # Access denial and fallback evidence commit before audit delivery.
+        with self.transaction():
+            row = self.terminal_check(account, target, now, actor)
+            if row['state'] != target:
+                self.db.execute('UPDATE account SET state=? WHERE id=?', (target, account))
+                self.db.execute('INSERT INTO terminal_outbox VALUES(NULL,?,?,?,?,?,NULL)',
+                                (account, actor, row['state'], target, now))
+            item = self.db.execute('SELECT id FROM terminal_outbox WHERE account=?', (account,)).fetchone()
+            outbox_id = item['id']
+        return self.deliver_terminal(outbox_id)
+
+    def deliver_terminal(self, outbox_id):
+        """Local recovery only: preserve actor/time and never restore access."""
+        try:
+            with self.transaction():
+                item = self.db.execute('SELECT * FROM terminal_outbox WHERE id=?', (outbox_id,)).fetchone()
+                if item is None:
+                    raise Denied('UNKNOWN_TERMINAL_EVENT')
+                if item['audit_sequence'] is not None:
+                    return 'AUDIT_DELIVERED'
+                sequence = self.event(item['account'], item['actor'],
+                    'account.' + item['current'].lower(), item['previous'], item['current'], item['occurred'])
+                self.db.execute('UPDATE terminal_outbox SET audit_sequence=? WHERE id=?', (sequence, outbox_id))
+            return 'AUDIT_DELIVERED'
+        except sqlite3.Error:
+            return 'AUDIT_PENDING'
+
+    def pending_terminal_events(self):
+        return self.db.execute('SELECT * FROM terminal_outbox WHERE audit_sequence IS NULL ORDER BY id').fetchall()
 
     def allowed(self, account, workspace, now):
         row = self.get(account)

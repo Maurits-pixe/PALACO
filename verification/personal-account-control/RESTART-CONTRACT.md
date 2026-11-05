@@ -25,7 +25,7 @@ this is not a production mandate registry or live role-revocation service.
 
 Review requires writable safety and primary transactions, acquired in that order,
 SQLite quick_check success, an OPEN circuit, no pending suspension audit, and
-primary SUSPENDED status for every independent deny intent. A SHA-256 digest
+primary SUSPENDED, REVOKED or EXPIRED status for every independent deny intent. A SHA-256 digest
 binds the current primary and safety rows to a BootReview record containing boot
 ID, PID, reviewer, issue time and expiry. The digest is a computed snapshot
 identifier, not a signature or proof that recovered snapshots are historically
@@ -81,3 +81,6 @@ AI review: TRIAS — no reset or production authority; separate review boundarie
 ORACLE — local synthetic tests only; historical completeness remains UNVERIFIED.
 MENTOR — next step is a concrete evidence package and reproducible verification
 entry point for the complete slice, before proposing runtime integration.
+
+As of v0.15, terminal_outbox records also participate in snapshot binding and
+pending-audit reconciliation. Terminal-state acceptance never releases a deny.

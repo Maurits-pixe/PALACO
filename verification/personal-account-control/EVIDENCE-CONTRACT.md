@@ -27,7 +27,7 @@ execute in the Python runner. The runner hashes sources before and after executi
 HEAD does not identify uncommitted work: the source hash map binds these bytes.
 Timestamps are host-clock observations, not trusted timestamp attestations.
 
-Two suites execute in separate Python subprocesses: accounts (137 tests) and
+Two suites execute in separate Python subprocesses: accounts (155 tests) and
 existing_review_gate (8 tests). The explicit inventory lists their exact test IDs.
 Missing, additional or repeated test IDs, errors, failures, skips, expected
 failures, unexpected successes, source drift and subprocess timeouts prevent

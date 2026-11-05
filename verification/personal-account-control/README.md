@@ -1,4 +1,4 @@
-# Personal Account Control — executable reference model v0.14
+# Personal Account Control — executable reference model v0.15
 
 Status: IMPLEMENTED / LOCAL MODEL TESTS PASS. Production and ACCOUNT-1: HOLD.
 Base inspected: PALACO 1b2065af0dfe82e25b3f62c80d9f9873563f6afd.
@@ -26,7 +26,7 @@ SQLite file owner can bypass them. This is not a tamper-proof audit system.
 
 ## Evidence and remaining gaps
 
-S01-S12 and append-only model checks: 137 slice tests plus 8 existing review-gate tests pass locally, plus one isolated dependency-free Rust boundary test. Full RIO service tests are blocked by missing dependencies/unreachable registry.
+S01-S12 and append-only model checks: 155 slice tests plus 8 existing review-gate tests pass locally, plus one isolated dependency-free Rust boundary test. Full RIO service tests are blocked by missing dependencies/unreachable registry.
 S02 tests wrong recipient/token, expiry and replay; explicit invitation revocation
 is not implemented. S07 tests a completed suspension before activation. Additional two-connection
 tests hold a write transaction while activation attempts BEGIN IMMEDIATE, then
@@ -239,3 +239,13 @@ with the frontend and browser exact schemas. The corrected consumers still
 require the exact refusal boundary. Existing real-browser coverage now rejects
 malformed/promoted metadata and checks recovery to the genuine response. New
 head/run evidence is required; old success/failure records are not rewritten.
+
+## v0.15 terminal revocation and expiry
+
+[TERMINAL-CONTRACT.md](TERMINAL-CONTRACT.md) adds explicit final REVOKED/EXPIRED
+transitions with synthetic mandates, immutable durable evidence and idempotent
+audit recovery. The safety/start guards retain denial through primary/audit
+outages and reconciliation. Eighteen new tests close the terminal-state slice;
+155 reference tests plus 8 existing review-gate tests pass locally. No terminal
+HTTP route, expiry worker, identity reuse, production migration or real human
+role assignment is introduced. Actual CI must be bound to the new commit.
