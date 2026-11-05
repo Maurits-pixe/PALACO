@@ -106,6 +106,12 @@ fn historic_or_revoked_consent_fails_closed() {
         ReviewState::Fail
     );
 
+    expired.consent_expires_at -= 1;
+    assert_eq!(
+        evaluate_reference(&expired).consent_review,
+        ReviewState::Fail
+    );
+
     let mut revoked = valid_request();
     revoked.consent_revoked = true;
     assert_eq!(
@@ -178,6 +184,12 @@ fn issuer_scope_basis_expiry_and_revocation_are_required_for_reference_approval(
 
     let mut expired_issuer = valid_request();
     expired_issuer.issuer_expires_at = expired_issuer.evaluated_at;
+    assert_eq!(
+        evaluate_reference(&expired_issuer).issuance_review,
+        IssuanceReviewState::Denied
+    );
+
+    expired_issuer.issuer_expires_at -= 1;
     assert_eq!(
         evaluate_reference(&expired_issuer).issuance_review,
         IssuanceReviewState::Denied
