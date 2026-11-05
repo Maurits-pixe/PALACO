@@ -3316,6 +3316,44 @@ def check_palaco_component_distributions():
                 require(path.read_bytes() == original_bytes, "summary CLI modified input snapshot")
                 outputs.append(cli.stdout)
             require(outputs[0] == outputs[1], "distribution CLI output depends on record ordering")
+            expected_clusters = [
+                [f"FE-{index:05d}" for index in range(1, 11)],
+                ["FE-00011", "FE-00012"], ["FE-00013"],
+            ]
+            for minimum, maximum, expected_members in (
+                (1, 2, expected_clusters[1:]),
+                (2, 10, expected_clusters[:2]),
+                (10, 10, expected_clusters[:1]),
+                (3, 9, []),
+            ):
+                outputs = []
+                for variant in (snapshot, reordered):
+                    path.write_text(json.dumps(variant), encoding="utf-8")
+                    original_bytes = path.read_bytes()
+                    flags = ["--components", distributed_graph,
+                             "--min-component-size", str(minimum),
+                             "--max-component-size", str(maximum)]
+                    cli = subprocess.run(command[:-1] + flags,
+                                         capture_output=True, text=True, timeout=30)
+                    require(cli.returncode == 0 and not cli.stderr,
+                            f"mixed-size range CLI failed: {cli.stdout}{cli.stderr}")
+                    require(json.loads(cli.stdout)["components"] == expected_members,
+                            "range filtering changed cluster members, order or numeric boundaries")
+                    require(path.read_bytes() == original_bytes, "range CLI modified snapshot")
+                    outputs.append(cli.stdout)
+                require(outputs[0] == outputs[1], "range CLI depends on snapshot ordering")
+            for object_id, expected_members in (
+                ("FE-00005", expected_clusters[:1]), ("FE-00011", []), ("FE-00013", []),
+            ):
+                cli = subprocess.run(
+                    command[:-1] + ["--components", distributed_graph, "--component-of", object_id,
+                                    "--min-component-size", "10", "--max-component-size", "10"],
+                    capture_output=True, text=True, timeout=30,
+                )
+                require(cli.returncode == 0 and not cli.stderr
+                        and json.loads(cli.stdout)["components"] == expected_members,
+                        "selected mixed-size cluster did not respect exact numeric bounds")
+                require(path.read_bytes() == original_bytes, "selected range CLI modified snapshot")
     for record in fixture["objects"]:
         record["traceability"]["upstream"] = []
         record.pop("dependencies", None)
