@@ -2341,7 +2341,7 @@ and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
 Choose one query mode at a time. `--direction`, `--trace-graph`,
-`--trace-max-depth` and `--trace-distances` modify `--trace`, while
+`--trace-max-depth`, `--trace-distances` and `--trace-paths` modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
 
@@ -2380,7 +2380,7 @@ python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
 
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
-  --trace REQ-00001 --trace-max-depth 1 --trace-distances
+  --trace REQ-00001 --trace-max-depth 1 --trace-distances --trace-paths
 ```
 
 `--trace` first validates the entire closed snapshot, then emits only a JSON object
@@ -2405,10 +2405,19 @@ depth and do not establish completeness or authority.
 mapping exactly the `reachable_ids` to positive shortest-hop integers in the
 selected graph and direction. It excludes the starting ID and respects the depth
 bound (depth 0 yields `{}`). Omitting it leaves the JSON format unchanged.
+`--trace-paths` optionally adds a `paths` object with exactly the sorted
+`reachable_ids` as keys. Each ID array includes the origin and destination along
+a shortest path in the selected graph and direction; equal-hop alternatives use
+the lexicographically smallest **full ID sequence**, independent of record/edge
+order. It works with or without distances; depth 0 yields `{}`. Explicit path
+payloads can grow quadratically on long chains; a depth bound restricts results,
+not full-snapshot validation. The library keyword `include_paths` defaults to
+`False` and accepts only actual booleans. Omitting paths or passing `False`
+preserves the existing output. Paths are snapshot diagnostics, not authority.
 The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
-`--direction`, `--trace-graph`, `--trace-max-depth` and `--trace-distances`
+`--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances` and `--trace-paths`
 each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
