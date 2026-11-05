@@ -193,6 +193,28 @@ mod tests {
     }
 
     #[test]
+    fn evidence_usability_accepts_known_and_disputed_but_rejects_unknown() {
+        let mut evidence = Evidence {
+            id: EvidenceId::new(Uuid::new_v4()),
+            question_id: QuestionId::new(Uuid::new_v4()),
+            source: "source".to_owned(),
+            origin: "origin".to_owned(),
+            content_digest: "digest".to_owned(),
+            relevance: "relevant".to_owned(),
+            limitations: Vec::new(),
+            status: EpistemicStatus::Known,
+        };
+
+        assert!(evidence.is_usable());
+
+        evidence.status = EpistemicStatus::Disputed;
+        assert!(evidence.is_usable());
+
+        evidence.status = EpistemicStatus::Unknown;
+        assert!(!evidence.is_usable());
+    }
+
+    #[test]
     fn unknown_is_not_authorizable() {
         let decision = Decision {
             id: DecisionId::new(Uuid::new_v4()),
