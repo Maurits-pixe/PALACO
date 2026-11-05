@@ -43,6 +43,7 @@ impl EventStore for PgEventStore {
     ) -> Result<(), EventStoreError> {
         sequence_to_i64(expected_next)?;
         let event_sequence_db = sequence_to_i64(event.sequence)?;
+        let schema_version_db = schema_version_to_i16(event.schema_version)?;
 
         if event.aggregate_id != aggregate_id {
             return Err(EventStoreError::Persistence(
@@ -149,7 +150,7 @@ impl EventStore for PgEventStore {
                 .previous_event_hash
                 .map(|digest| digest.as_bytes().to_vec()),
         )
-        .bind(event.schema_version.0 as i16)
+        .bind(schema_version_db)
         .bind(event.provenance)
         .bind(event.signature.to_bytes().as_slice())
         .execute(&mut *transaction)
@@ -332,11 +333,10 @@ fn event_from_row(row: sqlx::postgres::PgRow) -> Result<EventEnvelope, EventStor
         payload: CanonicalBytes::new(payload),
         payload_hash,
         previous_event_hash,
-        schema_version: SchemaVersion(
-            row.try_get::<i16, _>("schema_version")
-                .map_err(|error| EventStoreError::Persistence(error.to_string()))?
-                as u16,
-        ),
+        schema_version: schema_version_from_i16(
+            row.try_get("schema_version")
+                .map_err(|error| EventStoreError::Persistence(error.to_string()))?,
+        )?,
         provenance: row
             .try_get("provenance")
             .map_err(|error| EventStoreError::Persistence(error.to_string()))?,
@@ -364,6 +364,17 @@ fn sequence_to_i64(sequence: Sequence) -> Result<i64, EventStoreError> {
     i64::try_from(sequence.value()).map_err(|_| EventStoreError::SequenceOutOfRange(sequence))
 }
 
+fn schema_version_to_i16(schema_version: SchemaVersion) -> Result<i16, EventStoreError> {
+    i16::try_from(schema_version.0)
+        .map_err(|_| EventStoreError::SchemaVersionOutOfRange(schema_version.0))
+}
+
+fn schema_version_from_i16(value: i16) -> Result<SchemaVersion, EventStoreError> {
+    u16::try_from(value)
+        .map(SchemaVersion)
+        .map_err(|_| EventStoreError::Persistence("negative event schema version".to_owned()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -384,6 +395,30 @@ mod tests {
         assert_eq!(
             sequence_to_i64(Sequence(u64::MAX)),
             Err(EventStoreError::SequenceOutOfRange(Sequence(u64::MAX)))
+        );
+    }
+
+    #[test]
+    fn postgres_schema_version_conversion_enforces_smallint_range() {
+        assert_eq!(
+            schema_version_to_i16(SchemaVersion(i16::MAX as u16)),
+            Ok(i16::MAX)
+        );
+        assert_eq!(
+            schema_version_to_i16(SchemaVersion(i16::MAX as u16 + 1)),
+            Err(EventStoreError::SchemaVersionOutOfRange(
+                i16::MAX as u16 + 1
+            ))
+        );
+    }
+
+    #[test]
+    fn postgres_schema_version_read_rejects_negative_values() {
+        assert_eq!(
+            schema_version_from_i16(-1),
+            Err(EventStoreError::Persistence(
+                "negative event schema version".to_owned()
+            ))
         );
     }
 }

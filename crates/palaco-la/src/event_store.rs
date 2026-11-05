@@ -8,6 +8,7 @@ pub enum EventStoreError {
         actual: Sequence,
     },
     SequenceOutOfRange(Sequence),
+    SchemaVersionOutOfRange(u16),
     PredecessorConflict,
     DuplicateEvent,
     Persistence(String),
