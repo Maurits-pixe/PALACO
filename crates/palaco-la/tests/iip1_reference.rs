@@ -227,6 +227,27 @@ fn issuer_must_be_authorized_for_requested_scope() {
 }
 
 #[test]
+fn consent_scope_must_match_requested_scope() {
+    let mut wrong_scope = valid_request();
+    wrong_scope.consent_scope = "identity:other".to_owned();
+
+    let result = evaluate_reference(&wrong_scope);
+    assert_eq!(result.consent_review, ReviewState::Fail);
+    assert!(!result.identity_validated);
+    assert_eq!(result.issuance_review, IssuanceReviewState::NotReached);
+}
+
+#[test]
+fn issuance_scope_must_match_requested_scope() {
+    let mut wrong_scope = valid_request();
+    wrong_scope.issuance_scope = "identity:other".to_owned();
+
+    let result = evaluate_reference(&wrong_scope);
+    assert!(result.identity_validated);
+    assert_eq!(result.issuance_review, IssuanceReviewState::Denied);
+}
+
+#[test]
 fn strict_request_contract_rejects_unknown_fields() {
     let serialized = serde_json::to_string(&valid_request()).expect("serialize fixture");
     let with_unknown = serialized.trim_end_matches('}').to_owned() + ",\"account_activated\":true}";
