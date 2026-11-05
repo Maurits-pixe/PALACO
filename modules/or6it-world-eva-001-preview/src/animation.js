@@ -10,7 +10,8 @@ export function startAmbientAnimation(canvas, {
   const reducedMotion = windowObject.matchMedia('(prefers-reduced-motion: reduce)');
   let frameId = 0;
   let lastFrame = 0;
-  let startedAt;
+  let lastTimestamp;
+  let elapsedMs = 0;
   let width = 0;
   let height = 0;
   let pixelRatio = 1;
@@ -37,14 +38,15 @@ export function startAmbientAnimation(canvas, {
 
   function draw(now) {
     if (reducedMotion.matches || documentObject.hidden) return;
-    if (startedAt === undefined) startedAt = now;
     if (now - lastFrame < FRAME_INTERVAL) {
       frameId = windowObject.requestAnimationFrame(draw);
       return;
     }
 
+    if (lastTimestamp !== undefined) elapsedMs += now - lastTimestamp;
+    lastTimestamp = now;
     lastFrame = now;
-    const elapsed = (now - startedAt) / 1000;
+    const elapsed = elapsedMs / 1000;
     context.clearRect(0, 0, width, height);
     for (const particle of particles) {
       const drift = (elapsed * 0.006 + particle.phase / (Math.PI * 2)) % 1;
@@ -63,6 +65,8 @@ export function startAmbientAnimation(canvas, {
   function stop() {
     windowObject.cancelAnimationFrame(frameId);
     frameId = 0;
+    lastFrame = 0;
+    lastTimestamp = undefined;
     context.clearRect(0, 0, width, height);
   }
 

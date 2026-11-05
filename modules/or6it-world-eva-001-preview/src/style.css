@@ -63,7 +63,7 @@ dd { margin: 0; font-family: var(--mono); font-size: .68rem; text-align: right; 
 .motion-button { padding: .35rem .5rem; border: 1px solid rgba(240, 229, 196, .7); background: rgba(4, 17, 26, .8); color: #f0e5c4; font: inherit; letter-spacing: .04em; cursor: pointer; }
 .motion-button:disabled { cursor: default; opacity: .8; }
 .event-pulse { animation: event-pulse .9s ease-out; }
-.scene.motion-paused, .scene.motion-paused .ring-system, .scene.motion-paused .core-mark { animation: none; }
+.scene.motion-paused, .scene.motion-paused .ring-system, .scene.motion-paused .core-mark { animation-play-state: paused; }
 @keyframes ring-orbit { to { transform: rotate(360deg); } }
 @keyframes core-pulse { 0%, 100% { opacity: .65; transform: scale(1); } 50% { opacity: 1; transform: scale(1.04); } }
 @keyframes event-pulse { 0%, 100% { filter: brightness(1); } 40% { filter: brightness(1.2); } }

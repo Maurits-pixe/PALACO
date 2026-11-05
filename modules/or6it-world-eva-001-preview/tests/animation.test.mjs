@@ -7,7 +7,7 @@ function createHarness() {
   const windowListeners = new Map();
   const documentListeners = new Map();
   const mediaListeners = new Map();
-  const calls = { arcs: 0, clears: 0 };
+  const calls = { arcs: 0, clears: 0, particles: [] };
   let nextFrame = 0;
   const mediaQuery = {
     matches: false,
@@ -18,7 +18,10 @@ function createHarness() {
     setTransform() {},
     clearRect() { calls.clears += 1; },
     beginPath() {},
-    arc() { calls.arcs += 1; },
+    arc(x, y, radius) {
+      calls.arcs += 1;
+      calls.particles.push([x, y, radius]);
+    },
     fill() {},
   };
   const canvas = {
@@ -61,6 +64,7 @@ test('ambient motion pauses while hidden and resumes without replacing its loop'
   assert.equal(harness.callbacks.size, 1);
   harness.runFrame(17);
   assert.ok(harness.calls.arcs > 0);
+  const pausedParticles = harness.calls.particles.slice(-40);
 
   harness.documentObject.hidden = true;
   harness.documentListeners.get('visibilitychange')();
@@ -71,6 +75,7 @@ test('ambient motion pauses while hidden and resumes without replacing its loop'
   assert.equal(harness.callbacks.size, 1);
   harness.runFrame(1000);
   assert.ok(harness.calls.arcs > 1);
+  assert.deepEqual(harness.calls.particles.slice(-40), pausedParticles);
 
   animation.dispose();
   assert.equal(harness.callbacks.size, 0);
@@ -112,6 +117,20 @@ test('manual pause stops rendering and resume respects system reduced motion', (
   harness.mediaQuery.matches = false;
   harness.mediaListeners.get('change')();
   assert.equal(harness.callbacks.size, 1);
+  animation.dispose();
+});
+
+test('pause and resume preserve animation time rather than skipping ahead', () => {
+  const harness = createHarness();
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  harness.runFrame(17);
+  const pausedParticles = harness.calls.particles.slice(-40);
+  animation.setEnabled(false);
+  animation.setEnabled(true);
+  harness.runFrame(20_000);
+
+  assert.deepEqual(harness.calls.particles.slice(-40), pausedParticles);
   animation.dispose();
 });
 

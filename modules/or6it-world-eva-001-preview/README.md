@@ -38,4 +38,5 @@ Open the localhost URL printed by Vite. The fixture-event button replays one
 predefined synthetic event locally; it does not contact a service or mutate a
 World. The scene's decorative animation has a pause/resume control, uses a
 separate `requestAnimationFrame` loop, and pauses when the document is hidden
-or reduced motion is requested by the operating system.
+or reduced motion is requested by the operating system. Pausing preserves its
+visual phase; resuming does not skip ahead or restart from the beginning.

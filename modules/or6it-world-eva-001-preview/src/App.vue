@@ -36,10 +36,12 @@ const eventAvailable = computed(() => readModel.value.sequence < nextEvent.seque
 const eventPulse = ref(false);
 const motionEnabled = ref(true);
 const systemReducedMotion = ref(false);
+const documentHidden = ref(false);
 const canvas = ref(null);
 let animationController = { setEnabled() {}, dispose() {} };
 let reducedMotionQuery;
 const onReducedMotionChange = event => { systemReducedMotion.value = event.matches; };
+const onVisibilityChange = () => { documentHidden.value = document.hidden; };
 let pulseTimer;
 
 function replayFixtureEvent() {
@@ -68,13 +70,16 @@ onMounted(() => {
 
   reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   systemReducedMotion.value = reducedMotionQuery.matches;
+  documentHidden.value = document.hidden;
   reducedMotionQuery.addEventListener('change', onReducedMotionChange);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   if (canvas.value) animationController = startAmbientAnimation(canvas.value);
 });
 
 onUnmounted(() => {
   animationController.dispose();
   reducedMotionQuery?.removeEventListener('change', onReducedMotionChange);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
   clearTimeout(pulseTimer);
 });
 </script>
@@ -109,7 +114,7 @@ onUnmounted(() => {
         </dl>
       </section>
 
-      <section class="scene" :class="{ 'event-pulse': eventPulse, 'motion-paused': !motionEnabled || systemReducedMotion }" aria-labelledby="scene-title">
+      <section class="scene" :class="{ 'event-pulse': eventPulse, 'motion-paused': !motionEnabled || systemReducedMotion || documentHidden }" aria-labelledby="scene-title">
         <h2 id="scene-title" class="visually-hidden">Statische EVA-ontwerpreferentie met decoratieve beweging</h2>
         <img
           class="reference-image"
