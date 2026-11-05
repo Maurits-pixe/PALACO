@@ -182,12 +182,21 @@ test('ambient motion throttles early frames without dropping its animation loop'
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
 
-  harness.runFrame(10);
+  harness.runFrame(16.66);
   assert.equal(harness.calls.arcs, 0);
   assert.equal(harness.callbacks.size, 1);
 
-  harness.runFrame(17);
+  harness.runFrame(16.67);
   assert.ok(harness.calls.arcs > 0);
+  assert.equal(harness.callbacks.size, 1);
+
+  const firstFrameArcs = harness.calls.arcs;
+  harness.runFrame(33.33);
+  assert.equal(harness.calls.arcs, firstFrameArcs);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.runFrame(33.34);
+  assert.ok(harness.calls.arcs > firstFrameArcs);
   assert.equal(harness.callbacks.size, 1);
 
   animation.dispose();
