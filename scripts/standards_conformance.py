@@ -5132,8 +5132,129 @@ def check_registry_cli_validation():
     return f"{count} in-process CLI mode, modifier, required-input and output-stream checks"
 
 
+def check_registry_cli_dispatch():
+    from unittest.mock import Mock, patch
+
+    parser = registry_cli_parser()
+    fixture_path = PALACO_FIXTURE_DIR / "registry.fixture.json"
+    previous_path = PALACO_FIXTURE_DIR / "registry.previous.fixture.json"
+    base = ["--registry", str(fixture_path)]
+    cases = (
+        ("find_type", ["--find-type", "FE"], "find_palaco_objects", ("FE",), {}),
+        ("find_domain", ["--find-domain", "Governance"], "find_palaco_domain", ("Governance",), {}),
+        ("find_verification", ["--find-verification", "Pending"], "find_palaco_verification", ("Pending",), {}),
+        ("find_approval", ["--find-approval", "Pending"], "find_palaco_approval", ("Pending",), {}),
+        ("find_owner", ["--find-owner", "custodian", "Example registry team"],
+         "find_palaco_owner", ("custodian", "Example registry team"), {}),
+        ("find_criticality", ["--find-criticality", "High"], "find_palaco_criticality", ("High",), {}),
+        ("find_confidentiality", ["--find-confidentiality", "Public"], "find_palaco_confidentiality", ("Public",), {}),
+        ("find_integrity", ["--find-integrity", "High"], "find_palaco_integrity", ("High",), {}),
+        ("find_availability", ["--find-availability", "Medium"], "find_palaco_availability", ("Medium",), {}),
+        ("find_relationship", ["--find-relationship", "DEPENDS_ON"], "find_palaco_relationship", ("DEPENDS_ON",), {}),
+        ("find_updater", ["--find-updater", "Example registry team"], "find_palaco_updater", ("Example registry team",), {}),
+        ("find_name", ["--find-name", "Example accountable registry"], "find_palaco_name", ("Example accountable registry",), {}),
+        ("find_updated_since", ["--find-updated-since", "2026-10-15"], "find_palaco_updated_since", ("2026-10-15",), {}),
+        ("find_dependents", ["--find-dependents", "FE-00001"], "find_palaco_dependents", ("FE-00001",), {}),
+        ("find_dependencies", ["--find-dependencies", "FE-00001"], "find_palaco_dependencies", ("FE-00001",), {}),
+        ("find_lifecycle", ["--find-lifecycle", "Draft"], "find_palaco_lifecycle", ("Draft",), {}),
+        ("find_review_due", ["--find-review-due", "2027-01-15"], "find_palaco_reviews_due", ("2027-01-15",), {}),
+        ("summary", ["--summary"], "summarize_palaco_registry", (), {}),
+        ("find_orphans", ["--find-orphans"], "find_palaco_orphans", (), {}),
+        ("find_dependency_orphans", ["--find-dependency-orphans"], "find_palaco_dependency_orphans", (), {}),
+        ("find_unverified_controls", ["--find-unverified-controls"], "find_unverified_controls", (), {}),
+        ("find_unaudited_evidence", ["--find-unaudited-evidence"], "find_unaudited_evidence", (), {}),
+        ("trace", ["--trace", "FE-00001"], "trace_palaco_registry", ("FE-00001", "upstream"), {}),
+        ("components", ["--components", "upstream"], "find_palaco_components", ("upstream",),
+         {"object_id": None, "min_size": 1, "max_size": None}),
+        ("diff", ["--diff", "--previous-registry", str(previous_path)],
+         "diff_palaco_registry", (), {}),
+    )
+    defaults = vars(parser.parse_args([]))
+    require(len(cases) == 25 and {case[0] for case in cases} == {
+        name for name in defaults
+        if name.startswith("find_") or name in ("diff", "trace", "summary", "components")
+    }, "CLI dispatch matrix must cover every registered query mode")
+    current = {"objects": [{"id": "current"}]}
+    previous = {"objects": [{"id": "previous"}]}
+    original_current, original_previous = copy.deepcopy(current), copy.deepcopy(previous)
+    result = {"dispatch": ["sentinel"]}
+    queries = {case[2]: Mock(return_value=result) for case in cases}
+    reader = Mock(return_value=previous)
+    count = 0
+
+    def check(mode, flags, function, selectors, keywords):
+        nonlocal count
+        args = parser.parse_args(base + flags)
+        original_args = copy.deepcopy(vars(args))
+        modes = validate_registry_cli(args, parser)
+        require(modes == (mode,), f"incorrect validated dispatch mode: {flags}")
+        for query in queries.values():
+            query.reset_mock()
+        reader.reset_mock()
+        actual = dispatch_registry_query(current, args, modes[0])
+        require(actual is result, f"dispatch changed query result: {mode}")
+        expected = (previous, current) if mode == "diff" else (current, *selectors)
+        queries[function].assert_called_once_with(*expected, **keywords)
+        for name, query in queries.items():
+            if name != function:
+                query.assert_not_called()
+        if mode == "diff":
+            reader.assert_called_once_with(previous_path)
+        else:
+            reader.assert_not_called()
+        require(vars(args) == original_args and current == original_current
+                and previous == original_previous, f"dispatch mutated inputs: {mode}")
+        count += 1
+
+    with patch.dict(dispatch_registry_query.__globals__, queries, read_json=reader):
+        for case in cases:
+            check(*case)
+        for mode, flags, function, selectors, keywords in cases:
+            if mode.startswith("find_") and selectors:
+                check(mode, [flags[0]] + [""] * len(selectors), function,
+                      ("",) * len(selectors), keywords)
+        check("trace", ["--trace", ""], "trace_palaco_registry", ("", "upstream"), {})
+        for direction in ("upstream", "downstream"):
+            check("trace", ["--trace", "FE-00001", "--direction", direction],
+                  "trace_palaco_registry", ("FE-00001", direction), {})
+        for graph in ("upstream", "dependency"):
+            for mask in range(8):
+                flags = ["--components", graph]
+                keywords = {"object_id": None, "min_size": 1, "max_size": None}
+                for bit, option, key, value in (
+                    (1, "--component-of", "object_id", "FE-00001"),
+                    (2, "--min-component-size", "min_size", 2),
+                    (4, "--max-component-size", "max_size", 3),
+                ):
+                    if mask & bit:
+                        flags.extend([option, str(value)])
+                        keywords[key] = value
+                check("components", flags, "find_palaco_components", (graph,), keywords)
+        args = parser.parse_args(base + ["--summary"])
+        original_args = copy.deepcopy(vars(args))
+        for unknown in ("unknown", "find_unknown", "", None):
+            for query in queries.values():
+                query.reset_mock()
+            reader.reset_mock()
+            try:
+                dispatch_registry_query(current, args, unknown)
+            except ConformanceError as error:
+                require("Unknown registry query mode" in str(error),
+                        f"wrong unknown dispatch diagnostic: {error}")
+            else:
+                raise ConformanceError(f"unknown dispatch mode accepted: {unknown!r}")
+            reader.assert_not_called()
+            for query in queries.values():
+                query.assert_not_called()
+            require(vars(args) == original_args and current == original_current
+                    and previous == original_previous, "unknown dispatch mutated inputs")
+            count += 1
+    return f"{count} in-process CLI dispatch, exact-argument and nonmutation checks"
+
+
 CHECKS = (
     ("PALACO Registry CLI validation", check_registry_cli_validation),
+    ("PALACO Registry CLI dispatch", check_registry_cli_dispatch),
     ("PALACO maximum component size conformance", check_palaco_component_max_size),
     ("PALACO minimum component size conformance", check_palaco_component_min_size),
     ("PALACO component size distribution conformance", check_palaco_component_distributions),
@@ -5291,115 +5412,62 @@ def validate_registry_cli(args, parser):
     return modes
 
 
+def dispatch_registry_query(current, args, mode):
+    """Dispatch the single JSON query mode returned by validate_registry_cli."""
+    selector_queries = {
+        "find_type": find_palaco_objects,
+        "find_domain": find_palaco_domain,
+        "find_verification": find_palaco_verification,
+        "find_approval": find_palaco_approval,
+        "find_criticality": find_palaco_criticality,
+        "find_confidentiality": find_palaco_confidentiality,
+        "find_integrity": find_palaco_integrity,
+        "find_availability": find_palaco_availability,
+        "find_relationship": find_palaco_relationship,
+        "find_updater": find_palaco_updater,
+        "find_name": find_palaco_name,
+        "find_updated_since": find_palaco_updated_since,
+        "find_dependents": find_palaco_dependents,
+        "find_dependencies": find_palaco_dependencies,
+        "find_lifecycle": find_palaco_lifecycle,
+        "find_review_due": find_palaco_reviews_due,
+    }
+    no_selector_queries = {
+        "summary": summarize_palaco_registry,
+        "find_orphans": find_palaco_orphans,
+        "find_dependency_orphans": find_palaco_dependency_orphans,
+        "find_unverified_controls": find_unverified_controls,
+        "find_unaudited_evidence": find_unaudited_evidence,
+    }
+    if mode in selector_queries:
+        return selector_queries[mode](current, getattr(args, mode))
+    if mode in no_selector_queries:
+        return no_selector_queries[mode](current)
+    if mode == "find_owner":
+        return find_palaco_owner(current, *args.find_owner)
+    if mode == "trace":
+        return trace_palaco_registry(current, args.trace, args.direction or "upstream")
+    if mode == "components":
+        return find_palaco_components(
+            current, args.components, object_id=args.component_of,
+            min_size=args.min_component_size if args.min_component_size is not None else 1,
+            max_size=args.max_component_size,
+        )
+    if mode == "diff":
+        return diff_palaco_registry(read_json(args.previous_registry), current)
+    raise ConformanceError(f"Unknown registry query mode: {mode!r}")
+
+
 def main():
     parser = registry_cli_parser()
     args = parser.parse_args()
-    json_query = bool(validate_registry_cli(args, parser))
+    modes = validate_registry_cli(args, parser)
+    json_query = bool(modes)
     if args.registry is not None:
         try:
             current = read_json(args.registry)
-            if args.components is not None:
-                result = find_palaco_components(
-                    current, args.components, object_id=args.component_of,
-                    min_size=args.min_component_size if args.min_component_size is not None else 1,
-                    max_size=args.max_component_size,
-                )
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_dependency_orphans:
-                result = find_palaco_dependency_orphans(current)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_dependencies is not None:
-                result = find_palaco_dependencies(current, args.find_dependencies)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_dependents is not None:
-                result = find_palaco_dependents(current, args.find_dependents)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_updated_since is not None:
-                result = find_palaco_updated_since(current, args.find_updated_since)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_name is not None:
-                result = find_palaco_name(current, args.find_name)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_updater is not None:
-                result = find_palaco_updater(current, args.find_updater)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_relationship is not None:
-                result = find_palaco_relationship(current, args.find_relationship)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_availability is not None:
-                result = find_palaco_availability(current, args.find_availability)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_integrity is not None:
-                result = find_palaco_integrity(current, args.find_integrity)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_confidentiality is not None:
-                result = find_palaco_confidentiality(current, args.find_confidentiality)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_criticality is not None:
-                result = find_palaco_criticality(current, args.find_criticality)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_owner is not None:
-                result = find_palaco_owner(current, *args.find_owner)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_approval is not None:
-                result = find_palaco_approval(current, args.find_approval)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_verification is not None:
-                result = find_palaco_verification(current, args.find_verification)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_domain is not None:
-                result = find_palaco_domain(current, args.find_domain)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_review_due is not None:
-                result = find_palaco_reviews_due(current, args.find_review_due)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.diff:
-                result = diff_palaco_registry(read_json(args.previous_registry), current)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.summary:
-                result = summarize_palaco_registry(current)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_lifecycle is not None:
-                result = find_palaco_lifecycle(current, args.find_lifecycle)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_unaudited_evidence:
-                result = find_unaudited_evidence(current)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_unverified_controls:
-                result = find_unverified_controls(current)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_orphans:
-                result = find_palaco_orphans(current)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.find_type is not None:
-                result = find_palaco_objects(current, args.find_type)
-                print(json.dumps(result, indent=2))
-                return 0
-            elif args.trace is not None:
-                result = trace_palaco_registry(current, args.trace, args.direction or "upstream")
+            if json_query:
+                result = dispatch_registry_query(current, args, modes[0])
                 print(json.dumps(result, indent=2))
                 return 0
             elif args.previous_registry is None:
