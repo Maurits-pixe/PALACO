@@ -146,8 +146,19 @@ test('Vercel applies the same strict security headers to deployed routes', () =>
   const route = config.headers.find(entry => entry.source === '/(.*)');
   assert.ok(route, 'Vercel must apply the security policy to every route.');
   const headers = Object.fromEntries(route.headers.map(({ key, value }) => [key, value]));
+  const staticHeaders = Object.fromEntries(
+    fs.readFileSync(new URL('../public/_headers', import.meta.url), 'utf8')
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('/*'))
+      .map(line => {
+        const separator = line.indexOf(':');
+        return [line.slice(0, separator), line.slice(separator + 1).trim()];
+      }),
+  );
 
   assert.equal(config.outputDirectory, 'dist');
+  assert.deepEqual(staticHeaders, headers);
   assert.equal(headers['Content-Security-Policy'],
     "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self'");
   assert.equal(headers['Permissions-Policy'], 'camera=(), geolocation=(), microphone=()');

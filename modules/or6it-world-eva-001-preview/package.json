@@ -13,7 +13,8 @@
     "schema:generate": "node scripts/generate-validator.mjs",
     "schema:check": "node scripts/generate-validator.mjs --check",
     "test": "npm run schema:check && node --test tests/*.test.mjs",
-    "test:preview": "npm run build && node scripts/preview-smoke.mjs"
+    "test:preview": "npm run build && node scripts/preview-smoke.mjs",
+    "test:browser": "npm run build && node scripts/event-motion-browser.mjs"
   },
   "dependencies": {
     "vue": "3.5.43"
@@ -21,6 +22,7 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "6.0.9",
     "ajv": "8.20.0",
+    "playwright": "1.58.2",
     "vite": "7.3.7"
   }
 }

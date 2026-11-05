@@ -34,6 +34,14 @@ npm run dev
 `npm run test:preview` builds the production bundle, starts it on an ephemeral
 localhost port, and checks the served security headers, app bundle, and image.
 
+For the event/motion browser regression, install Chromium with
+`npx playwright install chromium` and run `npm run test:browser`. It checks
+that the synthetic event advances sequence 41 to 42 without replacing the
+Canvas callback or restarting the existing SVG animation, including after
+the event pulse ends. This is a local browser check, not a live-service test.
+To use an existing Chrome/Chromium installation instead of downloading one,
+set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path.
+
 Open the localhost URL printed by Vite. The fixture-event button replays one
 predefined synthetic event locally; it does not contact a service or mutate a
 World. The scene's decorative animation has a pause/resume control, uses a
