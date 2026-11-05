@@ -3572,7 +3572,8 @@ def check_palaco_components_fail_closed():
                          ["--component-of", "FE-00001", "--min-component-size", "100"],
                          ["--max-component-size", "1"],
                          ["--component-of", "FE-00001", "--max-component-size", "1"])
-    ] + [["--summary"]]
+    ] + [["--summary"], ["--trace", "FE-00001"],
+         ["--trace", "FE-00001", "--direction", "downstream"]]
     with tempfile.TemporaryDirectory(prefix="palaco-components-", dir="/tmp") as directory:
         path = Path(directory) / "registry.json"
         script = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
@@ -3587,6 +3588,22 @@ def check_palaco_components_fail_closed():
                 require("FAIL:" in cli.stderr and diagnostic in cli.stderr,
                         f"{mode} missing expected diagnostic {diagnostic}: {cli.stderr}")
                 require(path.read_bytes() == original, "failed JSON query modified input")
+        path.write_text(json.dumps(fixture), encoding="utf-8")
+        original = path.read_bytes()
+        for direction in ("upstream", "downstream"):
+            for object_id in ("FE-00001", "REQ-00001", "FE-99999"):
+                cli = subprocess.run(script + ["--trace", object_id, "--direction", direction],
+                                     capture_output=True, text=True, timeout=30)
+                if object_id == "FE-99999":
+                    require(cli.returncode == 1 and not cli.stdout
+                            and "unknown trace object ID" in cli.stderr,
+                            "unknown trace ID did not fail with stderr-only diagnostics")
+                else:
+                    require(cli.returncode == 0 and not cli.stderr
+                            and json.loads(cli.stdout) == trace_palaco_registry(
+                                fixture, object_id, direction),
+                            f"successful trace streams changed: {cli.stdout}{cli.stderr}")
+                require(path.read_bytes() == original, "trace CLI modified input")
         path.unlink()
         for mode in modes:
             cli = subprocess.run(script + mode,
@@ -3594,7 +3611,7 @@ def check_palaco_components_fail_closed():
             require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
                     f"missing snapshot did not fail cleanly: {mode}")
             require(not path.exists(), "failed JSON query created missing snapshot")
-    return "summary and component modes: 8 invalid snapshots + missing file; JSON stdout remains empty"
+    return "summary, component and trace modes: invalid snapshots/missing files; JSON-only stdout"
 
 
 def check_palaco_components():
@@ -5327,7 +5344,8 @@ def main():
                 summary = validate_registry_transition(read_json(args.previous_registry), current)
         except Exception as error:  # fail closed, including unreadable files
             print(f"FAIL: {type(error).__name__}: {error}",
-                  file=sys.stderr if args.components is not None or args.summary else sys.stdout)
+                  file=sys.stderr if args.components is not None or args.summary
+                  or args.trace is not None else sys.stdout)
             return 1
         print(f"PASS: {summary}")
         return 0

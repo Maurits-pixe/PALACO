@@ -2368,6 +2368,9 @@ containing `object_id`, `direction`, `graph`, sorted unique `reachable_ids` and 
 scope disclaimer. The default direction is upstream; downstream traverses the
 same graph in reverse. The starting ID is excluded, and no reachable nodes yields
 an empty array. Unknown IDs and invalid registries fail nonzero without results.
+Trace errors, including unreadable snapshots, are written to stderr with empty
+stdout. Successful traces emit JSON on stdout and leave stderr empty in both
+directions, including when no nodes are reachable.
 Only `traceability.upstream` is traversed: dependency fields, embedded relationship
 edges and other references are not merged into the trace graph. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
