@@ -250,6 +250,7 @@ test('clock reset during frame throttling does not lock the loop', () => {
 
   harness.runFrame(17);
   const firstFrameArcs = harness.calls.arcs;
+  const firstFrameParticles = harness.calls.particles.slice(-40);
   assert.ok(firstFrameArcs > 0);
 
   harness.runFrame(20);
@@ -266,6 +267,7 @@ test('clock reset during frame throttling does not lock the loop', () => {
 
   harness.runFrame(17);
   assert.ok(harness.calls.arcs > firstFrameArcs);
+  assert.deepEqual(harness.calls.particles.slice(-40), firstFrameParticles);
   assert.equal(harness.callbacks.size, 1);
 
   animation.dispose();
