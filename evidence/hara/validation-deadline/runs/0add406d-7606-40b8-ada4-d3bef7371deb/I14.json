@@ -1,0 +1,9 @@
+{
+  "code": 0,
+  "signal": null,
+  "message": {
+    "status": "UNKNOWN",
+    "code": "APPROVAL_BINDING_MISMATCH"
+  },
+  "stderr": ""
+}

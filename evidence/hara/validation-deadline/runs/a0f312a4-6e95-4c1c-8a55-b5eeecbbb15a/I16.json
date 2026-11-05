@@ -1,0 +1,46 @@
+{
+  "r": {
+    "writer": {
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "FIXTURE_WRITE_ATTEMPT"
+      },
+      "stderr": ""
+    },
+    "read": {
+      "code": 0,
+      "signal": null,
+      "message": {
+        "status": "SYNTHETIC_APPROVAL_RECONSTRUCTED",
+        "challengeId": "cca478b4-e1f3-4827-ae21-136105b2ef29",
+        "approvalId": "approval-1",
+        "consumed": 0,
+        "expired": true,
+        "realAuthorityGranted": false
+      },
+      "stderr": ""
+    }
+  },
+  "native": {
+    "kind": "WAL_STALL",
+    "pathConfirmed": true,
+    "delayMs": 900,
+    "startMs": 1793858370407,
+    "endMs": 1793858371307
+  },
+  "result": {
+    "status": "DENIED",
+    "code": "VALIDATION_DEADLINE_EXPIRED",
+    "writer": {
+      "pid": 17345,
+      "code": 0,
+      "signal": null,
+      "message": {
+        "status": "DENIED",
+        "code": "VALIDATION_DEADLINE_EXPIRED"
+      },
+      "stderr": ""
+    }
+  }
+}

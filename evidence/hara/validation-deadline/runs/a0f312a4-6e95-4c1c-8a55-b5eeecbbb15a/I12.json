@@ -1,0 +1,20 @@
+{
+  "writer": {
+    "code": null,
+    "signal": "SIGKILL",
+    "message": {
+      "status": "SYNTHETIC_APPROVAL_RECONSTRUCTED",
+      "fakeAck": true
+    },
+    "stderr": ""
+  },
+  "read": {
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "NO_APPROVAL",
+      "challengeId": "321384f2-6310-4e55-9c39-c58d346a97a9"
+    },
+    "stderr": ""
+  }
+}

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,inspect,mutate,state} from './fixture.mjs';
 import {recordConsentSelection} from '../src/client.mjs';
-import {readFileSync,writeFileSync} from 'node:fs';
+import {readFileSync,writeFileSync,copyFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {execute,revoke} from '../src/index.mjs';
 import {prepareChallenge,confirmChallenge,inspectApproval,fixtureCall} from './approval-store.mjs';
@@ -62,4 +62,13 @@ test('I16 late durable fixture approval is historical but expired and cannot exe
  assert.ok(process.env.VD_NATIVE_LIBRARY);const {f,c,selection}=await setup(t,{lifetime:700}),environment=nativeEnvironment(f),r=await confirmChallenge(f,c.challengeId,selection,yes,{environment});
  const native=JSON.parse(readFileSync(environment.VD_NATIVE_TRACE,'utf8').trim());assert.ok(native.startMs<f.expiry&&f.expiry<native.endMs);assert.equal(r.read.message.status,'SYNTHETIC_APPROVAL_RECONSTRUCTED');assert.equal(r.read.message.expired,true);assert.equal(n(f),1);
  const result=await execute(f.path,f.context,f.request,{readCapability:f.readCapability});assert.equal(result.status,'DENIED');assert.equal(result.code,'VALIDATION_DEADLINE_EXPIRED');assert.equal(inspect(f.path,d=>d.prepare('SELECT count(*) n FROM events').get().n),0);trace('I16',{r,native,result});
+});
+
+test('I17 extra fields cannot redirect the guarded fixture call to another database path',async t=>{
+ const {f}=await setup(t),other=fixture(t,{provisionApproval:false}),outside=join(other.dir,'outside.sqlite');copyFileSync(other.path,outside);
+ let rejected=false;try{await fixtureCall('prepare',f.path,f.context,f.request,{path:outside,challengeExpiry:f.expiry,approvalExpiry:f.approvalExpiry});}catch(error){rejected=error.message==='FIXTURE_CONTROL_OVERRIDE';}
+ const created=!!inspect(outside,d=>d.prepare("SELECT 1 FROM sqlite_master WHERE name='fixture_challenges'").get());trace('I17',{rejected,targetChallengeTableCreated:created});assert.equal(rejected,true);assert.equal(created,false);
+});
+test('I18 extra fields cannot override context, request or worker mode after fencing',async t=>{
+ const {f}=await setup(t),before=state(f.path);for(const extra of [{context:{...f.context,owner:'other'}},{request:{...f.request,title:'other'}},{mode:'read'}])await assert.rejects(()=>fixtureCall('prepare',f.path,f.context,f.request,extra),/FIXTURE_CONTROL_OVERRIDE/);assert.equal(state(f.path),before);trace('I18',{reservedControlsImmutable:true});
 });

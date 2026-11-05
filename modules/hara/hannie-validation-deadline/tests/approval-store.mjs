@@ -9,6 +9,9 @@ const worker=fileURLToPath(new URL('./approval-store-worker.mjs',import.meta.url
 export async function fixtureCall(mode,path,context,request,extra={},environment={}) {
  path=realpathSync(path);
  if(dirname(dirname(path))!==realpathSync(tmpdir())||!basename(dirname(path)).startsWith('hara-vd-')||basename(path)!=='calendar.sqlite'||context.owner!=='synthetic-owner'||context.tenant!=='synthetic-tenant'||context.session!=='synthetic-session')throw Error('SYNTHETIC_FIXTURE_ONLY');
+ canonical(extra);
+ if(!extra||Object.getPrototypeOf(extra)!==Object.prototype)throw Error('INVALID_FIXTURE_OPTIONS');
+ if(['mode','path','context','request'].some(key=>Object.hasOwn(extra,key)))throw Error('FIXTURE_CONTROL_OVERRIDE');
  const input=JSON.parse(canonical({mode,path,context,request,...extra}));
  return await new Promise((resolve,reject)=>{
   const p=spawn('/usr/bin/flock',['--exclusive','--no-fork',path+'.release.lock',process.execPath,'--disable-warning=ExperimentalWarning',worker],{env:{...process.env,...environment},stdio:['ignore','ignore','pipe','ipc']});let message,stderr='';

@@ -1,0 +1,56 @@
+{
+  "mutation": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "WRITE_REVOKED",
+    "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 17535,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 17527,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true,
+        "validatedAt": 1793858373665
+      },
+      "stderr": ""
+    }
+  },
+  "rev": {
+    "status": "RECONSTRUCTION_REQUIRED",
+    "writer": {
+      "pid": 17534,
+      "code": null,
+      "signal": "SIGKILL",
+      "stderr": ""
+    }
+  },
+  "order": [
+    "DECISION",
+    "REVOKE"
+  ],
+  "r": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "WRITE_REVOKED",
+    "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 17548,
+      "exit": 0
+    }
+  },
+  "native": {
+    "kind": "WAL_STALL",
+    "pathConfirmed": true,
+    "delayMs": 900,
+    "startMs": 1793858373665,
+    "endMs": 1793858374565
+  },
+  "revokeRequestedAt": 1793858373769
+}

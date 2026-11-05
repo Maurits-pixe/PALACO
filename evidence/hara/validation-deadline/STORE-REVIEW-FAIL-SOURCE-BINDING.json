@@ -1,0 +1,94 @@
+{
+  "runId": "0add406d-7606-40b8-ada4-d3bef7371deb",
+  "sourceSetSha256": "f6af66932489f3218259aa12c7e875eef0d5b34daeb65b24362bc2f3d45e0a05",
+  "sources": {
+    ".github/workflows/hannie-validation-deadline.yml": {
+      "ref": "REPAIR_TREE",
+      "sha256": "a4fba8cb1719054f383e57ca627303a376d49e60d396fceb1d93bcbe5dba9b82"
+    },
+    "evidence/hara/validation-deadline/decision.json": {
+      "ref": "REPAIR_TREE",
+      "sha256": "1bea8de478edb0a395c98087e12e3ff3296f1956059024a6686dcc40b5e41572"
+    },
+    "modules/hara/hannie-validation-deadline/CONTRACT.md": {
+      "ref": "871c5c47969239af747bdb7ff5fd789b1de9f5be",
+      "sha256": "61e367dcf6f98cb3d3db6e642e8921f7cd142af3f14d5564f165823c960f3033"
+    },
+    "modules/hara/hannie-validation-deadline/README.md": {
+      "ref": "871c5c47969239af747bdb7ff5fd789b1de9f5be",
+      "sha256": "ae6e32ce8265483bf6ed971ef24cc34f5fa2d2abee935c851b411b588144a5b2"
+    },
+    "modules/hara/hannie-validation-deadline/package.json": {
+      "ref": "REPAIR_TREE",
+      "sha256": "65f37640a32f660352d7a02fa7a9dc699dc0b92ee5ade29f732e875830579bf6"
+    },
+    "modules/hara/hannie-validation-deadline/src/admission.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "3d489cac40279a71f3822640edf8390a664d71bbf8f192cb5826eb1090e0aea4"
+    },
+    "modules/hara/hannie-validation-deadline/src/client.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "b34ef2a8ea0e9f1fef639216d9f45772082b17e4ce3b34b7b28be9cb1b9e3b1d"
+    },
+    "modules/hara/hannie-validation-deadline/src/index.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "1c152f924e12368129bd71a0fe8c58cb6e85b2c51ab21785f5f29366f503593f"
+    },
+    "modules/hara/hannie-validation-deadline/src/schema.sql": {
+      "ref": "REPAIR_TREE",
+      "sha256": "987e8d61c5c05959b47c20757d861ebfadf50150edbbd0d924d76535c12ed944"
+    },
+    "modules/hara/hannie-validation-deadline/src/value.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "e11eda0e6adb38ccf185cdffd3af2a530026404783483ea4747ab4f6d70ed909"
+    },
+    "modules/hara/hannie-validation-deadline/src/worker.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "7682516dfbb32f4963add5ffc778b3fc675b91c67fda6f6e210675174fcee978"
+    },
+    "modules/hara/hannie-validation-deadline/tests/admission.test.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "d75d9d6cbf9f5fa702498defa2bac46e2031f94433c7320a212859da30457ab0"
+    },
+    "modules/hara/hannie-validation-deadline/tests/approval-store-worker.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "5296c1bda0160f93ec597108b4f0bfed008d1377c360868c11be7b3ac1576ee3"
+    },
+    "modules/hara/hannie-validation-deadline/tests/approval-store.mjs": {
+      "ref": "871c5c47969239af747bdb7ff5fd789b1de9f5be",
+      "sha256": "b60d646f3bf175a21d77b39425fd67c11d34e58549f75925399910d487c4f27d"
+    },
+    "modules/hara/hannie-validation-deadline/tests/client.test.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "183c9522484d85ead318a397d64be693d806a61b5d6e47d1f1d5956b6b74a941"
+    },
+    "modules/hara/hannie-validation-deadline/tests/contract.test.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "7560ff12cb5c8478644fb622338b4578471cc1dfca2af766daf83873be87bbc9"
+    },
+    "modules/hara/hannie-validation-deadline/tests/fixture.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "9e698daf95ea294906d387d381ccfc4b6e86507d45dfc26875da45cb63b53495"
+    },
+    "modules/hara/hannie-validation-deadline/tests/issuance.test.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "f630c194df036a3e50876f7e187aec54f5383707e0f0e68df767d71918f4723b"
+    },
+    "modules/hara/hannie-validation-deadline/tests/rollback-clock.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "c0b1ff008c38cb4eaad260b99974eada18b3827f61044552ebb8353ee129acc0"
+    },
+    "modules/hara/hannie-validation-deadline/tests/wal-stall.c": {
+      "ref": "REPAIR_TREE",
+      "sha256": "3b2c5ff5205044e842d993f6d83ada9215ff3965ad9ebbc060e53ac0e2d1aa75"
+    },
+    "modules/hara/hannie-validation-deadline/tools/run-evidence.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "73737b9cb5886fb5107ff6241b3532d1f92a3e31c0ece557f7e967ba00ba785e"
+    },
+    "modules/hara/hannie-validation-deadline/tools/verify-evidence.mjs": {
+      "ref": "REPAIR_TREE",
+      "sha256": "709ba72a10aa7936d168d2a92f0796fc451152b85e61d024e27dd178c6cf0a9b"
+    }
+  }
+}
