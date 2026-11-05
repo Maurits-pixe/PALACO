@@ -3345,6 +3345,17 @@ def check_palaco_components():
                 selected = find_palaco_components(fixture, graph_name, object_id=object_id)
                 require(selected == {**query, "components": [members]},
                         f"incorrect component selection for {graph_name} {object_id}")
+                selected["components"][0].clear()
+                selected["components"].append(["FE-99999"])
+                require(find_palaco_components(fixture, graph_name, object_id=object_id)
+                        == {**query, "components": [members]},
+                        "mutating selected query output affected a later query")
+        detached = find_palaco_components(fixture, graph_name)
+        detached["components"][0].append("FE-99999")
+        detached["components"].clear()
+        require(find_palaco_components(fixture, graph_name) == query,
+                "mutating unfiltered query output affected a later query")
+        require(fixture == original, "mutating component output affected snapshot")
         require(len(expected) == result[f"total_{graph_name}_components"]
                 and max(map(len, expected)) == result[f"largest_{graph_name}_component_size"],
                 "membership query and summary disagree")
@@ -3516,6 +3527,19 @@ def check_palaco_components():
     require(weak_component_sizes(reverse_chain) == [1, depth + 1],
             "component sizes depend on direction or root ordering")
     require(reverse_chain == before, "component traversal mutated reversed deep graph")
+    expected_chain = sorted(node for node in chain if node != "AUD-00001")
+    for graph in (chain, reverse_chain):
+        original_graph = copy.deepcopy(graph)
+        for index in (0, depth // 2, depth):
+            selected = weak_components(graph, f"FE-{index:05d}")
+            require(selected == [expected_chain],
+                    "deep selected traversal missed nodes from an endpoint or middle")
+            selected[0].clear()
+            require(weak_components(graph, f"FE-{index:05d}") == [expected_chain],
+                    "deep selected traversal reuses mutable result state")
+        require(weak_components(graph, "AUD-00001") == [["AUD-00001"]],
+                "deep selected traversal included unrelated components for an isolate")
+        require(graph == original_graph, "deep selected traversal mutated input graph")
     return "weak components: multi-cluster CLI, isolates, bridges, reversal, deep traversal and non-mutation"
 
 
