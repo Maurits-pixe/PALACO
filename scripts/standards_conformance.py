@@ -3540,6 +3540,24 @@ def check_palaco_cluster_fixture():
 
 def check_palaco_components_fail_closed():
     fixture = read_json(PALACO_FIXTURE_DIR / "registry.fixture.json")
+    metadata_queries = (
+        ("--find-type", find_palaco_objects, ["FE"], ["APP"], ["unknown"]),
+        ("--find-lifecycle", find_palaco_lifecycle, ["Draft"], ["Archived"], ["unknown"]),
+        ("--find-domain", find_palaco_domain, ["Governance"], ["Absent"], [" "]),
+        ("--find-verification", find_palaco_verification, ["Pending"], ["Passed"], ["unknown"]),
+        ("--find-approval", find_palaco_approval, ["Pending"], ["Rejected"], ["unknown"]),
+        ("--find-owner", find_palaco_owner, ["custodian", "Example registry team"],
+         ["custodian", "Absent"], ["unknown", "Example registry team"]),
+        ("--find-criticality", find_palaco_criticality, ["High"], ["Low"], ["unknown"]),
+        ("--find-confidentiality", find_palaco_confidentiality, ["Public"], ["Restricted"], ["unknown"]),
+        ("--find-integrity", find_palaco_integrity, ["High"], ["Low"], ["unknown"]),
+        ("--find-availability", find_palaco_availability, ["Medium"], ["Low"], ["unknown"]),
+        ("--find-relationship", find_palaco_relationship, ["DEPENDS_ON"], ["AUDITED_BY"], ["unknown"]),
+        ("--find-updater", find_palaco_updater, ["Example registry team"], ["Absent"], [" "]),
+        ("--find-name", find_palaco_name, ["Example accountable registry"], ["Absent"], [""]),
+        ("--find-review-due", find_palaco_reviews_due, ["2027-01-15"], ["2000-01-01"], ["2026-02-30"]),
+        ("--find-updated-since", find_palaco_updated_since, ["2026-10-15"], ["2099-01-01"], ["invalid"]),
+    )
     cases = []
     duplicate = copy.deepcopy(fixture)
     duplicate["objects"].append(copy.deepcopy(duplicate["objects"][0]))
@@ -3579,7 +3597,12 @@ def check_palaco_components_fail_closed():
          ["--find-unverified-controls"], ["--find-unaudited-evidence"]]
     with tempfile.TemporaryDirectory(prefix="palaco-components-", dir="/tmp") as directory:
         path = Path(directory) / "registry.json"
+        baseline = Path(directory) / "baseline.json"
+        baseline.write_text(json.dumps(fixture), encoding="utf-8")
+        baseline_bytes = baseline.read_bytes()
         script = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
+        modes.extend([flag, *matching] for flag, _, matching, _, _ in metadata_queries)
+        modes.append(["--diff", "--previous-registry", str(baseline)])
         for content, diagnostic in cases:
             path.write_text(content, encoding="utf-8")
             original = path.read_bytes()
@@ -3591,8 +3614,38 @@ def check_palaco_components_fail_closed():
                 require("FAIL:" in cli.stderr and diagnostic in cli.stderr,
                         f"{mode} missing expected diagnostic {diagnostic}: {cli.stderr}")
                 require(path.read_bytes() == original, "failed JSON query modified input")
+            cli = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve()), "--registry", str(baseline),
+                 "--previous-registry", str(path), "--diff"],
+                capture_output=True, text=True, timeout=30,
+            )
+            require(cli.returncode == 1 and not cli.stdout
+                    and "FAIL:" in cli.stderr and diagnostic in cli.stderr,
+                    f"invalid previous diff input did not fail cleanly: {cli.stdout}{cli.stderr}")
+            require(path.read_bytes() == original and baseline.read_bytes() == baseline_bytes,
+                    "failed diff modified an input")
+            for flags in ([], ["--previous-registry", str(baseline)]):
+                cli = subprocess.run(script + flags, capture_output=True, text=True, timeout=30)
+                require(cli.returncode == 1 and "FAIL:" in cli.stdout and not cli.stderr,
+                        "text validation error streams changed")
         path.write_text(json.dumps(fixture), encoding="utf-8")
         original = path.read_bytes()
+        for flag, query, matching, empty, invalid in metadata_queries:
+            for arguments, populated in ((matching, True), (empty, False)):
+                expected = query(fixture, *arguments)
+                require(bool(expected["object_ids"]) == populated,
+                        f"{flag} must exercise empty and populated results")
+                cli = subprocess.run(script + [flag, *arguments],
+                                     capture_output=True, text=True, timeout=30)
+                require(cli.returncode == 0 and not cli.stderr
+                        and json.loads(cli.stdout) == expected,
+                        f"{flag} successful streams changed: {cli.stdout}{cli.stderr}")
+                require(path.read_bytes() == original, f"{flag} modified input")
+            cli = subprocess.run(script + [flag, *invalid],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 1 and not cli.stdout and "FAIL:" in cli.stderr,
+                    f"{flag} invalid selector did not fail with stderr-only diagnostics")
+            require(path.read_bytes() == original, f"invalid {flag} modified input")
         for direction in ("upstream", "downstream"):
             for object_id in ("FE-00001", "REQ-00001", "FE-99999"):
                 cli = subprocess.run(script + ["--trace", object_id, "--direction", direction],
@@ -3657,6 +3710,13 @@ def check_palaco_components_fail_closed():
                         and json.loads(cli.stdout) == expected,
                         f"{flag} successful streams changed: {cli.stdout}{cli.stderr}")
                 require(path.read_bytes() == original, f"{flag} modified input")
+            cli = subprocess.run(script + ["--diff", "--previous-registry", str(baseline)],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 0 and not cli.stderr
+                    and json.loads(cli.stdout) == diff_palaco_registry(fixture, snapshot),
+                    f"diff successful streams changed: {cli.stdout}{cli.stderr}")
+            require(path.read_bytes() == original and baseline.read_bytes() == baseline_bytes,
+                    "successful diff modified an input")
         path.unlink()
         for mode in modes:
             cli = subprocess.run(script + mode,
@@ -3664,7 +3724,16 @@ def check_palaco_components_fail_closed():
             require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
                     f"missing snapshot did not fail cleanly: {mode}")
             require(not path.exists(), "failed JSON query created missing snapshot")
-    return "summary, component, trace, dependency and diagnostic modes: invalid snapshots/missing files; JSON-only stdout"
+        cli = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--registry", str(baseline),
+             "--previous-registry", str(path), "--diff"],
+            capture_output=True, text=True, timeout=30,
+        )
+        require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
+                "missing previous diff input did not fail cleanly")
+        require(not path.exists() and baseline.read_bytes() == baseline_bytes,
+                "JSON queries modified or created a diff input")
+    return "all Registry JSON query modes: invalid snapshots/missing files; JSON-only stdout; text validation preserved"
 
 
 def check_palaco_components():
@@ -5285,6 +5354,10 @@ def main():
                 or args.previous_registry is not None):
             parser.error("--summary cannot be combined with other query or comparison modes")
     if args.registry is not None:
+        json_query = args.diff or args.summary or args.components is not None or args.trace is not None or any(
+            value is not None and value is not False
+            for name, value in vars(args).items() if name.startswith("find_")
+        )
         try:
             current = read_json(args.registry)
             if args.components is not None:
@@ -5397,11 +5470,7 @@ def main():
                 summary = validate_registry_transition(read_json(args.previous_registry), current)
         except Exception as error:  # fail closed, including unreadable files
             print(f"FAIL: {type(error).__name__}: {error}",
-                  file=sys.stderr if args.components is not None or args.summary
-                  or args.trace is not None or args.find_dependencies is not None
-                  or args.find_dependents is not None or args.find_dependency_orphans
-                  or args.find_orphans or args.find_unverified_controls
-                  or args.find_unaudited_evidence else sys.stdout)
+                  file=sys.stderr if json_query else sys.stdout)
             return 1
         print(f"PASS: {summary}")
         return 0

@@ -2333,6 +2333,14 @@ history, verify intermediate events or authorize transitions.
 
 Read-only snapshot differences describe changes without enforcing transitions:
 
+All Registry JSON queries (`--diff`, `--trace`, `--summary`, `--components`
+and every `--find-*` filter) share one output contract: success exits 0 with
+JSON-only stdout and empty stderr, including empty results. Invalid selectors,
+invalid snapshots and unreadable files fail nonzero with diagnostics on stderr
+and empty stdout, never partial JSON. Diff failures in either input follow this
+contract. Queries do not modify input files. Plain snapshot validation and
+transition validation without a JSON query retain their existing text output.
+
 ```sh
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --previous-registry /tmp/previous-registry.json \
