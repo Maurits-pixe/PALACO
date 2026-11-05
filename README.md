@@ -2340,8 +2340,8 @@ invalid snapshots and unreadable files fail nonzero with diagnostics on stderr
 and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
-Choose one query mode at a time. `--direction`, `--trace-graph` and
-`--trace-max-depth` modify `--trace`, while
+Choose one query mode at a time. `--direction`, `--trace-graph`,
+`--trace-max-depth` and `--trace-distances` modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
 
@@ -2380,7 +2380,7 @@ python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
 
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
-  --trace REQ-00001 --trace-max-depth 1
+  --trace REQ-00001 --trace-max-depth 1 --trace-distances
 ```
 
 `--trace` first validates the entire closed snapshot, then emits only a JSON object
@@ -2401,10 +2401,15 @@ An explicit bound adds `max_depth` to the JSON result; omitting it preserves
 unlimited reachability and the existing JSON format. This bounds reachability,
 not snapshot validation cost. Bounded results are not exhaustive beyond that
 depth and do not establish completeness or authority.
+`--trace-distances` optionally adds a `distances` object, sorted by object ID,
+mapping exactly the `reachable_ids` to positive shortest-hop integers in the
+selected graph and direction. It excludes the starting ID and respects the depth
+bound (depth 0 yields `{}`). Omitting it leaves the JSON format unchanged.
 The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
-`--direction`, `--trace-graph` and `--trace-max-depth` each require `--trace`, even when explicitly
+`--direction`, `--trace-graph`, `--trace-max-depth` and `--trace-distances`
+each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
 

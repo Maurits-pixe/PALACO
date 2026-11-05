@@ -842,12 +842,13 @@ def validate_registry_transition(previous, current, validator=None):
 
 
 def trace_palaco_registry(instance, object_id, direction="upstream", validator=None, *,
-                          graph_name="upstream", max_depth=None):
+                          graph_name="upstream", max_depth=None, include_distances=False):
     """Return reachable IDs in one graph, not authority or completeness."""
     require(direction in ("upstream", "downstream"), f"invalid trace direction: {direction}")
     require(graph_name in ("upstream", "dependency"), f"unknown trace graph: {graph_name}")
     require(max_depth is None or (type(max_depth) is int and max_depth >= 0),
             "trace max_depth must be a nonnegative integer")
+    require(type(include_distances) is bool, "trace include_distances must be a boolean")
     validate_palaco_registry(instance, validator)
     extract = direct_upstream_targets if graph_name == "upstream" else direct_dependency_targets
     graph = {
@@ -864,11 +865,14 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     visited = {object_id}
     frontier = {object_id}
     depth = 0
+    distances = {}
     while frontier and (max_depth is None or depth < max_depth):
         following = {target for source in frontier for target in graph[source]} - visited
         visited.update(following)
         frontier = following
         depth += 1
+        if include_distances:
+            distances.update((target, depth) for target in following)
     result = {
         "object_id": object_id,
         "direction": direction,
@@ -878,6 +882,8 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     }
     if max_depth is not None:
         result["max_depth"] = max_depth
+    if include_distances:
+        result["distances"] = {target: distances[target] for target in result["reachable_ids"]}
     return result
 
 
@@ -4510,6 +4516,7 @@ def check_palaco_traces():
                     f"trace CLI did not fail closed: {flags}")
         return stdout.getvalue()
 
+    distance_count = 0
     for graph_name, label, directions in expected_graphs:
         for direction, reachable in directions.items():
             for index, expected_ids in enumerate(reachable, 1):
@@ -4531,6 +4538,18 @@ def check_palaco_traces():
                 require(json.dumps(trace_palaco_registry(
                     clusters, object_id, direction, validator, graph_name=graph_name, max_depth=None,
                 ), indent=2) + "\n" == explicit, "unlimited depth changed JSON bytes")
+                require(json.dumps(trace_palaco_registry(
+                    clusters, object_id, direction, validator,
+                    graph_name=graph_name, include_distances=False,
+                ), indent=2) + "\n" == explicit, "false distances changed default JSON bytes")
+                with_distances = {**expected, "distances": {target: 1 for target in expected_ids}}
+                require(trace_palaco_registry(
+                    clusters, object_id, direction, validator,
+                    graph_name=graph_name, include_distances=True,
+                ) == with_distances, "distance trace merged divergent cluster graphs")
+                cli_trace(flags + ["--trace-graph", graph_name, "--trace-distances"],
+                          expected=with_distances)
+                distance_count += 1
                 for limit in (0, 1, 2, 10):
                     bounded = {**expected, "reachable_ids": expected_ids if limit else [],
                                "max_depth": limit}
@@ -4540,6 +4559,14 @@ def check_palaco_traces():
                     ) == bounded, "bounded trace merged graphs or lost scope")
                     cli_trace(flags + ["--trace-graph", graph_name, "--trace-max-depth", str(limit)],
                               expected=bounded)
+                    bounded_distances = {**bounded, "distances": with_distances["distances"] if limit else {}}
+                    require(trace_palaco_registry(
+                        clusters, object_id, direction, validator, graph_name=graph_name,
+                        max_depth=limit, include_distances=True,
+                    ) == bounded_distances, "bounded distance trace merged cluster graphs")
+                    cli_trace(flags + ["--trace-graph", graph_name, "--trace-max-depth", str(limit),
+                                       "--trace-distances"], expected=bounded_distances)
+                    distance_count += 1
                 result["reachable_ids"].append("FE-99999")
                 require(trace_palaco_registry(
                     clusters, object_id, direction, validator, graph_name=graph_name,
@@ -4555,6 +4582,10 @@ def check_palaco_traces():
                       1, diagnostic="unknown trace object ID")
             cli_trace(["--trace", "FE-00001", *bounded_flags], 1, diagnostic="FAIL:",
                       path=cluster_path.with_name("missing-trace-registry.json"))
+            cli_trace(["--trace", "FE-99999", *bounded_flags, "--trace-distances"],
+                      1, diagnostic="unknown trace object ID")
+            cli_trace(["--trace", "FE-00001", *bounded_flags, "--trace-distances"],
+                      1, diagnostic="FAIL:", path=cluster_path.with_name("missing-trace-registry.json"))
             invalid = copy.deepcopy(clusters)
             invalid["objects"][-1]["dependencies"] = ["FE-99999"]
             reader = read_json
@@ -4639,6 +4670,43 @@ def check_palaco_traces():
                         graph_name=graph_name, max_depth=limit,
                     ) == expected, "bounded trace must be fresh, sorted and order-independent")
                     bounded_count += 1
+                for limit in (None, 0, 1, 2):
+                    expected_distances = {
+                        f"FE-{index:05d}": distance
+                        for index, distance in sorted(distances.items())
+                        if index != origin and (limit is None or distance <= limit)
+                    }
+                    expected = {**unlimited, "reachable_ids": list(expected_distances),
+                                "distances": expected_distances}
+                    if limit is not None:
+                        expected["max_depth"] = limit
+                    result = trace_palaco_registry(
+                        routes, f"FE-{origin:05d}", direction, validator,
+                        graph_name=graph_name, max_depth=limit, include_distances=True,
+                    )
+                    require(result == expected
+                            and list(result["distances"]) == result["reachable_ids"]
+                            and all(type(value) is int and value > 0
+                                    for value in result["distances"].values()),
+                            f"independent shortest-hop distances mismatch: {result}")
+                    result["distances"]["FE-99999"] = -1
+                    result["reachable_ids"].append("FE-99999")
+                    require(trace_palaco_registry(
+                        reordered, f"FE-{origin:05d}", direction, validator,
+                        graph_name=graph_name, max_depth=limit, include_distances=True,
+                    ) == expected, "distance results must be fresh, sorted and order-independent")
+                    without_distances = trace_palaco_registry(
+                        routes, f"FE-{origin:05d}", direction, validator,
+                        graph_name=graph_name, max_depth=limit,
+                    )
+                    require(json.dumps(trace_palaco_registry(
+                        routes, f"FE-{origin:05d}", direction, validator, graph_name=graph_name,
+                        max_depth=limit, include_distances=False,
+                    )) == json.dumps(without_distances)
+                            and without_distances == {key: value for key, value in expected.items()
+                                                      if key != "distances"},
+                            "distance opt-in changed default/false trace bytes")
+                    distance_count += 1
         require(routes == original_routes, "bounded traces mutated their input")
 
     depth = sys.getrecursionlimit() + 100
@@ -4680,6 +4748,15 @@ def check_palaco_traces():
             require("nonnegative integer" in str(error), f"unexpected depth diagnostic: {error}")
         else:
             raise ConformanceError(f"invalid library trace depth accepted: {limit!r}")
+    for include_distances in (0, 1, None, "true"):
+        try:
+            trace_palaco_registry(clusters, "FE-00001", validator=validator,
+                                  include_distances=include_distances)
+        except ConformanceError as error:
+            require("include_distances must be a boolean" in str(error),
+                    f"unexpected distances diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid library include_distances accepted: {include_distances!r}")
 
     negatives = []
     negatives.append((fixture, "FE-99999", "upstream", "unknown trace object ID"))
@@ -4700,15 +4777,25 @@ def check_palaco_traces():
     for graph_name in ("upstream", "dependency"):
         for instance, object_id, direction, expected in negatives:
             for limit in (None, 0):
-                try:
-                    trace_palaco_registry(instance, object_id, direction, validator,
-                                          graph_name=graph_name, max_depth=limit)
-                except ConformanceError as error:
-                    require(expected in str(error), f"unexpected trace diagnostic: {error}")
-                else:
-                    raise ConformanceError(f"invalid trace query accepted: {expected}")
+                for include_distances in (False, True):
+                    try:
+                        trace_palaco_registry(instance, object_id, direction, validator,
+                                              graph_name=graph_name, max_depth=limit,
+                                              include_distances=include_distances)
+                    except ConformanceError as error:
+                        require(expected in str(error), f"unexpected trace diagnostic: {error}")
+                    else:
+                        raise ConformanceError(f"invalid trace query accepted: {expected}")
+                if direction in ("upstream", "downstream"):
+                    flags = ["--trace", object_id, "--direction", direction,
+                             "--trace-graph", graph_name, "--trace-distances"]
+                    if limit is not None:
+                        flags.extend(["--trace-max-depth", str(limit)])
+                    with patch.dict(main.__globals__, read_json=lambda path: instance if path == cluster_path else reader(path)):
+                        cli_trace(flags, 1, diagnostic=expected)
     return ("registry traces: separate graphs in both directions, default JSON compatibility, "
-            f"{bounded_count} shortest-hop bounds, deduplication, fresh/non-mutating results, "
+            f"{bounded_count} shortest-hop bounds, {distance_count} distance cases, "
+            "4 invalid distance types, deduplication, fresh/non-mutating results, "
             "deep iterative chains and fail-closed errors")
 
 
@@ -5243,6 +5330,9 @@ def check_registry_cli_validation():
     defaults = vars(parser.parse_args([]))
     require(defaults["trace_graph"] is None, "trace graph default must distinguish an explicit modifier")
     require(defaults["trace_max_depth"] is None, "trace depth default must distinguish an explicit bound")
+    require(defaults["trace_distances"] is False
+            and parser.parse_args(["--trace-distances"]).trace_distances is True,
+            "trace distances must be an opt-in boolean modifier")
     require(set(query_flags) == {
         name for name in defaults
         if name.startswith("find_") or name in ("diff", "trace", "summary", "components")
@@ -5294,6 +5384,29 @@ def check_registry_cli_validation():
     for direction in ("upstream", "downstream"):
         check(registry + query_flags["trace"] + ["--direction", direction], modes=("trace",))
         check(["--direction", direction], "--direction requires --trace")
+
+    modifier = ["--trace-distances"]
+    for base in ([], registry, previous, registry + previous):
+        check(base + modifier, "--trace-distances requires --trace")
+    for mode, flags in query_flags.items():
+        if mode != "trace":
+            base = registry + (previous if mode == "diff" else [])
+            check(base + flags + modifier, "--trace-distances requires --trace")
+            check(base + modifier + flags, "--trace-distances requires --trace")
+            check(base + query_flags["trace"] + flags + modifier, "cannot be combined")
+    check(query_flags["trace"] + modifier, "--trace requires --registry")
+    check(registry + previous + query_flags["trace"] + modifier, "cannot be combined")
+    for graph_name in (None, "upstream", "dependency"):
+        for direction in (None, "upstream", "downstream"):
+            for limit in (None, 0, 1, 2):
+                flags = registry + query_flags["trace"] + modifier
+                if graph_name is not None:
+                    flags += ["--trace-graph", graph_name]
+                if direction is not None:
+                    flags += ["--direction", direction]
+                if limit is not None:
+                    flags += ["--trace-max-depth", str(limit)]
+                check(flags, modes=("trace",))
 
     for graph_name in ("upstream", "dependency"):
         modifier = ["--trace-graph", graph_name]
@@ -5422,6 +5535,9 @@ def check_registry_cli_validation():
             check_output(registry + query_flags["trace"]
                          + ["--trace-graph", graph_name, "--trace-max-depth", "0"],
                          1, stderr_prefix="FAIL:")
+            check_output(registry + query_flags["trace"]
+                         + ["--trace-graph", graph_name, "--trace-max-depth", "0",
+                            "--trace-distances"], 1, stderr_prefix="FAIL:")
         check_output(registry + ["--find-name", ""], 1, stderr_prefix="FAIL:")
     return f"{count} in-process CLI mode, modifier, required-input and output-stream checks"
 
@@ -5532,6 +5648,22 @@ def check_registry_cli_dispatch():
                             flags.extend(["--trace-graph", graph_name])
                             keywords["graph_name"] = graph_name
                         check("trace", flags, "trace_palaco_registry", (object_id, direction), keywords)
+        for limit in (None, 0, 1, 2):
+            for graph_name in (None, "upstream", "dependency"):
+                for direction_flags, direction in (
+                    ([], "upstream"), (["--direction", "upstream"], "upstream"),
+                    (["--direction", "downstream"], "downstream"),
+                ):
+                    for object_id in ("FE-00001", ""):
+                        flags = ["--trace", object_id, "--trace-distances", *direction_flags]
+                        keywords = {"include_distances": True}
+                        if graph_name is not None:
+                            flags.extend(["--trace-graph", graph_name])
+                            keywords["graph_name"] = graph_name
+                        if limit is not None:
+                            flags.extend(["--trace-max-depth", str(limit)])
+                            keywords["max_depth"] = limit
+                        check("trace", flags, "trace_palaco_registry", (object_id, direction), keywords)
         for graph in ("upstream", "dependency"):
             for mask in range(8):
                 flags = ["--components", graph]
@@ -5629,6 +5761,8 @@ def registry_cli_parser():
                         help="Trace graph (default: upstream); dependency uses dependencies + DEPENDS_ON; requires --trace")
     parser.add_argument("--trace-max-depth", type=int, metavar="N",
                         help="Bound shortest-hop trace depth (nonnegative; 0 returns no IDs); requires --trace")
+    parser.add_argument("--trace-distances", action="store_true", default=False,
+                        help="Include shortest-hop distances for reachable IDs as JSON; requires --trace")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--find-domain", metavar="DOMAIN",
@@ -5697,6 +5831,8 @@ def active_registry_query_modes(args):
 
 def validate_registry_cli(args, parser):
     """Validate mode relationships without reading either registry."""
+    if args.trace_distances and args.trace is None:
+        parser.error("--trace-distances requires --trace; cannot be combined with other query modes")
     if args.trace_graph is not None and args.trace is None:
         parser.error("--trace-graph requires --trace; cannot be combined with other query modes")
     if args.trace_max_depth is not None:
@@ -5777,6 +5913,8 @@ def dispatch_registry_query(current, args, mode):
             keywords["graph_name"] = args.trace_graph
         if args.trace_max_depth is not None:
             keywords["max_depth"] = args.trace_max_depth
+        if args.trace_distances is True:
+            keywords["include_distances"] = True
         return trace_palaco_registry(current, args.trace, args.direction or "upstream", **keywords)
     if mode == "components":
         return find_palaco_components(
