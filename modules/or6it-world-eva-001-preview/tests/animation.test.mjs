@@ -108,6 +108,33 @@ test('repeated visibility changes keep one frame loop and disposal while hidden 
   assert.equal(harness.callbacks.size, 0);
 });
 
+test('resize updates canvas backing scale without starting a second frame loop', () => {
+  const harness = createHarness();
+  const context = harness.canvas.getContext();
+  const transforms = [];
+  harness.canvas.getBoundingClientRect = () => ({ width: 360, height: 240 });
+  harness.windowObject.devicePixelRatio = 3;
+  harness.canvas.getContext = () => ({
+    ...context,
+    setTransform: (...values) => transforms.push(values),
+  });
+  const animation = startAmbientAnimation(harness.canvas, harness);
+
+  assert.equal(harness.canvas.width, 720);
+  assert.equal(harness.canvas.height, 480);
+  assert.deepEqual(transforms, [[2, 0, 0, 2, 0, 0]]);
+  assert.equal(harness.callbacks.size, 1);
+
+  harness.canvas.getBoundingClientRect = () => ({ width: 180, height: 120 });
+  harness.windowListeners.get('resize')();
+  assert.equal(harness.canvas.width, 360);
+  assert.equal(harness.canvas.height, 240);
+  assert.deepEqual(transforms.at(-1), [2, 0, 0, 2, 0, 0]);
+  assert.equal(harness.callbacks.size, 1);
+
+  animation.dispose();
+});
+
 test('reduced motion disables the canvas loop and can be changed at runtime', () => {
   const harness = createHarness();
   const animation = startAmbientAnimation(harness.canvas, harness);
