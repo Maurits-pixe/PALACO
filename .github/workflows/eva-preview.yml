@@ -47,5 +47,5 @@ jobs:
         run: npm run test:preview
       - name: Install Chromium and system dependencies
         run: npx playwright install --with-deps chromium
-      - name: Verify event and animation clock separation in Chromium
+      - name: Verify clock separation and mobile reduced motion in Chromium
         run: npm run test:browser

@@ -81,6 +81,46 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Fixture-event getoond' }).isDisabled(), true);
   assert.deepEqual(errors, []);
   console.log('Event/motion browser regression passed:', result);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.reload();
+    const motionButton = page.getByRole('button', { name: 'Beweging beperkt door systeem' });
+    await motionButton.waitFor();
+    assert.equal(await motionButton.isDisabled(), true);
+    await page.getByRole('button', { name: 'Toon volgend fixture-event' }).click();
+    await page.waitForFunction(
+      () => document.querySelector('.sequence-badge').textContent.trim() === 'SEQUENCE 42' &&
+        !document.querySelector('.scene').classList.contains('event-pulse'),
+      null,
+      { polling: 20 },
+    );
+    await page.waitForFunction(() => document.querySelector('.reference-image').naturalWidth > 0, null, { polling: 20 });
+    const reduced = await page.evaluate(() => ({
+      canvasFrames: window.__evaMotionProbe.frames,
+      ringPaused: getComputedStyle(document.querySelector('.ring-system')).animationPlayState === 'paused',
+      corePaused: getComputedStyle(document.querySelector('.core-mark')).animationPlayState === 'paused',
+      noHorizontalOverflow: document.documentElement.scrollWidth <= innerWidth,
+      imageLoaded: document.querySelector('.reference-image').naturalWidth > 0,
+    }));
+    assert.equal(reduced.canvasFrames, 0, 'Reduced motion must not schedule Canvas frames.');
+    for (const check of ['ringPaused', 'corePaused', 'noHorizontalOverflow', 'imageLoaded']) {
+      assert.equal(reduced[check], true, `${width}px: ${check}`);
+    }
+    assert.equal(await page.locator('.event-list li').count(), 2);
+    console.log(`Reduced-motion mobile regression passed (${width}px):`, reduced);
+  }
+
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.waitForFunction(() => window.__evaMotionProbe.frames >= 5, null, { polling: 20 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByRole('button', { name: 'Beweging beperkt door systeem' }).waitFor();
+  const stoppedAt = await page.evaluate(() => window.__evaMotionProbe.frames);
+  await page.waitForTimeout(150);
+  assert.equal(await page.evaluate(() => window.__evaMotionProbe.frames), stoppedAt);
+  assert.deepEqual(errors, []);
+  console.log('Runtime reduced-motion preference change passed.');
 } finally {
   await browser?.close();
   await server.close();
