@@ -41,6 +41,9 @@ impl EventStore for PgEventStore {
         expected_previous_hash: Option<Sha256Digest>,
         event: EventEnvelope,
     ) -> Result<(), EventStoreError> {
+        sequence_to_i64(expected_next)?;
+        let event_sequence_db = sequence_to_i64(event.sequence)?;
+
         if event.aggregate_id != aggregate_id {
             return Err(EventStoreError::Persistence(
                 "event aggregate_id does not match append aggregate_id".to_owned(),
@@ -132,7 +135,7 @@ impl EventStore for PgEventStore {
         .bind(&event.event_type)
         .bind(event.aggregate_id.value())
         .bind(&event.aggregate_type)
-        .bind(event.sequence.value() as i64)
+        .bind(event_sequence_db)
         .bind(event.occurred_at)
         .bind(event.recorded_at)
         .bind(event.actor_id)
@@ -170,7 +173,7 @@ impl EventStore for PgEventStore {
              WHERE aggregate_id = $1",
         )
         .bind(aggregate_id.value())
-        .bind(event.sequence.value() as i64)
+        .bind(event_sequence_db)
         .bind(event.payload_hash.as_bytes().as_slice())
         .execute(&mut *transaction)
         .await
@@ -234,7 +237,7 @@ async fn load_events(
                  ORDER BY sequence ASC",
             )
             .bind(aggregate_id.value())
-            .bind(sequence.value() as i64)
+            .bind(sequence_to_i64(sequence)?)
             .fetch_all(pool)
             .await
         }
@@ -301,9 +304,11 @@ fn event_from_row(row: sqlx::postgres::PgRow) -> Result<EventEnvelope, EventStor
             .try_get("aggregate_type")
             .map_err(|error| EventStoreError::Persistence(error.to_string()))?,
         sequence: Sequence(
-            row.try_get::<i64, _>("sequence")
-                .map_err(|error| EventStoreError::Persistence(error.to_string()))?
-                as u64,
+            u64::try_from(
+                row.try_get::<i64, _>("sequence")
+                    .map_err(|error| EventStoreError::Persistence(error.to_string()))?,
+            )
+            .map_err(|_| EventStoreError::Persistence("negative event sequence".to_owned()))?,
         ),
         occurred_at: row
             .try_get::<DateTime<Utc>, _>("occurred_at")
@@ -353,4 +358,32 @@ fn digest_from_bytes(bytes: &[u8]) -> Result<Sha256Digest, String> {
         .try_into()
         .map_err(|_| "invalid SHA-256 digest length".to_owned())?;
     Ok(Sha256Digest::from_bytes(array))
+}
+
+fn sequence_to_i64(sequence: Sequence) -> Result<i64, EventStoreError> {
+    i64::try_from(sequence.value()).map_err(|_| EventStoreError::SequenceOutOfRange(sequence))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn postgres_sequence_conversion_rejects_values_above_bigint_range() {
+        assert_eq!(sequence_to_i64(Sequence(i64::MAX as u64)), Ok(i64::MAX));
+        assert_eq!(
+            sequence_to_i64(Sequence(i64::MAX as u64 + 1)),
+            Err(EventStoreError::SequenceOutOfRange(Sequence(
+                i64::MAX as u64 + 1
+            )))
+        );
+    }
+
+    #[test]
+    fn postgres_sequence_conversion_rejects_u64_max_without_wrapping() {
+        assert_eq!(
+            sequence_to_i64(Sequence(u64::MAX)),
+            Err(EventStoreError::SequenceOutOfRange(Sequence(u64::MAX)))
+        );
+    }
 }

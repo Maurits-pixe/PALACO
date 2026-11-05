@@ -7,6 +7,7 @@ pub enum EventStoreError {
         expected: Sequence,
         actual: Sequence,
     },
+    SequenceOutOfRange(Sequence),
     PredecessorConflict,
     DuplicateEvent,
     Persistence(String),
