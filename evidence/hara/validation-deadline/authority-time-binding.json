@@ -1,0 +1,76 @@
+{
+  "kind": "HARA_AUTHORITY_TIME_BINDING_REVIEW",
+  "date": "2026-11-05",
+  "implementationHead": "09878183a623b3188a4fec962348c0c06d0ebd1f",
+  "status": "AWAITING_OPERATIONAL_SOURCE_REFERENCES",
+  "authorityGranted": false,
+  "production": "HOLD",
+  "selectedIdentityProvider": null,
+  "selectedTemporalEvidenceProvider": null,
+  "operationalBindingVerified": false,
+  "credentialsInspected": false,
+  "deploymentChanged": false,
+  "sources": [
+    {
+      "repository": "Maurits-pixe/PALACO-BOOK-1",
+      "ref": "393b0596ec4b1bb87d73d3e9ec81e08e00133031",
+      "kind": "MERGED_SOURCE_SNAPSHOT_NOT_DEPLOYMENT_PROOF",
+      "files": [
+        {
+          "path": "src/lib/identity.ts",
+          "gitBlobSha": "4f5fb8511277c108be4ad4eabcc63a99594d1d4c"
+        },
+        {
+          "path": "src/lib/actor.ts",
+          "gitBlobSha": "b8f3adfd7314b7829952f4d5d8df091e0205a06b"
+        },
+        {
+          "path": "src/lib/authorization.ts",
+          "gitBlobSha": "509b9c79dfe3fdd47ee11949ce865129752d63da"
+        }
+      ],
+      "limits": [
+        "No established HARA owner/tenant/resource mapping",
+        "Separate application sessions",
+        "Role OWNER does not establish HARA ownership"
+      ]
+    },
+    {
+      "repository": "Maurits-pixe/PALACO-INDUSTRIE",
+      "ref": "d462e02de35dd9cea54c50fb6180bfd07c76aa30",
+      "kind": "MERGED_SOURCE_SNAPSHOT_NOT_DEPLOYMENT_PROOF",
+      "files": [
+        {
+          "path": "server.js",
+          "gitBlobSha": "629112df9d55279ae185d4aa48da77af8d9ea49f"
+        }
+      ],
+      "limits": [
+        "Separate application sessions",
+        "No established HARA federation/approval issuer binding"
+      ]
+    }
+  ],
+  "requiredUnresolvedBindings": [
+    "identity deployment and issuer/trust anchor",
+    "owner and tenant/resource mapping",
+    "session validity/revocation and trust epoch",
+    "authenticated origin and exact consent/challenge issuer",
+    "atomic challenge consumption and approval issuance",
+    "authoritative grant generation/revocation at dispatch",
+    "ERA temporal evidence issuer, verification, uncertainty interval and freshness",
+    "clock rollback/restore continuity and read-time revalidation"
+  ],
+  "review": {
+    "kind": "OWN_AI_THREE_LENS_REVIEW",
+    "independentAcceptance": false
+  },
+  "coverage": "Bounded GitHub and Notion source research; no exhaustive connector search or live deployment verification",
+  "requestedExecutionRoute": "PALACO ONE",
+  "requestedServicePurposes": [
+    "CONSUMER_ASSISTANCE",
+    "PALACO_PROGRAM_MAINTENANCE"
+  ],
+  "executionRouteBinding": "UNRESOLVED",
+  "userDirectionRecorded": true
+}
