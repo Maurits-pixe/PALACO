@@ -42,6 +42,9 @@ the event pulse ends. This is a local browser check, not a live-service test.
 It also checks 320px and 390px layouts with reduced motion: fixture events
 still work, Canvas schedules no frames, SVG motion stays paused, and the page
 has no horizontal overflow. Runtime preference changes are checked as well.
+The browser regression also checks that manual pause survives fixture events
+and reduced-motion preference changes, and resumes the original animations
+without losing their paused phase.
 To use an existing Chrome/Chromium installation instead of downloading one,
 set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path.
 

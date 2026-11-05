@@ -82,6 +82,64 @@ try {
   assert.deepEqual(errors, []);
   console.log('Event/motion browser regression passed:', result);
 
+  await page.reload();
+  await page.waitForFunction(() => window.__evaMotionProbe.frames >= 5, null, { polling: 20 });
+  await page.getByRole('button', { name: 'Pauzeer beweging' }).click();
+  const resumeButton = page.getByRole('button', { name: 'Hervat beweging' });
+  await resumeButton.waitFor();
+  assert.equal(await resumeButton.getAttribute('aria-pressed'), 'false');
+  await page.evaluate(async () => {
+    const animations = ['.ring-system', '.core-mark'].map(selector =>
+      document.querySelector(selector).getAnimations()[0]);
+    await Promise.all(animations.map(animation => animation.ready));
+    window.__evaPaused = {
+      animations,
+      times: animations.map(animation => animation.currentTime),
+      frames: window.__evaMotionProbe.frames,
+      callbacks: [...window.__evaMotionProbe.callbacks],
+    };
+  });
+  await page.getByRole('button', { name: 'Toon volgend fixture-event' }).click();
+  await page.waitForFunction(
+    () => document.querySelector('.sequence-badge').textContent.trim() === 'SEQUENCE 42' &&
+      !document.querySelector('.scene').classList.contains('event-pulse'),
+    null,
+    { polling: 20 },
+  );
+  const pausedResult = await page.evaluate(() => {
+    const before = window.__evaPaused;
+    return {
+      svgStillPaused: before.animations.every(animation => animation.playState === 'paused'),
+      svgPhaseUnchanged: before.animations.every((animation, index) =>
+        animation.currentTime === before.times[index]),
+      canvasStillPaused: window.__evaMotionProbe.frames === before.frames,
+    };
+  });
+  for (const [check, passed] of Object.entries(pausedResult)) assert.equal(passed, true, check);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.getByRole('button', { name: 'Beweging beperkt door systeem' }).waitFor();
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await resumeButton.waitFor();
+  assert.equal(await resumeButton.getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.evaluate(() =>
+    window.__evaMotionProbe.frames === window.__evaPaused.frames), true);
+
+  await resumeButton.click();
+  await page.waitForFunction(() => {
+    const before = window.__evaPaused;
+    return before.animations.every((animation, index) =>
+      animation.playState === 'running' && animation.currentTime > before.times[index]) &&
+      window.__evaMotionProbe.frames > before.frames;
+  }, null, { polling: 20 });
+  assert.equal(await page.evaluate(() =>
+    ['.ring-system', '.core-mark'].every((selector, index) =>
+      document.querySelector(selector).getAnimations()[0] === window.__evaPaused.animations[index]) &&
+    window.__evaMotionProbe.callbacks.size === window.__evaPaused.callbacks.length &&
+    window.__evaPaused.callbacks.every(callback => window.__evaMotionProbe.callbacks.has(callback))),
+  true);
+  assert.equal(await page.getByRole('button', { name: 'Pauzeer beweging' }).getAttribute('aria-pressed'), 'true');
+  console.log('Manual pause survives fixture events and preference changes; original animations resume.');
+
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
