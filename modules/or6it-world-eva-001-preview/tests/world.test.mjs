@@ -117,3 +117,20 @@ test('preview source has no live transport, external write, or activation path',
     assert.doesNotMatch(source, /\b(activate|publish|execute)\s*\(/i);
   }
 });
+
+test('static preview headers deny external content, embedding, and device permissions', () => {
+  const headers = fs.readFileSync(new URL('../public/_headers', import.meta.url), 'utf8');
+  assert.match(headers, /Content-Security-Policy: default-src 'self'/);
+  assert.match(headers, /object-src 'none'/);
+  assert.match(headers, /frame-ancestors 'none'/);
+  assert.match(headers, /form-action 'none'/);
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
+  assert.match(headers, /X-Frame-Options: DENY/);
+  assert.match(headers, /Referrer-Policy: no-referrer/);
+  assert.match(headers, /Permissions-Policy: camera=\(\), geolocation=\(\), microphone=\(\)/);
+});
+
+test('generated schema validator does not require runtime code evaluation', () => {
+  const validator = fs.readFileSync(new URL('../src/validate-manifest.generated.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(validator, /\bnew Function\b|\beval\s*\(|\brequire\s*\(/);
+});

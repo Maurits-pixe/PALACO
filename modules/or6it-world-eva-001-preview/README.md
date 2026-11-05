@@ -3,10 +3,16 @@
 This is a local, synthetic, read-only dashboard preview. It consumes the checked-in
 EVA design fixture only. It has no World API, polling, SSE, WebSocket, backend,
 persistent store, credentials, activation, or external effects.
+The static production preview ships a same-origin Content Security Policy,
+denies framing and plugins, disables unneeded device permissions, and sets
+baseline browser security headers.
 
 The manifest is checked against the current structural schema stub plus EVA
 fixture-specific invariants. `STRUCTURALLY_VALID` describes document shape
 only; constitutional validation and evidence remain `UNKNOWN` / `UNVALIDATED`.
+The Ajv validator is generated as static ESM from the schema so browser-side
+validation works without runtime code evaluation. After changing the schema,
+run `npm run schema:generate`; tests and builds verify the generated validator.
 The normalized fixture is also shown with a deterministic SHA-256 fingerprint.
 That digest is an integrity aid only, not identity, provenance, or authority.
 The image is served from the repository's canonical

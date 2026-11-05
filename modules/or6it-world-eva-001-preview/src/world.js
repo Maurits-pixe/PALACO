@@ -1,10 +1,7 @@
-import Ajv2020 from 'ajv/dist/2020.js';
-import schema from '../../../schemas/world-design-manifest.schema.json' with { type: 'json' };
+import validateManifestSchema from './validate-manifest.generated.js';
 
 export const EXPECTED_WORLD_ID = 'WORLD-EVA-001';
 
-const ajv = new Ajv2020({ allErrors: true, strict: true });
-const validateSchema = ajv.compile(schema);
 const expectedStructure = ['HORIZON', 'GATE', 'RING', 'FOUR_REGIONS', 'CORE'];
 const expectedRegions = ['MEMORY', 'CREATION', 'LIFE', 'PROOF'];
 const expectedLandmarks = [
@@ -34,8 +31,8 @@ export function validateWorldManifest(manifest) {
     return { state: 'INVALID', issues: ['Manifest is not an object.'] };
   }
 
-  if (!validateSchema(manifest)) {
-    const errors = validateSchema.errors ?? [];
+  if (!validateManifestSchema(manifest)) {
+    const errors = validateManifestSchema.errors ?? [];
     return {
       state: errors.some(error => error.keyword === 'required') ? 'INCOMPLETE' : 'INVALID',
       issues: errors.map(error => `${error.instancePath || '/'}: ${error.message}`),
