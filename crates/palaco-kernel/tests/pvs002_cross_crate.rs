@@ -48,7 +48,11 @@ fn expired_authority_is_denied_across_all_downstream_boundaries() -> Result<(), 
     assert_eq!(cycle.disposition(), ContractDisposition::Deny);
     assert!(!cycle.can_execute());
     assert_eq!(cycle.fail_closed(), ContractDisposition::Deny);
-    assert_eq!(cycle.validate(), Err(ContractError::ExpiredAuthority));
+    assert_eq!(
+        cycle.plan().boundary().record().validate(),
+        Err(ContractError::ExpiredAuthority)
+    );
+    cycle.validate()?;
 
     Ok(())
 }
