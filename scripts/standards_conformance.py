@@ -3282,6 +3282,32 @@ def check_palaco_component_distributions():
     require(summarize_palaco_registry(fixture) == result, "distribution depends on record order")
     fixture["objects"].reverse()
     require(fixture == original, "distribution queries mutated input")
+    swapped = copy.deepcopy(fixture)
+    for record in swapped["objects"]:
+        upstream = record["traceability"]["upstream"]
+        record["traceability"]["upstream"] = record.pop("dependencies", [])
+        record["dependencies"] = upstream
+    with tempfile.TemporaryDirectory(prefix="palaco-distributions-", dir="/tmp") as directory:
+        path = Path(directory) / "registry.json"
+        command = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path), "--summary"]
+        for snapshot, distributed_graph in ((fixture, "upstream"), (swapped, "dependency")):
+            expected_summary = summarize_palaco_registry(snapshot)
+            reordered = copy.deepcopy(snapshot)
+            reordered["objects"].reverse()
+            outputs = []
+            for variant in (snapshot, reordered):
+                path.write_text(json.dumps(variant, indent=2), encoding="utf-8")
+                original_bytes = path.read_bytes()
+                cli = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                require(cli.returncode == 0 and not cli.stderr,
+                        f"distribution summary CLI failed: {cli.stdout}{cli.stderr}")
+                parsed = json.loads(cli.stdout)
+                require(parsed == expected_summary, "distribution CLI differs from library summary")
+                require(list(parsed[f"by_{distributed_graph}_component_size"]) == ["1", "2", "10"],
+                        "summary JSON serialized sizes lexicographically rather than numerically")
+                require(path.read_bytes() == original_bytes, "summary CLI modified input snapshot")
+                outputs.append(cli.stdout)
+            require(outputs[0] == outputs[1], "distribution CLI output depends on record ordering")
     for record in fixture["objects"]:
         record["traceability"]["upstream"] = []
         record.pop("dependencies", None)
@@ -3289,7 +3315,7 @@ def check_palaco_component_distributions():
     require(unlinked["by_upstream_component_size"] == {"1": 13}
             and unlinked["by_dependency_component_size"] == {"1": 13},
             "all-isolated distribution must include every singleton")
-    return "component distributions: numeric ordering, graph boundaries, membership and summary invariants"
+    return "component distributions: numeric CLI ordering, stable output, membership and summary invariants"
 
 
 def check_palaco_cluster_fixture():
