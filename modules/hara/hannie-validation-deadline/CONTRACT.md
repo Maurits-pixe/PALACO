@@ -27,3 +27,11 @@ presentResult structurally checks the exact supported receipt profile/version, r
 Thirteen separate client controls include an actual synthetic worker receipt; mutated receipt cases are local decoder controls, not browser or identity integration. The runtime suite remains independently counted. Restore/trust-epoch, authenticated admission and a real consent UI remain OPEN.
 
 A withheld-outcome view additionally requires the exact profile/operation binding and a positive safe-integer auditSequence. Missing, zero, fractional or string audit sequences are protocol errors; they cannot be presented as a confirmed committed outcome. This is structural validation only, not an authenticity check.
+
+## Admission snapshot conformance model
+
+src/admission.mjs is a pure synthetic host-snapshot checker, not an authentication provider, grant issuer, approval writer or admission endpoint. Its only positive outcome is SNAPSHOT_REQUIREMENTS_SATISFIED with authorityGranted=false; it never returns a usable approval. All input verification flags are assertions in a test snapshot, not evidence that real credentials/origin/time were verified. Production use cannot infer authority from those flags.
+
+The model checks actor owner/tenant/session, verified-origin assertion, policy/profile, current write ACL, exact active grant/generation/opt-in, server snapshot time against both expiries, an open unexpired challenge bound to request/context/preview, two explicit owner-confirmation choices and exact selection binding. Client selectedAt cannot override expired server-snapshot time. It accepts only SYNTHETIC_ADMISSION_SNAPSHOT_V1 and is not connected to execute(). Real credential verification, authoritative snapshot acquisition, challenge consumption, durable idempotent approval issuance and revoke-race handling at issuance are not implemented by this model. Runtime still independently rechecks expiry/grant/approval before mutation.
+
+Twenty snapshot controls run separately from the 24 runtime and 13 client controls, with before/after fixture-state equality for positive and negative checks. A consumed-challenge input is rejected; this is not proof of concurrent challenge consumption. Full restore/trust-epoch remains OPEN.
