@@ -3245,6 +3245,12 @@ def check_palaco_components_fail_closed():
     dependency_cycle = copy.deepcopy(fixture)
     dependency_cycle["objects"][0]["dependencies"] = ["REQ-00001"]
     cases.append((json.dumps(dependency_cycle), "dependency cycle"))
+    outside_cluster = copy.deepcopy(fixture)
+    isolated = read_json(PALACO_FIXTURE_DIR / "FE-00001.fixture.json")
+    isolated["metadata"]["id"] = "FE-00002"
+    isolated["dependencies"] = ["FE-99999"]
+    outside_cluster["objects"].append(isolated)
+    cases.append((json.dumps(outside_cluster), "unresolved"))
     cases.extend([
         (json.dumps({"registry_version": "0.1.0", "objects": []}), "registry structure"),
         ('{"registry_version": "0.1.0", "objects": [', "Expecting value"),
@@ -3256,8 +3262,11 @@ def check_palaco_components_fail_closed():
         for content, diagnostic in cases:
             path.write_text(content, encoding="utf-8")
             original = path.read_bytes()
-            for graph_name in ("upstream", "dependency"):
-                cli = subprocess.run(script + ["--components", graph_name],
+            for graph_name, selection in (
+                (graph, selector) for graph in ("upstream", "dependency")
+                for selector in ([], ["--component-of", "FE-00001"])
+            ):
+                cli = subprocess.run(script + ["--components", graph_name] + selection,
                                      capture_output=True, text=True, timeout=30)
                 require(cli.returncode == 1 and not cli.stdout,
                         f"{graph_name} emitted results for invalid snapshot: {cli.stdout}")
@@ -3265,13 +3274,16 @@ def check_palaco_components_fail_closed():
                         f"{graph_name} missing expected diagnostic {diagnostic}: {cli.stderr}")
                 require(path.read_bytes() == original, "failed component query modified input")
         path.unlink()
-        for graph_name in ("upstream", "dependency"):
-            cli = subprocess.run(script + ["--components", graph_name],
+        for graph_name, selection in (
+            (graph, selector) for graph in ("upstream", "dependency")
+            for selector in ([], ["--component-of", "FE-00001"])
+        ):
+            cli = subprocess.run(script + ["--components", graph_name] + selection,
                                  capture_output=True, text=True, timeout=30)
             require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
                     "missing component snapshot did not fail cleanly")
             require(not path.exists(), "failed component query created missing snapshot")
-    return "both component modes: 7 invalid snapshots + missing file; empty stdout and unchanged input"
+    return "both component modes, selected/unfiltered: 8 invalid snapshots + missing file; fail-closed"
 
 
 def check_palaco_components():
@@ -3406,10 +3418,14 @@ def check_palaco_components():
         ["--find-dependency-orphans"], ["--direction", "upstream"], ["--diff"],
         ["--previous-registry", str(PALACO_FIXTURE_DIR / "registry.fixture.json")],
     ):
-        cli = subprocess.run(base + ["--components", "upstream"] + flags,
-                             capture_output=True, text=True, timeout=30)
-        require(cli.returncode == 2 and not cli.stdout,
-                f"components accepted conflicting flags: {flags}")
+        for graph_name, selection in (
+            (graph, selector) for graph in ("upstream", "dependency")
+            for selector in ([], ["--component-of", "FE-00001"])
+        ):
+            cli = subprocess.run(base + ["--components", graph_name] + selection + flags,
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 2 and not cli.stdout and "cannot be combined" in cli.stderr,
+                    f"components accepted conflicting flags: {graph_name} {selection} {flags}")
     for args in (["--components", "upstream"], base[2:] + ["--components", "unknown"],
                  ["--component-of", "FE-00001"], base[2:] + ["--component-of", "FE-00001"],
                  base[2:] + ["--summary", "--component-of", "FE-00001"]):
