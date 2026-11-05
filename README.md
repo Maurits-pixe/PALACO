@@ -3004,6 +3004,13 @@ queries exit 0 with an empty or populated array; invalid input exits nonzero.
 The query is read-only, requires `--registry`, and cannot be combined with other
 query modes, `--direction` or `--previous-registry`.
 
+For `--find-orphans`, `--find-unverified-controls` and `--find-unaudited-evidence`,
+successful stdout contains only JSON and stderr is empty, whether findings are
+empty or populated. Invalid or unreadable snapshots fail nonzero with diagnostics
+on stderr and empty stdout; no partial findings are emitted. Errors anywhere in
+the snapshot prevent results, including errors in records outside the diagnostic's
+matching object families. No input files are changed.
+
 This MVP does not enforce upstream completeness, root reachability,
 authenticated lifecycle history, approval authority or evidence authenticity.
 Empty upstream lists are allowed for roots; draft records can have pending
