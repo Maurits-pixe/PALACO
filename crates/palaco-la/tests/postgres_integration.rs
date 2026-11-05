@@ -135,6 +135,38 @@ async fn postgres_rejects_sequence_and_predecessor_conflicts() {
 }
 
 #[tokio::test]
+async fn postgres_rejects_event_sequence_mismatch() {
+    let store = store().await;
+    let aggregate_id = AggregateId::new(Uuid::new_v4());
+    let first = event(aggregate_id, Sequence::genesis(), None, b"sequence-1");
+    store
+        .append(aggregate_id, Sequence::genesis(), None, first.clone())
+        .await
+        .expect("genesis append must succeed");
+
+    let mismatched_sequence = event(
+        aggregate_id,
+        first.sequence.next().next(),
+        Some(first.payload_hash),
+        b"wrong-sequence",
+    );
+    assert_eq!(
+        store
+            .append(
+                aggregate_id,
+                first.sequence.next(),
+                Some(first.payload_hash),
+                mismatched_sequence,
+            )
+            .await,
+        Err(EventStoreError::SequenceConflict {
+            expected: first.sequence.next(),
+            actual: first.sequence.next(),
+        })
+    );
+}
+
+#[tokio::test]
 async fn postgres_rejects_aggregate_type_changes() {
     let store = store().await;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
