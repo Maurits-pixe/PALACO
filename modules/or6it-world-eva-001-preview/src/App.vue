@@ -95,7 +95,7 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <main id="main-content">
+    <main id="main-content" tabindex="-1">
       <section class="notice" role="note" aria-label="Previewgrenzen">
         <strong>SYNTHETISCHE FIXTURE — READ-ONLY</strong>
         <span>Geen World API, live stream, opslag, activatie of externe effecten.</span>

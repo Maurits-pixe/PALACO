@@ -204,6 +204,46 @@ try {
   assert.deepEqual(errors, []);
   await cryptoFailurePage.close();
   console.log('Fingerprint failure is visible without a fabricated digest; fixture events remain usable.');
+
+  const keyboardPage = await browser.newPage({ reducedMotion: 'no-preference' });
+  keyboardPage.on('pageerror', error => errors.push(error.message));
+  keyboardPage.on('console', message => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  await keyboardPage.goto(`http://127.0.0.1:${address.port}`);
+  const skipLink = keyboardPage.getByRole('link', { name: 'Ga naar inhoud' });
+  await keyboardPage.keyboard.press('Tab');
+  assert.equal(await skipLink.evaluate(element => element === document.activeElement), true);
+  assert.ok(await skipLink.evaluate(element => element.getBoundingClientRect().top >= 0));
+  await keyboardPage.keyboard.press('Enter');
+  await keyboardPage.waitForFunction(() => location.hash === '#main-content');
+  assert.equal(await keyboardPage.locator('#main-content').evaluate(element => element === document.activeElement), true);
+  await keyboardPage.keyboard.press('Tab');
+  const motionButton = keyboardPage.getByRole('button', { name: 'Pauzeer beweging' });
+  assert.equal(await motionButton
+    .evaluate(element => element === document.activeElement), true);
+  await keyboardPage.keyboard.press('Enter');
+  const keyboardResumeButton = keyboardPage.getByRole('button', { name: 'Hervat beweging' });
+  await keyboardResumeButton.waitFor();
+  assert.equal(await keyboardResumeButton.getAttribute('aria-pressed'), 'false');
+  await keyboardPage.keyboard.press('Tab');
+  const eventButton = keyboardPage.getByRole('button', { name: 'Toon volgend fixture-event' });
+  assert.equal(await eventButton.evaluate(element => element === document.activeElement), true);
+  await keyboardPage.keyboard.press('Enter');
+  await keyboardPage.waitForFunction(
+    () => document.querySelector('.sequence-badge').textContent.trim() === 'SEQUENCE 42',
+    null,
+    { polling: 20 },
+  );
+  assert.equal(await keyboardPage.getByRole('button', { name: 'Fixture-event getoond' }).isDisabled(), true);
+  await keyboardPage.emulateMedia({ reducedMotion: 'reduce' });
+  await keyboardPage.getByRole('button', { name: 'Beweging beperkt door systeem' }).waitFor();
+  await keyboardPage.keyboard.press('Tab');
+  assert.equal(await keyboardPage.locator('.manifest-details summary')
+    .evaluate(element => element === document.activeElement), true);
+  assert.deepEqual(errors, []);
+  await keyboardPage.close();
+  console.log('Keyboard skip link, motion state, event activation, and disabled state passed.');
 } finally {
   await browser?.close();
   await server.close();

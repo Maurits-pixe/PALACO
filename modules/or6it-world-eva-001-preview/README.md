@@ -49,6 +49,8 @@ and reduced-motion preference changes, and resumes the original animations
 without losing their paused phase.
 It also injects a synthetic SHA-256 failure to check the visible error status
 and continued read-only fixture interaction.
+Keyboard-only checks cover the visible skip link, focus order, reduced-motion
+state, Enter activation of the synthetic event, and its disabled terminal state.
 To use an existing Chrome/Chromium installation instead of downloading one,
 set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to its executable path.
 
