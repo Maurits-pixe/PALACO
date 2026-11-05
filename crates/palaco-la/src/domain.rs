@@ -110,9 +110,9 @@ pub struct Authorization {
 
 impl Evidence {
     pub fn is_usable(&self) -> bool {
-        !self.source.is_empty()
-            && !self.origin.is_empty()
-            && !self.content_digest.is_empty()
+        !self.source.trim().is_empty()
+            && !self.origin.trim().is_empty()
+            && !self.content_digest.trim().is_empty()
             && matches!(
                 self.status,
                 EpistemicStatus::Known | EpistemicStatus::Disputed
@@ -159,6 +159,31 @@ mod tests {
             limitations: Vec::new(),
             status: EpistemicStatus::Known,
         };
+        assert!(!evidence.is_usable());
+    }
+
+    #[test]
+    fn whitespace_only_evidence_metadata_is_not_usable() {
+        let mut evidence = Evidence {
+            id: EvidenceId::new(Uuid::new_v4()),
+            question_id: QuestionId::new(Uuid::new_v4()),
+            source: "source".to_owned(),
+            origin: "origin".to_owned(),
+            content_digest: "digest".to_owned(),
+            relevance: "test".to_owned(),
+            limitations: Vec::new(),
+            status: EpistemicStatus::Known,
+        };
+
+        evidence.source = " \t\n".to_owned();
+        assert!(!evidence.is_usable());
+
+        evidence.source = "source".to_owned();
+        evidence.origin = " \t\n".to_owned();
+        assert!(!evidence.is_usable());
+
+        evidence.origin = "origin".to_owned();
+        evidence.content_digest = " \t\n".to_owned();
         assert!(!evidence.is_usable());
     }
 

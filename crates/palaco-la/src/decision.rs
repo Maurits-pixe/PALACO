@@ -148,6 +148,22 @@ mod tests {
     }
 
     #[test]
+    fn whitespace_only_evidence_cannot_support_decision() {
+        let q = question();
+        let mut e = evidence(q.id);
+        e.source = " \t\n".to_owned();
+        let threshold = ThresholdAssessment {
+            question_id: q.id,
+            state: ThresholdState::Satisfied,
+            basis: vec![e.id],
+            rationale: "invalid basis".to_owned(),
+        };
+
+        let result = evaluate(q, &[e], threshold, DecisionId::new(Uuid::new_v4()));
+        assert_eq!(result, Err(DecisionEvaluationError::UnusableEvidence));
+    }
+
+    #[test]
     fn missing_basis_evidence_fails_closed() {
         let q = question();
         let e = evidence(q.id);
