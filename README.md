@@ -2929,6 +2929,13 @@ No records or files are modified. The option requires `--registry` and cannot
 be combined with other queries, `--direction` or `--previous-registry`.
 Existing `--find-orphans` remains upstream-only.
 
+For `--find-dependencies`, `--find-dependents` and `--find-dependency-orphans`,
+successful stdout contains only JSON and stderr is empty, including when
+`object_ids` is empty. Invalid or unreadable snapshots and unknown selected
+IDs fail nonzero with diagnostics on stderr and empty stdout; no partial JSON
+is emitted. The entire snapshot is validated even when errors are outside the
+selected object's dependency neighborhood.
+
 Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
 
 ```sh

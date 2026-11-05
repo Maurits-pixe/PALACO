@@ -3573,7 +3573,9 @@ def check_palaco_components_fail_closed():
                          ["--max-component-size", "1"],
                          ["--component-of", "FE-00001", "--max-component-size", "1"])
     ] + [["--summary"], ["--trace", "FE-00001"],
-         ["--trace", "FE-00001", "--direction", "downstream"]]
+         ["--trace", "FE-00001", "--direction", "downstream"],
+         ["--find-dependencies", "FE-00001"], ["--find-dependents", "FE-00001"],
+         ["--find-dependency-orphans"]]
     with tempfile.TemporaryDirectory(prefix="palaco-components-", dir="/tmp") as directory:
         path = Path(directory) / "registry.json"
         script = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
@@ -3604,6 +3606,31 @@ def check_palaco_components_fail_closed():
                                 fixture, object_id, direction),
                             f"successful trace streams changed: {cli.stdout}{cli.stderr}")
                 require(path.read_bytes() == original, "trace CLI modified input")
+        for flag, query in (
+            ("--find-dependencies", find_palaco_dependencies),
+            ("--find-dependents", find_palaco_dependents),
+        ):
+            for object_id in ("FE-00001", "REQ-00001", "FE-99999"):
+                cli = subprocess.run(script + [flag, object_id],
+                                     capture_output=True, text=True, timeout=30)
+                if object_id == "FE-99999":
+                    require(cli.returncode == 1 and not cli.stdout
+                            and "unknown PALACO object ID" in cli.stderr,
+                            f"{flag} unknown ID did not fail with stderr-only diagnostics")
+                else:
+                    require(cli.returncode == 0 and not cli.stderr
+                            and json.loads(cli.stdout) == query(fixture, object_id),
+                            f"{flag} successful streams changed: {cli.stdout}{cli.stderr}")
+                require(path.read_bytes() == original, f"{flag} modified input")
+        for snapshot in (fixture, read_json(PALACO_FIXTURE_DIR / "registry-clusters.fixture.json")):
+            path.write_text(json.dumps(snapshot), encoding="utf-8")
+            original = path.read_bytes()
+            cli = subprocess.run(script + ["--find-dependency-orphans"],
+                                 capture_output=True, text=True, timeout=30)
+            require(cli.returncode == 0 and not cli.stderr
+                    and json.loads(cli.stdout) == find_palaco_dependency_orphans(snapshot),
+                    f"dependency-orphan streams changed: {cli.stdout}{cli.stderr}")
+            require(path.read_bytes() == original, "dependency-orphan CLI modified input")
         path.unlink()
         for mode in modes:
             cli = subprocess.run(script + mode,
@@ -3611,7 +3638,7 @@ def check_palaco_components_fail_closed():
             require(cli.returncode == 1 and not cli.stdout and "FileNotFoundError" in cli.stderr,
                     f"missing snapshot did not fail cleanly: {mode}")
             require(not path.exists(), "failed JSON query created missing snapshot")
-    return "summary, component and trace modes: invalid snapshots/missing files; JSON-only stdout"
+    return "summary, component, trace and dependency modes: invalid snapshots/missing files; JSON-only stdout"
 
 
 def check_palaco_components():
@@ -5345,7 +5372,8 @@ def main():
         except Exception as error:  # fail closed, including unreadable files
             print(f"FAIL: {type(error).__name__}: {error}",
                   file=sys.stderr if args.components is not None or args.summary
-                  or args.trace is not None else sys.stdout)
+                  or args.trace is not None or args.find_dependencies is not None
+                  or args.find_dependents is not None or args.find_dependency_orphans else sys.stdout)
             return 1
         print(f"PASS: {summary}")
         return 0
