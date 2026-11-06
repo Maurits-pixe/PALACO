@@ -117,3 +117,8 @@ h2 { margin: 0 0 .7rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.
 @media (prefers-reduced-motion: no-preference) {
   .button { transition: background-color .15s ease; }
 }
+
+.access-boundary { margin-top: 1rem; padding: .85rem; border-left: 4px solid var(--teal); border-radius: 0 .7rem .7rem 0; background: var(--cream); }
+.access-boundary h3 { margin: 0 0 .4rem; font-size: 1rem; }
+.access-boundary p { margin: .4rem 0; }
+.access-state { font-weight: 750; }

@@ -5,7 +5,8 @@
     const MAX_DRAFT_BYTES = 12288;
     const $ = (id) => document.getElementById(id);
     const elements = {
-        account: $('account'), accountId: $('account-id'), login: $('start-login'), loginDetail: $('login-stage-detail'),
+        account: $('account'), accountId: $('account-id'), access: $('personal-access'),
+        accessState: $('personal-access-state'), login: $('start-login'), loginDetail: $('login-stage-detail'),
         loginInfo: $('login-info'), feedback: $('feedback'), retry: $('retry-session'),
         sessionState: $('session-state'), logout: $('logout'), logoutAll: $('logout-all'),
         consentPanel: $('consent-panel'), consentGuest: $('consent-guest'),
@@ -61,6 +62,8 @@
         const authenticated = phase === 'authenticated' && typeof csrf === 'string';
         const locked = !authenticated || busy;
         elements.account.hidden = !authenticated;
+        elements.access.hidden = !authenticated;
+        elements.accessState.textContent = authenticated ? 'Persoonlijke toegang blijft gesloten.' : '';
         elements.loginInfo.hidden = authenticated;
         elements.login.hidden = phase !== 'anonymous';
         elements.retry.hidden = phase !== 'unavailable';
@@ -177,8 +180,16 @@
     function validMe(me) {
         return exactKeys(me, [
             'accountId', 'csrfToken', 'actorKind', 'credentialControl', 'accountActive',
-            'mode', 'operativeAuthority', 'canOpenContact', 'account1'
+            'mode', 'operativeAuthority', 'canOpenContact', 'account1', 'personalAccountControl'
         ]) && closedBoundary(me)
+            && exactKeys(me.personalAccountControl, [
+                'schema', 'strongAuthentication', 'lifecycleAuthority', 'activationEligible', 'reason'
+            ])
+            && me.personalAccountControl.schema === 'rio-personal-account-boundary/v1'
+            && me.personalAccountControl.strongAuthentication === 'UNKNOWN'
+            && me.personalAccountControl.lifecycleAuthority === 'NONE'
+            && me.personalAccountControl.activationEligible === false
+            && me.personalAccountControl.reason === 'STRONG_AUTHENTICATION_EVIDENCE_MISSING'
             && (me.accountId === 'TST-alpha' || me.accountId === 'TST-beta')
             && me.actorKind === 'SYNTHETIC_DEV_ACTOR'
             && me.credentialControl === 'VERIFIED_DEV_OIDC'

@@ -59,6 +59,11 @@
           <p class="small-label">Je bent aangemeld als</p>
           <p id="account-id" class="account-name"></p>
           <p class="muted">Dit proefaccount geeft geen persoonlijke toegang, contacttoegang of bevoegdheden.</p>
+          <section id="personal-access" class="access-boundary" aria-labelledby="personal-access-title" hidden>
+            <h3 id="personal-access-title">Persoonlijke toegang</h3>
+            <p id="personal-access-state" class="access-state" role="status" aria-live="polite" aria-atomic="true"></p>
+            <p>Voor persoonlijke toegang zijn extra veiligheidscontroles en een bevoegde menselijke goedkeuring nodig.</p>
+          </section>
           <div class="button-stack">
             <button id="logout" class="button button-outline" type="button">Deze sessie afmelden</button>
             <button id="logout-all" class="button button-quiet" type="button">Alle lokale testsessies afmelden</button>
