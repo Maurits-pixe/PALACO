@@ -135,6 +135,52 @@ async fn postgres_rejects_sequence_and_predecessor_conflicts() {
 }
 
 #[tokio::test]
+async fn postgres_rejects_event_predecessor_hash_mismatch() {
+    let store = store().await;
+    let aggregate_id = AggregateId::new(Uuid::new_v4());
+    let first = event(aggregate_id, Sequence::genesis(), None, b"first");
+    store
+        .append(aggregate_id, Sequence::genesis(), None, first.clone())
+        .await
+        .expect("genesis append must succeed");
+
+    let wrong_predecessor = event(
+        aggregate_id,
+        Sequence::genesis(),
+        None,
+        b"wrong predecessor",
+    );
+    let second = EventEnvelope {
+        previous_event_hash: Some(wrong_predecessor.payload_hash),
+        ..event(
+            aggregate_id,
+            first.sequence.next(),
+            Some(first.payload_hash),
+            b"second",
+        )
+    };
+
+    assert_eq!(
+        store
+            .append(
+                aggregate_id,
+                second.sequence,
+                Some(first.payload_hash),
+                second,
+            )
+            .await,
+        Err(EventStoreError::PredecessorConflict)
+    );
+    assert_eq!(
+        store
+            .current_head(aggregate_id)
+            .await
+            .expect("head lookup must succeed"),
+        Some(first)
+    );
+}
+
+#[tokio::test]
 async fn postgres_rejects_payload_hash_mismatch_before_persisting() {
     let store = store().await;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
