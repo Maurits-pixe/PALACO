@@ -145,6 +145,19 @@ fn provenance_requires_anchored_identifiable_source_history_and_matching_digest(
 }
 
 #[test]
+fn every_provenance_history_reference_must_be_a_valid_identifier() {
+    let mut request = valid_request();
+    request
+        .provenance_history_refs
+        .extend(["history-2".to_owned(), " invalid-history".to_owned()]);
+
+    assert_eq!(
+        evaluate_reference(&request).provenance_review,
+        ReviewState::Fail
+    );
+}
+
+#[test]
 fn account_and_ownership_are_independent_gates() {
     let mut blocked = valid_request();
     blocked.account_blocked = true;
