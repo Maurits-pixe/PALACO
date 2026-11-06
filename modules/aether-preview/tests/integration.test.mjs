@@ -4,6 +4,7 @@ import { encryptMessage } from '../src/crypto.js';
 import { isEncryptedEnvelope } from '../src/envelope.js';
 import { createBastionTask } from '../src/bastion.js';
 import { createRevisionGuard } from '../src/revision.js';
+import { createEncryptedExport, ENCRYPTED_EXPORT_FILENAME } from '../src/export.js';
 
 test('encryption is randomized, decryptable, and contains no plaintext or passphrase', async () => {
   const text = 'Vertrouwelijk bericht 🔒';
@@ -103,4 +104,18 @@ test('async encryption results are accepted only for the original input revision
   assert.equal(guard.isCurrent(second), false);
   assert.equal(guard.isCurrent(guard.snapshot()), true);
   assert.equal(guard.isCurrent(String(guard.snapshot())), false);
+});
+
+test('offline export contains exactly the validated encrypted envelope', async () => {
+  const plaintext = 'synthetic offline fixture';
+  const passphrase = 'offline test passphrase';
+  const envelope = await encryptMessage(plaintext, passphrase);
+  const blob = createEncryptedExport(envelope);
+  assert.equal(ENCRYPTED_EXPORT_FILENAME, 'aether-envelope-v1.json');
+  assert.equal(blob.type, 'application/json');
+  assert.equal(await blob.text(), envelope);
+  assert.ok(!(await blob.text()).includes(plaintext));
+  assert.ok(!(await blob.text()).includes(passphrase));
+  assert.throws(() => createEncryptedExport(plaintext), /versleutelde envelop/);
+  assert.throws(() => createEncryptedExport('{}'), /versleutelde envelop/);
 });
