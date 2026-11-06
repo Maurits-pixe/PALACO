@@ -4454,6 +4454,126 @@ def check_palaco_find_lifecycle():
     return f"{len(statuses)} lifecycle states + sorted/non-mutating/empty results + 6 rejections"
 
 
+def check_palaco_trace_fixture():
+    path = PALACO_FIXTURE_DIR / "registry-traces.fixture.json"
+    original_bytes = path.read_bytes()
+    fixture = read_json(path)
+    original = copy.deepcopy(fixture)
+    validator = palaco_validators()["PCR-000.schema.json"]
+    # Registry examples are not discovered by the five-family fixture check.
+    validate_palaco_registry(fixture, validator)
+    require(len(fixture["objects"]) == 6 and all(
+        record["object_type"] == "FE"
+        and record["lifecycle"]["status"] == "Draft"
+        and record["approval"]["status"] == "Pending"
+        and record["verification"]["status"] == "Pending"
+        for record in fixture["objects"]
+    ), "trace fixture must contain six synthetic Draft/Pending FE objects")
+    cases = (
+        ("FE-00001", "upstream", "upstream",
+         ["FE-00002", "FE-00003", "FE-00004", "FE-00005", "FE-00006"],
+         {"FE-00002": 1, "FE-00003": 1, "FE-00004": 2, "FE-00005": 2, "FE-00006": 3},
+         {
+             "FE-00002": ["FE-00001", "FE-00002"],
+             "FE-00003": ["FE-00001", "FE-00003"],
+             "FE-00004": ["FE-00001", "FE-00003", "FE-00004"],
+             "FE-00005": ["FE-00001", "FE-00002", "FE-00005"],
+             "FE-00006": ["FE-00001", "FE-00002", "FE-00005", "FE-00006"],
+         }),
+        ("FE-00006", "downstream", "upstream",
+         ["FE-00001", "FE-00002", "FE-00003", "FE-00004", "FE-00005"],
+         {"FE-00001": 3, "FE-00002": 2, "FE-00003": 2, "FE-00004": 1, "FE-00005": 1},
+         {
+             "FE-00001": ["FE-00006", "FE-00004", "FE-00003", "FE-00001"],
+             "FE-00002": ["FE-00006", "FE-00005", "FE-00002"],
+             "FE-00003": ["FE-00006", "FE-00004", "FE-00003"],
+             "FE-00004": ["FE-00006", "FE-00004"],
+             "FE-00005": ["FE-00006", "FE-00005"],
+         }),
+        ("FE-00006", "upstream", "dependency", ["FE-00001"],
+         {"FE-00001": 1}, {"FE-00001": ["FE-00006", "FE-00001"]}),
+        ("FE-00001", "downstream", "dependency", ["FE-00006"],
+         {"FE-00006": 1}, {"FE-00006": ["FE-00001", "FE-00006"]}),
+        ("FE-00003", "upstream", "dependency", ["FE-00002"],
+         {"FE-00002": 1}, {"FE-00002": ["FE-00003", "FE-00002"]}),
+    )
+
+    def expected(case, limit=None, details=True):
+        object_id, direction, graph_name, ids, distances, paths = case
+        selected = [target for target in ids if limit is None or distances[target] <= limit]
+        result = {
+            "object_id": object_id, "direction": direction,
+            "graph": ("traceability.upstream" if graph_name == "upstream"
+                      else "dependencies + DEPENDS_ON"),
+            "reachable_ids": selected,
+            "scope": "supplied snapshot only; not a completeness or authority decision",
+        }
+        if limit is not None:
+            result["max_depth"] = limit
+        if details:
+            result["distances"] = {target: distances[target] for target in selected}
+            result["paths"] = {target: paths[target] for target in selected}
+        return result
+
+    library_count = 0
+    for case in cases:
+        object_id, direction, graph_name = case[:3]
+        for limit in (None, 0, 1, 2, 3):
+            result = trace_palaco_registry(
+                fixture, object_id, direction, validator, graph_name=graph_name,
+                max_depth=limit, include_distances=True, include_paths=True,
+            )
+            require(result == expected(case, limit), f"trace fixture mismatch: {case[:3]}, {limit}")
+            require(list(result["distances"]) == result["reachable_ids"]
+                    and list(result["paths"]) == result["reachable_ids"],
+                    "trace fixture detail keys must follow sorted reachable IDs")
+            require(fixture == original, "trace fixture library query mutated input")
+            library_count += 1
+    reordered = copy.deepcopy(fixture)
+    reordered["objects"].reverse()
+    for record in reordered["objects"]:
+        record["traceability"]["upstream"].reverse()
+    before = copy.deepcopy(reordered)
+    require(trace_palaco_registry(
+        reordered, "FE-00001", validator=validator, include_distances=True, include_paths=True,
+    ) == expected(cases[0]) and reordered == before,
+            "full-path tie must select FE-00002/FE-00005, not smaller parent FE-00004")
+    library_count += 1
+
+    base = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
+    cli_count = 0
+
+    def cli_trace(case, limit=None, details=True, explicit=True):
+        nonlocal cli_count
+        object_id, direction, graph_name = case[:3]
+        flags = ["--trace", object_id, "--direction", direction]
+        if explicit:
+            flags += ["--trace-graph", graph_name]
+        if limit is not None:
+            flags += ["--trace-max-depth", str(limit)]
+        if details:
+            flags += ["--trace-distances", "--trace-paths"]
+        cli = subprocess.run(base + flags, capture_output=True, timeout=30)
+        require(cli.returncode == 0 and cli.stderr == b""
+                and cli.stdout == (json.dumps(expected(case, limit, details), indent=2) + "\n").encode(),
+                f"trace fixture CLI JSON/streams mismatch: {flags}: {cli.stdout!r}{cli.stderr!r}")
+        require(path.read_bytes() == original_bytes, "trace fixture CLI modified input bytes")
+        cli_count += 1
+        return cli.stdout
+
+    for case in cases:
+        cli_trace(case)
+    for limit in (0, 2, 3):
+        cli_trace(cases[0], limit)
+    require(cli_trace(cases[0], details=False, explicit=False)
+            == cli_trace(cases[0], details=False),
+            "trace fixture default and explicit upstream differ in JSON bytes")
+    require(fixture == original and path.read_bytes() == original_bytes,
+            "trace fixture checks mutated input")
+    return (f"six-object trace fixture: schema/closed validation, {library_count} library cases, "
+            f"{cli_count} subprocess CLI cases; both graphs, bounds and full-path ties")
+
+
 def check_palaco_trace_distances_oracle():
     from itertools import permutations
 
@@ -6014,6 +6134,7 @@ CHECKS = (
     ("PALACO registry lifecycle conformance", check_palaco_lifecycle),
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
+    ("PALACO trace fixture conformance", check_palaco_trace_fixture),
     ("PALACO trace distances oracle", check_palaco_trace_distances_oracle),
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),

@@ -2422,6 +2422,28 @@ each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
 
+The [six-object trace fixture](docs/fixtures/palaco/registry-traces.fixture.json)
+contains only synthetic Draft records with Pending approval and verification;
+it makes no authority claim:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-distances --trace-paths
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00006 --trace-graph dependency --trace-distances --trace-paths
+```
+
+In the first result, FE-00006 has distance 3 and path
+`['FE-00001','FE-00002','FE-00005','FE-00006']`: the full sequence wins the
+equal-hop tie, not the smaller immediate predecessor FE-00004.
+Adding `--trace-max-depth 2` excludes FE-00006 from reachable IDs, distances and
+paths; depth 0 excludes every destination. In the second result, the separate
+dependency graph reaches only FE-00001 from FE-00006 at distance 1, despite its
+duplicate list/`DEPENDS_ON` representation. FE-00003 → FE-00002 is explicit-only.
+
 Read-only object-type queries filter records by the exact canonical family:
 
 ```sh
