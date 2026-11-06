@@ -55,3 +55,37 @@ test('helper sends only ciphertext and checks responses', async () => {
     await assert.rejects(createBastionTask(invalid, options), /versleutelde tekst/);
   }
 });
+
+test('malformed envelopes fail closed before any network call', async () => {
+  const valid = JSON.parse(await encryptMessage('fixture', 'test passphrase long enough'));
+  const variants = [
+    { ...valid, version: 2 },
+    { ...valid, iterations: 1 },
+    { ...valid, iv: 'AA==' },
+    { ...valid, salt: 'AA==' },
+    { ...valid, ciphertext: 'not-base64!' },
+    { ...valid, unexpected: 'field' },
+    { ...valid, ciphertext: '' },
+  ];
+  let networkCalls = 0;
+  const options = {
+    baseUrl: 'http://localhost:3000/api',
+    fetchImpl: async () => { networkCalls += 1; throw new Error('unexpected network call'); },
+  };
+  for (const variant of variants) {
+    const description = JSON.stringify(variant);
+    assert.equal(isEncryptedEnvelope(description), false);
+    await assert.rejects(createBastionTask(description, options), /versleutelde tekst/);
+  }
+  assert.equal(isEncryptedEnvelope('x'.repeat(65537)), false);
+  assert.equal(networkCalls, 0);
+});
+
+test('Bastion confirmation must match submitted ciphertext', async () => {
+  const description = await encryptMessage('fixture', 'test passphrase long enough');
+  const options = {
+    baseUrl: 'http://localhost:3000/api',
+    fetchImpl: async () => Response.json({ id: 'task-id', description: 'different ciphertext' }, { status: 201 }),
+  };
+  await assert.rejects(createBastionTask(description, options), /Geen bevestiging/);
+});
