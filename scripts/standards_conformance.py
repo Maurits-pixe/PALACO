@@ -29,6 +29,7 @@ Any failure exits non-zero.
 import argparse
 import copy
 import json
+import os
 import re
 import subprocess
 import sys
@@ -4574,6 +4575,73 @@ def check_palaco_trace_fixture():
             f"{cli_count} subprocess CLI cases; both graphs, bounds and full-path ties")
 
 
+def check_palaco_trace_process_determinism():
+    path = PALACO_FIXTURE_DIR / "registry-traces.fixture.json"
+    original_bytes = path.read_bytes()
+    fixture = read_json(path)
+    original = copy.deepcopy(fixture)
+    reordered = copy.deepcopy(fixture)
+    reordered["objects"].reverse()
+    for record in reordered["objects"]:
+        record["traceability"]["upstream"].reverse()
+        record["traceability"]["relationships"].reverse()
+        record.get("dependencies", []).reverse()
+    reordered_before = copy.deepcopy(reordered)
+    validator = palaco_validators()["PCR-000.schema.json"]
+    environment = os.environ.copy()
+    cases = (
+        ("upstream", "upstream", "FE-00001"),
+        ("upstream", "downstream", "FE-00006"),
+        ("dependency", "upstream", "FE-00006"),
+        ("dependency", "downstream", "FE-00001"),
+    )
+    count = 0
+    with tempfile.TemporaryDirectory(prefix="palaco-trace-order-", dir="/tmp") as directory:
+        reordered_path = Path(directory) / path.name
+        reordered_bytes = (json.dumps(reordered, indent=2) + "\n").encode()
+        reordered_path.write_bytes(reordered_bytes)
+        for graph_name, direction, object_id in cases:
+            for limit in (None, 0, 2):
+                result = trace_palaco_registry(
+                    fixture, object_id, direction, validator, graph_name=graph_name,
+                    max_depth=limit, include_distances=True, include_paths=True,
+                )
+                require(trace_palaco_registry(
+                    reordered, object_id, direction, validator, graph_name=graph_name,
+                    max_depth=limit, include_distances=True, include_paths=True,
+                ) == result, "trace library result changed with input order")
+                require(fixture == original and reordered == reordered_before,
+                        "trace determinism library queries mutated snapshots")
+                if limit == 0:
+                    require(result["reachable_ids"] == [] and result["distances"] == {}
+                            and result["paths"] == {}, "depth-zero trace must be empty")
+                    continue
+                if (graph_name, direction, limit) == ("upstream", "upstream", None):
+                    require(result["paths"]["FE-00006"]
+                            == ["FE-00001", "FE-00002", "FE-00005", "FE-00006"],
+                            "trace determinism baseline lost full-path tie ordering")
+                expected_bytes = (json.dumps(result, indent=2) + "\n").encode()
+                for seed, source in (("1", path), ("98765", reordered_path)):
+                    flags = ["--registry", str(source), "--trace", object_id,
+                             "--direction", direction, "--trace-graph", graph_name,
+                             "--trace-distances", "--trace-paths"]
+                    if limit is not None:
+                        flags += ["--trace-max-depth", str(limit)]
+                    cli = subprocess.run(
+                        [sys.executable, str(Path(__file__).resolve()), *flags],
+                        env={**environment, "PYTHONHASHSEED": seed},
+                        capture_output=True, timeout=30,
+                    )
+                    require(path.read_bytes() == original_bytes
+                            and reordered_path.read_bytes() == reordered_bytes,
+                            "trace determinism subprocess modified source bytes")
+                    require(cli.returncode == 0 and cli.stderr == b"" and cli.stdout == expected_bytes,
+                            f"trace bytes differ: seed={seed}, {flags}: {cli.stdout!r}{cli.stderr!r}")
+                    count += 1
+    return (f"{count} byte-exact subprocess traces across two hash seeds/input orders; "
+            "both graphs/directions, unbounded/depth-two + four library depth-zero cases")
+
+
 def check_palaco_trace_distances_oracle():
     from itertools import permutations
 
@@ -6135,6 +6203,7 @@ CHECKS = (
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
     ("PALACO trace fixture conformance", check_palaco_trace_fixture),
+    ("PALACO trace process determinism", check_palaco_trace_process_determinism),
     ("PALACO trace distances oracle", check_palaco_trace_distances_oracle),
     ("PALACO registry object-type query conformance", check_palaco_find),
     ("PALACO registry lifecycle-status query conformance", check_palaco_find_lifecycle),
