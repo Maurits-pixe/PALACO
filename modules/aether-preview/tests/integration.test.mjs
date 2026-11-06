@@ -119,3 +119,45 @@ test('offline export contains exactly the validated encrypted envelope', async (
   assert.throws(() => createEncryptedExport(plaintext), /versleutelde envelop/);
   assert.throws(() => createEncryptedExport('{}'), /versleutelde envelop/);
 });
+
+import { readEncryptedImport } from '../src/import.js';
+
+test('offline import accepts only a bounded encrypted v1 envelope', async () => {
+  const plaintext = 'synthetic import fixture';
+  const passphrase = 'import test passphrase';
+  const envelope = await encryptMessage(plaintext, passphrase);
+  const fixture = text => ({ size: new TextEncoder().encode(text).byteLength, text: async () => text });
+  assert.equal(await readEncryptedImport(fixture(envelope)), envelope);
+  assert.ok(!envelope.includes(plaintext));
+  assert.ok(!envelope.includes(passphrase));
+
+  for (const invalid of [
+    null,
+    { size: 65537, text: async () => envelope },
+    { size: 0, text: async () => envelope },
+    fixture(plaintext),
+    fixture('{}'),
+    fixture(envelope.replace('AES-GCM', 'not-a-cipher')),
+    { size: 10, text: async () => 'x'.repeat(65537) },
+    { size: 10, text: async () => { throw new Error('read failure'); } },
+  ]) {
+    await assert.rejects(readEncryptedImport(invalid));
+  }
+});
+
+test('offline import has no network side effect and does not grant authority', async () => {
+  const encrypted = await encryptMessage('offline only', 'long enough passphrase');
+  let networkCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { networkCalls += 1; throw new Error('not allowed'); };
+  try {
+    const imported = await readEncryptedImport({
+      size: new TextEncoder().encode(encrypted).byteLength,
+      text: async () => encrypted,
+    });
+    assert.equal(imported, encrypted);
+    assert.equal(networkCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
