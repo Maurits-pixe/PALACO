@@ -56,7 +56,7 @@ async function importEncrypted(event) {
   const input = event.target;
   const file = input.files?.[0];
   input.value = '';
-  if (!file || encrypting.value || sending.value) return;
+  if (!file || encrypting.value || importing.value || sending.value) return;
 
   inputGuard.invalidate();
   const revision = inputGuard.snapshot();
@@ -129,8 +129,8 @@ async function send() {
       <label for="message">Bericht</label>
       <textarea id="message" v-model="message" required maxlength="16000" :disabled="encrypting || importing || sending"></textarea>
       <label for="passphrase">Passphrase (minimaal 12 tekens; bewaar deze zelf)</label>
-      <input id="passphrase" v-model="passphrase" type="password" minlength="12" required autocomplete="new-password" :disabled="encrypting || sending" />
-      <button :disabled="encrypting || sending">{{ encrypting ? 'Versleutelen…' : 'Versleutel' }}</button>
+      <input id="passphrase" v-model="passphrase" type="password" minlength="12" required autocomplete="new-password" :disabled="encrypting || importing || sending" />
+      <button :disabled="encrypting || importing || sending">{{ encrypting ? 'Versleutelen…' : 'Versleutel' }}</button>
     </form>
     <section aria-labelledby="import-label">
       <h2 id="import-label">Lokaal versleuteld bestand openen</h2>
