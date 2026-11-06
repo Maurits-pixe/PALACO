@@ -162,6 +162,37 @@ async fn postgres_rejects_payload_hash_mismatch_before_persisting() {
 }
 
 #[tokio::test]
+async fn postgres_rejects_aggregate_id_mismatch_before_persisting() {
+    let store = store().await;
+    let append_aggregate_id = AggregateId::new(Uuid::new_v4());
+    let event_aggregate_id = AggregateId::new(Uuid::new_v4());
+    let mismatched = event(
+        event_aggregate_id,
+        Sequence::genesis(),
+        None,
+        b"wrong-aggregate",
+    );
+
+    assert_eq!(
+        store
+            .append(append_aggregate_id, Sequence::genesis(), None, mismatched)
+            .await,
+        Err(EventStoreError::Persistence(
+            "event aggregate_id does not match append aggregate_id".to_owned()
+        ))
+    );
+    for aggregate_id in [append_aggregate_id, event_aggregate_id] {
+        assert_eq!(
+            store
+                .current_head(aggregate_id)
+                .await
+                .expect("head lookup must succeed"),
+            None
+        );
+    }
+}
+
+#[tokio::test]
 async fn postgres_rejects_event_sequence_mismatch() {
     let store = store().await;
     let aggregate_id = AggregateId::new(Uuid::new_v4());
