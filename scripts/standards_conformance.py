@@ -4596,6 +4596,7 @@ def check_palaco_trace_process_determinism():
         ("dependency", "downstream", "FE-00001"),
     )
     count = 0
+    coverage = set()
     with tempfile.TemporaryDirectory(prefix="palaco-trace-order-", dir="/tmp") as directory:
         reordered_path = Path(directory) / path.name
         reordered_bytes = (json.dumps(reordered, indent=2) + "\n").encode()
@@ -4615,31 +4616,41 @@ def check_palaco_trace_process_determinism():
                 if limit == 0:
                     require(result["reachable_ids"] == [] and result["distances"] == {}
                             and result["paths"] == {}, "depth-zero trace must be empty")
-                    continue
                 if (graph_name, direction, limit) == ("upstream", "upstream", None):
                     require(result["paths"]["FE-00006"]
                             == ["FE-00001", "FE-00002", "FE-00005", "FE-00006"],
                             "trace determinism baseline lost full-path tie ordering")
                 expected_bytes = (json.dumps(result, indent=2) + "\n").encode()
-                for seed, source in (("1", path), ("98765", reordered_path)):
-                    flags = ["--registry", str(source), "--trace", object_id,
-                             "--direction", direction, "--trace-graph", graph_name,
-                             "--trace-distances", "--trace-paths"]
-                    if limit is not None:
-                        flags += ["--trace-max-depth", str(limit)]
-                    cli = subprocess.run(
-                        [sys.executable, str(Path(__file__).resolve()), *flags],
-                        env={**environment, "PYTHONHASHSEED": seed},
-                        capture_output=True, timeout=30,
-                    )
-                    require(path.read_bytes() == original_bytes
-                            and reordered_path.read_bytes() == reordered_bytes,
-                            "trace determinism subprocess modified source bytes")
-                    require(cli.returncode == 0 and cli.stderr == b"" and cli.stdout == expected_bytes,
-                            f"trace bytes differ: seed={seed}, {flags}: {cli.stdout!r}{cli.stderr!r}")
-                    count += 1
-    return (f"{count} byte-exact subprocess traces across two hash seeds/input orders; "
-            "both graphs/directions, unbounded/depth-two + four library depth-zero cases")
+                for seed in ("1", "98765"):
+                    for input_order, source in (("original", path), ("reordered", reordered_path)):
+                        flags = ["--registry", str(source), "--trace", object_id,
+                                 "--direction", direction, "--trace-graph", graph_name,
+                                 "--trace-distances", "--trace-paths"]
+                        if limit is not None:
+                            flags += ["--trace-max-depth", str(limit)]
+                        cli = subprocess.run(
+                            [sys.executable, str(Path(__file__).resolve()), *flags],
+                            env={**environment, "PYTHONHASHSEED": seed},
+                            capture_output=True, timeout=30,
+                        )
+                        require(path.read_bytes() == original_bytes
+                                and reordered_path.read_bytes() == reordered_bytes,
+                                "trace determinism subprocess modified source bytes")
+                        require(cli.returncode == 0 and cli.stderr == b"" and cli.stdout == expected_bytes,
+                                f"trace bytes differ: seed={seed}, {flags}: {cli.stdout!r}{cli.stderr!r}")
+                        coverage.add((graph_name, direction, object_id, limit, seed, input_order))
+                        count += 1
+    expected_coverage = {
+        (graph_name, direction, object_id, limit, seed, input_order)
+        for graph_name, direction, object_id in cases
+        for limit in (None, 0, 2)
+        for seed in ("1", "98765")
+        for input_order in ("original", "reordered")
+    }
+    require(count == len(coverage) == len(expected_coverage) == 48
+            and coverage == expected_coverage, "trace determinism matrix coverage mismatch")
+    return (f"{count} byte-exact subprocess traces: four graph/direction/origin cases "
+            "x three depth limits (None/0/2) x two hash seeds x two input orders")
 
 
 def check_palaco_trace_distances_oracle():
