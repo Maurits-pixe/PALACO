@@ -3,6 +3,7 @@ import { ref, watch } from 'vue';
 import { encryptMessage } from './crypto.js';
 import { createBastionTask } from './bastion.js';
 import { createRevisionGuard } from './revision.js';
+import { createEncryptedExport, ENCRYPTED_EXPORT_FILENAME } from './export.js';
 
 const message = ref('');
 const passphrase = ref('');
@@ -49,6 +50,23 @@ async function encrypt() {
   }
 }
 
+function downloadEncrypted() {
+  if (!encrypted.value || sending.value) return;
+  try {
+    const blob = createEncryptedExport(encrypted.value);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = ENCRYPTED_EXPORT_FILENAME;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notice.value = 'Versleuteld bestand aangeboden voor lokaal opslaan. Bewaar de passphrase afzonderlijk.';
+    error.value = '';
+  } catch {
+    error.value = 'Lokaal exporteren is niet gelukt.';
+  }
+}
+
 function clearResult() {
   if (sending.value) return;
   encrypted.value = '';
@@ -89,6 +107,7 @@ async function send() {
       <h2 id="result">Versleuteld resultaat</h2>
       <textarea aria-label="Versleutelde tekst" :value="encrypted" readonly></textarea>
       <button @click="send" :disabled="sending || sent" :aria-busy="sending">{{ sending ? 'Versturen…' : sent ? 'Verstuurd' : 'Send to Bastion' }}</button>
+      <button type="button" @click="downloadEncrypted" :disabled="sending">Bewaar versleuteld bestand</button>
       <button type="button" @click="clearResult" :disabled="sending">Wis versleuteld resultaat</button>
     </section>
     <p v-if="notice" role="status">{{ notice }}</p>
