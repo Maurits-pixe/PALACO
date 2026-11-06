@@ -158,6 +158,17 @@ fn every_provenance_history_reference_must_be_a_valid_identifier() {
 }
 
 #[test]
+fn provenance_anchor_reference_must_be_a_valid_identifier() {
+    let mut request = valid_request();
+    request.provenance_anchor_ref = " invalid-anchor".to_owned();
+
+    assert_eq!(
+        evaluate_reference(&request).provenance_review,
+        ReviewState::Fail
+    );
+}
+
+#[test]
 fn account_and_ownership_are_independent_gates() {
     let mut blocked = valid_request();
     blocked.account_blocked = true;
