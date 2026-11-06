@@ -32,7 +32,7 @@ elif sys.argv[1] == "summary":
     print("RIO_BROWSER_SUMMARY " + json.dumps(data, separators=(",", ":")))
 else:
     result = subprocess.run(
-        ["docker", "image", "inspect", "quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741",
+        ["docker", "image", "inspect", "quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b",
          "--format", "{{index .RepoDigests 0}}"],
         check=True, capture_output=True, text=True,
     ).stdout.strip()

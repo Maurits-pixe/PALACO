@@ -44,7 +44,7 @@ The certificate expires after one day. Do not reuse an old runtime after expiry.
 
 | Item | Fixed fixture value |
 | --- | --- |
-| Keycloak image | `quay.io/keycloak/keycloak:26.8.0@sha256:27b3230fbabb8c9ff3c66c864cf09dcd8a41aca82e5100679d109ef0eeb05741` |
+| Keycloak image | `quay.io/keycloak/keycloak:26.8.1@sha256:a78d6b79572168cb25886b80a8b5b8d4ed4390743e3eecb810538683e209dd6b` |
 | PostgreSQL image | `postgres:18.6-bookworm@sha256:afc7e2d441324c0388fa80c3d24f733b4194a4eb7f47dd8ee2b08eb1a24a647c` |
 | Synthetic database | `127.0.0.1:8090`, role `rio_dev`, database `rio_synthetic` |
 | Offline restore database | `rio_synthetic_restore` on the same loopback port |
