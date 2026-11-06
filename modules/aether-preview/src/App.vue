@@ -68,6 +68,10 @@ async function importEncrypted(event) {
   try {
     const result = await readEncryptedImport(file);
     if (!inputGuard.isCurrent(revision)) return;
+    // An imported envelope replaces the draft, not just the prior ciphertext.
+    // Clear sensitive form contents before making the imported result available.
+    message.value = '';
+    passphrase.value = '';
     encrypted.value = result;
     notice.value = 'Versleuteld bestand lokaal geladen. Er is niets verstuurd. Bewaar de passphrase afzonderlijk.';
   } catch {
