@@ -41,6 +41,11 @@ test('[RIO-MOBILE-01] Native consent controls preserve focus and reflow', async 
   });
   await test.step('mobile-native-semantics', async () => {
     await expect(page.locator('#feedback')).toHaveAttribute('role', 'status');
+    await expect(page.getByRole('region', { name: 'Persoonlijke toegang', exact: true })).toBeVisible();
+    await expect(page.locator('#personal-access-state')).toHaveAttribute('role', 'status');
+    await expect(page.locator('#personal-access-state')).toHaveAttribute('aria-live', 'polite');
+    await expect(page.locator('#personal-access-state')).toHaveText('Persoonlijke toegang blijft gesloten.');
+    await expect(page.locator('#personal-access').locator('button, a, input')).toHaveCount(0);
     await expect(page.locator('#feedback')).toHaveAttribute('aria-live', 'polite');
     await expect(page.locator('#consent-choice')).toMatchAriaSnapshot(
       '- checkbox "Ik geef toestemming voor deze oefensessie. Ik weet dat dit geen persoonlijke toegang geeft."'
@@ -67,6 +72,7 @@ test('[RIO-MOBILE-01] Native consent controls preserve focus and reflow', async 
     expect(account.status).toBe(200);
     expect(account.data.accountId).toBe('TST-alpha');
     expect(account.data.accountActive || account.data.canOpenContact).toBe(false);
+    await expect(page.locator('#personal-access-state')).toHaveText('Persoonlijke toegang blijft gesloten.');
     const revoked = receiptFrom(await nativeConsent(page, '#consent-revoke', testInfo));
     expect(revoked.granted).toBe(false);
     expect(revoked.revision).toBe(accepted.revision + 1);

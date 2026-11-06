@@ -1,4 +1,4 @@
-# Personal Account Control — executable reference model v0.15
+# Personal Account Control — executable reference model v0.16
 
 Status: IMPLEMENTED / LOCAL MODEL TESTS PASS. Production and ACCOUNT-1: HOLD.
 Base inspected: PALACO 1b2065af0dfe82e25b3f62c80d9f9873563f6afd.
@@ -249,3 +249,12 @@ outages and reconciliation. Eighteen new tests close the terminal-state slice;
 155 reference tests plus 8 existing review-gate tests pass locally. No terminal
 HTTP route, expiry worker, identity reuse, production migration or real human
 role assignment is introduced. Actual CI must be bound to the new commit.
+
+## v0.16 visible access boundary
+
+[UI-BOUNDARY-CONTRACT.md](UI-BOUNDARY-CONTRACT.md) describes the read-only personal-
+access notice on the authenticated test-account card. Existing strict response
+validation and clearance paths govern its visibility; consent never opens it.
+Real OIDC/mobile browser scenarios now check the notice, absence of actions,
+closed state and removal under logout/expiry/invalid responses. No new route or
+activation authority is introduced. Full CI must verify the new source head.

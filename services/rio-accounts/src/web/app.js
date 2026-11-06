@@ -5,7 +5,8 @@
     const MAX_DRAFT_BYTES = 12288;
     const $ = (id) => document.getElementById(id);
     const elements = {
-        account: $('account'), accountId: $('account-id'), login: $('start-login'), loginDetail: $('login-stage-detail'),
+        account: $('account'), accountId: $('account-id'), access: $('personal-access'),
+        accessState: $('personal-access-state'), login: $('start-login'), loginDetail: $('login-stage-detail'),
         loginInfo: $('login-info'), feedback: $('feedback'), retry: $('retry-session'),
         sessionState: $('session-state'), logout: $('logout'), logoutAll: $('logout-all'),
         consentPanel: $('consent-panel'), consentGuest: $('consent-guest'),
@@ -61,6 +62,8 @@
         const authenticated = phase === 'authenticated' && typeof csrf === 'string';
         const locked = !authenticated || busy;
         elements.account.hidden = !authenticated;
+        elements.access.hidden = !authenticated;
+        elements.accessState.textContent = authenticated ? 'Persoonlijke toegang blijft gesloten.' : '';
         elements.loginInfo.hidden = authenticated;
         elements.login.hidden = phase !== 'anonymous';
         elements.retry.hidden = phase !== 'unavailable';

@@ -230,6 +230,11 @@ async function login(page, user, { rotate = false } = {}) {
       await page.locator('#kc-login').click();
       await page.waitForURL(url => url.origin === BFF && url.pathname === '/');
       await expect(page.locator('#account-id')).toHaveText(user.username);
+      await expect(page.locator('#personal-access')).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Persoonlijke toegang', exact: true })).toBeVisible();
+      await expect(page.locator('#personal-access-state')).toHaveText('Persoonlijke toegang blijft gesloten.');
+      await expect(page.locator('#personal-access').locator('button, a, input')).toHaveCount(0);
+
     });
     await test.step('no-browser-tokens', async () => {
       expect(browserExchangedTokens).toBe(false);
@@ -288,6 +293,8 @@ test('[RIO-E2E-01] Two real users have separate sessions and account data', asyn
           await alphaPage.reload();
           await expect(alphaPage.locator('#account-id')).toHaveText('');
           await expect(alphaPage.locator('#account')).toBeHidden();
+          await expect(alphaPage.locator('#personal-access')).toBeHidden();
+          await expect(alphaPage.locator('#personal-access-state')).toHaveText('');
           await expect(alphaPage.locator('#feedback')).toHaveText(
             'RIO is tijdelijk niet beschikbaar. Controleer je testsessie opnieuw.');
         } finally {
@@ -311,6 +318,8 @@ test('[RIO-E2E-02] Unauthenticated and invalid sessions fail closed', async ({ b
     await test.step('initial-access', async () => {
       expect((await readMe(page)).status).toBe(401);
       await expect(page.locator('#account-id')).toBeHidden();
+      await expect(page.locator('#personal-access')).toBeHidden();
+      await expect(page.locator('#personal-access-state')).toHaveText('');
       await expect(page.locator('#account-id')).toHaveText('');
     });
     await test.step('invalid-session', async () => {
@@ -322,6 +331,8 @@ test('[RIO-E2E-02] Unauthenticated and invalid sessions fail closed', async ({ b
       await page.reload();
       await expect(page.locator('#start-login')).toBeVisible();
       await expect(page.locator('#account-id')).toBeHidden();
+      await expect(page.locator('#personal-access')).toBeHidden();
+      await expect(page.locator('#personal-access-state')).toHaveText('');
       await expect(page.locator('#account-id')).toHaveText('');
     });
   } finally {
@@ -344,6 +355,8 @@ test('[RIO-E2E-03] Invalid credentials create no BFF session', async ({ browser 
       await page.goto(BFF);
       expect((await readMe(page)).status).toBe(401);
       await expect(page.locator('#account-id')).toBeHidden();
+      await expect(page.locator('#personal-access')).toBeHidden();
+      await expect(page.locator('#personal-access-state')).toHaveText('');
       await expect(page.locator('#account-id')).toHaveText('');
     });
   } finally {
@@ -394,6 +407,8 @@ test('[RIO-E2E-04] Logout invalidates the session without affecting another user
         expect(JSON.stringify(idpCookiesBefore) === JSON.stringify(idpCookiesAfter)).toBe(true);
       });
       await expect(alphaPage.locator('#start-login')).toBeVisible();
+      await expect(alphaPage.locator('#personal-access')).toBeHidden();
+      await expect(alphaPage.locator('#personal-access-state')).toHaveText('');
       expect((await readMe(alphaPage)).status).toBe(401);
       expect((await alpha.cookies(BFF)).some(cookie => cookie.name === SESSION_NAME)).toBe(false);
       // Restoring the retired browser cookie must not revive the server session.
@@ -416,6 +431,8 @@ test('[RIO-E2E-04] Logout invalidates the session without affecting another user
       await assertOwnAccount(peerPage, credentials.alpha.username);
       await alphaPage.locator('#logout-all').click();
       await expect(alphaPage.locator('#start-login')).toBeVisible();
+      await expect(alphaPage.locator('#personal-access')).toBeHidden();
+      await expect(alphaPage.locator('#personal-access-state')).toHaveText('');
       expect((await readMe(alphaPage)).status).toBe(401);
       expect((await readMe(peerPage)).status).toBe(401);
       await assertOwnAccount(betaPage, credentials.beta.username);
@@ -444,6 +461,8 @@ test('[RIO-E2E-05] Expired sessions no longer authorize account access', async (
       await page.reload();
       await expect(page.locator('#start-login')).toBeVisible();
       await expect(page.locator('#account-id')).toBeHidden();
+      await expect(page.locator('#personal-access')).toBeHidden();
+      await expect(page.locator('#personal-access-state')).toHaveText('');
       await expect(page.locator('#account-id')).toHaveText('');
     });
   } finally {
