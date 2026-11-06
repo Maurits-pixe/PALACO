@@ -866,32 +866,23 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
         graph = reverse
     visited = {object_id}
     distances = {}
-    if include_paths:
-        predecessors = {}
-        queue = deque([(object_id, 0)])
-        while queue:
-            source, depth = queue.popleft()
-            if max_depth is not None and depth >= max_depth:
-                continue
-            # FIFO discovery with sorted neighbors orders whole shortest paths,
-            # not just the immediate predecessor IDs.
-            for target in sorted(graph[source]):
-                if target not in visited:
-                    visited.add(target)
+    predecessors = {}
+    queue = deque([(object_id, 0)])
+    while queue:
+        source, depth = queue.popleft()
+        if max_depth is not None and depth >= max_depth:
+            continue
+        # FIFO discovery with sorted neighbors orders whole shortest paths,
+        # not just the immediate predecessor IDs.
+        neighbors = sorted(graph[source]) if include_paths else graph[source]
+        for target in neighbors:
+            if target not in visited:
+                visited.add(target)
+                if include_paths:
                     predecessors[target] = source
-                    if include_distances:
-                        distances[target] = depth + 1
-                    queue.append((target, depth + 1))
-    else:
-        frontier = {object_id}
-        depth = 0
-        while frontier and (max_depth is None or depth < max_depth):
-            following = {target for source in frontier for target in graph[source]} - visited
-            visited.update(following)
-            frontier = following
-            depth += 1
-            if include_distances:
-                distances.update((target, depth) for target in following)
+                if include_distances:
+                    distances[target] = depth + 1
+                queue.append((target, depth + 1))
     result = {
         "object_id": object_id,
         "direction": direction,
@@ -4799,7 +4790,7 @@ def check_palaco_traces():
             dependency_diamond, origin, direction, validator, graph_name="dependency",
         )["reachable_ids"] == expected_ids, "dependency diamond lost transitive or unique IDs")
 
-    bounded_count = 0
+    bounded_count = option_count = 0
     # The lexicographically winning full path has the larger immediate parent,
     # in both directions. Sorting only the candidate parent IDs is incorrect.
     tie_edges = {1: [3, 2], 2: [9], 3: [4], 4: [10], 9: [10], 10: []}
@@ -4907,7 +4898,7 @@ def check_palaco_traces():
                         graph_name=graph_name, max_depth=limit,
                     ) == expected, "bounded trace must be fresh, sorted and order-independent")
                     bounded_count += 1
-                for limit in (None, 0, 1, 2):
+                for limit in (None, 0, 1, 2, 3, 10):
                     expected_distances = {
                         f"FE-{index:05d}": distance
                         for index, distance in sorted(distances.items())
@@ -4917,6 +4908,21 @@ def check_palaco_traces():
                                 "distances": expected_distances}
                     if limit is not None:
                         expected["max_depth"] = limit
+                    plain = {key: value for key, value in expected.items() if key != "distances"}
+                    for include_distances in (False, True):
+                        for include_paths in (False, True):
+                            variant = trace_palaco_registry(
+                                routes, f"FE-{origin:05d}", direction, validator,
+                                graph_name=graph_name, max_depth=limit,
+                                include_distances=include_distances, include_paths=include_paths,
+                            )
+                            require({key: value for key, value in variant.items()
+                                     if key not in ("distances", "paths")} == plain,
+                                    "optional trace fields changed branching reachability or metadata")
+                            require(("distances" in variant) == include_distances
+                                    and ("paths" in variant) == include_paths,
+                                    "trace option field presence mismatch")
+                            option_count += 1
                     result = trace_palaco_registry(
                         routes, f"FE-{origin:05d}", direction, validator,
                         graph_name=graph_name, max_depth=limit, include_distances=True, include_paths=True,
@@ -5060,6 +5066,7 @@ def check_palaco_traces():
                         cli_trace(flags, 1, diagnostic=expected)
     return ("registry traces: separate graphs in both directions, default JSON compatibility, "
             f"{bounded_count} shortest-hop bounds, {distance_count} distance cases, {path_count} path cases, "
+            f"{option_count} stripped-field option equivalence cases, "
             "4 invalid distance types, 7 invalid path types, deduplication, fresh/non-mutating results, "
             "deep iterative chains and fail-closed errors")
 
