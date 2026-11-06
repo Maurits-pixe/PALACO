@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { encryptMessage } from './crypto.js';
 import { createBastionTask } from './bastion.js';
 
@@ -11,6 +11,15 @@ const sending = ref(false);
 const sent = ref(false);
 const notice = ref('');
 const error = ref('');
+let inputRevision = 0;
+
+// Never offer a ciphertext for transmission after its source fields change.
+watch([message, passphrase], () => {
+  inputRevision += 1;
+  encrypted.value = '';
+  sent.value = false;
+  notice.value = '';
+}, { flush: 'sync' });
 
 async function encrypt() {
   if (encrypting.value || sending.value) return;
@@ -19,11 +28,20 @@ async function encrypt() {
   error.value = '';
   sent.value = false;
   encrypting.value = true;
+  const revision = inputRevision;
   try {
-    encrypted.value = await encryptMessage(message.value, passphrase.value);
+    const result = await encryptMessage(message.value, passphrase.value);
+    if (revision !== inputRevision) return;
+    // Clear the form before publishing the new ciphertext: the watcher will
+    // invalidate any previous result, but not the result assigned below.
+    message.value = '';
     passphrase.value = '';
+    encrypted.value = result;
+    notice.value = 'Versleuteld. De leesbare invoer is uit het formulier verwijderd.';
   } catch {
-    error.value = 'Versleutelen mislukt. Vul een bericht (max. 16.000 tekens) en een passphrase van minimaal 12 tekens in.';
+    if (revision === inputRevision) {
+      error.value = 'Versleutelen mislukt. Vul een bericht (max. 16.000 tekens) en een passphrase van minimaal 12 tekens in.';
+    }
   } finally {
     encrypting.value = false;
   }
@@ -60,7 +78,7 @@ async function send() {
     <section v-if="encrypted" aria-labelledby="result">
       <h2 id="result">Versleuteld resultaat</h2>
       <textarea aria-label="Versleutelde tekst" :value="encrypted" readonly></textarea>
-      <button @click="send" :disabled="sending || sent" :aria-busy="sending">{{ sending ? 'Versturen…' : 'Send to Bastion' }}</button>
+      <button @click="send" :disabled="sending || sent" :aria-busy="sending">{{ sending ? 'Versturen…' : sent ? 'Verstuurd' : 'Send to Bastion' }}</button>
     </section>
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="error" role="alert">{{ error }}</p>
