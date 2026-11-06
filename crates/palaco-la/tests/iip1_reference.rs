@@ -262,6 +262,17 @@ fn issuer_must_be_authorized_for_requested_scope() {
 }
 
 #[test]
+fn issuer_must_be_authorized_before_reference_approval() {
+    let mut unauthorized = valid_request();
+    unauthorized.issuer_authorized = false;
+
+    assert_eq!(
+        evaluate_reference(&unauthorized).issuance_review,
+        IssuanceReviewState::Denied
+    );
+}
+
+#[test]
 fn consent_scope_must_match_requested_scope() {
     let mut wrong_scope = valid_request();
     wrong_scope.consent_scope = "identity:other".to_owned();
