@@ -1,0 +1,20 @@
+name: HARA service proposal preparation
+on:
+  pull_request:
+    paths: ['modules/hara/service-preparation/**', 'modules/hara/hannie-validation-deadline/src/client.mjs', 'modules/hara/hannie-validation-deadline/src/value.mjs', '.github/workflows/hara-service-preparation.yml']
+permissions:
+  contents: read
+jobs:
+  preparation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        node: ['24.14.1', '24.19.0']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+        working-directory: modules/hara/service-preparation

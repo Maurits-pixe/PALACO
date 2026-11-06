@@ -1,0 +1,37 @@
+{
+  "kind": "HARA_SERVICE_PREPARATION_LOCAL_TESTS",
+  "runId": "055cadce-8dfa-401a-8fc1-736ff50ddb07",
+  "observedAt": "2026-11-06T06:07:10.250939+00:00",
+  "comparisonParent": "c1aaaea91c4d1ca18d74e2a7a34976a69f6d9322",
+  "localGitHead": "1b2065af0dfe82e25b3f62c80d9f9873563f6afd",
+  "node": "v24.19.0",
+  "command": "node --test --test-isolation=none --test-reporter=tap tests/preparation.test.mjs",
+  "exit": 0,
+  "counts": {
+    "tests": 10,
+    "pass": 10,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0
+  },
+  "sources": {
+    ".github/workflows/hara-service-preparation.yml": "d0eb889c475c0816a4310879bb0c39a33bdafb6d36241c3c20a88aa7d9323cf9",
+    "modules/hara/hannie-validation-deadline/src/client.mjs": "b34ef2a8ea0e9f1fef639216d9f45772082b17e4ce3b34b7b28be9cb1b9e3b1d",
+    "modules/hara/hannie-validation-deadline/src/value.mjs": "e11eda0e6adb38ccf185cdffd3af2a530026404783483ea4747ab4f6d70ed909",
+    "modules/hara/service-preparation/README.md": "359f9e5aab13ea231b2b58f88b799d9b6542b5a2ddb1de307f2f946c612f19ed",
+    "modules/hara/service-preparation/package.json": "5be1bbc2b67a85f4da35c89cc75a6422e83919b0da0e088345f63650247b9a66",
+    "modules/hara/service-preparation/src/index.mjs": "dcb25afaa96e8f0d0b4bfc7b8133bec86dfcad7ef110a05582920a6e4bafe31e",
+    "modules/hara/service-preparation/tests/preparation.test.mjs": "53158e152d7b7ef31d980bd9d1fd964c4e13fbeeb13d67137820d6b15d9be7c6"
+  },
+  "sourcesUnchanged": true,
+  "artifacts": {
+    "tests.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tests.tap": "e7d92f161bfbd9dedbf6b000248198372e1e19b627df551918cbff87c3f930a5"
+  },
+  "checks": "PASS",
+  "scope": "Pure proposal preparation; no host verification or effect execution",
+  "independentAcceptance": "PENDING",
+  "integration": "HOLD",
+  "production": "HOLD"
+}
