@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue';
 import { encryptMessage } from './crypto.js';
 import { createBastionTask } from './bastion.js';
+import { createRevisionGuard } from './revision.js';
 
 const message = ref('');
 const passphrase = ref('');
@@ -11,11 +12,11 @@ const sending = ref(false);
 const sent = ref(false);
 const notice = ref('');
 const error = ref('');
-let inputRevision = 0;
+const inputGuard = createRevisionGuard();
 
 // Never offer a ciphertext for transmission after its source fields change.
 watch([message, passphrase], () => {
-  inputRevision += 1;
+  inputGuard.invalidate();
   encrypted.value = '';
   sent.value = false;
   notice.value = '';
@@ -29,10 +30,10 @@ async function encrypt() {
   error.value = '';
   sent.value = false;
   encrypting.value = true;
-  const revision = inputRevision;
+  const revision = inputGuard.snapshot();
   try {
     const result = await encryptMessage(message.value, passphrase.value);
-    if (revision !== inputRevision) return;
+    if (!inputGuard.isCurrent(revision)) return;
     // Clear the form before publishing the new ciphertext: the watcher will
     // invalidate any previous result, but not the result assigned below.
     message.value = '';
@@ -40,7 +41,7 @@ async function encrypt() {
     encrypted.value = result;
     notice.value = 'Versleuteld. De leesbare invoer is uit het formulier verwijderd.';
   } catch {
-    if (revision === inputRevision) {
+    if (inputGuard.isCurrent(revision)) {
       error.value = 'Versleutelen mislukt. Vul een bericht (max. 16.000 tekens) en een passphrase van minimaal 12 tekens in.';
     }
   } finally {
