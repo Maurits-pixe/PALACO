@@ -19,6 +19,7 @@ watch([message, passphrase], () => {
   encrypted.value = '';
   sent.value = false;
   notice.value = '';
+  error.value = '';
 }, { flush: 'sync' });
 
 async function encrypt() {
@@ -45,6 +46,14 @@ async function encrypt() {
   } finally {
     encrypting.value = false;
   }
+}
+
+function clearResult() {
+  if (sending.value) return;
+  encrypted.value = '';
+  sent.value = false;
+  notice.value = '';
+  error.value = '';
 }
 
 async function send() {
@@ -79,6 +88,7 @@ async function send() {
       <h2 id="result">Versleuteld resultaat</h2>
       <textarea aria-label="Versleutelde tekst" :value="encrypted" readonly></textarea>
       <button @click="send" :disabled="sending || sent" :aria-busy="sending">{{ sending ? 'Versturen…' : sent ? 'Verstuurd' : 'Send to Bastion' }}</button>
+      <button type="button" @click="clearResult" :disabled="sending">Wis versleuteld resultaat</button>
     </section>
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="error" role="alert">{{ error }}</p>
