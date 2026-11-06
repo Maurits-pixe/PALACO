@@ -4,11 +4,13 @@ import { encryptMessage } from './crypto.js';
 import { createBastionTask } from './bastion.js';
 import { createRevisionGuard } from './revision.js';
 import { createEncryptedExport, ENCRYPTED_EXPORT_FILENAME } from './export.js';
+import { readEncryptedImport } from './import.js';
 
 const message = ref('');
 const passphrase = ref('');
 const encrypted = ref('');
 const encrypting = ref(false);
+const importing = ref(false);
 const sending = ref(false);
 const sent = ref(false);
 const notice = ref('');
@@ -25,7 +27,7 @@ watch([message, passphrase], () => {
 }, { flush: 'sync' });
 
 async function encrypt() {
-  if (encrypting.value || sending.value) return;
+  if (encrypting.value || importing.value || sending.value) return;
   encrypted.value = '';
   notice.value = '';
   error.value = '';
@@ -50,8 +52,35 @@ async function encrypt() {
   }
 }
 
+async function importEncrypted(event) {
+  const input = event.target;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || encrypting.value || sending.value) return;
+
+  inputGuard.invalidate();
+  const revision = inputGuard.snapshot();
+  encrypted.value = '';
+  sent.value = false;
+  notice.value = '';
+  error.value = '';
+  importing.value = true;
+  try {
+    const result = await readEncryptedImport(file);
+    if (!inputGuard.isCurrent(revision)) return;
+    encrypted.value = result;
+    notice.value = 'Versleuteld bestand lokaal geladen. Er is niets verstuurd. Bewaar de passphrase afzonderlijk.';
+  } catch {
+    if (inputGuard.isCurrent(revision)) {
+      error.value = 'Import geweigerd: ongeldig, beschadigd of te groot versleuteld bestand.';
+    }
+  } finally {
+    importing.value = false;
+  }
+}
+
 function downloadEncrypted() {
-  if (!encrypted.value || sending.value) return;
+  if (!encrypted.value || importing.value || sending.value) return;
   try {
     const blob = createEncryptedExport(encrypted.value);
     const url = URL.createObjectURL(blob);
@@ -68,7 +97,7 @@ function downloadEncrypted() {
 }
 
 function clearResult() {
-  if (sending.value) return;
+  if (importing.value || sending.value) return;
   encrypted.value = '';
   sent.value = false;
   notice.value = '';
@@ -76,7 +105,7 @@ function clearResult() {
 }
 
 async function send() {
-  if (sending.value || sent.value || !encrypted.value) return;
+  if (importing.value || sending.value || sent.value || !encrypted.value) return;
   sending.value = true;
   error.value = '';
   notice.value = '';
@@ -98,17 +127,24 @@ async function send() {
     <p>Lokale demo — geen productiegegevens. Alleen het versleutelde resultaat wordt op verzoek verstuurd.</p>
     <form @submit.prevent="encrypt">
       <label for="message">Bericht</label>
-      <textarea id="message" v-model="message" required maxlength="16000" :disabled="encrypting || sending"></textarea>
+      <textarea id="message" v-model="message" required maxlength="16000" :disabled="encrypting || importing || sending"></textarea>
       <label for="passphrase">Passphrase (minimaal 12 tekens; bewaar deze zelf)</label>
       <input id="passphrase" v-model="passphrase" type="password" minlength="12" required autocomplete="new-password" :disabled="encrypting || sending" />
       <button :disabled="encrypting || sending">{{ encrypting ? 'Versleutelen…' : 'Versleutel' }}</button>
     </form>
+    <section aria-labelledby="import-label">
+      <h2 id="import-label">Lokaal versleuteld bestand openen</h2>
+      <p>Alleen AETHER-envelop v1 (maximaal 64 KiB). Geen automatische verzending of ontsleuteling.</p>
+      <label for="encrypted-file">Kies een versleuteld JSON-bestand</label>
+      <input id="encrypted-file" type="file" accept=".json,application/json" @change="importEncrypted" :disabled="encrypting || importing || sending" />
+      <p v-if="importing" role="status">Bestand controleren…</p>
+    </section>
     <section v-if="encrypted" aria-labelledby="result">
       <h2 id="result">Versleuteld resultaat</h2>
       <textarea aria-label="Versleutelde tekst" :value="encrypted" readonly></textarea>
-      <button @click="send" :disabled="sending || sent" :aria-busy="sending">{{ sending ? 'Versturen…' : sent ? 'Verstuurd' : 'Send to Bastion' }}</button>
-      <button type="button" @click="downloadEncrypted" :disabled="sending">Bewaar versleuteld bestand</button>
-      <button type="button" @click="clearResult" :disabled="sending">Wis versleuteld resultaat</button>
+      <button @click="send" :disabled="importing || sending || sent" :aria-busy="sending">{{ sending ? 'Versturen…' : sent ? 'Verstuurd' : 'Send to Bastion' }}</button>
+      <button type="button" @click="downloadEncrypted" :disabled="importing || sending">Bewaar versleuteld bestand</button>
+      <button type="button" @click="clearResult" :disabled="importing || sending">Wis versleuteld resultaat</button>
     </section>
     <p v-if="notice" role="status">{{ notice }}</p>
     <p v-if="error" role="alert">{{ error }}</p>
