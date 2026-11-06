@@ -1,0 +1,15 @@
+{
+  "kind": "IDENTITY_SOURCE_SCOPE_REVIEW",
+  "date": "2026-11-05",
+  "repository": "Maurits-pixe/PALACO",
+  "ref": "d92b65237dd617d02cd4521ace54db219eff34cb",
+  "files": {
+    "services/rio-accounts/src/lib.rs": "4b3cb75a454c567d7d7cd70f6b92a6e79849a0a4903138f4a70fc1336b60d05b",
+    "services/rio-accounts/src/storage.rs": "4f0f7856b00c4d33d57cf1241f9090e3f5a8cf36f2d46f0ff13672c91198a6c4"
+  },
+  "remoteBytesCompared": true,
+  "observedScope": "Loopback-only synthetic OIDC/sessions, fictitious actors TST-alpha/TST-beta, RIO_SYNTHETIC_SESSION_TEST_V1",
+  "selection": "NOT SELECTED AS GENUINE HARA AUTHORITY",
+  "credentialsInspected": false,
+  "authorityGranted": false
+}

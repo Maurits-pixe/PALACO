@@ -1,0 +1,83 @@
+import {readFileSync, realpathSync, readdirSync, lstatSync} from 'node:fs';
+import {resolve, relative, isAbsolute} from 'node:path';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+const requireThat = (ok, message) => { if (!ok) throw Error(message); };
+function inside(root, name) {
+  requireThat(typeof name === 'string' && name.length > 0 && !isAbsolute(name), 'INVALID_PATH');
+  const path = realpathSync(resolve(root, name)), rel = relative(root, path);
+  requireThat(rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel), 'PATH_ESCAPE');
+  return path;
+}
+function sourceInventory(repo) {
+  const module = inside(repo, 'modules/hara/hannie-validation-deadline');
+  function walk(dir) {
+    return readdirSync(dir).sort().flatMap(name => {
+      const path = resolve(dir, name), stat = lstatSync(path);
+      requireThat(!stat.isSymbolicLink(), 'SOURCE_SYMLINK');
+      return stat.isDirectory() ? walk(path) : [relative(repo, path)];
+    });
+  }
+  return [...walk(module), '.github/workflows/hannie-validation-deadline.yml',
+    'evidence/hara/validation-deadline/decision.json'].sort();
+}
+export function verifyEvidence(directory, repository) {
+  const dir = realpathSync(directory), repo = realpathSync(repository);
+  const result = JSON.parse(readFileSync(resolve(dir, 'result.json'), 'utf8'));
+  requireThat(result.runId === dir.split('/').at(-1), 'RUN_ID_MISMATCH');
+  requireThat(result.kind === 'VALIDATION_DEADLINE_EXECUTION_EVIDENCE' && result.checks === 'PASS', 'RUN_NOT_PASS');
+  requireThat(result.counts.tests === 24 && result.counts.pass === 24 &&
+    ['fail','cancelled','skipped','todo'].every(k => result.counts[k] === 0), 'INCOMPLETE_RUN');
+  requireThat(result.issuanceExit===0&&!result.issuanceError&&!result.issuanceSignal&&result.issuanceCounts?.tests===18&&result.issuanceCounts.pass===18&&['fail','cancelled','skipped','todo'].every(k=>result.issuanceCounts[k]===0),'ISSUANCE_CONTROLS_INCOMPLETE');
+  requireThat(result.admissionExit===0&&!result.admissionError&&!result.admissionSignal&&result.admissionCounts?.tests===20&&result.admissionCounts.pass===20&&['fail','cancelled','skipped','todo'].every(k=>result.admissionCounts[k]===0),'ADMISSION_CONTROLS_INCOMPLETE');
+  requireThat(result.clientExit===0&&!result.clientError&&!result.clientSignal&&result.clientCounts?.tests===13&&result.clientCounts.pass===13&&['fail','cancelled','skipped','todo'].every(k=>result.clientCounts[k]===0), 'CLIENT_CONTROLS_INCOMPLETE');
+  requireThat(result.sourceUnchangedAfterRun === true && result.compileExit === 0 && result.testExit === 0, 'EXECUTION_MISMATCH');
+  requireThat(!result.compileError && !result.testError && !result.compileSignal && !result.testSignal, 'PROCESS_ERROR');
+  requireThat(/^[a-f0-9]{40}$/.test(result.sourceCommitAtStart), 'COMMIT_MISSING');
+  requireThat(sha(JSON.stringify(result.sourceHashes)) === result.sourceSetSha256, 'SOURCE_SET_MISMATCH');
+  requireThat(Object.keys(result.sourceHashes).length > 0, 'SOURCE_HASHES_MISSING');
+  for (const [name, hash] of Object.entries(result.sourceHashes))
+    requireThat(sha(readFileSync(inside(repo, name))) === hash, 'SOURCE_HASH_MISMATCH: ' + name);
+  requireThat(JSON.stringify(Object.keys(result.sourceHashes).sort()) ===
+    JSON.stringify(sourceInventory(repo)), 'SOURCE_INVENTORY_MISMATCH');
+  const actual = readdirSync(dir).filter(n => n !== 'result.json').sort();
+  requireThat(JSON.stringify(actual) === JSON.stringify(Object.keys(result.artifacts).sort()), 'ARTIFACT_SET_MISMATCH');
+  requireThat(['I17.json','I18.json','I01.json','I02.json','I03.json','I04.json','I12.json','I13.json','I14.json','I15.json','I16.json','issuance-tests.tap','issuance-tests.stderr','admission-tests.tap','admission-tests.stderr','client-tests.tap','client-tests.stderr','tests.tap','tests.stderr',...Array.from({length:24},(_,i)=>'N'+String(i+1).padStart(2,'0')+'.json')].every(n => n in result.artifacts), 'REQUIRED_ARTIFACT_MISSING');
+  for (const [name, hash] of Object.entries(result.artifacts))
+    requireThat(sha(readFileSync(inside(dir, name))) === hash, 'ARTIFACT_HASH_MISMATCH: ' + name);
+  const tap = readFileSync(resolve(dir, 'tests.tap'), 'utf8');
+  for (const [name, count] of Object.entries(result.counts)) {
+    const matches = [...tap.matchAll(new RegExp('^# ' + name + ' (\\d+)$', 'gm'))];
+    requireThat(matches.length === 1 && Number(matches[0][1]) === count, 'TAP_COUNT_MISMATCH: ' + name);
+  }
+  const clientTap=readFileSync(resolve(dir,'client-tests.tap'),'utf8');
+  for(const [name,count] of Object.entries(result.clientCounts)) {
+    const matches=[...clientTap.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
+    requireThat(matches.length===1&&Number(matches[0][1])===count,'CLIENT_TAP_COUNT_MISMATCH');
+  }
+  const admissionTap=readFileSync(resolve(dir,'admission-tests.tap'),'utf8');
+  for(const [name,count] of Object.entries(result.admissionCounts)) {
+    const matches=[...admissionTap.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
+    requireThat(matches.length===1&&Number(matches[0][1])===count,'ADMISSION_TAP_COUNT_MISMATCH');
+  }
+  const issuanceTap=readFileSync(resolve(dir,'issuance-tests.tap'),'utf8');
+  for(const [name,count] of Object.entries(result.issuanceCounts)) {
+    const matches=[...issuanceTap.matchAll(new RegExp('^# '+name+' (\\d+)$','gm'))];
+    requireThat(matches.length===1&&Number(matches[0][1])===count,'ISSUANCE_TAP_COUNT_MISMATCH');
+  }
+  const late = JSON.parse(readFileSync(resolve(dir, 'N04.json'), 'utf8'));
+  requireThat(late.lateEffectExists === true && late.d013Conformance === false && late.newProfile === true &&
+    late.r.status === 'COMMITTED' && late.r.receipt?.deadlineSatisfied === 'VALIDATION_DEADLINE_ONLY' &&
+    late.r.receipt.validatedAt < late.expiry && late.r.receipt.observedAfterExpiry === true &&
+    late.r.receipt.exactDurableAt === 'UNKNOWN' && late.native[0].startMs < late.expiry && late.native[0].endMs > late.expiry,
+    'NEW_PROFILE_LATE_COMMIT_EVIDENCE_MISSING');
+  requireThat(result.integration === 'HOLD' && result.production === 'HOLD' && result.proof === 'NOT ISSUED', 'AUTHORITY_BOUNDARY_CHANGED');
+  return {runId: result.runId, sourceSetSha256: result.sourceSetSha256, sources: Object.keys(result.sourceHashes).length, artifacts: actual.length, verification: 'PASS', acceptance: 'HOLD'};
+}
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    requireThat(process.argv.length === 4, 'USAGE: node verify-evidence.mjs RUN_DIRECTORY REPOSITORY');
+    console.log(JSON.stringify(verifyEvidence(process.argv[2], process.argv[3])));
+  } catch (error) { console.error(error.message); process.exitCode = 1; }
+}

@@ -1,0 +1,23 @@
+{
+  "writer": {
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "RECONSTRUCT_EXISTING"
+    },
+    "stderr": ""
+  },
+  "read": {
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "SYNTHETIC_APPROVAL_RECONSTRUCTED",
+      "challengeId": "db2dafeb-a1b9-43d6-87bc-e1660ebec7b7",
+      "approvalId": "approval-1",
+      "consumed": 1,
+      "expired": false,
+      "realAuthorityGranted": false
+    },
+    "stderr": ""
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "writer": {
+    "code": null,
+    "signal": "SIGKILL",
+    "message": {
+      "status": "FIXTURE_WRITE_ATTEMPT"
+    },
+    "stderr": ""
+  },
+  "read": {
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "NO_APPROVAL",
+      "challengeId": "6ba8746e-9b17-4ea3-bd26-73c497d99b96"
+    },
+    "stderr": ""
+  }
+}

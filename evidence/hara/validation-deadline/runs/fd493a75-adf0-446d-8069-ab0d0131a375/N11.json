@@ -1,0 +1,11 @@
+{
+  "status": "COMMITTED_RESULT_WITHHELD",
+  "code": "READ_AUTHORITY_REQUIRED",
+  "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+  "operationId": "operation-1",
+  "auditSequence": 1,
+  "readProcess": {
+    "pid": 7134,
+    "exit": 0
+  }
+}

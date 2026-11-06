@@ -1,0 +1,19 @@
+{
+  "status": "RESULT_UNKNOWN",
+  "code": "NO_DURABLE_COMMIT",
+  "readProcess": {
+    "pid": 5119,
+    "exit": 0
+  },
+  "writer": {
+    "pid": 5112,
+    "code": null,
+    "signal": "SIGKILL",
+    "message": {
+      "status": "WRITE_ATTEMPT",
+      "created": true,
+      "validatedAt": 1793799692703
+    },
+    "stderr": ""
+  }
+}

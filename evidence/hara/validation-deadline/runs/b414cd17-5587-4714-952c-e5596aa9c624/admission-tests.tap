@@ -1,0 +1,130 @@
+TAP version 13
+# Subtest: A01 complete synthetic snapshot satisfies requirements but grants no authority or writes
+ok 1 - A01 complete synthetic snapshot satisfies requirements but grants no authority or writes
+  ---
+  duration_ms: 5.422089
+  type: 'test'
+  ...
+# Subtest: A02 rejects OWNER_AUTH_UNVERIFIED without side effects
+ok 2 - A02 rejects OWNER_AUTH_UNVERIFIED without side effects
+  ---
+  duration_ms: 2.268532
+  type: 'test'
+  ...
+# Subtest: A03 rejects OWNER_AUTH_UNVERIFIED without side effects
+ok 3 - A03 rejects OWNER_AUTH_UNVERIFIED without side effects
+  ---
+  duration_ms: 2.455732
+  type: 'test'
+  ...
+# Subtest: A04 rejects ACTOR_CONTEXT_MISMATCH without side effects
+ok 4 - A04 rejects ACTOR_CONTEXT_MISMATCH without side effects
+  ---
+  duration_ms: 2.054933
+  type: 'test'
+  ...
+# Subtest: A05 rejects ACTOR_CONTEXT_MISMATCH without side effects
+ok 5 - A05 rejects ACTOR_CONTEXT_MISMATCH without side effects
+  ---
+  duration_ms: 2.358447
+  type: 'test'
+  ...
+# Subtest: A06 rejects ACTOR_CONTEXT_MISMATCH without side effects
+ok 6 - A06 rejects ACTOR_CONTEXT_MISMATCH without side effects
+  ---
+  duration_ms: 2.298828
+  type: 'test'
+  ...
+# Subtest: A07 rejects GRANT_SCOPE without side effects
+ok 7 - A07 rejects GRANT_SCOPE without side effects
+  ---
+  duration_ms: 2.056375
+  type: 'test'
+  ...
+# Subtest: A08 rejects GRANT_INACTIVE without side effects
+ok 8 - A08 rejects GRANT_INACTIVE without side effects
+  ---
+  duration_ms: 1.807583
+  type: 'test'
+  ...
+# Subtest: A09 rejects SERVER_DEADLINE_EXPIRED without side effects
+ok 9 - A09 rejects SERVER_DEADLINE_EXPIRED without side effects
+  ---
+  duration_ms: 2.11956
+  type: 'test'
+  ...
+# Subtest: A10 rejects CHALLENGE_NOT_OPEN without side effects
+ok 10 - A10 rejects CHALLENGE_NOT_OPEN without side effects
+  ---
+  duration_ms: 2.232759
+  type: 'test'
+  ...
+# Subtest: A11 rejects CHALLENGE_EXPIRED without side effects
+ok 11 - A11 rejects CHALLENGE_EXPIRED without side effects
+  ---
+  duration_ms: 2.600218
+  type: 'test'
+  ...
+# Subtest: A12 rejects POLICY_DENIED without side effects
+ok 12 - A12 rejects POLICY_DENIED without side effects
+  ---
+  duration_ms: 1.771078
+  type: 'test'
+  ...
+# Subtest: A13 rejects EXPLICIT_OWNER_CONFIRMATION_REQUIRED without side effects
+ok 13 - A13 rejects EXPLICIT_OWNER_CONFIRMATION_REQUIRED without side effects
+  ---
+  duration_ms: 1.696538
+  type: 'test'
+  ...
+# Subtest: A14 rejects EXPLICIT_OWNER_CONFIRMATION_REQUIRED without side effects
+ok 14 - A14 rejects EXPLICIT_OWNER_CONFIRMATION_REQUIRED without side effects
+  ---
+  duration_ms: 1.943436
+  type: 'test'
+  ...
+# Subtest: A15 rejects CHALLENGE_BINDING_MISMATCH without side effects
+ok 15 - A15 rejects CHALLENGE_BINDING_MISMATCH without side effects
+  ---
+  duration_ms: 1.821154
+  type: 'test'
+  ...
+# Subtest: A16 rejects SELECTION_BINDING_MISMATCH without side effects
+ok 16 - A16 rejects SELECTION_BINDING_MISMATCH without side effects
+  ---
+  duration_ms: 2.246129
+  type: 'test'
+  ...
+# Subtest: A17 rejects TIME_UNVERIFIED without side effects
+ok 17 - A17 rejects TIME_UNVERIFIED without side effects
+  ---
+  duration_ms: 2.241722
+  type: 'test'
+  ...
+# Subtest: A18 rejects CALENDAR_SCOPE without side effects
+ok 18 - A18 rejects CALENDAR_SCOPE without side effects
+  ---
+  duration_ms: 1.880071
+  type: 'test'
+  ...
+# Subtest: A19 rejects PROFILE_OPT_IN_REQUIRED without side effects
+ok 19 - A19 rejects PROFILE_OPT_IN_REQUIRED without side effects
+  ---
+  duration_ms: 1.769376
+  type: 'test'
+  ...
+# Subtest: A20 rejects SERVER_DEADLINE_EXPIRED without side effects
+ok 20 - A20 rejects SERVER_DEADLINE_EXPIRED without side effects
+  ---
+  duration_ms: 1.770448
+  type: 'test'
+  ...
+1..20
+# tests 20
+# suites 0
+# pass 20
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 66.879122

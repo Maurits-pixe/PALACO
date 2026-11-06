@@ -1,0 +1,106 @@
+TAP version 13
+# Subtest: I01 fixture challenge and exact approval are separate; runtime still revalidates
+ok 1 - I01 fixture challenge and exact approval are separate; runtime still revalidates
+  ---
+  duration_ms: 193.938295
+  type: 'test'
+  ...
+# Subtest: I02 crash before commit leaves challenge open and no approval; readback writes nothing
+ok 2 - I02 crash before commit leaves challenge open and no approval; readback writes nothing
+  ---
+  duration_ms: 105.837392
+  type: 'test'
+  ...
+# Subtest: I03 lost ACK after durable commit reconstructs consumed challenge and approval
+ok 3 - I03 lost ACK after durable commit reconstructs consumed challenge and approval
+  ---
+  duration_ms: 150.506937
+  type: 'test'
+  ...
+# Subtest: I04 real concurrent confirmation processes issue exactly one approval
+ok 4 - I04 real concurrent confirmation processes issue exactly one approval
+  ---
+  duration_ms: 179.902556
+  type: 'test'
+  ...
+# Subtest: I05 foreign actor context cannot enter fixture provisioning
+ok 5 - I05 foreign actor context cannot enter fixture provisioning
+  ---
+  duration_ms: 41.615899
+  type: 'test'
+  ...
+# Subtest: I06 changed exact request cannot consume original challenge
+ok 6 - I06 changed exact request cannot consume original challenge
+  ---
+  duration_ms: 109.226029
+  type: 'test'
+  ...
+# Subtest: I07 expired challenge rejects confirmation without approval
+ok 7 - I07 expired challenge rejects confirmation without approval
+  ---
+  duration_ms: 111.969082
+  type: 'test'
+  ...
+# Subtest: I08 revoked write grant rejects confirmation
+ok 8 - I08 revoked write grant rejects confirmation
+  ---
+  duration_ms: 141.654418
+  type: 'test'
+  ...
+# Subtest: I09 changed generation rejects stale confirmation
+ok 9 - I09 changed generation rejects stale confirmation
+  ---
+  duration_ms: 117.589441
+  type: 'test'
+  ...
+# Subtest: I10 missing late-completion acknowledgement cannot issue fixture approval
+ok 10 - I10 missing late-completion acknowledgement cannot issue fixture approval
+  ---
+  duration_ms: 107.440619
+  type: 'test'
+  ...
+# Subtest: I11 early client time cannot override expired server grant
+ok 11 - I11 early client time cannot override expired server grant
+  ---
+  duration_ms: 115.043418
+  type: 'test'
+  ...
+# Subtest: I12 false precommit ACK cannot substitute for readback
+ok 12 - I12 false precommit ACK cannot substitute for readback
+  ---
+  duration_ms: 111.900018
+  type: 'test'
+  ...
+# Subtest: I13 replay after runtime consumption cannot reactivate approval
+ok 13 - I13 replay after runtime consumption cannot reactivate approval
+  ---
+  duration_ms: 254.173357
+  type: 'test'
+  ...
+# Subtest: I14 incomplete consumed challenge gives unknown without silent repair
+ok 14 - I14 incomplete consumed challenge gives unknown without silent repair
+  ---
+  duration_ms: 149.762707
+  type: 'test'
+  ...
+# Subtest: I15 real native SIGKILL inside approval COMMIT leaves neither consumption nor approval
+ok 15 - I15 real native SIGKILL inside approval COMMIT leaves neither consumption nor approval
+  ---
+  duration_ms: 110.842211
+  type: 'test'
+  ...
+# Subtest: I16 late durable fixture approval is historical but expired and cannot execute an effect
+ok 16 - I16 late durable fixture approval is historical but expired and cannot execute an effect
+  ---
+  duration_ms: 1082.738448
+  type: 'test'
+  ...
+1..16
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3104.095286

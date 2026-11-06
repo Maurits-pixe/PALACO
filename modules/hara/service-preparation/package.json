@@ -1,0 +1,1 @@
+{"name":"@palaco/hara-service-preparation","version":"0.1.0-candidate","private":true,"type":"module","exports":"./src/index.mjs","engines":{"node":">=24.14.1"},"scripts":{"test":"node --test --test-isolation=none --test-reporter=tap tests/preparation.test.mjs"}}

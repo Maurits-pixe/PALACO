@@ -1,0 +1,26 @@
+name: Hannie validation-deadline synthetic candidate
+on:
+  pull_request:
+    paths: ['modules/hara/hannie-validation-deadline/**', 'evidence/hara/validation-deadline/**', '.github/workflows/hannie-validation-deadline.yml']
+permissions:
+  contents: read
+jobs:
+  validation-deadline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        node: ['24.14.1', '24.19.0']
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ${{ matrix.node }}
+      - run: node tools/run-evidence.mjs
+        working-directory: modules/hara/hannie-validation-deadline
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: validation-deadline-${{ matrix.node }}
+          path: evidence/hara/validation-deadline/runs/
+          if-no-files-found: error

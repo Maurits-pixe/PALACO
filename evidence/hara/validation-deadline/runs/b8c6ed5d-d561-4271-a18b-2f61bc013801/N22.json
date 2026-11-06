@@ -1,0 +1,102 @@
+[
+  {
+    "status": "COMMITTED",
+    "releasePoint": "LOCKED_WORKER_IPC_SEND",
+    "receipt": {
+      "approvalExpiresAt": 1793799755399,
+      "approvalId": "approval-1",
+      "auditSequence": 1,
+      "calendarId": "calendar-1",
+      "contextDigest": "f6b6f8022d9aeb50f0e871358c471708cb3968a68fabb5c609f47308f56c4e6d",
+      "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+      "eventId": "event-1",
+      "finishAfterExpiry": true,
+      "generation": 1,
+      "grantExpiresAt": 1793799755399,
+      "grantId": "grant-1",
+      "operationId": "operation-1",
+      "receiptVersion": 1,
+      "requestDigest": "de21ef07b3acc1548921ba0ea77b22eaef162279f71f6e5a802b9405d9dfb90f",
+      "snapshotDigest": "6792436d1006010fc257febb30a65a49df550cbbec8d53d84683399478aabe24",
+      "timeTrustProfile": "SYNTHETIC_LIVE_SUPERVISOR_MONOTONE_V1",
+      "validatedAt": 1793799725434,
+      "validationMeasurement": "PRECOMMIT_VALIDATION_OBSERVATION",
+      "durability": "RECONSTRUCTED_COMMIT",
+      "durableObservedAt": 1793799725499,
+      "durabilityMeasurement": "READBACK_UPPER_BOUND",
+      "exactDurableAt": "UNKNOWN",
+      "observedAfterExpiry": false,
+      "deadlineSatisfied": "VALIDATION_DEADLINE_ONLY"
+    },
+    "event": {
+      "id": "event-1",
+      "calendar_id": "calendar-1",
+      "revision": 1,
+      "title": "Synthetic private event"
+    },
+    "readProcess": {
+      "pid": 6171,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 6163,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "WRITE_ATTEMPT",
+        "created": true,
+        "validatedAt": 1793799725434
+      },
+      "stderr": ""
+    }
+  },
+  {
+    "status": "COMMITTED",
+    "releasePoint": "LOCKED_WORKER_IPC_SEND",
+    "receipt": {
+      "approvalExpiresAt": 1793799755399,
+      "approvalId": "approval-1",
+      "auditSequence": 1,
+      "calendarId": "calendar-1",
+      "contextDigest": "f6b6f8022d9aeb50f0e871358c471708cb3968a68fabb5c609f47308f56c4e6d",
+      "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+      "eventId": "event-1",
+      "finishAfterExpiry": true,
+      "generation": 1,
+      "grantExpiresAt": 1793799755399,
+      "grantId": "grant-1",
+      "operationId": "operation-1",
+      "receiptVersion": 1,
+      "requestDigest": "de21ef07b3acc1548921ba0ea77b22eaef162279f71f6e5a802b9405d9dfb90f",
+      "snapshotDigest": "6792436d1006010fc257febb30a65a49df550cbbec8d53d84683399478aabe24",
+      "timeTrustProfile": "SYNTHETIC_LIVE_SUPERVISOR_MONOTONE_V1",
+      "validatedAt": 1793799725434,
+      "validationMeasurement": "PRECOMMIT_VALIDATION_OBSERVATION",
+      "durability": "RECONSTRUCTED_COMMIT",
+      "durableObservedAt": 1793799725537,
+      "durabilityMeasurement": "READBACK_UPPER_BOUND",
+      "exactDurableAt": "UNKNOWN",
+      "observedAfterExpiry": false,
+      "deadlineSatisfied": "VALIDATION_DEADLINE_ONLY"
+    },
+    "event": {
+      "id": "event-1",
+      "calendar_id": "calendar-1",
+      "revision": 1,
+      "title": "Synthetic private event"
+    },
+    "readProcess": {
+      "pid": 6178,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 6164,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "RECONSTRUCTION_REQUIRED"
+      },
+      "stderr": ""
+    }
+  }
+]

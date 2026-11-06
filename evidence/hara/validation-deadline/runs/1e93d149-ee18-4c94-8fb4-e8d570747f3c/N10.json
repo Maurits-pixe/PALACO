@@ -1,0 +1,11 @@
+{
+  "status": "COMMITTED_RESULT_WITHHELD",
+  "code": "WRITE_REVOKED",
+  "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+  "operationId": "operation-1",
+  "auditSequence": 1,
+  "readProcess": {
+    "pid": 5245,
+    "exit": 0
+  }
+}

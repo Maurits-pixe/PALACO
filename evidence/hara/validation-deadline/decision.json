@@ -1,0 +1,27 @@
+{
+  "kind": "OWNER_DECISION_BINDING",
+  "date": "2026-11-04",
+  "proposalCommit": "cf0626fda6841a265e430d91efe29cecdf3821b8",
+  "proposalPath": "evidence/hara/b-d013/DEADLINE-SEMANTICS-PROPOSAL-2026-11-04.md",
+  "proposalSha256": "37e6d30781fc637d59bdc0c57b087a1d53740a105675266d5898a1fef38575e0",
+  "profile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+  "request": "Wil je deze wijziging van D-010/D-013 expliciet vaststellen als basis voor een nieuwe synthetische candidate?",
+  "response": "GO, BOUW VERDER",
+  "interpretation": "Affirmative answer to the immediately preceding explicit adoption request; adopted for new synthetic candidate scope",
+  "scope": [
+    "new synthetic CREATE_OWN_EVENT candidate",
+    "new grant and exact-approval profile/finishAfterExpiry binding",
+    "one atomic decision/effect commit allowed after expiry",
+    "independent current read authority",
+    "new receipt semantics"
+  ],
+  "notAuthorized": [
+    "merge",
+    "integration",
+    "production",
+    "deployment",
+    "provider dispatch",
+    "official PROOF"
+  ],
+  "authenticity": "Conversation-grounded record, not a signed authority credential"
+}

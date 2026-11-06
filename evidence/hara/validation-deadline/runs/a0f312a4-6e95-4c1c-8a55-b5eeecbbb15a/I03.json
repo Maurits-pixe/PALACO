@@ -1,0 +1,23 @@
+{
+  "writer": {
+    "code": null,
+    "signal": "SIGKILL",
+    "message": {
+      "status": "FIXTURE_WRITE_ATTEMPT"
+    },
+    "stderr": ""
+  },
+  "read": {
+    "code": 0,
+    "signal": null,
+    "message": {
+      "status": "SYNTHETIC_APPROVAL_RECONSTRUCTED",
+      "challengeId": "02949c07-b5b3-45b4-b7f6-3d92c81ef3a5",
+      "approvalId": "approval-1",
+      "consumed": 0,
+      "expired": false,
+      "realAuthorityGranted": false
+    },
+    "stderr": ""
+  }
+}

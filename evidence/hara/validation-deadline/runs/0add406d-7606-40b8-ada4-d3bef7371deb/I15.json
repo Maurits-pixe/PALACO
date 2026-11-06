@@ -1,0 +1,25 @@
+{
+  "r": {
+    "writer": {
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "FIXTURE_WRITE_ATTEMPT"
+      },
+      "stderr": ""
+    },
+    "read": {
+      "code": 0,
+      "signal": null,
+      "message": {
+        "status": "NO_APPROVAL",
+        "challengeId": "377e42be-e3df-4b9e-b95e-2d9031ef3665"
+      },
+      "stderr": ""
+    }
+  },
+  "native": {
+    "kind": "NATIVE_COMMIT_INTERRUPT",
+    "beforeWalWrite": true
+  }
+}

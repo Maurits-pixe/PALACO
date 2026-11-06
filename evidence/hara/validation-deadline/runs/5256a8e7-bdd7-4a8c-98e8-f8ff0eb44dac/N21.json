@@ -1,0 +1,8 @@
+{
+  "status": "RESULT_UNKNOWN",
+  "code": "Unexpected token 'o', \"not JSON\" is not valid JSON",
+  "readProcess": {
+    "pid": 9661,
+    "exit": 0
+  }
+}

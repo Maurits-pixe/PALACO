@@ -1,0 +1,43 @@
+{
+  "r": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "TIME_TRUST_UNAVAILABLE",
+    "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 6002,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 5995,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "DENIED",
+        "code": "SYNTHETIC_POST_COMMIT_ERROR"
+      },
+      "stderr": ""
+    }
+  },
+  "replay": {
+    "status": "COMMITTED_RESULT_WITHHELD",
+    "code": "TIME_TRUST_UNAVAILABLE",
+    "contractProfile": "HARA_WRITE_VALIDATION_DEADLINE_DRAFT_1",
+    "operationId": "operation-1",
+    "auditSequence": 1,
+    "readProcess": {
+      "pid": 6016,
+      "exit": 0
+    },
+    "writer": {
+      "pid": 6009,
+      "code": null,
+      "signal": "SIGKILL",
+      "message": {
+        "status": "RECONSTRUCTION_REQUIRED"
+      },
+      "stderr": ""
+    }
+  }
+}
