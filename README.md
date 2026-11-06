@@ -2341,7 +2341,8 @@ and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
 Choose one query mode at a time. `--direction`, `--trace-graph`,
-`--trace-max-depth`, `--trace-distances` and `--trace-paths` modify `--trace`, while
+`--trace-max-depth`, `--trace-distances`, `--trace-paths` and `--trace-predecessors`
+modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
 
@@ -2414,10 +2415,22 @@ payloads can grow quadratically on long chains; a depth bound restricts results,
 not full-snapshot validation. The library keyword `include_paths` defaults to
 `False` and accepts only actual booleans. Omitting paths or passing `False`
 preserves the existing output. Paths are snapshot diagnostics, not authority.
+`--trace-predecessors` optionally adds a `predecessors` object with exactly the
+sorted `reachable_ids` as keys. Each value is the immediate prior node on the
+same lexicographically smallest **full shortest path** used by `--trace-paths`;
+first-hop parents are the origin, which is not a key. This compact form has one
+entry per reachable ID (linear entries rather than potentially quadratic explicit
+paths), and does not reconstruct full paths unless requested. It independently
+combines with paths, distances and depth bounds in either graph/direction; depth
+0 gives `{}` while still validating the entire snapshot and checking the origin.
+The library keyword `include_predecessors=False` accepts only actual booleans;
+omitting it or passing `False` leaves output byte-identical. These are measured
+snapshot metadata, not completeness, verification or authority decisions.
 The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
-`--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances` and `--trace-paths`
+`--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances`, `--trace-paths`
+and `--trace-predecessors`
 each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
@@ -2434,11 +2447,17 @@ python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
   --trace FE-00006 --trace-graph dependency --trace-distances --trace-paths
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-predecessors
 ```
 
 In the first result, FE-00006 has distance 3 and path
 `['FE-00001','FE-00002','FE-00005','FE-00006']`: the full sequence wins the
 equal-hop tie, not the smaller immediate predecessor FE-00004.
+The compact third query therefore maps `"FE-00006": "FE-00005"` and
+`"FE-00002": "FE-00001"`, without emitting `paths` or `distances`.
 Adding `--trace-max-depth 2` excludes FE-00006 from reachable IDs, distances and
 paths; depth 0 excludes every destination. In the second result, the separate
 dependency graph reaches only FE-00001 from FE-00006 at distance 1, despite its
