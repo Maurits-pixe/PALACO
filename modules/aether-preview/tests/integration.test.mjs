@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { encryptMessage } from '../src/crypto.js';
 import { isEncryptedEnvelope } from '../src/envelope.js';
 import { createBastionTask } from '../src/bastion.js';
+import { createRevisionGuard } from '../src/revision.js';
 
 test('encryption is randomized, decryptable, and contains no plaintext or passphrase', async () => {
   const text = 'Vertrouwelijk bericht 🔒';
@@ -88,4 +89,18 @@ test('Bastion confirmation must match submitted ciphertext', async () => {
     fetchImpl: async () => Response.json({ id: 'task-id', description: 'different ciphertext' }, { status: 201 }),
   };
   await assert.rejects(createBastionTask(description, options), /Geen bevestiging/);
+});
+
+test('async encryption results are accepted only for the original input revision', async () => {
+  const guard = createRevisionGuard();
+  const first = guard.snapshot();
+  assert.equal(guard.isCurrent(first), true);
+  guard.invalidate(); // user changes the message or passphrase
+  assert.equal(guard.isCurrent(first), false);
+  const second = guard.snapshot();
+  assert.equal(guard.isCurrent(second), true);
+  guard.invalidate(); // second edit invalidates even a pending result
+  assert.equal(guard.isCurrent(second), false);
+  assert.equal(guard.isCurrent(guard.snapshot()), true);
+  assert.equal(guard.isCurrent(String(guard.snapshot())), false);
 });
