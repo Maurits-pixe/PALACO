@@ -2341,7 +2341,7 @@ and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
 Choose one query mode at a time. `--direction`, `--trace-graph`,
-`--trace-max-depth`, `--trace-distances`, `--trace-paths`, `--trace-predecessors` and `--trace-layers`
+`--trace-max-depth`, `--trace-distances`, `--trace-paths`, `--trace-predecessors`, `--trace-layers` and `--trace-edges`
 modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
@@ -2434,11 +2434,29 @@ reachability gives `{}`. It combines independently with all detail flags and bou
 distances are not emitted unless separately requested. The library keyword
 `include_layers=False` accepts only actual booleans; omission or `False` preserves
 existing output bytes. Layers are snapshot measurements, not completeness or authority.
+`--trace-edges` optionally adds an `edges` array of `{"source": ID, "target": ID}`
+entries, deduplicated and sorted by source then target. It exports the **induced
+subgraph** on the origin plus reachable IDs in the selected graph/direction:
+every edge with both endpoints included, not just BFS or shortest-path edges.
+Downstream endpoints follow traversal direction (the stored edges are reversed).
+Depth bounds select vertices, not exported edge path lengths; edges from boundary
+vertices to other included vertices remain. Depth 0 or no reachability gives `[]`.
+It combines independently with other details. The keyword-only library argument
+`include_edges=False` accepts only actual booleans; omission or `False` leaves
+output byte-identical. Edges are diagnostic-only snapshot metadata, not
+completeness, verification or authority decisions.
+
+```bash
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-max-depth 2 --trace-edges
+```
+
 The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
 `--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances`, `--trace-paths`,
-`--trace-predecessors` and `--trace-layers`
+`--trace-predecessors`, `--trace-layers` and `--trace-edges`
 each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.

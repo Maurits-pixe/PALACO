@@ -844,7 +844,8 @@ def validate_registry_transition(previous, current, validator=None):
 
 def trace_palaco_registry(instance, object_id, direction="upstream", validator=None, *,
                           graph_name="upstream", max_depth=None, include_distances=False,
-                          include_paths=False, include_predecessors=False, include_layers=False):
+                          include_paths=False, include_predecessors=False, include_layers=False,
+                          include_edges=False):
     """Return reachable IDs in one graph, not authority or completeness."""
     require(direction in ("upstream", "downstream"), f"invalid trace direction: {direction}")
     require(graph_name in ("upstream", "dependency"), f"unknown trace graph: {graph_name}")
@@ -854,6 +855,7 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
     require(type(include_paths) is bool, "trace include_paths must be a boolean")
     require(type(include_predecessors) is bool, "trace include_predecessors must be a boolean")
     require(type(include_layers) is bool, "trace include_layers must be a boolean")
+    require(type(include_edges) is bool, "trace include_edges must be a boolean")
     validate_palaco_registry(instance, validator)
     extract = direct_upstream_targets if graph_name == "upstream" else direct_dependency_targets
     graph = {
@@ -912,6 +914,12 @@ def trace_palaco_registry(instance, object_id, direction="upstream", validator=N
         for target in result["reachable_ids"]:
             layers.setdefault(distances[target], []).append(target)
         result["layers"] = {str(depth): layers[depth] for depth in sorted(layers)}
+    if include_edges:
+        result["edges"] = [
+            {"source": source, "target": target}
+            for source in sorted(visited)
+            for target in sorted(graph[source] & visited)
+        ]
     return result
 
 
@@ -4518,9 +4526,26 @@ def check_palaco_trace_fixture():
         {"1": ["FE-00001"]},
         {"1": ["FE-00006"]},
     )
+    edge_expectations = (
+        {
+            0: [],
+            1: [(1, 2), (1, 3)],
+            2: [(1, 2), (1, 3), (2, 5), (3, 4)],
+            3: [(1, 2), (1, 3), (2, 5), (3, 4), (4, 6), (5, 6)],
+        },
+        {
+            0: [],
+            1: [(6, 4), (6, 5)],
+            2: [(4, 3), (5, 2), (6, 4), (6, 5)],
+            3: [(2, 1), (3, 1), (4, 3), (5, 2), (6, 4), (6, 5)],
+        },
+        {0: [], 1: [(6, 1)], 2: [(6, 1)], 3: [(6, 1)]},
+        {0: [], 1: [(1, 6)], 2: [(1, 6)], 3: [(1, 6)]},
+        {0: [], 1: [(3, 2)], 2: [(3, 2)], 3: [(3, 2)]},
+    )
 
     def expected(case, limit=None, details=True, predecessors=False, *,
-                 include_distances=None, include_paths=None, include_layers=False):
+                 include_distances=None, include_paths=None, include_layers=False, include_edges=False):
         object_id, direction, graph_name, ids, distances, paths = case
         include_distances = details if include_distances is None else include_distances
         include_paths = details if include_paths is None else include_paths
@@ -4545,6 +4570,11 @@ def check_palaco_trace_fixture():
                 hop: targets for hop, targets in layer_expectations[cases.index(case)].items()
                 if limit is None or int(hop) <= limit
             }
+        if include_edges:
+            result["edges"] = [
+                {"source": f"FE-{source:05d}", "target": f"FE-{target:05d}"}
+                for source, target in edge_expectations[cases.index(case)][3 if limit is None else limit]
+            ]
         return result
 
     library_count = 0
@@ -4560,6 +4590,15 @@ def check_palaco_trace_fixture():
                     and list(result["paths"]) == result["reachable_ids"],
                     "trace fixture detail keys must follow sorted reachable IDs")
             require(fixture == original, "trace fixture library query mutated input")
+            require(trace_palaco_registry(
+                fixture, object_id, direction, validator, graph_name=graph_name,
+                max_depth=limit, include_distances=True, include_paths=True, include_edges=True,
+            ) == expected(case, limit, include_edges=True), "independent fixture edge oracle mismatch")
+            require(json.dumps(trace_palaco_registry(
+                fixture, object_id, direction, validator, graph_name=graph_name,
+                max_depth=limit, include_distances=True, include_paths=True, include_edges=False,
+            ), indent=2) == json.dumps(result, indent=2) and "edges" not in result,
+                    "omitted/False edges must preserve existing JSON bytes and field absence")
             library_count += 1
     reordered = copy.deepcopy(fixture)
     reordered["objects"].reverse()
@@ -4638,6 +4677,27 @@ def check_palaco_trace_fixture():
                                     f"trace detail combination CLI JSON/streams mismatch: {label}")
                             require(fixture == original and path.read_bytes() == original_bytes,
                                     f"trace detail combination mutated input: {label}")
+                            edge_wanted = expected(
+                                case, limit, predecessors=include_predecessors,
+                                include_distances=include_distances, include_paths=include_paths,
+                                include_layers=include_layers, include_edges=True,
+                            )
+                            edge_result = trace_palaco_registry(
+                                fixture, object_id, direction, validator, graph_name=graph_name,
+                                max_depth=limit, include_distances=include_distances,
+                                include_paths=include_paths, include_predecessors=include_predecessors,
+                                include_layers=include_layers, include_edges=True,
+                            )
+                            require(json.dumps(edge_result, indent=2) == json.dumps(edge_wanted, indent=2),
+                                    f"edge/detail combination mismatch: {label}")
+                            stdout, stderr = StringIO(), StringIO()
+                            with patch.object(sys, "argv", argv + ["--trace-edges"]), redirect_stdout(stdout), redirect_stderr(stderr):
+                                exit_code = main()
+                            require(exit_code == 0 and stderr.getvalue() == ""
+                                    and stdout.getvalue().encode() == (json.dumps(edge_wanted, indent=2) + "\n").encode(),
+                                    f"edge/detail CLI JSON/streams mismatch: {label}")
+                            require(fixture == original and path.read_bytes() == original_bytes,
+                                    f"edge/detail combination mutated input: {label}")
                             combination_coverage.add(label)
     require(len(combination_coverage) == 320
             and len({entry[:4] for entry in combination_coverage}) == 20
@@ -4780,8 +4840,118 @@ def check_palaco_trace_fixture():
             "trace fixture checks mutated input")
     return (f"six-object trace fixture: schema/closed validation, {library_count} library cases, "
             f"{cli_count} subprocess CLI cases; {len(combination_coverage)} four-flag detail combinations "
-            f"in 20 groups; {layer_count} layer variants in 20 groups (library + in-process CLI); "
+            f"in 20 groups, also with edges enabled (library + byte-exact CLI); "
+            f"{layer_count} layer variants in 20 groups (library + in-process CLI); "
             "both graphs, bounds and full-path ties")
+
+
+def check_palaco_trace_edges():
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from unittest.mock import patch
+
+    path = PALACO_FIXTURE_DIR / "registry-traces.fixture.json"
+    fixture = read_json(path)
+    validator = palaco_validators()["PCR-000.schema.json"]
+    # Shortcuts and cross-depth edges distinguish induced edges from BFS trees.
+    adjacency = {1: [2, 3], 2: [3, 4], 3: [], 4: [3, 5], 5: [6], 6: []}
+    for record in fixture["objects"]:
+        source = record["metadata"]["id"]
+        targets = [f"FE-{target:05d}" for target in adjacency[int(source[-5:])]]
+        record["traceability"]["upstream"] = targets[:]
+        record["dependencies"] = targets[:]
+        record["traceability"]["relationships"] = [
+            {"source": source, "relation": "DEPENDS_ON", "target": target}
+            for target in targets
+        ]
+    validate_palaco_registry(fixture, validator)
+    original = copy.deepcopy(fixture)
+    cases = (
+        ("FE-00001", "upstream", {
+            0: ([], []),
+            1: ([2, 3], [(1, 2), (1, 3), (2, 3)]),
+            2: ([2, 3, 4], [(1, 2), (1, 3), (2, 3), (2, 4), (4, 3)]),
+            3: ([2, 3, 4, 5], [(1, 2), (1, 3), (2, 3), (2, 4), (4, 3), (4, 5)]),
+            None: ([2, 3, 4, 5, 6], [(1, 2), (1, 3), (2, 3), (2, 4), (4, 3), (4, 5), (5, 6)]),
+        }),
+        ("FE-00003", "downstream", {
+            0: ([], []),
+            1: ([1, 2, 4], [(2, 1), (3, 1), (3, 2), (3, 4), (4, 2)]),
+            2: ([1, 2, 4], [(2, 1), (3, 1), (3, 2), (3, 4), (4, 2)]),
+            3: ([1, 2, 4], [(2, 1), (3, 1), (3, 2), (3, 4), (4, 2)]),
+            None: ([1, 2, 4], [(2, 1), (3, 1), (3, 2), (3, 4), (4, 2)]),
+        }),
+    )
+    reordered = copy.deepcopy(fixture)
+    reordered["objects"].reverse()
+    for record in reordered["objects"]:
+        record["traceability"]["upstream"].reverse()
+        record["traceability"]["relationships"].reverse()
+        record["dependencies"].reverse()
+    reordered_before = copy.deepcopy(reordered)
+    reader = read_json
+    count = 0
+    for object_id, direction, expectations in cases:
+        for graph_name in ("upstream", "dependency"):
+            for limit in (None, 0, 1, 2, 3):
+                ids, pairs = expectations[limit]
+                wanted = {
+                    "object_id": object_id,
+                    "direction": direction,
+                    "graph": ("traceability.upstream" if graph_name == "upstream"
+                              else "dependencies + DEPENDS_ON"),
+                    "reachable_ids": [f"FE-{target:05d}" for target in ids],
+                    "scope": "supplied snapshot only; not a completeness or authority decision",
+                }
+                if limit is not None:
+                    wanted["max_depth"] = limit
+                wanted["edges"] = [
+                    {"source": f"FE-{source:05d}", "target": f"FE-{target:05d}"}
+                    for source, target in pairs
+                ]
+                options = dict(graph_name=graph_name, max_depth=limit, include_edges=True)
+                result = trace_palaco_registry(fixture, object_id, direction, validator, **options)
+                require(json.dumps(result, indent=2) == json.dumps(wanted, indent=2),
+                        "synthetic induced edges must retain shortcuts and boundary cross-edges")
+                require(trace_palaco_registry(reordered, object_id, direction, validator, **options) == wanted,
+                        "synthetic edge sorting or dependency deduplication changed with input order")
+                require([(edge["source"], edge["target"]) for edge in result["edges"]]
+                        == sorted(set((edge["source"], edge["target"]) for edge in result["edges"])),
+                        "edges must be unique and sorted by source then target")
+                plain = {key: value for key, value in wanted.items() if key != "edges"}
+                for keywords in ({}, {"include_edges": False}):
+                    require(json.dumps(trace_palaco_registry(
+                        fixture, object_id, direction, validator, graph_name=graph_name,
+                        max_depth=limit, **keywords,
+                    ), indent=2) == json.dumps(plain, indent=2),
+                            "fourth positional validator or omitted/False edges compatibility changed")
+                argv = [str(Path(__file__).resolve()), "--registry", str(path), "--trace", object_id,
+                        "--direction", direction, "--trace-graph", graph_name, "--trace-edges"]
+                if limit is not None:
+                    argv += ["--trace-max-depth", str(limit)]
+                stdout, stderr = StringIO(), StringIO()
+                with patch.dict(main.__globals__, read_json=lambda source: fixture if source == path else reader(source)), \
+                        patch.object(sys, "argv", argv), redirect_stdout(stdout), redirect_stderr(stderr):
+                    exit_code = main()
+                require(exit_code == 0 and stderr.getvalue() == ""
+                        and stdout.getvalue().encode() == (json.dumps(wanted, indent=2) + "\n").encode(),
+                        "synthetic edge CLI JSON bytes/streams mismatch")
+                if result["edges"]:
+                    result["edges"][0]["source"] = "FE-99999"
+                result["edges"].append({"source": "FE-99999", "target": "FE-99999"})
+                result["reachable_ids"].clear()
+                require(trace_palaco_registry(fixture, object_id, direction, validator, **options) == wanted
+                        and fixture == original and reordered == reordered_before,
+                        "edge result mutation leaked into input or subsequent calls")
+                count += 1
+    for graph_name in ("upstream", "dependency"):
+        result = trace_palaco_registry(fixture, "FE-00006", validator=validator,
+                                       graph_name=graph_name, include_edges=True)
+        require(result["reachable_ids"] == [] and result["edges"] == [],
+                "no reachable vertices must give an empty edge list")
+    return (f"{count} independent synthetic induced-edge cases (library + byte-exact CLI): "
+            "both graphs/directions, None/0/1/2/3 bounds, shortcuts, boundary cross-edges, "
+            "excluded endpoints, deduplication, sorting, positional/False compatibility and no mutation")
 
 
 def check_palaco_trace_layers():
@@ -4898,19 +5068,19 @@ def check_palaco_trace_process_determinism():
                 result = trace_palaco_registry(
                     fixture, object_id, direction, validator, graph_name=graph_name,
                     max_depth=limit, include_distances=True, include_paths=True, include_predecessors=True,
-                    include_layers=True,
+                    include_layers=True, include_edges=True,
                 )
                 require(trace_palaco_registry(
                     reordered, object_id, direction, validator, graph_name=graph_name,
                     max_depth=limit, include_distances=True, include_paths=True, include_predecessors=True,
-                    include_layers=True,
+                    include_layers=True, include_edges=True,
                 ) == result, "trace library result changed with input order")
                 require(fixture == original and reordered == reordered_before,
                         "trace determinism library queries mutated snapshots")
                 if limit == 0:
                     require(result["reachable_ids"] == [] and result["distances"] == {}
                             and result["paths"] == {} and result["predecessors"] == {}
-                            and result["layers"] == {},
+                            and result["layers"] == {} and result["edges"] == [],
                             "depth-zero trace must be empty")
                 if (graph_name, direction, limit) == ("upstream", "upstream", None):
                     require(result["paths"]["FE-00006"]
@@ -4921,7 +5091,8 @@ def check_palaco_trace_process_determinism():
                     for input_order, source in (("original", path), ("reordered", reordered_path)):
                         flags = ["--registry", str(source), "--trace", object_id,
                                  "--direction", direction, "--trace-graph", graph_name,
-                                 "--trace-distances", "--trace-paths", "--trace-predecessors", "--trace-layers"]
+                                 "--trace-distances", "--trace-paths", "--trace-predecessors", "--trace-layers",
+                                 "--trace-edges"]
                         if limit is not None:
                             flags += ["--trace-max-depth", str(limit)]
                         cli = subprocess.run(
@@ -5625,6 +5796,15 @@ def check_palaco_traces():
                     f"unexpected layers diagnostic: {error}")
         else:
             raise ConformanceError(f"invalid library include_layers accepted: {include_layers!r}")
+    for include_edges in (0, 1, None, "true", 1.0, [], {}):
+        try:
+            trace_palaco_registry(clusters, "FE-00001", validator=validator, max_depth=0,
+                                  include_edges=include_edges)
+        except ConformanceError as error:
+            require("include_edges must be a boolean" in str(error),
+                    f"unexpected edges diagnostic: {error}")
+        else:
+            raise ConformanceError(f"invalid library include_edges accepted: {include_edges!r}")
 
     negatives = []
     negatives.append((fixture, "FE-99999", "upstream", "unknown trace object ID"))
@@ -5644,6 +5824,18 @@ def check_palaco_traces():
     negatives.append((unrelated, "FE-00001", "upstream", "unresolved"))
     for graph_name in ("upstream", "dependency"):
         for instance, object_id, direction, expected in negatives:
+            try:
+                trace_palaco_registry(instance, object_id, direction, validator,
+                                      graph_name=graph_name, max_depth=0, include_edges=True)
+            except ConformanceError as error:
+                require(expected in str(error), f"unexpected edge trace diagnostic: {error}")
+            else:
+                raise ConformanceError(f"invalid edge trace query accepted: {expected}")
+            if direction in ("upstream", "downstream"):
+                with patch.dict(main.__globals__, read_json=lambda path: instance if path == cluster_path else reader(path)):
+                    cli_trace(["--trace", object_id, "--direction", direction,
+                               "--trace-graph", graph_name, "--trace-max-depth", "0", "--trace-edges"],
+                              1, diagnostic=expected)
             try:
                 trace_palaco_registry(instance, object_id, direction, validator,
                                       graph_name=graph_name, max_depth=0, include_layers=True)
@@ -5684,7 +5876,7 @@ def check_palaco_traces():
             f"{bounded_count} shortest-hop bounds, {distance_count} distance cases, {path_count} path cases, "
             f"{predecessor_count} predecessor cases, 7 invalid predecessor types, "
             f"{option_count} stripped-field option equivalence cases, "
-            "4 invalid distance types, 7 invalid path types, 4 invalid layer types, "
+            "4 invalid distance types, 7 invalid path types, 4 invalid layer types, 7 invalid edge types, "
             "deduplication, fresh/non-mutating results, "
             "deep iterative chains and fail-closed errors")
 
@@ -6239,6 +6431,13 @@ def check_registry_cli_validation():
     require(active_registry_query_modes(parser.parse_args(["--trace-layers"])) == ()
             and active_registry_query_modes(parser.parse_args(["--trace", "", "--trace-layers"])) == ("trace",),
             "layers must not change active query detection, including an empty origin")
+    require(defaults["trace_edges"] is False
+            and parser.parse_args(["--trace-edges"]).trace_edges is True
+            and "--trace-edges" in parser.format_help(),
+            "trace edges must be an opt-in boolean modifier documented in help")
+    require(active_registry_query_modes(parser.parse_args(["--trace-edges"])) == ()
+            and active_registry_query_modes(parser.parse_args(["--trace", "", "--trace-edges"])) == ("trace",),
+            "edges must not change active query detection, including an empty origin")
     require(set(query_flags) == {
         name for name in defaults
         if name.startswith("find_") or name in ("diff", "trace", "summary", "components")
@@ -6291,7 +6490,7 @@ def check_registry_cli_validation():
         check(registry + query_flags["trace"] + ["--direction", direction], modes=("trace",))
         check(["--direction", direction], "--direction requires --trace")
 
-    for modifier_name in ("--trace-distances", "--trace-paths", "--trace-predecessors", "--trace-layers"):
+    for modifier_name in ("--trace-distances", "--trace-paths", "--trace-predecessors", "--trace-layers", "--trace-edges"):
         modifier = [modifier_name]
         for base in ([], registry, previous, registry + previous):
             check(base + modifier, f"{modifier_name} requires --trace")
@@ -6303,18 +6502,23 @@ def check_registry_cli_validation():
                 check(base + query_flags["trace"] + flags + modifier, "cannot be combined")
         check(query_flags["trace"] + modifier, "--trace requires --registry")
         check(registry + previous + query_flags["trace"] + modifier, "cannot be combined")
-        if modifier_name in ("--trace-predecessors", "--trace-layers"):
+        if modifier_name in ("--trace-predecessors", "--trace-layers", "--trace-edges"):
             variants = (
                 [], ["--trace-distances"], ["--trace-paths"],
                 ["--direction", "downstream", "--trace-graph", "dependency", "--trace-max-depth", "0",
                  "--trace-distances", "--trace-paths"],
                 ["--direction", "upstream", "--trace-graph", "upstream", "--trace-max-depth", "2"],
             )
-            if modifier_name == "--trace-layers":
+            if modifier_name in ("--trace-layers", "--trace-edges"):
                 variants += (
                     ["--trace-predecessors"],
                     ["--direction", "downstream", "--trace-graph", "dependency", "--trace-max-depth", "3",
                      "--trace-distances", "--trace-paths", "--trace-predecessors"],
+                )
+            if modifier_name == "--trace-edges":
+                variants += (
+                    ["--trace-layers"],
+                    ["--trace-distances", "--trace-paths", "--trace-predecessors", "--trace-layers"],
                 )
             for other_flags in variants:
                 check(registry + query_flags["trace"] + modifier + other_flags, modes=("trace",))
@@ -6572,6 +6776,11 @@ def check_registry_cli_dispatch():
             (["--direction", "upstream", "--trace-graph", "upstream", "--trace-max-depth", "2"],
              {"graph_name": "upstream", "max_depth": 2}, "FE-00001", "upstream"),
         ):
+            check("trace", ["--trace", object_id, "--trace-edges", *extra_flags],
+                  "trace_palaco_registry", (object_id, direction), {**keywords, "include_edges": True})
+            check("trace", ["--trace", object_id, "--trace-edges", "--trace-layers", "--trace-predecessors", *extra_flags],
+                  "trace_palaco_registry", (object_id, direction),
+                  {**keywords, "include_predecessors": True, "include_layers": True, "include_edges": True})
             check("trace", ["--trace", object_id, "--trace-predecessors", *extra_flags],
                   "trace_palaco_registry", (object_id, direction), {**keywords, "include_predecessors": True})
             check("trace", ["--trace", object_id, "--trace-layers", *extra_flags],
@@ -6687,6 +6896,7 @@ CHECKS = (
     ("PALACO registry transition conformance", check_palaco_transitions),
     ("PALACO registry trace conformance", check_palaco_traces),
     ("PALACO trace fixture conformance", check_palaco_trace_fixture),
+    ("PALACO trace edges", check_palaco_trace_edges),
     ("PALACO trace layers", check_palaco_trace_layers),
     ("PALACO trace process determinism", check_palaco_trace_process_determinism),
     ("PALACO trace distances oracle", check_palaco_trace_distances_oracle),
@@ -6737,6 +6947,8 @@ def registry_cli_parser():
                         help="Include immediate parents on lexicographically smallest full shortest paths; linear entries, measured metadata not authority; requires --trace")
     parser.add_argument("--trace-layers", action="store_true", default=False,
                         help="Group reachable IDs by shortest-hop depth, numerically ordered; snapshot metadata not authority; requires --trace")
+    parser.add_argument("--trace-edges", action="store_true", default=False,
+                        help="Include all selected-direction edges between origin and reachable IDs, sorted by source then target; depth bounds vertices, not edges; diagnostic only; requires --trace")
     parser.add_argument("--find-type", metavar="OBJECT_TYPE",
                         help="Return matching canonical object IDs as JSON (e.g. REQ)")
     parser.add_argument("--find-domain", metavar="DOMAIN",
@@ -6805,6 +7017,8 @@ def active_registry_query_modes(args):
 
 def validate_registry_cli(args, parser):
     """Validate mode relationships without reading either registry."""
+    if args.trace_edges and args.trace is None:
+        parser.error("--trace-edges requires --trace; cannot be combined with other query modes")
     if args.trace_layers and args.trace is None:
         parser.error("--trace-layers requires --trace; cannot be combined with other query modes")
     if args.trace_predecessors and args.trace is None:
@@ -6901,6 +7115,8 @@ def dispatch_registry_query(current, args, mode):
             keywords["include_predecessors"] = True
         if args.trace_layers is True:
             keywords["include_layers"] = True
+        if args.trace_edges is True:
+            keywords["include_edges"] = True
         return trace_palaco_registry(current, args.trace, args.direction or "upstream", **keywords)
     if mode == "components":
         return find_palaco_components(
