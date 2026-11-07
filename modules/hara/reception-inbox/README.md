@@ -48,3 +48,9 @@ This checkpoint is **plaintext** and has no independent trust anchor, encryption
 `recovery.mjs` inspects the single-host store and optional backup **without mutations**. It returns `HOLD_FOR_HUMAN_RECOVERY` on missing/invalid store, lock files, detected temporary write remnants, invalid/newer backups or same-revision content divergence. Run `node modules/hara/reception-inbox/recovery.test.mjs`. No deletion, lock takeover, rollback, restore or authorization is implemented.
 
 **Limitations:** filesystem scans are not atomic with concurrent writes; checksum comparisons do not prove trusted identity or time; older backup histories are not cryptographically anchored; a deleted store cannot be distinguished from a clean first install without an external anchor. Operators must stop writers and use separately approved recovery procedures. No live production use.
+
+## Multi-device synchronization preflight (read-only)
+
+`sync-contract.mjs` compares two validated same-Citadel journals using distinct device labels. It classifies equal history, one device behind, or first divergent entry (`CONFLICT_HOLD`). Run `node modules/hara/reception-inbox/sync-contract.test.mjs`. It never transmits data, combines histories, changes a local store, or grants authority. A behind-device verdict is **not** permission to replicate.
+
+Device labels are unverified input, not PALACO ONE identity. JSON bytewise equality is conservative and can flag semantically equal entries with different property ordering; that is a safe false HOLD. Authentic signatures, canonical serialization, revocation, trusted sequence anchors, anti-rollback, encrypted transport, authorization and human conflict resolution remain OPEN. No automatic merge or production synchronization.
