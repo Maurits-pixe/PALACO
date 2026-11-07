@@ -54,3 +54,9 @@ This checkpoint is **plaintext** and has no independent trust anchor, encryption
 `sync-contract.mjs` compares two validated same-Citadel journals using distinct device labels. It classifies equal history, one device behind, or first divergent entry (`CONFLICT_HOLD`). Run `node modules/hara/reception-inbox/sync-contract.test.mjs`. It never transmits data, combines histories, changes a local store, or grants authority. A behind-device verdict is **not** permission to replicate.
 
 Device labels are unverified input, not PALACO ONE identity. JSON bytewise equality is conservative and can flag semantically equal entries with different property ordering; that is a safe false HOLD. Authentic signatures, canonical serialization, revocation, trusted sequence anchors, anti-rollback, encrypted transport, authorization and human conflict resolution remain OPEN. No automatic merge or production synchronization.
+
+## Signed sync manifest candidate
+
+`signed-manifest.mjs` signs a short-lived, Citadel- and device-labeled SHA-256 journal summary with a caller-supplied Ed25519 private key. The verifier checks a caller-supplied public key, target, journal revision/content, time window (maximum 300 seconds) and signature. Run `node modules/hara/reception-inbox/signed-manifest.test.mjs`.
+
+**Critical boundaries:** public keys are not bound to a trusted PALACO ONE device identity; callers choose their own time; nonce use is not persistently recorded and therefore replay protection is **NOT established**. The signature does not encrypt journal content, transmit payloads, establish recipient authorization or prove trustworthy clock time. No real keys or user content are stored in this module. Trust anchors, key rotation/revocation, durable nonce registry, encryption and authorized transport must be separately verified. This is not a production handshake.
