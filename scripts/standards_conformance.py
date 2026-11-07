@@ -4459,6 +4459,10 @@ def check_palaco_find_lifecycle():
 
 
 def check_palaco_trace_fixture():
+    from contextlib import redirect_stderr, redirect_stdout
+    from io import StringIO
+    from unittest.mock import patch
+
     path = PALACO_FIXTURE_DIR / "registry-traces.fixture.json"
     original_bytes = path.read_bytes()
     fixture = read_json(path)
@@ -4502,8 +4506,11 @@ def check_palaco_trace_fixture():
          {"FE-00002": 1}, {"FE-00002": ["FE-00003", "FE-00002"]}),
     )
 
-    def expected(case, limit=None, details=True, predecessors=False):
+    def expected(case, limit=None, details=True, predecessors=False, *,
+                 include_distances=None, include_paths=None):
         object_id, direction, graph_name, ids, distances, paths = case
+        include_distances = details if include_distances is None else include_distances
+        include_paths = details if include_paths is None else include_paths
         selected = [target for target in ids if limit is None or distances[target] <= limit]
         result = {
             "object_id": object_id, "direction": direction,
@@ -4514,8 +4521,9 @@ def check_palaco_trace_fixture():
         }
         if limit is not None:
             result["max_depth"] = limit
-        if details:
+        if include_distances:
             result["distances"] = {target: distances[target] for target in selected}
+        if include_paths:
             result["paths"] = {target: paths[target] for target in selected}
         if predecessors:
             result["predecessors"] = {target: paths[target][-2] for target in selected}
@@ -4545,6 +4553,82 @@ def check_palaco_trace_fixture():
     ) == expected(cases[0]) and reordered == before,
             "full-path tie must select FE-00002/FE-00005, not smaller parent FE-00004")
     library_count += 1
+
+    combination_coverage = set()
+    for case in cases[:4]:
+        object_id, direction, graph_name = case[:3]
+        for limit in (None, 0, 1, 2, 3):
+            for include_distances in (False, True):
+                for include_paths in (False, True):
+                    for include_predecessors in (False, True):
+                        flags = (include_distances, include_paths, include_predecessors)
+                        label = (object_id, direction, graph_name, limit, flags)
+                        wanted = expected(
+                            case, limit, predecessors=include_predecessors,
+                            include_distances=include_distances, include_paths=include_paths,
+                        )
+                        result = trace_palaco_registry(
+                            fixture, object_id, direction, validator, graph_name=graph_name,
+                            max_depth=limit, include_distances=include_distances,
+                            include_paths=include_paths, include_predecessors=include_predecessors,
+                        )
+                        require(result == wanted, f"trace detail combination mismatch: {label}")
+                        require(result["reachable_ids"] == sorted(result["reachable_ids"]),
+                                f"trace detail combination IDs are not sorted: {label}")
+                        for field, enabled in zip(("distances", "paths", "predecessors"), flags):
+                            require((field in result) == enabled,
+                                    f"trace detail combination field presence mismatch: {label}, {field}")
+                            if enabled:
+                                require(list(result[field]) == result["reachable_ids"],
+                                        f"trace detail combination map order mismatch: {label}, {field}")
+                        if flags == (False, False, False):
+                            require(trace_palaco_registry(
+                                fixture, object_id, direction, validator, graph_name=graph_name,
+                                max_depth=limit,
+                            ) == wanted, f"default no-detail trace compatibility mismatch: {label}")
+                        argv = [
+                            str(Path(__file__).resolve()), "--registry", str(path),
+                            "--trace", object_id, "--direction", direction,
+                            "--trace-graph", graph_name,
+                        ]
+                        if limit is not None:
+                            argv += ["--trace-max-depth", str(limit)]
+                        for flag, enabled in zip(
+                            ("--trace-distances", "--trace-paths", "--trace-predecessors"), flags,
+                        ):
+                            if enabled:
+                                argv.append(flag)
+                        stdout, stderr = StringIO(), StringIO()
+                        with patch.object(sys, "argv", argv), redirect_stdout(stdout), redirect_stderr(stderr):
+                            exit_code = main()
+                        require(exit_code == 0 and stderr.getvalue() == ""
+                                and stdout.getvalue().encode() == (json.dumps(wanted, indent=2) + "\n").encode(),
+                                f"trace detail combination CLI JSON/streams mismatch: {label}")
+                        require(fixture == original and path.read_bytes() == original_bytes,
+                                f"trace detail combination mutated input: {label}")
+                        combination_coverage.add(label)
+    require(len(combination_coverage) == 160
+            and len({entry[:4] for entry in combination_coverage}) == 20
+            and all(
+                {entry[4] for entry in combination_coverage if entry[:4] == group}
+                == {(distances, paths, predecessors)
+                    for distances in (False, True) for paths in (False, True)
+                    for predecessors in (False, True)}
+                for group in {entry[:4] for entry in combination_coverage}
+            ), "trace detail combinations must cover all eight flags in all 20 graph/direction/depth groups")
+    mutable = trace_palaco_registry(
+        fixture, "FE-00001", validator=validator,
+        include_distances=True, include_paths=True, include_predecessors=True,
+    )
+    mutable["reachable_ids"].clear()
+    mutable["distances"]["FE-00002"] = 99
+    mutable["paths"]["FE-00002"].append("FE-99999")
+    mutable["predecessors"]["FE-00002"] = "FE-99999"
+    require(trace_palaco_registry(
+        fixture, "FE-00001", validator=validator,
+        include_distances=True, include_paths=True, include_predecessors=True,
+    ) == expected(cases[0], predecessors=True) and fixture == original,
+            "mutating trace detail results must not affect the snapshot or subsequent calls")
 
     base = [sys.executable, str(Path(__file__).resolve()), "--registry", str(path)]
     cli_count = 0
@@ -4582,7 +4666,8 @@ def check_palaco_trace_fixture():
     require(fixture == original and path.read_bytes() == original_bytes,
             "trace fixture checks mutated input")
     return (f"six-object trace fixture: schema/closed validation, {library_count} library cases, "
-            f"{cli_count} subprocess CLI cases; both graphs, bounds and full-path ties")
+            f"{cli_count} subprocess CLI cases; {len(combination_coverage)} detail combinations "
+            "in 20 groups (library + in-process CLI); both graphs, bounds and full-path ties")
 
 
 def check_palaco_trace_process_determinism():
