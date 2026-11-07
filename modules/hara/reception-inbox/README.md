@@ -60,3 +60,9 @@ Device labels are unverified input, not PALACO ONE identity. JSON bytewise equal
 `signed-manifest.mjs` signs a short-lived, Citadel- and device-labeled SHA-256 journal summary with a caller-supplied Ed25519 private key. The verifier checks a caller-supplied public key, target, journal revision/content, time window (maximum 300 seconds) and signature. Run `node modules/hara/reception-inbox/signed-manifest.test.mjs`.
 
 **Critical boundaries:** public keys are not bound to a trusted PALACO ONE device identity; callers choose their own time; nonce use is not persistently recorded and therefore replay protection is **NOT established**. The signature does not encrypt journal content, transmit payloads, establish recipient authorization or prove trustworthy clock time. No real keys or user content are stored in this module. Trust anchors, key rotation/revocation, durable nonce registry, encryption and authorized transport must be separately verified. This is not a production handshake.
+
+## Pinned-key and nonce trust gate candidate
+
+`trust-gate.mjs` compares a signed manifest against an externally supplied, Citadel-scoped, unique, non-revoked public-key record and an externally supplied consumed-nonce snapshot. It returns an immutable proposed nonce reservation without executing any transfer. Run `node modules/hara/reception-inbox/trust-gate.test.mjs`.
+
+**Not a live authority gate:** this module cannot establish that the pinned record belongs to a real PALACO ONE device, validate who provisioned or revoked it, or atomically persist the nonce. The host must durably commit the nonce reservation and use a trusted clock before releasing anything; otherwise replay remains possible. The module returns `authorityGranted: false` even when a signature passes. No enrollment, remote execution, key rotation, storage migration, transmission or deployment has occurred.
