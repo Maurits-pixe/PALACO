@@ -2341,7 +2341,7 @@ and empty stdout, never partial JSON. Diff failures in either input follow this
 contract. Queries do not modify input files. Plain snapshot validation and
 transition validation without a JSON query retain their existing text output.
 Choose one query mode at a time. `--direction`, `--trace-graph`,
-`--trace-max-depth`, `--trace-distances`, `--trace-paths` and `--trace-predecessors`
+`--trace-max-depth`, `--trace-distances`, `--trace-paths`, `--trace-predecessors` and `--trace-layers`
 modify `--trace`, while
 `--component-of`, `--min-component-size` and `--max-component-size` modify
 `--components`; these modifiers are not query modes.
@@ -2426,11 +2426,19 @@ combines with paths, distances and depth bounds in either graph/direction; depth
 The library keyword `include_predecessors=False` accepts only actual booleans;
 omitting it or passing `False` leaves output byte-identical. These are measured
 snapshot metadata, not completeness, verification or authority decisions.
+`--trace-layers` optionally adds `layers`: decimal-string hop keys in **numeric**
+ascending order (`"1"`, `"2"`, …, `"10"`, not lexical order), each mapping to sorted
+IDs at that shortest distance in the selected graph/direction. Every reachable ID
+appears exactly once; the origin and empty layers are excluded. Depth 0 or no
+reachability gives `{}`. It combines independently with all detail flags and bounds;
+distances are not emitted unless separately requested. The library keyword
+`include_layers=False` accepts only actual booleans; omission or `False` preserves
+existing output bytes. Layers are snapshot measurements, not completeness or authority.
 The two graphs are never merged, and other references do not contribute. Results describe
 reachability in the supplied snapshot, not verified completeness or authority.
 Queries do not modify records or write files. `--trace` requires `--registry`;
-`--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances`, `--trace-paths`
-and `--trace-predecessors`
+`--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances`, `--trace-paths`,
+`--trace-predecessors` and `--trace-layers`
 each require `--trace`, even when explicitly
 selecting the default graph; trace and previous-registry comparison modes
 cannot be combined.
@@ -2451,6 +2459,10 @@ python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
 python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
   --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
   --trace FE-00001 --trace-predecessors
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-layers
 ```
 
 In the first result, FE-00006 has distance 3 and path
@@ -2458,6 +2470,8 @@ In the first result, FE-00006 has distance 3 and path
 equal-hop tie, not the smaller immediate predecessor FE-00004.
 The compact third query therefore maps `"FE-00006": "FE-00005"` and
 `"FE-00002": "FE-00001"`, without emitting `paths` or `distances`.
+The fourth query emits layers `"1": ["FE-00002", "FE-00003"]`,
+`"2": ["FE-00004", "FE-00005"]`, `"3": ["FE-00006"]`, without other details.
 Adding `--trace-max-depth 2` excludes FE-00006 from reachable IDs, distances and
 paths; depth 0 excludes every destination. In the second result, the separate
 dependency graph reaches only FE-00001 from FE-00006 at distance 1, despite its
