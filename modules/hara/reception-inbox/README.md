@@ -174,3 +174,9 @@ Even `ANCHOR_SNAPSHOT_MATCH` returns `safeToProceed: false`, `authorityGranted: 
 `challenge-recovery-dossier.mjs` composes a prior read-only local inspection and a separately supplied challenge-register snapshot with the test-only signed anchor verdict. It rejects unsafe/locked/missing local-state inspections, revision/count inconsistencies, invalid signatures, rollback/floor mismatches and expired anchors. `challenge-recovery-dossier.test.mjs` provides positive fixture and negative regressions. No register hashes or identities are emitted in the dossier.
 
 A matched anchor generates **`DOSSIER_REVIEW_REQUIRED` / `HOLD_FOR_HUMAN_RECOVERY`**, never recovery authorization. The individual observations were not collected atomically; witness custody, writer quiescence and revocation freshness remain unverified. An authorized person must preserve the original evidence and review it separately. No restore, lock removal, challenge reset, merge or production integration is performed.
+
+## Non-authorizing challenge human observation
+
+`challenge-human-observation.mjs` drafts a bounded, immutable, digest-linked metadata observation referencing a challenge recovery dossier, opaque reviewer label, allowed finding (`EVIDENCE_INCOMPLETE`, `CONFLICT_OBSERVED`, `NO_CONCLUSION`), observation time and up to 16 unique SHA-256 evidence references. `challenge-human-observation.test.mjs` includes wrong scope, duplicate evidence, attempted approval, and forged GO/authority rejection.
+
+The dossier object is caller-supplied and **not independently authenticated** by this pure function. A digest links the supplied data but does not attest its custody or truth. The reviewer label is unauthenticated, no real PALACO ONE identity binding or signature exists, and the observation is not durably stored. All outputs retain HOLD, `authorityGranted: false`, `recoveryExecuted: false` and no permitted operations. Human recovery, live integration and production remain blocked.
