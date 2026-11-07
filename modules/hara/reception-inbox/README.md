@@ -24,3 +24,9 @@ Run: `node modules/hara/reception-inbox/test.mjs` (Node with ESM support).
 5. Independent review and evidence before any live activation.
 
 No production integration, schema migration, user access change, merge or approval is performed by this candidate.
+
+## Offline journal candidate
+
+`journal.mjs` reconstructs a Citadel-scoped inbox from ordered append-only entries. It rejects duplicate/no-op entries, sequence gaps and cross-Citadel events, and minimizes stored reception fields. Run `node modules/hara/reception-inbox/journal.test.mjs` alongside the existing tests.
+
+This is a **pure in-memory journal format**, not durable encrypted storage: it does not write to disk, verify cryptographic authenticity, protect against an attacker rewriting a coherent history, or resolve multi-device conflicts. The host must supply authenticated event ingestion, atomic persistence, encryption at rest, external integrity anchors, retention policy and authorization checks before any integration. Restoration is historical reconstruction only and cannot create new authority.
