@@ -4512,8 +4512,15 @@ def check_palaco_trace_fixture():
          {"FE-00002": 1}, {"FE-00002": ["FE-00003", "FE-00002"]}),
     )
 
+    layer_expectations = (
+        {"1": ["FE-00002", "FE-00003"], "2": ["FE-00004", "FE-00005"], "3": ["FE-00006"]},
+        {"1": ["FE-00004", "FE-00005"], "2": ["FE-00002", "FE-00003"], "3": ["FE-00001"]},
+        {"1": ["FE-00001"]},
+        {"1": ["FE-00006"]},
+    )
+
     def expected(case, limit=None, details=True, predecessors=False, *,
-                 include_distances=None, include_paths=None):
+                 include_distances=None, include_paths=None, include_layers=False):
         object_id, direction, graph_name, ids, distances, paths = case
         include_distances = details if include_distances is None else include_distances
         include_paths = details if include_paths is None else include_paths
@@ -4533,6 +4540,11 @@ def check_palaco_trace_fixture():
             result["paths"] = {target: paths[target] for target in selected}
         if predecessors:
             result["predecessors"] = {target: paths[target][-2] for target in selected}
+        if include_layers:
+            result["layers"] = {
+                hop: targets for hop, targets in layer_expectations[cases.index(case)].items()
+                if limit is None or int(hop) <= limit
+            }
         return result
 
     library_count = 0
@@ -4567,67 +4579,75 @@ def check_palaco_trace_fixture():
             for include_distances in (False, True):
                 for include_paths in (False, True):
                     for include_predecessors in (False, True):
-                        flags = (include_distances, include_paths, include_predecessors)
-                        label = (object_id, direction, graph_name, limit, flags)
-                        wanted = expected(
-                            case, limit, predecessors=include_predecessors,
-                            include_distances=include_distances, include_paths=include_paths,
-                        )
-                        result = trace_palaco_registry(
-                            fixture, object_id, direction, validator, graph_name=graph_name,
-                            max_depth=limit, include_distances=include_distances,
-                            include_paths=include_paths, include_predecessors=include_predecessors,
-                        )
-                        require(result == wanted, f"trace detail combination mismatch: {label}")
-                        require(result["reachable_ids"] == sorted(result["reachable_ids"]),
-                                f"trace detail combination IDs are not sorted: {label}")
-                        for field, enabled in zip(("distances", "paths", "predecessors"), flags):
-                            require((field in result) == enabled,
-                                    f"trace detail combination field presence mismatch: {label}, {field}")
-                            if enabled:
-                                require(list(result[field]) == result["reachable_ids"],
-                                        f"trace detail combination map order mismatch: {label}, {field}")
-                        if flags == (False, False, False):
-                            require(trace_palaco_registry(
+                        for include_layers in (False, True):
+                            flags = (include_distances, include_paths, include_predecessors, include_layers)
+                            label = (object_id, direction, graph_name, limit, flags)
+                            wanted = expected(
+                                case, limit, predecessors=include_predecessors,
+                                include_distances=include_distances, include_paths=include_paths,
+                                include_layers=include_layers,
+                            )
+                            result = trace_palaco_registry(
                                 fixture, object_id, direction, validator, graph_name=graph_name,
-                                max_depth=limit,
-                            ) == wanted, f"default no-detail trace compatibility mismatch: {label}")
-                        argv = [
-                            str(Path(__file__).resolve()), "--registry", str(path),
-                            "--trace", object_id, "--direction", direction,
-                            "--trace-graph", graph_name,
-                        ]
-                        if limit is not None:
-                            argv += ["--trace-max-depth", str(limit)]
-                        for flag, enabled in zip(
-                            ("--trace-distances", "--trace-paths", "--trace-predecessors"), flags,
-                        ):
-                            if enabled:
-                                argv.append(flag)
-                        stdout, stderr = StringIO(), StringIO()
-                        with patch.object(sys, "argv", argv), redirect_stdout(stdout), redirect_stderr(stderr):
-                            exit_code = main()
-                        require(exit_code == 0 and stderr.getvalue() == ""
-                                and stdout.getvalue().encode() == (json.dumps(wanted, indent=2) + "\n").encode(),
-                                f"trace detail combination CLI JSON/streams mismatch: {label}")
-                        require(fixture == original and path.read_bytes() == original_bytes,
-                                f"trace detail combination mutated input: {label}")
-                        combination_coverage.add(label)
-    require(len(combination_coverage) == 160
+                                max_depth=limit, include_distances=include_distances,
+                                include_paths=include_paths, include_predecessors=include_predecessors,
+                                include_layers=include_layers,
+                            )
+                            require(result == wanted, f"trace detail combination mismatch: {label}")
+                            require(result["reachable_ids"] == sorted(result["reachable_ids"])
+                                    and object_id not in result["reachable_ids"],
+                                    f"trace detail combination IDs are not sorted or contain origin: {label}")
+                            for field, enabled in zip(("distances", "paths", "predecessors", "layers"), flags):
+                                require((field in result) == enabled,
+                                        f"trace detail combination field presence mismatch: {label}, {field}")
+                                if enabled and field != "layers":
+                                    require(list(result[field]) == result["reachable_ids"],
+                                            f"trace detail combination map order mismatch: {label}, {field}")
+                            if include_layers:
+                                hops = list(result["layers"])
+                                flat = [target for targets in result["layers"].values() for target in targets]
+                                require(all(hop.isdecimal() and int(hop) > 0 for hop in hops)
+                                        and [int(hop) for hop in hops] == sorted(int(hop) for hop in hops)
+                                        and all(targets and targets == sorted(targets)
+                                                for targets in result["layers"].values())
+                                        and sorted(flat) == result["reachable_ids"]
+                                        and len(flat) == len(set(flat)) and object_id not in flat,
+                                        f"trace detail combination layers must be an ordered hop partition: {label}")
+                            if flags == (False, False, False, False):
+                                require(trace_palaco_registry(
+                                    fixture, object_id, direction, validator, graph_name=graph_name,
+                                    max_depth=limit,
+                                ) == wanted, f"default no-detail trace compatibility mismatch: {label}")
+                            argv = [
+                                str(Path(__file__).resolve()), "--registry", str(path),
+                                "--trace", object_id, "--direction", direction,
+                                "--trace-graph", graph_name,
+                            ]
+                            if limit is not None:
+                                argv += ["--trace-max-depth", str(limit)]
+                            for flag, enabled in zip(
+                                ("--trace-distances", "--trace-paths", "--trace-predecessors", "--trace-layers"), flags,
+                            ):
+                                if enabled:
+                                    argv.append(flag)
+                            stdout, stderr = StringIO(), StringIO()
+                            with patch.object(sys, "argv", argv), redirect_stdout(stdout), redirect_stderr(stderr):
+                                exit_code = main()
+                            require(exit_code == 0 and stderr.getvalue() == ""
+                                    and stdout.getvalue().encode() == (json.dumps(wanted, indent=2) + "\n").encode(),
+                                    f"trace detail combination CLI JSON/streams mismatch: {label}")
+                            require(fixture == original and path.read_bytes() == original_bytes,
+                                    f"trace detail combination mutated input: {label}")
+                            combination_coverage.add(label)
+    require(len(combination_coverage) == 320
             and len({entry[:4] for entry in combination_coverage}) == 20
             and all(
                 {entry[4] for entry in combination_coverage if entry[:4] == group}
-                == {(distances, paths, predecessors)
+                == {(distances, paths, predecessors, layers)
                     for distances in (False, True) for paths in (False, True)
-                    for predecessors in (False, True)}
+                    for predecessors in (False, True) for layers in (False, True)}
                 for group in {entry[:4] for entry in combination_coverage}
-            ), "trace detail combinations must cover all eight flags in all 20 graph/direction/depth groups")
-    layer_expectations = (
-        {"1": ["FE-00002", "FE-00003"], "2": ["FE-00004", "FE-00005"], "3": ["FE-00006"]},
-        {"1": ["FE-00004", "FE-00005"], "2": ["FE-00002", "FE-00003"], "3": ["FE-00001"]},
-        {"1": ["FE-00001"]},
-        {"1": ["FE-00006"]},
-    )
+            ), "trace detail combinations must cover all sixteen flags in all 20 graph/direction/depth groups")
     layer_count = 0
     for case, unlimited_layers in zip(cases[:4], layer_expectations):
         object_id, direction, graph_name = case[:3]
@@ -4759,7 +4779,7 @@ def check_palaco_trace_fixture():
     require(fixture == original and path.read_bytes() == original_bytes,
             "trace fixture checks mutated input")
     return (f"six-object trace fixture: schema/closed validation, {library_count} library cases, "
-            f"{cli_count} subprocess CLI cases; {len(combination_coverage)} detail combinations "
+            f"{cli_count} subprocess CLI cases; {len(combination_coverage)} four-flag detail combinations "
             f"in 20 groups; {layer_count} layer variants in 20 groups (library + in-process CLI); "
             "both graphs, bounds and full-path ties")
 
