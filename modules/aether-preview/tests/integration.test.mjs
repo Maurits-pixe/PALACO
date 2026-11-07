@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { encryptMessage } from '../src/crypto.js';
 import { isEncryptedEnvelope } from '../src/envelope.js';
 import { createBastionTask } from '../src/bastion.js';
+import { createRevisionGuard } from '../src/revision.js';
+import { createEncryptedExport, ENCRYPTED_EXPORT_FILENAME } from '../src/export.js';
 
 test('encryption is randomized, decryptable, and contains no plaintext or passphrase', async () => {
   const text = 'Vertrouwelijk bericht 🔒';
@@ -53,5 +55,109 @@ test('helper sends only ciphertext and checks responses', async () => {
   for (const invalid of ['', ' ', 'plaintext', '{}', 'null', description.replace('AES-GCM', 'unknown')]) {
     assert.equal(isEncryptedEnvelope(invalid), false);
     await assert.rejects(createBastionTask(invalid, options), /versleutelde tekst/);
+  }
+});
+
+test('malformed envelopes fail closed before any network call', async () => {
+  const valid = JSON.parse(await encryptMessage('fixture', 'test passphrase long enough'));
+  const variants = [
+    { ...valid, version: 2 },
+    { ...valid, iterations: 1 },
+    { ...valid, iv: 'AA==' },
+    { ...valid, salt: 'AA==' },
+    { ...valid, ciphertext: 'not-base64!' },
+    { ...valid, unexpected: 'field' },
+    { ...valid, ciphertext: '' },
+  ];
+  let networkCalls = 0;
+  const options = {
+    baseUrl: 'http://localhost:3000/api',
+    fetchImpl: async () => { networkCalls += 1; throw new Error('unexpected network call'); },
+  };
+  for (const variant of variants) {
+    const description = JSON.stringify(variant);
+    assert.equal(isEncryptedEnvelope(description), false);
+    await assert.rejects(createBastionTask(description, options), /versleutelde tekst/);
+  }
+  assert.equal(isEncryptedEnvelope('x'.repeat(65537)), false);
+  assert.equal(networkCalls, 0);
+});
+
+test('Bastion confirmation must match submitted ciphertext', async () => {
+  const description = await encryptMessage('fixture', 'test passphrase long enough');
+  const options = {
+    baseUrl: 'http://localhost:3000/api',
+    fetchImpl: async () => Response.json({ id: 'task-id', description: 'different ciphertext' }, { status: 201 }),
+  };
+  await assert.rejects(createBastionTask(description, options), /Geen bevestiging/);
+});
+
+test('async encryption results are accepted only for the original input revision', async () => {
+  const guard = createRevisionGuard();
+  const first = guard.snapshot();
+  assert.equal(guard.isCurrent(first), true);
+  guard.invalidate(); // user changes the message or passphrase
+  assert.equal(guard.isCurrent(first), false);
+  const second = guard.snapshot();
+  assert.equal(guard.isCurrent(second), true);
+  guard.invalidate(); // second edit invalidates even a pending result
+  assert.equal(guard.isCurrent(second), false);
+  assert.equal(guard.isCurrent(guard.snapshot()), true);
+  assert.equal(guard.isCurrent(String(guard.snapshot())), false);
+});
+
+test('offline export contains exactly the validated encrypted envelope', async () => {
+  const plaintext = 'synthetic offline fixture';
+  const passphrase = 'offline test passphrase';
+  const envelope = await encryptMessage(plaintext, passphrase);
+  const blob = createEncryptedExport(envelope);
+  assert.equal(ENCRYPTED_EXPORT_FILENAME, 'aether-envelope-v1.json');
+  assert.equal(blob.type, 'application/json');
+  assert.equal(await blob.text(), envelope);
+  assert.ok(!(await blob.text()).includes(plaintext));
+  assert.ok(!(await blob.text()).includes(passphrase));
+  assert.throws(() => createEncryptedExport(plaintext), /versleutelde envelop/);
+  assert.throws(() => createEncryptedExport('{}'), /versleutelde envelop/);
+});
+
+import { readEncryptedImport } from '../src/import.js';
+
+test('offline import accepts only a bounded encrypted v1 envelope', async () => {
+  const plaintext = 'synthetic import fixture';
+  const passphrase = 'import test passphrase';
+  const envelope = await encryptMessage(plaintext, passphrase);
+  const fixture = text => ({ size: new TextEncoder().encode(text).byteLength, text: async () => text });
+  assert.equal(await readEncryptedImport(fixture(envelope)), envelope);
+  assert.ok(!envelope.includes(plaintext));
+  assert.ok(!envelope.includes(passphrase));
+
+  for (const invalid of [
+    null,
+    { size: 65537, text: async () => envelope },
+    { size: 0, text: async () => envelope },
+    fixture(plaintext),
+    fixture('{}'),
+    fixture(envelope.replace('AES-GCM', 'not-a-cipher')),
+    { size: 10, text: async () => 'x'.repeat(65537) },
+    { size: 10, text: async () => { throw new Error('read failure'); } },
+  ]) {
+    await assert.rejects(readEncryptedImport(invalid));
+  }
+});
+
+test('offline import has no network side effect and does not grant authority', async () => {
+  const encrypted = await encryptMessage('offline only', 'long enough passphrase');
+  let networkCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { networkCalls += 1; throw new Error('not allowed'); };
+  try {
+    const imported = await readEncryptedImport({
+      size: new TextEncoder().encode(encrypted).byteLength,
+      text: async () => encrypted,
+    });
+    assert.equal(imported, encrypted);
+    assert.equal(networkCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
