@@ -1,0 +1,50 @@
+{
+  "object_type": "ADR",
+  "metadata": {
+    "id": "ADR-00001",
+    "name": "Use a shared registry contract",
+    "domain": "Registry",
+    "version": "0.1.0"
+  },
+  "ownership": {
+    "business": "Example governance team",
+    "architecture": "Example architecture team",
+    "technical": "Example platform team",
+    "verification": "Example assurance team",
+    "custodian": "Example registry team"
+  },
+  "lifecycle": {
+    "status": "Draft",
+    "created": "2026-10-15",
+    "next_review": "2027-01-15"
+  },
+  "approval": { "status": "Pending" },
+  "classification": {
+    "criticality": "Medium",
+    "confidentiality": "Internal",
+    "integrity": "High",
+    "availability": "Medium"
+  },
+  "traceability": {
+    "upstream": ["ARC-00001"],
+    "relationships": [
+      { "source": "ADR-00001", "relation": "DEFINED_BY", "target": "ARC-00001" },
+      { "source": "ADR-00001", "relation": "APPROVED_BY", "target": "GOV-00001" }
+    ]
+  },
+  "verification": {
+    "method": "Architecture review",
+    "frequency": "On change",
+    "status": "Pending"
+  },
+  "audit": {
+    "updated_at": "2026-10-15T12:00:00Z",
+    "updated_by": "Example registry team",
+    "audit_refs": []
+  },
+  "architecture_ref": "ARC-00001",
+  "approved_by": "GOV-00001",
+  "context": "Registry records need consistent metadata across object families.",
+  "decision": "Use PMS-001 with reusable definitions and small specializations.",
+  "consequences": "Registry-level checks remain necessary for graph integrity."
+}

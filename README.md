@@ -2224,6 +2224,1039 @@ MBvanGeen/palaco-foundation # PALACO
 
 
 ```
+### PALACO canonical registry schemas (MVP)
+
+The Draft 2020-12 [PMS-001 canonical metaschema](docs/schemas/palaco/PMS-001.schema.json)
+provides shared metadata, ownership, lifecycle, approval, classification,
+traceability, verification and audit blocks for all 30 PALACO object families.
+Repository, runtime, service-level and evidence blocks are reusable; ADR, SVC,
+COM and REQ have additional required fields. AUD requires evidence references.
+Identifiers use an object-type prefix and exactly five digits (`REQ-00001`);
+the prefix must match `object_type`.
+
+[PMS-002](docs/schemas/palaco/PMS-002.schema.json) defines directed, typed
+relationships. `IMPLEMENTS` accepts APP/SVC → REQ; `DEFINED_BY` accepts
+APP/SVC/ADR → ARC. Other relation endpoint types are declared in the schema,
+with `DEPENDS_ON` available between any canonical object families.
+[Synthetic example fixtures](docs/fixtures/palaco/) cover FE, ADR, SVC, COM and REQ.
+Those individual examples intentionally reference illustrative IDs, not a complete
+registry. The separate [closed registry fixture](docs/fixtures/palaco/registry.fixture.json)
+contains a self-contained FE → CAP → REQ example.
+
+Run the existing conformance gate (also run by GO-13 CI):
+
+```sh
+python -m pip install "jsonschema[format]==4.23.0"
+python scripts/standards_conformance.py
+```
+
+The gate resolves all three schemas locally, checks formats, and exercises positive
+and negative cases alongside the unchanged RIO/VisitCard checks. Other validators
+must register the schema `$id` values and enable format assertions.
+
+[PCR-000](docs/schemas/palaco/PCR-000.schema.json) adds a closed registry envelope:
+`registry_version` is `0.1.0` and `objects` contains at least one PMS-001 record.
+Validate a snapshot independently of the full conformance gate:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json
+```
+
+The CLI exits 0 for a valid snapshot and nonzero for malformed JSON, schema errors
+or registry-integrity failures. It uses strict JSON parsing and local schemas only;
+input cannot select schemas or trigger remote reference retrieval.
+
+Registry validation enforces unique object IDs, resolution of every explicit
+canonical object reference within the snapshot, no self-references, and embedded
+edge sources matching their owning object. Free-text ownership, approval authority,
+approval references and URLs are not canonical object references. When a dedicated
+field exists, corresponding edges must target one of its values:
+`IMPLEMENTS` → `requirement_refs`, `REALIZES` → `capability_ref`,
+`DEFINED_BY` → `architecture_ref`, `APPROVED_BY` → `approved_by`,
+`VERIFIED_BY` → `verification.verification_ref`, `PROVEN_BY` → `evidence`,
+`AUDITED_BY` → `audit.audit_refs`, `DEPENDS_ON` → `dependencies`.
+Absent fields impose no such edge constraint; empty arrays permit no corresponding
+edges. Dedicated references need not be duplicated as edges. An upstream list is
+not a dependency list. Partial snapshots and external object references are not
+supported by this closed profile; record-only PMS-001 validation stays unchanged.
+
+The closed registry validator rejects cycles in two separate directed graphs:
+the union of `dependencies` and embedded `DEPENDS_ON` edges, and
+`traceability.upstream`. Duplicate representations of an edge count once.
+Diagnostics identify the graph and the object-ID path closing the cycle.
+Traversal is iterative, so deep chains do not depend on Python's recursion limit.
+The two graphs are not merged: opposite edges across the graphs are allowed.
+Other references and relation types are not cycle-checked; reciprocal evidence
+and audit references remain valid. Standalone PMS-001/PMS-002 schema validation
+does not perform these graph checks.
+
+Closed snapshots also enforce lifecycle consistency:
+
+- `created` ≤ `next_review`; if `approved` is present, `created` ≤ `approved` ≤ `next_review`.
+- `audit.updated_at` must not precede creation or an approval date. Calendar dates
+  are interpreted at midnight UTC; audit timestamps are compared as instants,
+  respecting their timezone offsets.
+- `approval.status: Approved` requires `lifecycle.approved`.
+- Lifecycle states Approved, Active, Deprecated, Retired and Archived require
+  approved approval metadata (including the authority and reference required by PMS-001).
+
+Proposed, Draft and Review may have pending or rejected approval. A historical
+approval date may be retained during a new review. Same-day dates are valid;
+overdue reviews and future dates are not compared to the current clock. Audit
+updates after `next_review` remain valid. These snapshot rules do not validate
+transition history, prove an approval or change standalone PMS-001 acceptance.
+
+To compare **consecutive** registry snapshots, add `--previous-registry`:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --previous-registry /tmp/previous-registry.json \
+  --registry /tmp/current-registry.json
+```
+
+Both inputs must independently pass closed registry validation. For existing IDs,
+the state may remain unchanged or advance one step along
+Proposed → Draft → Review → Approved → Active → Deprecated → Retired → Archived.
+Skipped states, backward transitions and reactivation are rejected by this MVP
+profile. Archived is terminal except for same-state metadata updates.
+The creation date cannot change. Audit timestamps cannot move backwards; any
+record change requires a strictly later audit instant, including lifecycle changes.
+Object ordering within the registry does not matter.
+
+All previous IDs must remain present: use retirement/archival instead of deletion.
+New IDs may be imported in any valid snapshot state; no prior history is inferred
+for them. `--previous-registry` requires `--registry`. Without the option, the
+existing single-snapshot behavior remains unchanged. This comparison checks only
+the supplied pair; it does not authenticate a baseline, establish an immutable
+history, verify intermediate events or authorize transitions.
+
+Read-only snapshot differences describe changes without enforcing transitions:
+
+All Registry JSON queries (`--diff`, `--trace`, `--summary`, `--components`
+and every `--find-*` filter) share one output contract: success exits 0 with
+JSON-only stdout and empty stderr, including empty results. Invalid selectors,
+invalid snapshots and unreadable files fail nonzero with diagnostics on stderr
+and empty stdout, never partial JSON. Diff failures in either input follow this
+contract. Queries do not modify input files. Plain snapshot validation and
+transition validation without a JSON query retain their existing text output.
+Choose one query mode at a time. `--direction`, `--trace-graph`,
+`--trace-max-depth`, `--trace-distances`, `--trace-paths`, `--trace-predecessors`, `--trace-layers` and `--trace-edges`
+modify `--trace`, while
+`--component-of`, `--min-component-size` and `--max-component-size` modify
+`--components`; these modifiers are not query modes.
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --previous-registry /tmp/previous-registry.json \
+  --registry /tmp/current-registry.json \
+  --diff
+```
+
+`--diff` independently validates both closed snapshots before emitting JSON with
+sorted `added_ids`, `removed_ids`, `changed_ids`, `unchanged_ids` and a scope
+disclaimer. IDs are matched by `metadata.id`; shared IDs are changed when their
+complete parsed records differ. Registry object order and JSON object-key order
+are ignored; order within record arrays remains significant. Identical snapshots
+produce empty added/removed/changed arrays. No record values are included.
+
+This diagnostic may report removals, backward lifecycle changes or metadata
+changes without newer audit timestamps: it is **not** transition validation,
+authenticated history or authorization. Omit `--diff` to retain the stricter
+existing `--previous-registry` transition checks. Invalid inputs, including empty
+snapshots, fail nonzero without diff results. Both paths are required; other
+queries and trace modifiers cannot be combined with `--diff`. No records or files
+are modified.
+
+Read-only trace queries return the transitive upstream or downstream object IDs:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --trace REQ-00001 --direction upstream
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-clusters.fixture.json \
+  --trace FE-00002 --trace-graph dependency --direction downstream
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --trace REQ-00001 --trace-max-depth 1 --trace-distances --trace-paths
+```
+
+`--trace` first validates the entire closed snapshot, then emits only a JSON object
+containing `object_id`, `direction`, `graph`, sorted unique `reachable_ids` and a
+scope disclaimer. `--trace-graph upstream` (the default) uses only
+`traceability.upstream`; `--trace-graph dependency` uses the union of `dependencies`
+and explicit `DEPENDS_ON` edges, deduplicating repeated edges. The default
+direction is upstream (forward); downstream traverses the selected graph in
+reverse. The starting ID is excluded, and no reachable nodes yields
+an empty array. Unknown IDs and invalid registries fail nonzero without results.
+Trace errors, including unreadable snapshots, are written to stderr with empty
+stdout. Successful traces emit JSON on stdout and leave stderr empty in both
+directions, including when no nodes are reachable.
+`--trace-max-depth N` includes only IDs whose shortest path in the selected graph
+and direction is at most N hops. N must be a nonnegative integer; 0 returns no
+reachable IDs but still validates the entire snapshot and checks the starting ID.
+An explicit bound adds `max_depth` to the JSON result; omitting it preserves
+unlimited reachability and the existing JSON format. This bounds reachability,
+not snapshot validation cost. Bounded results are not exhaustive beyond that
+depth and do not establish completeness or authority.
+`--trace-distances` optionally adds a `distances` object, sorted by object ID,
+mapping exactly the `reachable_ids` to positive shortest-hop integers in the
+selected graph and direction. It excludes the starting ID and respects the depth
+bound (depth 0 yields `{}`). Omitting it leaves the JSON format unchanged.
+`--trace-paths` optionally adds a `paths` object with exactly the sorted
+`reachable_ids` as keys. Each ID array includes the origin and destination along
+a shortest path in the selected graph and direction; equal-hop alternatives use
+the lexicographically smallest **full ID sequence**, independent of record/edge
+order. It works with or without distances; depth 0 yields `{}`. Explicit path
+payloads can grow quadratically on long chains; a depth bound restricts results,
+not full-snapshot validation. The library keyword `include_paths` defaults to
+`False` and accepts only actual booleans. Omitting paths or passing `False`
+preserves the existing output. Paths are snapshot diagnostics, not authority.
+`--trace-predecessors` optionally adds a `predecessors` object with exactly the
+sorted `reachable_ids` as keys. Each value is the immediate prior node on the
+same lexicographically smallest **full shortest path** used by `--trace-paths`;
+first-hop parents are the origin, which is not a key. This compact form has one
+entry per reachable ID (linear entries rather than potentially quadratic explicit
+paths), and does not reconstruct full paths unless requested. It independently
+combines with paths, distances and depth bounds in either graph/direction; depth
+0 gives `{}` while still validating the entire snapshot and checking the origin.
+The library keyword `include_predecessors=False` accepts only actual booleans;
+omitting it or passing `False` leaves output byte-identical. These are measured
+snapshot metadata, not completeness, verification or authority decisions.
+`--trace-layers` optionally adds `layers`: decimal-string hop keys in **numeric**
+ascending order (`"1"`, `"2"`, …, `"10"`, not lexical order), each mapping to sorted
+IDs at that shortest distance in the selected graph/direction. Every reachable ID
+appears exactly once; the origin and empty layers are excluded. Depth 0 or no
+reachability gives `{}`. It combines independently with all detail flags and bounds;
+distances are not emitted unless separately requested. The library keyword
+`include_layers=False` accepts only actual booleans; omission or `False` preserves
+existing output bytes. Layers are snapshot measurements, not completeness or authority.
+`--trace-edges` optionally adds an `edges` array of `{"source": ID, "target": ID}`
+entries, deduplicated and sorted by source then target. It exports the **induced
+subgraph** on the origin plus reachable IDs in the selected graph/direction:
+every edge with both endpoints included, not just BFS or shortest-path edges.
+Downstream endpoints follow traversal direction (the stored edges are reversed).
+Depth bounds select vertices, not exported edge path lengths; edges from boundary
+vertices to other included vertices remain. Depth 0 or no reachability gives `[]`.
+It combines independently with other details. The keyword-only library argument
+`include_edges=False` accepts only actual booleans; omission or `False` leaves
+output byte-identical. Edges are diagnostic-only snapshot metadata, not
+completeness, verification or authority decisions.
+
+```bash
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-max-depth 2 --trace-edges
+```
+
+The two graphs are never merged, and other references do not contribute. Results describe
+reachability in the supplied snapshot, not verified completeness or authority.
+Queries do not modify records or write files. `--trace` requires `--registry`;
+`--direction`, `--trace-graph`, `--trace-max-depth`, `--trace-distances`, `--trace-paths`,
+`--trace-predecessors`, `--trace-layers` and `--trace-edges`
+each require `--trace`, even when explicitly
+selecting the default graph; trace and previous-registry comparison modes
+cannot be combined.
+
+The [six-object trace fixture](docs/fixtures/palaco/registry-traces.fixture.json)
+contains only synthetic Draft records with Pending approval and verification;
+it makes no authority claim:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-distances --trace-paths
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00006 --trace-graph dependency --trace-distances --trace-paths
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-predecessors
+
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry-traces.fixture.json \
+  --trace FE-00001 --trace-layers
+```
+
+In the first result, FE-00006 has distance 3 and path
+`['FE-00001','FE-00002','FE-00005','FE-00006']`: the full sequence wins the
+equal-hop tie, not the smaller immediate predecessor FE-00004.
+The compact third query therefore maps `"FE-00006": "FE-00005"` and
+`"FE-00002": "FE-00001"`, without emitting `paths` or `distances`.
+The fourth query emits layers `"1": ["FE-00002", "FE-00003"]`,
+`"2": ["FE-00004", "FE-00005"]`, `"3": ["FE-00006"]`, without other details.
+Adding `--trace-max-depth 2` excludes FE-00006 from reachable IDs, distances and
+paths; depth 0 excludes every destination. In the second result, the separate
+dependency graph reaches only FE-00001 from FE-00006 at distance 1, despite its
+duplicate list/`DEPENDS_ON` representation. FE-00003 → FE-00002 is explicit-only.
+
+Read-only object-type queries filter records by the exact canonical family:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-type REQ
+```
+
+`--find-type` accepts the case-sensitive object types declared by PMS-001, not
+display names or domains. After validating the entire snapshot, it emits only
+JSON containing `object_type`, sorted `object_ids` and a scope disclaimer.
+A recognized family with no matches returns an empty array and exit 0.
+Unknown types or invalid registries fail nonzero without query results, including
+invalid records outside the requested family. Results contain IDs, not record
+contents, and make no completeness, authorization or canonical-status claim.
+The query is read-only and requires `--registry`; it cannot be combined with
+`--trace`, `--direction` or `--previous-registry`.
+
+Read-only lifecycle queries filter the exact `lifecycle.status` metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-lifecycle Draft
+```
+
+`--find-lifecycle` accepts the case-sensitive PMS-001 statuses: `Proposed`,
+`Draft`, `Review`, `Approved`, `Active`, `Deprecated`, `Retired`, `Archived`.
+It validates the entire snapshot before emitting JSON with `lifecycle_status`,
+sorted `object_ids` and a scope disclaimer. A known status without matches returns
+an empty array and exit 0. Unknown statuses and invalid snapshots fail nonzero
+without query results, even when the invalid record would not match the filter.
+This filters recorded metadata, not approval authenticity, runtime activation or
+authority. Records and files are not modified. The option requires `--registry`
+and cannot be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only registry summaries count object types, lifecycle, verification and
+approval statuses, and explicit relationships:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --summary
+```
+
+After validating the entire snapshot, `--summary` emits JSON with
+`registry_version`, `total_objects`, `by_object_type`, `by_lifecycle_status` and
+a scope disclaimer. Every PMS-001 family and lifecycle status is included, with
+zero for absent values. Object-type keys are alphabetically ordered; lifecycle
+keys follow the PMS-001 lifecycle sequence. Output does not depend on record order.
+The object-type and lifecycle breakdowns each sum to `total_objects`.
+The additive fields `total_relationships` and `by_relationship_type` count
+explicit `traceability.relationships` edges, not source objects. Every PMS-002
+relationship type is included with zero for absent values, in alphabetical key
+order; its breakdown sums to `total_relationships`. Multiple edges from one
+source count separately. Upstream links, `dependencies`, dedicated references
+and inferred or transitive links are not counted as extra relationships.
+The fixture has two explicit `DEPENDS_ON` edges and zero for all other types.
+Existing summary fields retain their meanings; consumers must allow these
+additional JSON fields.
+The additive `by_verification_status` and `by_approval_status` breakdowns each
+sum to `total_objects`. They include every respective PMS-001 status in schema
+order, with zero for absent values. Verification counts use each record's own
+`verification.status`, not the status of a referenced VER object. Approval
+counts use `approval.status`, independently of `lifecycle.status`; for example,
+a Draft object can carry Approved approval metadata without becoming Active.
+These counts do not authenticate verification results or approval claims.
+The additive `total_upstream_components` and `total_dependency_components`
+fields count weakly connected components in their respective graphs. For this
+diagnostic only, edge direction is ignored: connected roots, leaves and shared
+ancestors belong to the same component. Each isolated object counts as one
+component; disconnected multi-object clusters count separately. The upstream
+graph uses only `traceability.upstream`; the dependency graph uses the union of
+`dependencies` and explicit `DEPENDS_ON` edges. Duplicate representations of a
+dependency do not change the count, and other references do not connect clusters.
+The fixture reports one component in each graph. These counts do not establish
+completeness, invalidity or authority, and do not weaken directed cycle checks.
+The complete snapshot is validated before counting; existing fields are unchanged.
+The additive `largest_upstream_component_size` and
+`largest_dependency_component_size` fields report the number of distinct
+objects in the largest weakly connected component of each respective graph,
+not the number of edges or the longest directed path. Shared ancestors count
+once. The fixture reports three for each graph; a singleton or an all-isolated
+snapshot reports one. Empty registries remain invalid. Graph boundaries and
+the diagnostic-only scope are the same as for the component counts above.
+The summary fields `by_upstream_component_size` and `by_dependency_component_size`
+map component sizes to component counts. Keys are decimal strings in ascending
+numeric order (for example `1`, `2`, `10`), and only observed sizes appear.
+Counts sum to the corresponding component total; multiplying each size by its
+count and adding yields `total_objects`. The size-one count equals the orphan
+total, while the largest key equals the largest component size. Each graph keeps
+its existing boundaries and diagnostic-only scope. The four-object cluster
+fixture below reports `{"1": 2, "2": 1}` for both graphs despite different members.
+
+Use `--registry SNAPSHOT --components upstream` or
+`--registry SNAPSHOT --components dependency` to inspect actual cluster members.
+The read-only JSON result contains `graph`, `definition`, `components` and `scope`.
+Each component is a sorted array of object IDs; components are sorted
+lexicographically by their member arrays, not by size. Every object appears
+exactly once, including isolated objects as singleton arrays. Graph boundaries
+and weak connectivity follow the summary definitions above; no additional links
+are inferred. The entire snapshot must validate before any result is emitted.
+`--components` requires `--registry` and cannot be combined with any other query,
+comparison mode or `--direction`. Invalid or unreadable snapshots fail nonzero,
+with diagnostics on stderr and no stdout JSON or partial cluster results.
+Input files are never modified. These are snapshot diagnostics, not proof of
+completeness, canonical status or authority.
+
+Add `--component-of OBJECT_ID` to either component mode to return only the
+cluster containing that exact ID. The JSON structure is unchanged: `components`
+contains one member array, including the requested object itself. Isolated
+objects return a singleton cluster. Unknown IDs fail nonzero with diagnostics
+on stderr and empty stdout; no case folding or whitespace normalization occurs.
+The modifier requires `--components`; it cannot be used with other query modes.
+The full snapshot is still validated, including objects outside the selected
+cluster. Omitting the modifier preserves the complete component listing.
+
+Add `--min-component-size N` to either component mode to show only clusters
+containing at least `N` objects. `N` must be a positive integer; the default is
+one, preserving the unfiltered listing. For example, two excludes isolated
+objects. Filtering retains complete clusters and their existing sort order,
+without changing graph edges, summary counts or snapshot validation.
+It can be combined with `--component-of`: a known object's cluster below the
+minimum returns `"components": []` with exit zero, while an unknown ID still
+fails. No matching clusters also returns an empty array, not an error.
+The modifier requires `--components`; it cannot be used with other query modes.
+
+`--max-component-size N` optionally adds an inclusive upper bound. With no
+upper bound, existing results are unchanged. The bound must be a positive
+integer and cannot be less than `--min-component-size`. Set both bounds to
+the same value to select an exact cluster size; an upper bound of one selects
+only isolated objects. It also works with `--component-of`, returning an empty
+array if the known object's cluster falls outside the range. Full snapshot
+validation and unknown-ID checks still precede filtering. Both size modifiers
+require `--components` and leave summaries unchanged.
+
+For a reusable synthetic example, use
+`docs/fixtures/palaco/registry-clusters.fixture.json` as `SNAPSHOT`.
+It contains four Draft FE records, not approved canonical objects:
+
+| Graph | Components |
+| --- | --- |
+| upstream | `[FE-00001, FE-00002]`, `[FE-00003]`, `[FE-00004]` |
+| dependency | `[FE-00001]`, `[FE-00002, FE-00003]`, `[FE-00004]` |
+
+Both graphs have three components, a largest component size of two, one edge
+and two isolated objects. `FE-00004` is isolated in both graphs.
+Selecting `FE-00002` demonstrates the different graph boundaries.
+The dependency from `FE-00003` to `FE-00002` appears in both `dependencies`
+and `DEPENDS_ON`, but still counts as one edge. The conformance gate exercises
+this fixture through both component modes, selected queries and summaries.
+
+The `total_dependency_orphans` field counts objects with neither
+incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
+An object referenced by another dependency source is connected, even if it has
+no dependencies of its own. Duplicate representations of an edge do not change
+connectivity. Upstream links, other relationship types and dedicated references
+are excluded; this count is independent of `total_upstream_orphans`.
+The fixture reports zero dependency orphans. Isolation is a graph diagnostic,
+not proof that dependencies are missing, records are invalid or objects lack
+authority. Full snapshot validation still precedes counting; existing fields
+retain their meanings.
+The additive `total_upstream_orphans` field counts objects with neither incoming
+nor outgoing `traceability.upstream` links, using the same definition as
+`--find-orphans`. A root referenced by another object is not isolated; a
+standalone object is. Dependency lists and typed relationships do not make an
+object upstream-connected. The fixture reports zero upstream orphans.
+This is a graph diagnostic, not proof of missing required links, invalid records,
+incomplete governance or non-canonical status. Existing summary fields remain
+unchanged, and the complete snapshot is validated before counting.
+The additive `total_upstream_edges` field counts direct
+`traceability.upstream` source-target pairs only. Several sources referencing
+the same upstream object count separately; transitive paths do not add edges.
+The fixture reports two upstream edges. Dependency lists, typed relationships
+and other references do not contribute, even when they name the same objects.
+This total remains separate from `total_dependency_edges` and
+`total_relationships`; the three totals must not be added as a unique-link count.
+Duplicate upstream entries remain invalid rather than being silently counted
+or repaired. Zero upstream links is valid. These counts do not prove complete
+lineage or authority; existing summary fields retain their meanings.
+The additive `total_dependency_edges` field counts direct source-target pairs
+from the union of each record's `dependencies` and explicit `DEPENDS_ON` edges.
+The same dependency represented in both places counts once; different sources
+depending on the same target count separately. Upstream links, other relationship
+types, dedicated references and transitive paths do not add dependency edges.
+The fixture reports two dependency edges. Unlike `total_relationships`, this
+total includes dependency-list entries even without explicit typed edges, but
+excludes all other relationship types. It is not complete impact analysis,
+runtime dependency discovery or authority; existing summary fields are unchanged.
+The additive `by_domain` field counts exact `metadata.domain` labels, with
+case, whitespace and Unicode normalization differences preserved. Only labels
+present in the supplied snapshot are included; unlike schema enums, domains
+have no closed vocabulary or zero-filled list. Keys use ascending Unicode
+code-point order, independently of record order or locale, and counts sum to
+`total_objects`. The fixture reports `Governance: 1` and `Registry: 2`.
+These labels do not establish canonical domains, domain ownership or completeness.
+The additive `by_ownership` field counts exact owner labels separately for
+`business`, `architecture`, `technical`, `verification` and `custodian`, in
+PMS-001 schema order. Within each role, only observed labels are included,
+sorted by Unicode code point, with case, whitespace and Unicode normalization
+differences preserved. Every role's counts sum to `total_objects`; the same
+label in different roles is counted independently. Input role-key order does
+not affect output. Audit updaters and approval authorities are not owners for
+this breakdown. These counts do not authenticate identities, establish staffing
+levels or grant authority. Existing summary fields retain their meanings.
+The additive `by_classification` field contains separate breakdowns for
+`criticality`, `confidentiality`, `integrity` and `availability`. Each dimension
+includes all its PMS-001 labels in schema order, including zero counts, and
+sums to `total_objects`. Dimension keys also follow schema order. These are
+exact label counts, not thresholds, aggregate risk scores or a combined CIA
+rating. They do not establish access rights, data integrity, measured uptime
+or SLA compliance; no runtime probes or network requests are made.
+Counts are metadata observations, not
+proof of completeness, approval, activation or authority.
+Invalid snapshots, including empty registries, fail nonzero without summary
+results. Invalid or unreadable snapshot diagnostics are written to stderr;
+stdout remains empty rather than containing error text or partial JSON.
+Successful stdout remains the JSON summary, with empty stderr.
+No records or files are modified. `--summary` requires `--registry` and
+cannot be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only review-date queries find scheduled reviews up to an explicit cutoff:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-review-due 2027-01-15
+```
+
+The cutoff must be a valid calendar date in exact `YYYY-MM-DD` form. No system
+clock, timezone conversion or implicit current date is used. After full snapshot
+validation, the query emits JSON with `as_of`, `definition`, sorted `object_ids`
+and a scope disclaimer. Matching is inclusive: `lifecycle.next_review <= as_of`.
+All lifecycle states, including Retired and Archived, are included; no review
+exemption is inferred. Results describe recorded scheduling metadata, not proof
+that work is overdue, a review is incomplete, or compliance/authority exists.
+No matches yields an empty array and exit 0. Invalid dates or snapshots fail
+nonzero without query results, including invalid records outside the date range.
+The query changes no records or files, requires `--registry` and cannot be
+combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only domain queries match exact `metadata.domain` values:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-domain Governance
+```
+
+Domain names are free-text metadata, not canonical object families. Matching is
+case-sensitive with no trimming, substring search or Unicode normalization; quote
+names containing spaces. Empty or whitespace-only search values are rejected.
+After validating the entire snapshot, the query emits JSON with `domain`,
+sorted `object_ids` and a scope disclaimer. A nonblank domain without matches
+returns an empty array and exit 0. Invalid snapshots fail nonzero without query
+results, even when invalid records belong to another domain.
+Results do not establish completeness, canonical status or authority. No records
+or files are modified. `--find-domain` requires `--registry` and cannot be combined
+with other queries, `--direction` or `--previous-registry`.
+
+Read-only verification-status queries filter each record's own status metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-verification Pending
+```
+
+`--find-verification` accepts the exact, case-sensitive PMS-001 values `Pending`,
+`Passed`, `Failed` and `NotApplicable`. It validates the entire snapshot before
+emitting JSON with `verification_status`, sorted `object_ids` and a scope
+disclaimer. Matching uses only the record's own `verification.status`: referenced
+VER statuses do not override it. Use `--find-unverified-controls` for the separate
+COM/VER diagnostic. No matches returns an empty array and exit 0.
+Unknown statuses and invalid snapshots fail nonzero without query results,
+including invalid records outside the filter. A recorded `Passed` value is not
+proof that verification happened, evidence is authentic, compliance exists or
+authority was granted. No records or files are modified. The query requires
+`--registry` and cannot be combined with other queries, `--direction` or
+`--previous-registry`.
+
+Read-only approval-status queries filter recorded `approval.status`:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-approval Pending
+```
+
+`--find-approval` accepts the exact, case-sensitive PMS-001 statuses `Pending`,
+`Approved` and `Rejected`. After full snapshot validation it emits JSON with
+`approval_status`, sorted `object_ids` and a scope disclaimer. Matching does not
+use `lifecycle.status` or `verification.status`; an Approved approval record may
+still have Draft lifecycle metadata. Existing structural requirements for
+Approved approval (authority, approval reference and approval date) remain enforced.
+Those fields are not authenticated by this query.
+No matches returns an empty array and exit 0. Unknown statuses or invalid
+snapshots fail nonzero without results, even when invalid records do not match.
+Recorded approval is not proof of approval authenticity, activation or authority.
+No records or files are modified. The query requires `--registry` and cannot be
+combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only ownership queries match one exact role and owner:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-owner custodian "Example registry team"
+```
+
+Roles are the exact PMS-001 keys `business`, `architecture`, `technical`,
+`verification` and `custodian`. Matching uses only `ownership[role]`, not other
+roles or `audit.updated_by`. Owner text is case-sensitive without trimming,
+substring search or Unicode normalization; quote values containing spaces.
+Empty or whitespace-only owner values and unknown roles are rejected.
+After full snapshot validation, output is JSON with `role`, `owner`, sorted
+`object_ids` and a scope disclaimer. No matches returns an empty array and exit 0.
+Invalid snapshots fail nonzero without results, including records outside the
+requested ownership. Assigned metadata is not proof of identity, accountability
+or authority. The read-only query modifies no records or files, requires
+`--registry` and cannot be combined with other queries, `--direction` or
+`--previous-registry`.
+
+Read-only criticality queries filter exact `classification.criticality` metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-criticality High
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Low`, `Medium`, `High`
+and `Critical`. Matching is exact, not a minimum-threshold comparison, and does
+not use integrity, availability or confidentiality labels. After full snapshot
+validation, output is JSON with `criticality`, sorted `object_ids` and a scope
+disclaimer. No matches returns an empty array and exit 0; unknown values or
+invalid snapshots fail nonzero without results, including invalid nonmatching
+records. Recorded criticality is not proof of risk assessment, compliance or
+authority. No records or files are modified. The query requires `--registry`
+and cannot be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only confidentiality queries filter exact classification labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-confidentiality Public
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Public`, `Internal`,
+`Confidential` and `Restricted`. Matching uses only
+`classification.confidentiality` and is exact, not a threshold or clearance
+comparison. After full snapshot validation, JSON contains `confidentiality`,
+sorted `object_ids` and a scope disclaimer. No matches returns an empty array
+and exit 0; unknown values or invalid snapshots fail nonzero without results,
+including invalid nonmatching records.
+
+This is local metadata filtering, **not access control or disclosure permission**.
+A Public label does not authorize publication; Restricted does not implement
+encryption or conceal IDs. The caller must already be permitted to read the
+snapshot, and output handling remains the caller's responsibility. No record
+contents are returned and no records or files are modified. The option requires
+`--registry` and cannot be combined with other queries, `--direction` or
+`--previous-registry`.
+
+Read-only integrity-classification queries filter exact metadata labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-integrity High
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Low`, `Medium` and `High`.
+Matching uses only `classification.integrity`, not criticality, availability,
+verification results or a minimum threshold. After full snapshot validation,
+JSON contains `integrity`, sorted `object_ids` and a scope disclaimer.
+No matches returns an empty array and exit 0; unknown values or invalid snapshots
+fail nonzero without results, including invalid nonmatching records.
+A High label is not proof of data integrity, tamper resistance, compliance or
+authority; no checksum or signature is verified by this query.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only availability-classification queries filter exact metadata labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-availability Medium
+```
+
+Accepted values are the case-sensitive PMS-001 labels `Low`, `Medium` and `High`.
+Matching uses only `classification.availability`, not integrity, criticality,
+runtime state, service-level targets or a minimum threshold. After full snapshot
+validation, JSON contains `availability`, sorted `object_ids` and a scope
+disclaimer. No matches returns an empty array and exit 0; unknown values or
+invalid snapshots fail nonzero without results, including invalid nonmatching
+records. A High label is not proof of measured uptime, SLA compliance or
+authority; no runtime probe or network request is made.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only relationship-type queries identify sources of explicit typed edges:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-relationship DEPENDS_ON
+```
+
+Accepted values are the case-sensitive PMS-002 relationship labels `IMPLEMENTS`,
+`REALIZES`, `SATISFIES`, `CONSTRAINED_BY`, `DEFINED_BY`, `APPROVED_BY`,
+`VERIFIED_BY`, `PROVEN_BY`, `AUDITED_BY` and `DEPENDS_ON`.
+After full snapshot validation, JSON contains `relation`, sorted unique
+`object_ids` and a scope disclaimer. IDs identify source records, not targets;
+multiple matching edges on one record return its ID only once. Only explicit
+`traceability.relationships` edges match: upstream, dependencies, dedicated
+references and transitive paths do not create inferred edges.
+No matches returns an empty array and exit 0; unknown labels or invalid snapshots
+fail nonzero without results, including invalid nonmatching records. Relationship
+claims are not proof of implementation, verification, compliance or authority.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only audit-updater queries filter exact recorded updater labels:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-updater "Example registry team"
+```
+
+The updater must contain non-whitespace text. Matching is case-sensitive against
+`audit.updated_by`, without trimming or normalization; ownership roles and
+approval authority do not match. After full snapshot validation, JSON contains
+`updated_by`, sorted `object_ids` and a scope disclaimer. No matches returns an
+empty array and exit 0; blank input or invalid snapshots fail nonzero without
+results, including invalid nonmatching records. This is current snapshot
+metadata, not an update history, authenticated identity, audit evidence or a
+grant of authority. No identity lookup or network request is made.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only name queries filter exact object-name metadata:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-name "Example accountable registry"
+```
+
+The name must contain non-whitespace text. Matching is case-sensitive against
+`metadata.name`, without trimming, normalization, substring or fuzzy matching.
+Identifiers and descriptions do not match. Names need not be unique: all matching
+records are returned as sorted `object_ids`, alongside `name` and a scope
+disclaimer, after full snapshot validation. No matches returns an empty array
+and exit 0; blank input or invalid snapshots fail nonzero without results,
+including invalid nonmatching records. A matching name does not establish unique
+identity, canonical status or authority.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only updated-since queries filter recorded audit timestamps:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-updated-since 2026-10-15
+```
+
+Supply an explicit valid `YYYY-MM-DD` calendar date. Matching uses
+`audit.updated_at >= midnight UTC` on that date, inclusively, comparing instants
+with their timezone offsets rather than local calendar-date text. All lifecycle
+states are included; no system clock is consulted. After full snapshot
+validation, JSON contains `since`, `definition`, sorted `object_ids` and a scope
+disclaimer. No matches returns an empty array and exit 0; invalid dates or
+snapshots fail nonzero without results, including invalid nonmatching records.
+These are current snapshot timestamp claims, not authenticated update history,
+proof of recent activity or authority; future timestamps are not independently
+verified. No records or files are modified. The option requires `--registry`
+and cannot be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only direct-dependents queries identify records that depend on an object:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-dependents FE-00001
+```
+
+The exact object ID must exist in the supplied snapshot. After full snapshot
+validation, JSON contains `object_id`, `definition`, sorted unique `object_ids`
+and a scope disclaimer. Results are direct dependency sources from the union
+of `dependencies` and explicit `DEPENDS_ON` edges; representing the same
+dependency in both places returns its source once. Upstream links, other
+relationship types, dedicated references and transitive dependents are excluded.
+For the fixture, `FE-00001` returns only `CAP-00001`, not the indirectly dependent
+`REQ-00001`. An existing object without direct dependents returns an empty array
+and exit 0; unknown IDs or invalid snapshots fail nonzero without results,
+including invalid nonmatching records. Supplied dependency metadata is not
+complete impact analysis, runtime dependency discovery or authority.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+
+Read-only direct-dependencies queries identify an object's dependency targets:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-dependencies REQ-00001
+```
+
+The exact object ID must exist in the supplied snapshot. After full snapshot
+validation, JSON contains `object_id`, `definition`, sorted unique `object_ids`
+and a scope disclaimer. Targets come from the union of the selected record's
+`dependencies` and explicit `DEPENDS_ON` edges; duplicate representations count
+once. Upstream links, other relationship types, dedicated references and
+transitive dependencies are excluded. For the fixture, `REQ-00001` returns only
+`CAP-00001`, not the indirectly required `FE-00001`. Unlike `--find-dependents`,
+this option returns targets, not dependency sources.
+An existing object without dependencies returns an empty array and exit 0;
+unknown IDs or invalid snapshots fail nonzero without results, including invalid
+nonmatching records. Supplied metadata is not complete impact analysis, runtime
+dependency discovery or authority. No records or files are modified. The option
+requires `--registry` and cannot be combined with other queries, `--direction`
+or `--previous-registry`.
+
+Read-only dependency-orphan diagnostics return isolated dependency-graph nodes:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-dependency-orphans
+```
+
+After full snapshot validation, JSON contains `graph`, `definition`, sorted
+`object_ids` and a scope disclaimer. An object matches only if it has neither
+incoming nor outgoing links in the union of `dependencies` and `DEPENDS_ON`.
+An incoming dependency alone prevents isolation; duplicate representations of
+an edge do not change connectivity. Disconnected multi-object components are
+not isolated nodes. Upstream links, other relationship types and dedicated
+references are excluded. The result count equals summary
+`total_dependency_orphans`; the fixture returns an empty array and exit 0.
+Invalid snapshots fail nonzero without results, including errors outside
+matching records. Isolation does not prove missing required dependencies,
+invalid objects or non-canonical status.
+No records or files are modified. The option requires `--registry` and cannot
+be combined with other queries, `--direction` or `--previous-registry`.
+Existing `--find-orphans` remains upstream-only.
+
+For `--find-dependencies`, `--find-dependents` and `--find-dependency-orphans`,
+successful stdout contains only JSON and stderr is empty, including when
+`object_ids` is empty. Invalid or unreadable snapshots and unknown selected
+IDs fail nonzero with diagnostics on stderr and empty stdout; no partial JSON
+is emitted. The entire snapshot is validated even when errors are outside the
+selected object's dependency neighborhood.
+
+Read-only lineage orphan diagnostics identify isolated upstream-graph nodes:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /home/runner/work/PALACO/PALACO/docs/fixtures/palaco/registry.fixture.json \
+  --find-orphans
+```
+
+After whole-snapshot validation, the query emits JSON containing `graph`,
+`definition`, sorted `object_ids` and a scope disclaimer. Here an orphan means
+**no incoming and no outgoing `traceability.upstream` edges**. Roots with
+downstream records and leaves with upstream records are not orphans. A standalone
+root is reported as isolated, but is not thereby invalid. Disconnected components
+with multiple linked records are not reported: this is not a root-reachability or
+foundation-completeness check. Dependency fields, embedded relationship edges and
+other references do not affect isolation in this particular graph.
+
+Orphans are diagnostic findings, not conformance failures: successful queries
+exit 0 whether the array is empty or populated. Invalid snapshots fail nonzero
+without results. The query neither writes files nor changes canonical status or
+authority. `--find-orphans` requires `--registry` and cannot be combined with
+`--find-type`, `--trace`, `--direction` or `--previous-registry`.
+
+Read-only control verification-status diagnostics:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /tmp/closed-registry.json --find-unverified-controls
+```
+
+After validating the entire snapshot, this query emits JSON with `definition`,
+sorted `object_ids` and a scope disclaimer. A COM is reported when its own
+`verification.status` **or** the referenced VER record's `verification.status`
+is not `Passed`. Pending, Failed and NotApplicable are all reported; only two
+`Passed` statuses suppress the finding. Each control is evaluated against its
+own `verification.verification_ref`; an embedded VERIFIED_BY edge is not
+required. Missing or unresolved mandatory references are validation errors, not
+partial diagnostic findings. A snapshot without controls returns an empty array.
+
+Findings are status metadata, not authenticated proof of verification, current
+evidence, compliance or canonical status. Query success exits 0 for empty and
+populated results; invalid registries fail nonzero without results. The query
+does not modify files. `--find-unverified-controls` requires `--registry` and
+cannot be combined with other query modes, `--direction` or `--previous-registry`.
+
+Read-only evidence audit-link diagnostics:
+
+```sh
+python /home/runner/work/PALACO/PALACO/scripts/standards_conformance.py \
+  --registry /tmp/closed-registry.json --find-unaudited-evidence
+```
+
+After full snapshot validation, the query returns JSON with `definition`, sorted
+`object_ids` and a scope disclaimer. An EVD is reported only when both its
+`audit.audit_refs` is empty **and** no AUD record lists its ID in `evidence`.
+Either direction establishes a recorded audit association; reciprocal links are
+not required. An optional AUDITED_BY edge must still agree with `audit.audit_refs`
+under existing registry consistency rules. Evidence referenced by a non-AUD
+record, generic dependencies and upstream links do not establish an audit
+association. Invalid or dangling references fail validation before results.
+
+The name describes missing links, not whether an audit was actually performed:
+associations do not prove audit completion, evidence authenticity, freshness or
+compliance. Findings are diagnostic and do not change canonical status. Successful
+queries exit 0 with an empty or populated array; invalid input exits nonzero.
+The query is read-only, requires `--registry`, and cannot be combined with other
+query modes, `--direction` or `--previous-registry`.
+
+For `--find-orphans`, `--find-unverified-controls` and `--find-unaudited-evidence`,
+successful stdout contains only JSON and stderr is empty, whether findings are
+empty or populated. Invalid or unreadable snapshots fail nonzero with diagnostics
+on stderr and empty stdout; no partial findings are emitted. Errors anywhere in
+the snapshot prevent results, including errors in records outside the diagnostic's
+matching object families. No input files are changed.
+
+This MVP does not enforce upstream completeness, root reachability,
+authenticated lifecycle history, approval authority or evidence authenticity.
+Empty upstream lists are allowed for roots; draft records can have pending
+approval. Validation alone never grants authority or establishes PCC-001
+`CANONICAL` status.
+
+### OR6IT — WORLD-EVA-001 dashboard architecture
+
+- **Status:** DRAFT / DESIGN REFERENCE / UNVERIFIED
+- **Version:** 0.1
+- **Last Updated:** 2026-10-27
+- **Owner:** Not assigned; human confirmation required
+- **Decision boundary:** ADVISORY — HUMAN DECISION REQUIRED
+
+This section proposes a read-only EVA dashboard architecture. It adds no OR6IT
+runtime, live dashboard, World API, World-eventstream, polling/SSE service or
+external-world integration. Runtime implementation is not provided here;
+activation and deployment are not authorized. Existing repository previews and
+offline reference models are not evidence that this proposed dashboard exists.
+
+#### Context and identifier boundaries
+
+| Reference | Proposed role and repository evidence |
+|---|---|
+| WORLD-EVA-001 | World design context; present as `world_id` in the [draft release contract](release-registry/contract.json). |
+| LA-001 | Proposed reference-Citadel binding; the [public Citadel metadata](website/data/citadels/la-001.json) labels it DRAFT and UNVERIFIED. |
+| EVA-LA-001 | Requested constitutional context label, not a verified constitutional instrument. The draft release contract actually uses this value as `citadel_id`; do not reinterpret or rename that field. |
+| OR6IT | Proposed development engine/workstream for this architecture; no engine implementation is introduced or asserted. |
+| RIO | Proposed communication layer, subject to the [RIO authority boundary](docs/standards/rio/governance/RIO-AUTH-BOUNDARY-001.md); communication does not grant authority. |
+| VORM9EVIN9 | Proposed presentation language, following the [CX-001 design reference](docs/PALACO-CX-001.md): black perimeter, ivory canvas, restrained gold and literal status labels. |
+
+LA-001 and EVA-LA-001 belong to different existing contexts; their mapping and
+any constitutional binding require explicit human review. They are not aliases
+established by this document. The [release registry](release-registry/README.md)
+remains a separate draft proposal with `production_release_enabled=false`.
+Its release states must not be conflated with dashboard animation or PMS lifecycle
+states.
+
+#### Proposed read-only data flow
+
+1. **Input boundary:** a future implementation first accepts explicitly selected,
+   synthetic/local snapshots. A network adapter requires a separate implementation
+   and authorization review; no endpoint, credentials or subscription is defined.
+2. **Validation boundary:** validate the selected contract before rendering;
+   reject unsupported versions and malformed records. Preserve source identifiers,
+   revisions, timestamps and validation errors without converting them into trust.
+3. **View model:** derive bounded presentation data from the accepted snapshot.
+   Keep reported facts, locally derived values and unknown prerequisites separate.
+   Do not treat imported status strings as authenticated release decisions.
+4. **Dashboard projection:** show a World/Citadel context header, source/provenance
+   inspector, observation-status panel and read-only event/history area. Label
+   synthetic data and missing sources visibly. Provide no activation, release,
+   signing, external-write or autonomous-action control.
+5. **Failure behavior:** invalid input must not appear as a successful refresh.
+   Missing data remains UNKNOWN; retained data must show its original source and
+   age, not acquire a new source timestamp. Ordering, replay, stale-data handling
+   and recovery contracts must be specified before any live adapter is built.
+
+The projection must not write back to a World, RIO, release registry or external
+system. A future adapter must render untrusted text as text, bound payload and
+history sizes, and avoid resolving arbitrary URLs or loading remote resources
+from snapshot fields. These are implementation requirements, not implemented
+security controls or a completed threat model.
+
+#### Three independent clocks
+
+| Clock | Intended responsibility | Must not imply |
+|---|---|---|
+| Animation clock | Local presentation timing for transitions or decorative motion. | New observations, source time, freshness, proof or authority. |
+| Data clock | Timing of a future snapshot fetch/import and the local receipt of data; keep receipt time distinct from source generation time. | That refresh succeeded, that a source is truthful, or that authorization was renewed. |
+| World clock | Source-reported World time or sequence, if a reviewed source contract provides it; otherwise UNKNOWN. | Trusted time, execution permission, or a running/active World. |
+
+No clock may overwrite another clock's provenance. Animation can continue while
+data is stale or absent, but the status label must remain unchanged. Pausing an
+animation does not pause a World. A local timer must not invent World events.
+Source freshness and release authorization remain separate dimensions; a green
+refresh indicator cannot enable an action.
+
+#### EVA visual reference and accessibility
+
+No EVA-specific image asset is linked or added: an approved visual source,
+repository-relative path, usage rights and descriptive alternative text remain
+unresolved. Until reviewed, use a clearly labelled text-only design placeholder,
+not a fabricated screenshot or authoritative seal. VORM9EVIN9 is a design
+reference, not proof that EVA has been implemented.
+
+A future dashboard must honor `prefers-reduced-motion` and provide an explicit
+pause/disable-motion control. Reduced motion must remove nonessential orbiting,
+parallax and continuous transitions without hiding status or data. Meaning must
+remain available in a static view, with keyboard navigation, visible focus,
+textual labels independent of color, legible contrast and semantic headings.
+Avoid flashing and continuously announced decorative changes; announce meaningful
+data/status updates without overwhelming assistive technology. These requirements
+need implementation-level accessibility checks in a separate PR.
+
+#### Canonical schema alignment
+
+[PMS-001](docs/schemas/palaco/PMS-001.schema.json) remains the canonical object
+contract; [PMS-002](docs/schemas/palaco/PMS-002.schema.json) types relationships and
+[PCR-000](docs/schemas/palaco/PCR-000.schema.json) describes closed snapshots.
+WORLD, CITADEL and OR6IT are not PMS-001 object families. WORLD-EVA-001, LA-001 and
+EVA-LA-001 do not satisfy its family-prefix/five-digit canonical identifier rule.
+Keep them as design-context labels, not canonical object IDs or typed references.
+Selecting an appropriate ARC/APP/SVC representation and an explicit context
+mapping is a remaining review gate. No executable schema stub, sample canonical
+record, new object family or schema change is introduced here.
+
+#### Review and handoff gates
+
+- [ ] Assign ownership and confirm the LA-001/EVA-LA-001 context mapping.
+- [ ] Review the constitutional reference and schema/context mapping.
+- [ ] Supply and review the EVA visual asset, rights and actual image path.
+- [ ] Perform a separate security/threat-model review and human architecture review.
+- [ ] Define source provenance, clock, freshness, ordering and failure contracts.
+- [ ] Make an explicit human merge decision for the documentation.
+- [ ] Use a separate implementation PR with tests and accessibility validation.
+- [ ] Obtain separate authorization before runtime activation or deployment.
+
+This change does not certify CI results, a feature branch, PR draft status or a
+source revision from a prior handoff. Such evidence must be verified for the exact
+revision under review. Existing conformance success does not validate this
+proposed dashboard's security, schema mapping or operational readiness.
+
+**CONDITIONAL GO:** documentation and architecture review only.
+
+**HOLD:** runtime implementation pending separate scope/review; security release,
+activation and deployment pending explicit authorization. A repository merge is
+not World activation. Unknown prerequisites remain visible.
+
 ### ERA-009 — process-local reference model
 
 ERA-009 is isolated in `palaco-citadel::InMemoryCommitGate`. It is not wired

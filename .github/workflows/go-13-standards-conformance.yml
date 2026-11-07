@@ -21,5 +21,5 @@ jobs:
           python-version: "3.12"
       - name: Install validator
         run: python -m pip install "jsonschema[format]==4.23.0"
-      - name: Validate RIO and VisitCard standards
+      - name: Validate RIO, VisitCard and PALACO standards
         run: python scripts/standards_conformance.py

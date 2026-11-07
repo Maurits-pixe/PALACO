@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://palaco.example/schemas/palaco/PMS-002.schema.json",
+  "title": "PMS-002 — PALACO Relationship Model — MVP",
+  "description": "A directed registry edge. Endpoint identifiers are structurally typed; existence, graph integrity and authorization require registry-level validation.",
+  "type": "object",
+  "required": ["source", "relation", "target"],
+  "properties": {
+    "source": { "$ref": "#/$defs/ObjectId" },
+    "relation": {
+      "enum": ["IMPLEMENTS", "REALIZES", "SATISFIES", "CONSTRAINED_BY", "DEFINED_BY", "APPROVED_BY", "VERIFIED_BY", "PROVEN_BY", "AUDITED_BY", "DEPENDS_ON"]
+    },
+    "target": { "$ref": "#/$defs/ObjectId" }
+  },
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "properties": {
+        "relation": { "const": "IMPLEMENTS" },
+        "source": { "pattern": "^(APP|SVC)-" },
+        "target": { "pattern": "^REQ-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "REALIZES" },
+        "source": { "pattern": "^SVC-" },
+        "target": { "pattern": "^CAP-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "SATISFIES" },
+        "source": { "pattern": "^REQ-" },
+        "target": { "pattern": "^OBJ-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "CONSTRAINED_BY" },
+        "source": { "pattern": "^APP-" },
+        "target": { "pattern": "^POL-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "DEFINED_BY" },
+        "source": { "pattern": "^(APP|SVC|ADR)-" },
+        "target": { "pattern": "^ARC-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "APPROVED_BY" },
+        "source": { "pattern": "^ADR-" },
+        "target": { "pattern": "^GOV-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "VERIFIED_BY" },
+        "source": { "pattern": "^COM-" },
+        "target": { "pattern": "^VER-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "PROVEN_BY" },
+        "source": { "pattern": "^VER-" },
+        "target": { "pattern": "^EVD-" }
+      }
+    },
+    {
+      "properties": {
+        "relation": { "const": "AUDITED_BY" },
+        "source": { "pattern": "^EVD-" },
+        "target": { "pattern": "^AUD-" }
+      }
+    },
+    { "properties": { "relation": { "const": "DEPENDS_ON" } } }
+  ],
+  "$defs": {
+    "ObjectId": {
+      "type": "string",
+      "pattern": "^(FE|PDP|PCS|GOV|CAP|DOM|OBJ|POL|RSK|REQ|ARC|ADR|INT|DAT|APP|SVC|API|MOD|REP|CFG|COM|VER|TST|EVD|AUD|RUN|MON|EVT|INC|CHG)-[0-9]{5}(?![\\s\\S])"
+    }
+  }
+}
