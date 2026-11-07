@@ -36,3 +36,9 @@ This is a **pure in-memory journal format**, not durable encrypted storage: it d
 `local-store.mjs` provides a Node-only, one-writer file adapter for the offline journal. It uses exclusive lock creation, a write/sync/rename sequence, directory sync and an expected-entry-count check; the prior append-only prefix is checked to reject history rewrites. Run `node modules/hara/reception-inbox/local-store.test.mjs`.
 
 **Limits:** a SHA-256 checksum detects incidental corruption, not malicious rewriting of file and checksum. An attacker able to change the file, a deleted file, a stale lock after a crash, an unsupported filesystem, power-loss behavior, or another machine is outside the demonstrated durability guarantee. Lock cleanup is not automatic after a process crash. This prototype is neither encrypted nor a distributed/production store. Supervised crash recovery, retention, back-up, trusted external anchors and PALACO ONE tenant authorization are pending. No true push delivery has been enabled.
+
+## Write-once backup candidate
+
+`backup.mjs` creates a checkpoint with exclusive file creation and validates its scope, SHA-256 checksum and replayable revision without restoring it. Run `node modules/hara/reception-inbox/backup.test.mjs`. Existing backup files cannot be replaced through this API. A failed interrupted write can leave an incomplete reserved name; recovery requires human inspection.
+
+This checkpoint is **plaintext** and has no independent trust anchor, encryption, key lifecycle, secure deletion, backup rotation, multi-device sync, or automatic restore. SHA-256 alone is not authentication against someone who can rewrite both payload and checksum. Do not put real reception personal data into this isolated candidate. RESTORE / PRODUCTION remain HOLD.
