@@ -30,3 +30,9 @@ No production integration, schema migration, user access change, merge or approv
 `journal.mjs` reconstructs a Citadel-scoped inbox from ordered append-only entries. It rejects duplicate/no-op entries, sequence gaps and cross-Citadel events, and minimizes stored reception fields. Run `node modules/hara/reception-inbox/journal.test.mjs` alongside the existing tests.
 
 This is a **pure in-memory journal format**, not durable encrypted storage: it does not write to disk, verify cryptographic authenticity, protect against an attacker rewriting a coherent history, or resolve multi-device conflicts. The host must supply authenticated event ingestion, atomic persistence, encryption at rest, external integrity anchors, retention policy and authorization checks before any integration. Restoration is historical reconstruction only and cannot create new authority.
+
+## Single-host atomic storage candidate
+
+`local-store.mjs` provides a Node-only, one-writer file adapter for the offline journal. It uses exclusive lock creation, a write/sync/rename sequence, directory sync and an expected-entry-count check; the prior append-only prefix is checked to reject history rewrites. Run `node modules/hara/reception-inbox/local-store.test.mjs`.
+
+**Limits:** a SHA-256 checksum detects incidental corruption, not malicious rewriting of file and checksum. An attacker able to change the file, a deleted file, a stale lock after a crash, an unsupported filesystem, power-loss behavior, or another machine is outside the demonstrated durability guarantee. Lock cleanup is not automatic after a process crash. This prototype is neither encrypted nor a distributed/production store. Supervised crash recovery, retention, back-up, trusted external anchors and PALACO ONE tenant authorization are pending. No true push delivery has been enabled.
