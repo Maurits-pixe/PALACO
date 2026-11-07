@@ -273,6 +273,17 @@ fn issuer_evidence_must_have_a_valid_reference_and_version() {
 }
 
 #[test]
+fn issuer_ref_must_be_a_valid_identifier() {
+    let mut request = valid_request();
+    request.issuer_ref = " synthetic-issuer".to_owned();
+
+    let result = evaluate_reference(&request);
+
+    assert!(result.identity_validated);
+    assert_eq!(result.issuance_review, IssuanceReviewState::Denied);
+}
+
+#[test]
 fn issuer_must_be_authorized_for_requested_scope() {
     let mut wrong_scopes = valid_request();
     wrong_scopes.issuer_scopes = vec!["identity:other".to_owned()];
