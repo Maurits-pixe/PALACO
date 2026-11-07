@@ -156,3 +156,9 @@ This register is **not yet composed atomically** with `reviewer-proof.mjs` verif
 `reviewer-proof-consume.mjs` combines offline reviewer proof verification with one-time challenge registration. A failed signature never writes. After a verified scoped proof, the storage adapter races through a single-host exclusive lock and revision check; at most one concurrent request can commit the same challenge. Unreadable/corrupt storage and ambiguous commits fail closed. `reviewer-proof-consume.test.mjs` includes parallel race, signature denial, replay, wrong scope, expiry and corruption cases.
 
 This is a **preflight only**, not an atomic distributed identity service. The signature proof uses a test issuer and non-live public key. The verification/commit boundary is protected only within the local lock protocol, while externally fresh revocation, crash behavior, rollback detection, real PALACO ONE binding and durable independent anchors remain unproven. A successful consumption does not produce reviewer authority, content release or recovery; all such transitions remain HOLD.
+
+## Read-only challenge recovery inspection
+
+`challenge-recovery.mjs` inspects the local challenge register without changing any files. It identifies missing/invalid stores, unsafe file type (including symlinks), writer locks and leftover temporary files, with bounded summary counts. `challenge-recovery.test.mjs` covers these failure modes. Even a locally well-formed snapshot returns `HOLD_FOR_HUMAN_RECOVERY` because local checksums cannot independently detect a coherent rollback or verify external anchors.
+
+This diagnostic is not atomic with concurrent writers and never removes locks, restores data, resets a challenge, retries a proof or grants authority. An authorized operator must first stop writers, preserve original artifacts and conduct separately approved recovery. Integration and production remain HOLD.
