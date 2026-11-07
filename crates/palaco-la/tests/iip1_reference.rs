@@ -210,6 +210,18 @@ fn account_and_ownership_are_independent_gates() {
 }
 
 #[test]
+fn owner_evidence_must_have_a_valid_reference_and_version() {
+    let mut request = valid_request();
+    request.owner_evidence.version = " v1".to_owned();
+
+    let result = evaluate_reference(&request);
+
+    assert_eq!(result.owner_review, ReviewState::Fail);
+    assert!(!result.identity_validated);
+    assert_eq!(result.issuance_review, IssuanceReviewState::NotReached);
+}
+
+#[test]
 fn issuer_scope_basis_expiry_and_revocation_are_required_for_reference_approval() {
     let mut wrong_basis = valid_request();
     wrong_basis.issuer_basis_ref = "different-basis".to_owned();
