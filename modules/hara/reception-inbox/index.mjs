@@ -2,6 +2,7 @@
 const STATES = new Set(["UNREAD", "READ", "HANDLED"]);
 const MAX_ITEMS = 10000;
 const validText = (v, max = 128) => typeof v === "string" && v.length > 0 && v.length <= max;
+const validId = (v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(v);
 const frozen = (value) => Object.freeze(value);
 
 export function emptyInbox() {
@@ -14,7 +15,7 @@ export function unreadCount(inbox) {
 
 export function receiveReception(inbox, input) {
   assertInbox(inbox);
-  if (!input || !validText(input.eventId) || !validText(input.citadelId) ||
+  if (!input || !validId(input.eventId) || !validId(input.citadelId) ||
       !validText(input.arrivalAt, 64) || !validText(input.actorRef)) {
     throw new TypeError("INVALID_RECEPTION_ENVELOPE");
   }
@@ -68,3 +69,4 @@ export function badge(inbox) {
   return frozen({ count, label: count === 0 ? "Geen nieuwe berichten" :
     count === 1 ? "1 nieuw bericht" : count + " nieuwe berichten" });
 }
+
