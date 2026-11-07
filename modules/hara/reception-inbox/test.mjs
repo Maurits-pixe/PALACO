@@ -23,4 +23,7 @@ assert.equal(handled.events[0].state, "HANDLED");
 assert.throws(() => transition(handled, cmd), /INVALID_STATE_TRANSITION/);
 assert.equal(unreadCount(second), 2); // immutable previous snapshot
 assert.equal(badge(emptyInbox()).count, 0);
-console.log("HARA reception inbox candidate: 12 assertions PASS");
+assert.throws(() => receiveReception(first, { ...a, eventId: "x:y" }), /INVALID_RECEPTION_ENVELOPE/);
+assert.throws(() => receiveReception(first, { ...a, citadelId: "../LA" }), /INVALID_RECEPTION_ENVELOPE/);
+console.log("HARA reception inbox candidate: core assertions PASS");
+
