@@ -66,3 +66,9 @@ Device labels are unverified input, not PALACO ONE identity. JSON bytewise equal
 `trust-gate.mjs` compares a signed manifest against an externally supplied, Citadel-scoped, unique, non-revoked public-key record and an externally supplied consumed-nonce snapshot. It returns an immutable proposed nonce reservation without executing any transfer. Run `node modules/hara/reception-inbox/trust-gate.test.mjs`.
 
 **Not a live authority gate:** this module cannot establish that the pinned record belongs to a real PALACO ONE device, validate who provisioned or revoked it, or atomically persist the nonce. The host must durably commit the nonce reservation and use a trusted clock before releasing anything; otherwise replay remains possible. The module returns `authorityGranted: false` even when a signature passes. No enrollment, remote execution, key rotation, storage migration, transmission or deployment has occurred.
+
+## Single-host nonce reservation storage candidate
+
+`nonce-store.mjs` persists an append-only consumed-nonce list via a single-host exclusive lock and temporary-file sync/rename. It rejects duplicate keys, stale expected revisions, invalid Citadel scope and detected checksum corruption. Run `node modules/hara/reception-inbox/nonce-store.test.mjs` (including a concurrent same-nonce test).
+
+**Severe remaining boundaries:** the module takes a caller-supplied nonce key and does not itself verify authority or signatures. The host must invoke it only after a trusted verification decision and must withhold any protected content until a successful commit. A deleted or maliciously rewritten store can reset/forge the history; SHA-256 is not a trusted external anti-rollback anchor. Crash-stale locks require supervised recovery. Durability under sudden power loss, cross-host concurrency, key trust, migration and production deployment remain unverified. This component does not by itself establish global replay resistance.
