@@ -1,4 +1,4 @@
-import { assertInbox, unreadCount } from "./index.mjs";
+import { assertInbox } from "./index.mjs";
 
 // UI projection: intentionally excludes actorRef, eventId and raw reception content.
 export function indicator(inbox, citadelId) {
@@ -35,8 +35,4 @@ export function pushIntent(inbox, citadelId, previousUnreadCount) {
   });
 }
 
-// Aggregate counts must be scoped; this helper is for isolated diagnostics only.
-export function diagnosticTotal(inbox) {
-  assertInbox(inbox);
-  return unreadCount(inbox);
-}
+
