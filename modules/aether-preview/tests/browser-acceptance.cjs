@@ -39,7 +39,7 @@ async function run() {
     await page.goto(origin);
     await page.getByLabel('Bericht').fill('Synthetische AETHER-testtekst');
     await page.getByLabel(/Passphrase/).fill('synthetic test passphrase');
-    await page.getByRole('button', { name: 'Versleutel' }).click();
+    await page.getByRole('button', { name: 'Versleutel', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'Versleuteld.' }).waitFor();
     assert.equal(await page.getByLabel('Bericht').inputValue(), '');
     assert.equal(await page.getByLabel(/Passphrase/).inputValue(), '');
