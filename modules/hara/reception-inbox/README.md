@@ -168,3 +168,9 @@ This diagnostic is not atomic with concurrent writers and never removes locks, r
 `challenge-anchor.mjs` signs and verifies a bounded Ed25519 **test fixture** for a Citadel-scoped ordered challenge-register snapshot. Verification checks pinned test issuer, Citadel, time bounds, signature, independently supplied revision floor and exact revision/digest match. `challenge-anchor.test.mjs` covers forged signature, wrong scope, expiry, rollback, stale anchor, floor violation, altered ordering and invalid snapshots.
 
 Even `ANCHOR_SNAPSHOT_MATCH` returns `safeToProceed: false`, `authorityGranted: false` and `independentWitnessVerified: false`. The caller-supplied revision floor has no proven external custody; there is no actual witness transport, live issuer, remote durability, recovery authorization or automatic restoration. Keep human recovery, integration and production HOLD.
+
+## Read-only human challenge recovery dossier
+
+`challenge-recovery-dossier.mjs` composes a prior read-only local inspection and a separately supplied challenge-register snapshot with the test-only signed anchor verdict. It rejects unsafe/locked/missing local-state inspections, revision/count inconsistencies, invalid signatures, rollback/floor mismatches and expired anchors. `challenge-recovery-dossier.test.mjs` provides positive fixture and negative regressions. No register hashes or identities are emitted in the dossier.
+
+A matched anchor generates **`DOSSIER_REVIEW_REQUIRED` / `HOLD_FOR_HUMAN_RECOVERY`**, never recovery authorization. The individual observations were not collected atomically; witness custody, writer quiescence and revocation freshness remain unverified. An authorized person must preserve the original evidence and review it separately. No restore, lock removal, challenge reset, merge or production integration is performed.
