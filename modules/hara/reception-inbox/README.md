@@ -42,3 +42,9 @@ This is a **pure in-memory journal format**, not durable encrypted storage: it d
 `backup.mjs` creates a checkpoint with exclusive file creation and validates its scope, SHA-256 checksum and replayable revision without restoring it. Run `node modules/hara/reception-inbox/backup.test.mjs`. Existing backup files cannot be replaced through this API. A failed interrupted write can leave an incomplete reserved name; recovery requires human inspection.
 
 This checkpoint is **plaintext** and has no independent trust anchor, encryption, key lifecycle, secure deletion, backup rotation, multi-device sync, or automatic restore. SHA-256 alone is not authentication against someone who can rewrite both payload and checksum. Do not put real reception personal data into this isolated candidate. RESTORE / PRODUCTION remain HOLD.
+
+## Supervised recovery inspection candidate
+
+`recovery.mjs` inspects the single-host store and optional backup **without mutations**. It returns `HOLD_FOR_HUMAN_RECOVERY` on missing/invalid store, lock files, detected temporary write remnants, invalid/newer backups or same-revision content divergence. Run `node modules/hara/reception-inbox/recovery.test.mjs`. No deletion, lock takeover, rollback, restore or authorization is implemented.
+
+**Limitations:** filesystem scans are not atomic with concurrent writes; checksum comparisons do not prove trusted identity or time; older backup histories are not cryptographically anchored; a deleted store cannot be distinguished from a clean first install without an external anchor. Operators must stop writers and use separately approved recovery procedures. No live production use.
