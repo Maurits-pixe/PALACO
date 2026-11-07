@@ -162,3 +162,9 @@ This is a **preflight only**, not an atomic distributed identity service. The si
 `challenge-recovery.mjs` inspects the local challenge register without changing any files. It identifies missing/invalid stores, unsafe file type (including symlinks), writer locks and leftover temporary files, with bounded summary counts. `challenge-recovery.test.mjs` covers these failure modes. Even a locally well-formed snapshot returns `HOLD_FOR_HUMAN_RECOVERY` because local checksums cannot independently detect a coherent rollback or verify external anchors.
 
 This diagnostic is not atomic with concurrent writers and never removes locks, restores data, resets a challenge, retries a proof or grants authority. An authorized operator must first stop writers, preserve original artifacts and conduct separately approved recovery. Integration and production remain HOLD.
+
+## Test-only challenge snapshot anchor
+
+`challenge-anchor.mjs` signs and verifies a bounded Ed25519 **test fixture** for a Citadel-scoped ordered challenge-register snapshot. Verification checks pinned test issuer, Citadel, time bounds, signature, independently supplied revision floor and exact revision/digest match. `challenge-anchor.test.mjs` covers forged signature, wrong scope, expiry, rollback, stale anchor, floor violation, altered ordering and invalid snapshots.
+
+Even `ANCHOR_SNAPSHOT_MATCH` returns `safeToProceed: false`, `authorityGranted: false` and `independentWitnessVerified: false`. The caller-supplied revision floor has no proven external custody; there is no actual witness transport, live issuer, remote durability, recovery authorization or automatic restoration. Keep human recovery, integration and production HOLD.
