@@ -1,0 +1,37 @@
+name: AETHER browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'modules/aether-preview/**'
+      - '.github/workflows/aether-browser-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: modules/aether-preview
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.22.1
+          cache: npm
+          cache-dependency-path: modules/aether-preview/package-lock.json
+      - name: Install application and test driver
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund playwright@1.62.1
+      - name: Use runner Chromium-compatible browser
+        run: |
+          BROWSER_PATH="$(command -v google-chrome || command -v chromium)"
+          test -n "$BROWSER_PATH"
+          echo "AETHER_CHROMIUM_PATH=$BROWSER_PATH" >> "$GITHUB_ENV"
+      - name: Test synthetic offline browser flows
+        run: node tests/browser-acceptance.cjs
