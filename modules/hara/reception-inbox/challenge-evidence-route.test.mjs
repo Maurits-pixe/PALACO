@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { draftChallengeHumanObservation } from "./challenge-human-observation.mjs";
@@ -76,6 +76,10 @@ try {
   assert.equal(goodReport.report.incidentResolved, false);
   assert.equal(goodReport.report.authorityGranted, false);
   assert.equal(goodReport.report.reportDigest, report(goodInspection, "001").report.reportDigest);
+  const stored = await readFile(registerPath, "utf8");
+  assert.equal(stored.includes("QA_REVIEWER"), false);
+  assert.equal(stored.includes(observation.observationDigest), false);
+  assert.equal(JSON.stringify(goodReport).includes("QA_REVIEWER"), false);
 
   const replay = await verifyAndConsumeChallengeObservation(consumeArgs);
   assert.equal(replay.reason, "OBSERVATION_CHALLENGE_REPLAY_DENIED");
@@ -93,6 +97,19 @@ try {
   assert.equal(locked.reason, "POSTCOMMIT_LOCAL_HOLD");
   assert.equal(report(locked, "004").report.incidentResolved, false);
   assert.equal((await loadChallengeRegister(registerPath, "LA")).revision, 1);
+
+  // Faults are injected only into this test-owned disposable register.
+  await unlink(registerPath + ".lock");
+  const wrongKey = await inspect({ publicKey: otherKeys.publicKey });
+  assert.equal(wrongKey.reason, "POSTCOMMIT_ANCHOR_OR_DOSSIER_HOLD");
+  assert.equal(report(wrongKey, "005").report.authorityGranted, false);
+  const rollback = await inspect({ trustedRevisionFloor: 2 });
+  assert.equal(rollback.reason, "POSTCOMMIT_ANCHOR_OR_DOSSIER_HOLD");
+  assert.equal(report(rollback, "006").report.incidentResolved, false);
+  await writeFile(registerPath, "{corrupted-fixture", "utf8");
+  const corrupt = await inspect();
+  assert.equal(corrupt.reason, "POSTCOMMIT_LOCAL_HOLD");
+  assert.equal(report(corrupt, "007").report.authorityGranted, false);
 } finally {
   await rm(dir, { recursive: true, force: true });
 }
