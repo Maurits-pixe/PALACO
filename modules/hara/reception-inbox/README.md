@@ -198,3 +198,9 @@ This protocol is not distributed or atomic across external identity systems. The
 `challenge-postcommit-inspection.mjs` checks a prior local one-time challenge receipt against two read-only register inspections, the current consumed-hash lineage and a separately supplied signed **test** anchor. It labels missing/unsafe/locked storage, revision rollback, absent committed hash, position mismatch, inconclusive non-atomic observation and disputed/expired anchor. `challenge-postcommit-inspection.test.mjs` exercises matched HOLD, rollback, absent digest, floor/expiry denial and stale writer lock.
 
 A repeat inspection **does not make reads atomic**, prevent a concurrent writer, or establish trusted external custody; coherent rollback may remain undetectable when the anchor and floor are not independently retained. Even apparent match yields `POSTCOMMIT_MATCH_HUMAN_REVIEW_REQUIRED`, `safeToProceed: false` and no authority. No lock is removed, no challenge reset or reissue occurs, and no recovery or production integration is performed.
+
+## Deterministic read-only incident report draft
+
+`challenge-incident-report.mjs` projects only allowlisted postcommit inspection status/reason and up to 16 unique SHA-256 evidence references into a deterministic metadata report. It includes explicit unverified custody and human-review flags and binds the known fields with SHA-256 for repeatability. `challenge-incident-report.test.mjs` checks stable digest, private-field exclusion, invalid/approval reason denial, duplicate evidence and attempted authority injection.
+
+Caller-provided inspection data and time are **not independently authenticated**. The report does not store evidence, prove custody, verify a real issuer or authorize any recovery. SHA-256 does not establish source authenticity. Outputs retain `HOLD_FOR_HUMAN_RECOVERY`; no restore, challenge reissue, merge, live integration or release has occurred.
