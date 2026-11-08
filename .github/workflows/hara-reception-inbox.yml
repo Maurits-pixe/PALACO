@@ -21,11 +21,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout candidate commit
-        uses: actions/checkout@v4
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # pinned GO-15 repository baseline
         with:
           persist-credentials: false
       - name: Install Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0 immutable SHA
         with:
           node-version: "22"
       - name: Run all standalone reception inbox tests
