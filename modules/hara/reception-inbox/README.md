@@ -180,3 +180,9 @@ A matched anchor generates **`DOSSIER_REVIEW_REQUIRED` / `HOLD_FOR_HUMAN_RECOVER
 `challenge-human-observation.mjs` drafts a bounded, immutable, digest-linked metadata observation referencing a challenge recovery dossier, opaque reviewer label, allowed finding (`EVIDENCE_INCOMPLETE`, `CONFLICT_OBSERVED`, `NO_CONCLUSION`), observation time and up to 16 unique SHA-256 evidence references. `challenge-human-observation.test.mjs` includes wrong scope, duplicate evidence, attempted approval, and forged GO/authority rejection.
 
 The dossier object is caller-supplied and **not independently authenticated** by this pure function. A digest links the supplied data but does not attest its custody or truth. The reviewer label is unauthenticated, no real PALACO ONE identity binding or signature exists, and the observation is not durably stored. All outputs retain HOLD, `authorityGranted: false`, `recoveryExecuted: false` and no permitted operations. Human recovery, live integration and production remain blocked.
+
+## Isolated human observation signature proof
+
+`challenge-observation-proof.mjs` validates the exact known observation fields, recalculates the observation digest and signs/verifies a bounded Ed25519 **test issuer** statement scoped to observation digest, challenge, issuer and time window. `challenge-observation-proof.test.mjs` checks tampering, forged key/signature, wrong Citadel/issuer/challenge, expiry and attempted authority injection.
+
+This is an isolated fixture; it has **no** PALACO ONE production identity binding, key attestation, independent challenge consumption, revocation freshness, custody or persistence. Even `TEST_SIGNATURE_MATCH_ONLY` returns `reviewerAuthenticated: false`, `reviewerAuthorized: false`, `safeToProceed: false` and `authorityGranted: false`. No automated review approval, recovery, merge or deployment is permitted.
