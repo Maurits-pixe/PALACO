@@ -1,0 +1,46 @@
+name: HARA Reception Inbox Isolated Tests
+
+on:
+  pull_request:
+    paths:
+      - "modules/hara/reception-inbox/**"
+      - ".github/workflows/hara-reception-inbox.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hara-reception-inbox-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  isolated-node-tests:
+    name: isolated-node-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout candidate commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # pinned GO-15 repository baseline
+        with:
+          persist-credentials: false
+      - name: Install Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0 immutable SHA
+        with:
+          node-version: "22"
+      - name: Run all standalone reception inbox tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd modules/hara/reception-inbox
+          shopt -s nullglob
+          files=( *.test.mjs )
+          if (( ${#files[@]} == 0 )); then
+            echo "No HARA reception inbox tests found" >&2
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            echo "Running ${file}"
+            node "${file}"
+          done
+          echo "HARA isolated test suites: ${#files[@]} PASS"
