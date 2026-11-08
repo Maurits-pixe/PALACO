@@ -204,3 +204,9 @@ A repeat inspection **does not make reads atomic**, prevent a concurrent writer,
 `challenge-incident-report.mjs` projects only allowlisted postcommit inspection status/reason and up to 16 unique SHA-256 evidence references into a deterministic metadata report. It includes explicit unverified custody and human-review flags and binds the known fields with SHA-256 for repeatability. `challenge-incident-report.test.mjs` checks stable digest, private-field exclusion, invalid/approval reason denial, duplicate evidence and attempted authority injection.
 
 Caller-provided inspection data and time are **not independently authenticated**. The report does not store evidence, prove custody, verify a real issuer or authorize any recovery. SHA-256 does not establish source authenticity. Outputs retain `HOLD_FOR_HUMAN_RECOVERY`; no restore, challenge reissue, merge, live integration or release has occurred.
+
+## Isolated end-to-end evidence route regression
+
+`challenge-evidence-route.test.mjs` exercises the fictitious human observation, Ed25519 test proof, one-time challenge commit, signed local register anchor, read-only postcommit inspection and metadata-only incident report as one sequence. Negative cases include invalid signature, replay, missing commit digest, expired anchor and an existing writer lock. The test uses a disposable local directory and deletes only its own temporary fixtures.
+
+**Evidence limit:** 27 local test suites passing does not establish trusted identity, independent key custody, reliable wall-clock time, multi-host durability or production authorization. All findings and incident reports stay `HOLD_FOR_HUMAN_RECOVERY`; no live integration, push notification, Supabase mutation, identity activation, merge, signing or release is permitted by this test.
