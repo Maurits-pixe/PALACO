@@ -186,3 +186,9 @@ The dossier object is caller-supplied and **not independently authenticated** by
 `challenge-observation-proof.mjs` validates the exact known observation fields, recalculates the observation digest and signs/verifies a bounded Ed25519 **test issuer** statement scoped to observation digest, challenge, issuer and time window. `challenge-observation-proof.test.mjs` checks tampering, forged key/signature, wrong Citadel/issuer/challenge, expiry and attempted authority injection.
 
 This is an isolated fixture; it has **no** PALACO ONE production identity binding, key attestation, independent challenge consumption, revocation freshness, custody or persistence. Even `TEST_SIGNATURE_MATCH_ONLY` returns `reviewerAuthenticated: false`, `reviewerAuthorized: false`, `safeToProceed: false` and `authorityGranted: false`. No automated review approval, recovery, merge or deployment is permitted.
+
+## One-time signed observation test preflight
+
+`challenge-observation-consume.mjs` composes the **test-only** observation signature verifier with the existing local one-writer challenge register. It verifies the signature, context and expiry before committing a challenge; the register's exclusive lock and revision compare ensure at most one successful local claim under concurrent attempts. `challenge-observation-consume.test.mjs` covers invalid signatures before write, parallel collision, replay refusal and scoped/expired denial. The register holds only hashed challenge identity and no reviewer label or observation digest.
+
+This protocol is not distributed or atomic across external identity systems. The test issuer is not independently trusted; reviewer authentication, revocation freshness, external custody, rollback resistance and crash ambiguity are unproven. A committed challenge remains **HOLD**, not recovery authorization, admission, access or a reviewer decision. Production, integration and merge remain blocked.
