@@ -11,6 +11,7 @@ on:
       - 'scripts/pr_replay_sqlite_harness.py'
       - 'scripts/pr_audit_integrity.py'
       - 'scripts/pr_audit_export.py'
+      - 'scripts/pr_signed_audit_checkpoint.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -20,6 +21,7 @@ on:
       - 'tests/test_pr_replay_sqlite_harness.py'
       - 'tests/test_pr_audit_integrity.py'
       - 'tests/test_pr_audit_export.py'
+      - 'tests/test_pr_signed_audit_checkpoint.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -59,6 +61,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_replay_sqlite_harness.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_audit_integrity.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_audit_export.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_signed_audit_checkpoint.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
