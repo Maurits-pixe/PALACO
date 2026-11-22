@@ -132,9 +132,11 @@ def seal_advisory_report(data: object, result: dict) -> dict:
         report["manifest_sha256"] = (
             manifest["manifest_sha256"] if manifest is not None else None
         )
+        report["snapshot_sha256"] = canonical_digest(data)
         report["report_sha256"] = canonical_digest(report)
     except (TypeError, ValueError, OverflowError, RecursionError):
         report["manifest_sha256"] = None
+        report["snapshot_sha256"] = None
         report["technical_inputs_complete"] = False
         report["reasons"] = sorted(set(report["reasons"] + ["unhashable_snapshot"]))
         report["report_sha256"] = None
