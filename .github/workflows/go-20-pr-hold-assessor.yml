@@ -21,6 +21,8 @@ on:
       - 'tests/run_go20_postgres_disposable.sh'
       - 'tests/go20_postgres_rls_fixture.sql'
       - 'tests/run_go20_postgres_rls_disposable.sh'
+      - 'tests/go20_postgres_identity_fixture.sql'
+      - 'tests/run_go20_postgres_identity_disposable.sh'
       - '.github/workflows/go-20-pr-hold-assessor.yml'
   workflow_dispatch:
 
@@ -80,3 +82,7 @@ jobs:
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
         run: bash tests/run_go20_postgres_rls_disposable.sh
+      - name: Test synthetic principal binding and denied role hopping
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_identity_disposable.sh
