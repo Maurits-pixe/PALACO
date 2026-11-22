@@ -130,6 +130,50 @@ class AssessorTests(unittest.TestCase):
             (root / "proof.txt").symlink_to(root / "target.txt")
             self.assertIn("artifact_unreadable", module.assess(self.valid(), root)["reasons"])
 
+    def test_manifest_is_deterministic(self):
+        data = self.valid()
+        second = dict(data)
+        second["evidence"] = [dict(reversed(list(data["evidence"][0].items())))]
+        left = module.assess(data)
+        right = module.assess(second)
+        self.assertEqual(left["manifest_sha256"], right["manifest_sha256"])
+        self.assertEqual(left["snapshot_sha256"], right["snapshot_sha256"])
+        self.assertEqual(left["report_sha256"], right["report_sha256"])
+        self.assertEqual(left["authorization"], "DENY")
+
+    def test_manifest_changes_when_artifact_digest_changes(self):
+        data = self.valid()
+        before = module.assess(data)
+        data["evidence"][0]["artifact_sha256"] = "c" * 64
+        after = module.assess(data)
+        self.assertNotEqual(before["manifest_sha256"], after["manifest_sha256"])
+        self.assertNotEqual(before["report_sha256"], after["report_sha256"])
+
+    def test_report_changes_with_review_state(self):
+        data = self.valid()
+        before = module.assess(data)
+        data["reviews"] = "pending"
+        after = module.assess(data)
+        self.assertEqual(before["manifest_sha256"], after["manifest_sha256"])
+        self.assertNotEqual(before["snapshot_sha256"], after["snapshot_sha256"])
+        self.assertNotEqual(before["report_sha256"], after["report_sha256"])
+        self.assertEqual(after["authorization"], "DENY")
+
+    def test_manifest_rejects_mismatched_commit(self):
+        data = self.valid()
+        data["evidence"][0]["head_sha"] = "c" * 40
+        self.assertIsNone(module.evidence_manifest(data))
+        self.assertIsNone(module.assess(data)["manifest_sha256"])
+
+    def test_non_json_value_fails_closed(self):
+        data = self.valid()
+        data["unexpected"] = object()
+        result = module.assess(data)
+        self.assertFalse(result["technical_inputs_complete"])
+        self.assertIn("unhashable_snapshot", result["reasons"])
+        self.assertIsNone(result["report_sha256"])
+        self.assertEqual(result["authorization"], "DENY")
+
     def test_invalid_root(self):
         self.assertEqual(module.assess([])["authorization"], "DENY")
 
