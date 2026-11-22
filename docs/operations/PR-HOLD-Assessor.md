@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v9 (candidate)
+# PALACO — offline PR HOLD assessor v10 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -256,3 +256,35 @@ database-isolatieniveaus, multi-writerconsistentie of duurzame opslag.
 Geen GitHub-merge, autorisatie of productie-uitvoering wordt geactiveerd.
 Een echte database-implementatie vereist onafhankelijke integratietests,
 concurrerende transacties en crash-/herstelproeven.
+
+## V10 — SQLite-integratieharness in een tijdelijke testdatabase
+
+`scripts/pr_replay_sqlite_harness.py` bevat een afgesloten SQLite-harness
+die **uitsluitend zelf een nieuwe tijdelijke database** aanmaakt. Er is
+geen parameter voor een bestaande database, geen externe verbinding en
+geen productieconfiguratie. De database wordt na de tests opgeruimd.
+
+```sh
+python3 -m unittest discover -s tests -p 'test_pr_replay_sqlite_harness.py' -v
+```
+
+De harness opent voor iedere schrijfpoging een afzonderlijke verbinding
+en begint met `BEGIN IMMEDIATE`. Binnen die transactie worden de
+huidige toestand en de v8-voorwaarden gelezen en opnieuw gecontroleerd.
+De toestand en afzonderlijk uniek geïndexeerde ontvangsthashes worden
+samen ingevoegd, gevolgd door één `COMMIT`. Bij fouten en geïnjecteerde
+fouten na de toestandswijziging of na ontvangstregistratie volgt
+`ROLLBACK`. De tests controleren dat géén deelwijziging blijft staan.
+
+De tests behandelen daarnaast twee daadwerkelijk concurrerende lokale
+threads, hergebruik van dezelfde hash, heropening van SQLite-verbindingen,
+afwijkende revisies en een herhaalde poging na rollback.
+
+**Belangrijke grens:** dit verifieert alleen de tijdelijke SQLite-fixture.
+Het is geen integratie met PALACO MONO/Supabase/PostgreSQL, geen
+crashconsistentie- of cross-host-test, geen bewijs van productiegeschiktheid,
+en geen autorisatie. De fixture bevat uitsluitend synthetische gegevens,
+de verstrekte testreceipts zijn niet rechtsgeldig en alle verdicts houden
+`decision: HOLD`, `authorization: DENY` en
+`production_database_touched: false`. Een backendimplementatie vereist
+een aparte beveiligingsreview en formele releaseprocedure.
