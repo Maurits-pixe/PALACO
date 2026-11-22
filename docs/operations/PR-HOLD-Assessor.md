@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v5 (candidate)
+# PALACO — offline PR HOLD assessor v6 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -97,3 +97,58 @@ reviewer's organizational authority. Trust-store lifecycle, key revocation,
 authenticated identity binding, time semantics and full artifact origin are
 not established. No verifier result authorizes execution, production,
 release or a GitHub merge; GO-13 stays HOLD.
+
+## V6 — externe sleutelstatus en replaycontrole
+
+Nieuwe offline, alleen-lezen beleidscontrole:
+`scripts/pr_attestation_policy.py`. Deze bouwt voort op de v5-verificatie
+van Ed25519-handtekeningen en rapportketens. Alle gegevens moeten
+**onafhankelijk** van de te controleren rapportketen beschikbaar zijn.
+
+```sh
+python3 scripts/pr_attestation_policy.py chain.json \
+  --registry trusted-key-registry.json \
+  --replay-journal trusted-replay-journal.json
+python3 -m unittest discover -s tests -p 'test_pr_attestation_policy.py' -v
+```
+
+Vertrouwensregister (voorbeeld, fictieve sleutel):
+
+```json
+{
+  "schema": "palaco.pr-trust-registry.v1",
+  "keys": {
+    "reviewer-a": {
+      "public_key_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "status": "active",
+      "valid_from_sequence": 0,
+      "valid_until_sequence": null
+    }
+  }
+}
+```
+
+Replayregister, onafhankelijk vastgelegd:
+
+```json
+{
+  "schema": "palaco.pr-replay-journal.v1",
+  "consumed_entry_sha256": []
+}
+```
+
+De beleidscontrole controleert onbekende of ingetrokken sleutels, grenzen van
+toegestane indexnummers, reeds geregistreerde entry-digests, dubbele vermeldingen
+in het replayregister en de verplichte v5-rapportketenverificatie. Een replaymatch,
+ontbrekend register of ongeldige structuur resulteert in `policy_valid: false`.
+
+**Begrenzing:** de reeksnummers zijn geen tijdstempels en kunnen geen
+historisch sleutellidmaatschap bewijzen. Dit is een uitsluitend lokale
+momentopname. De tool schrijft **geen** replaystatus terug; gelijktijdige
+controleurs zonder gezamenlijk atomair register kunnen dezelfde nieuwe entry
+tweemaal accepteren. Een veilige productie-implementatie heeft een onafhankelijk
+geauthenticeerd register, actuele intrekkingsgegevens, commitbinding,
+atomair verbruik van replaytokens, en een menselijke governancebeslissing nodig.
+`policy_valid: true` blijft uitsluitend een technisch oordeel, nooit release-
+of uitvoeringsautorisatie. GO-13 blijft HOLD en alle uitkomsten houden
+`decision: HOLD` en `authorization: DENY`.
