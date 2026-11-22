@@ -1,6 +1,8 @@
 """Negative and contract tests for the offline PR assessor."""
 import importlib.util
+import hashlib
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,13 +23,15 @@ class AssessorTests(unittest.TestCase):
                 "kind": "unit-test-log",
                 "head_sha": "a" * 40,
                 "artifact_sha256": "b" * 64,
+                "path": "proof.txt",
             }],
             "go13_release_authorized": True,
         }
 
     def test_complete_inputs_still_deny(self):
         result = module.assess(self.valid())
-        self.assertTrue(result["technical_inputs_complete"])
+        self.assertFalse(result["technical_inputs_complete"])
+        self.assertIn("evidence_not_verified", result["reasons"])
         self.assertEqual((result["decision"], result["authorization"]), ("HOLD", "DENY"))
 
     def test_missing_evidence(self):
@@ -86,6 +90,45 @@ class AssessorTests(unittest.TestCase):
         data = self.valid()
         data["evidence"] = ["unbound-evidence"]
         self.assertIn("invalid_evidence", module.assess(data)["reasons"])
+
+    def test_verified_file_matches_and_still_denies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            proof = Path(directory) / "proof.txt"
+            proof.write_bytes(b"synthetic local evidence")
+            data = self.valid()
+            data["evidence"][0]["artifact_sha256"] = hashlib.sha256(proof.read_bytes()).hexdigest()
+            result = module.assess(data, Path(directory))
+            self.assertTrue(result["technical_inputs_complete"])
+            self.assertEqual(result["authorization"], "DENY")
+
+    def test_digest_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            (Path(directory) / "proof.txt").write_bytes(b"tampered")
+            result = module.assess(self.valid(), Path(directory))
+            self.assertIn("artifact_digest_mismatch", result["reasons"])
+
+    def test_rejects_parent_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = self.valid()
+            data["evidence"][0]["path"] = "../outside.txt"
+            self.assertIn("invalid_artifact_path", module.assess(data, Path(directory))["reasons"])
+
+    def test_rejects_absolute_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            data = self.valid()
+            data["evidence"][0]["path"] = "/etc/passwd"
+            self.assertIn("invalid_artifact_path", module.assess(data, Path(directory))["reasons"])
+
+    def test_missing_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertIn("artifact_unreadable", module.assess(self.valid(), Path(directory))["reasons"])
+
+    def test_rejects_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "target.txt").write_bytes(b"evidence")
+            (root / "proof.txt").symlink_to(root / "target.txt")
+            self.assertIn("artifact_unreadable", module.assess(self.valid(), root)["reasons"])
 
     def test_invalid_root(self):
         self.assertEqual(module.assess([])["authorization"], "DENY")
