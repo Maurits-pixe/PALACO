@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v7 (candidate)
+# PALACO — offline PR HOLD assessor v8 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -187,3 +187,43 @@ het actuele replayregister toetsen, en pas daarna atomair opslaan.
 Snapshotversheid, sleutelintrekking, rollbackbescherming en een formele
 human-authority-verificatie vallen nog buiten dit lokale ontwerp.
 Alle uitkomsten houden **HOLD / DENY**.
+
+## V8 — transactioneel replaycontract (simulatie; niet persistent)
+
+`scripts/pr_replay_transaction_contract.py` bevat een **zuivere,
+alleen-lezen** referentiefunctie `evaluate_transition(current, proposal)`.
+Deze modelleert de voorwaarden voor een toekomstige transactionele
+compare-and-swap (CAS) replayopslag, maar opent geen databaseverbinding,
+plaatst geen vergrendeling en schrijft geen gegevens weg.
+
+```sh
+python3 -m unittest discover -s tests -p 'test_pr_replay_transaction_contract.py' -v
+```
+
+Het contract vereist tegelijk:
+
+- Exact gespecificeerde, geldige huidige staat en voorgestelde transactie.
+- Geldige SHA-256-binding van het voorstel aan de **ongewijzigde**
+  verwachte revisie en gehele huidige toestand.
+- Geen eerder verbruikte of dubbele ontvangsthashes.
+- Een canoniek gesorteerd nieuw replayregister dat exact overeenkomt met
+  de huidige hashes plus de nieuwe hashes.
+- Overeenstemmende hash van het voorgestelde nieuwe replayregister.
+- Maximale registergrootte van 10.000 hashes en veilige 64-bits revisiegrens.
+- Een expliciete `atomic_commit_performed: false` in het voorstel.
+
+Alleen als alle voorwaarden gelden retourneert het contract een
+`proposed_next_state` met `revision + 1` en een bijbehorende hash.
+Ook in dat geval blijven `state_persisted: false`,
+`atomic_commit_performed: false`, `decision: HOLD` en
+`authorization: DENY`.
+
+**Vereiste toekomstige backendsemantiek:** verkrijg binnen één
+serialiseerbare transactie een exclusieve toestandvergrendeling; laad
+de actuele registerinhoud; verifieer de vertrouwde identiteit en
+autorisatie buiten dit simulatiemodel; controleer revisie en toestandhash;
+controleer opnieuw iedere hash op eerder verbruik; schrijf het nieuwe
+register en de nieuwe revisie samen atomair weg; commit éénmaal of
+rollback volledig. Verleen geen uitvoeringsbevoegdheid op basis van
+het feit dat het simulatiecontract slaagt. De code in v8 **implementeert
+deze databasehandelingen niet**. GO-13 blijft HOLD.
