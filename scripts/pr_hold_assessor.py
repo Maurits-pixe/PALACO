@@ -81,6 +81,66 @@ def verify_local_artifact(root: Path, relative: object, expected: object) -> str
             os.close(descriptor)
 
 
+
+def canonical_digest(payload: object) -> str:
+    """Deterministic UTF-8 digest; never a signature or trust attestation."""
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def evidence_manifest(data: object) -> dict | None:
+    """Build a stable manifest solely from well-formed, locally supplied records."""
+    if not isinstance(data, dict):
+        return None
+    repository, head_sha, items = (
+        data.get("repository"), data.get("head_sha"), data.get("evidence")
+    )
+    if not isinstance(repository, str) or not is_hex(head_sha, 40):
+        return None
+    if not isinstance(items, list) or not items:
+        return None
+    entries = []
+    for item in items:
+        if (not isinstance(item, dict) or
+                set(item) != {"kind", "head_sha", "artifact_sha256", "path"} or
+                not isinstance(item["kind"], str) or not item["kind"].strip() or
+                not isinstance(item["path"], str) or not item["path"] or
+                not is_hex(item["artifact_sha256"], 64) or
+                item["head_sha"] != head_sha):
+            return None
+        entries.append(dict(item))
+    entries.sort(key=lambda entry: (
+        entry["path"], entry["kind"], entry["artifact_sha256"], entry["head_sha"]
+    ))
+    manifest = {
+        "schema": "palaco.pr-evidence-manifest.v1",
+        "repository": repository,
+        "head_sha": head_sha,
+        "entries": entries,
+    }
+    return {"manifest": manifest, "manifest_sha256": canonical_digest(manifest)}
+
+
+def seal_advisory_report(data: object, result: dict) -> dict:
+    """Add reproducible identifiers without elevating the authority of inputs."""
+    report = dict(result)
+    try:
+        manifest = evidence_manifest(data)
+        report["manifest_sha256"] = (
+            manifest["manifest_sha256"] if manifest is not None else None
+        )
+        report["report_sha256"] = canonical_digest(report)
+    except (TypeError, ValueError, OverflowError, RecursionError):
+        report["manifest_sha256"] = None
+        report["technical_inputs_complete"] = False
+        report["reasons"] = sorted(set(report["reasons"] + ["unhashable_snapshot"]))
+        report["report_sha256"] = None
+    return report
+
+
 def assess(data: object, evidence_root: Path | None = None) -> dict:
     reasons: list[str] = []
     if not isinstance(data, dict):
@@ -140,14 +200,14 @@ def assess(data: object, evidence_root: Path | None = None) -> dict:
                     seen.add(digest)
         if data.get("go13_release_authorized") is not True:
             reasons.append("go13_not_authorized")
-    return {
+    return seal_advisory_report(data, {
         "schema": SCHEMA,
         "decision": "HOLD",
         "authorization": "DENY",
         "reasons": sorted(set(reasons)),
         "technical_inputs_complete": not reasons,
         "note": "Advisory input consistency only; independent evidence verification and human authority required."
-    }
+    })
 
 
 def main(argv: list[str] | None = None) -> int:
