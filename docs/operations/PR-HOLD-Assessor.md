@@ -626,3 +626,64 @@ uitgesloten. De positieve cryptografische tests vereisen de optionele
 de verifier niet positief valideren. Alle verdicts blijven
 `decision: HOLD` en `authorization: DENY`.
 GO-13 blijft HOLD, PR #109 Draft, zonder productieaanpassingen.
+
+## V19 — afzonderlijk ondertekende getuigen en audit-forkdetectie
+
+`scripts/pr_audit_witness_forks.py` controleert in alleen-lezen modus
+of onafhankelijke, Ed25519-ondertekende getuigenverklaringen elkaar
+tegenspreken over **dezelfde** auditcheckpointrevisie.
+
+```sh
+python3 scripts/pr_audit_witness_forks.py \
+  --evidence witnessed-bundles.json \
+  --audit-trust independently-pinned-audit-keys.json \
+  --witness-trust independently-pinned-witness-keys.json \
+  --expected-revision 42 \
+  --minimum-witnesses 2
+python3 -m unittest discover -s tests -p 'test_pr_audit_witness_forks.py' -v
+```
+
+De `evidence`-input gebruikt `schema:
+palaco.go20-witness-evidence.v1` en twee arrays:
+`bundles` (1–16 v17-bundels met export, manifest, checkpoint) en
+`attestations` (1–64 onafhankelijke verklaringen). De bundels
+worden eerst integraal via de v17-checkpointverifier en het externe
+auditsleutelregister gecontroleerd. De verwachte revisie is expliciet
+en **mag niet** uitsluitend uit een onbetrouwbare bundel komen.
+
+Het tweede, afzonderlijke getuigensleutelregister
+(`palaco.go20-witness-trust.v1`) houdt per `witness_id` een
+Ed25519-`public_key_hex` en `active`/`revoked`-status bij.
+Getuigen ondertekenen de canonieke statement
+`palaco.go20-witness-statement.v1`, met `witness_id`,
+`revision` en `checkpoint_payload_sha256`.
+De Ed25519-verificatie wordt domeingescheiden uitgevoerd volgens
+de bestaande PALACO-handtekeningconventie.
+
+De controle weigert onbekende, ingetrokken, dubbele en vervalste
+getuigenverklaringen, niet-ondertekende of ongeldige auditbundels,
+ongeldige revisies en onvolledige getuigenquorums. Het quorum vereist
+standaard **twee verschillende actieve getuigensleutels** per
+gecontroleerde checkpoint, configureerbaar van twee tot acht.
+Wanneer twee verschillende, cryptografisch geverifieerde
+checkpoint-payloads van dezelfde revisie getuigenverklaringen hebben,
+rapporteert de tool `fork_detected: true` en
+`signed_checkpoint_fork_detected`. Een getuige die twee afwijkende
+hashes ondertekent, wordt apart als `witness_equivocation` gemarkeerd.
+**Geen enkel geldig quorum geeft toestemming tot vrijgave of
+uitvoering:** alle antwoorden behouden `decision: HOLD` en
+`authorization: DENY`.
+
+**Grenzen:** deze tool is geen publicatie-, quorum- of sleutelbeheer-
+dienst. Onafhankelijkheid van de sleutels is een externe organisatorische
+voorwaarde; verschillende sleutel-ID's bewijzen op zichzelf geen
+onafhankelijke eigenaarschap of fysieke gescheiden opslag. Verbergde
+checkpoints zonder aangeboden getuigenverklaringen zijn hiermee niet
+detecteerbaar. Voor detectie van split views op verschillende momenten
+zijn transparante, duurzame getuigenregisters, authenticatie van
+publieke sleutelwijzigingen en gossip tussen onafhankelijke
+waarnemers nodig. Er is geen dergelijke dienst, databasewijziging,
+signing-service of productieautorisatie gebouwd. De positieve
+Ed25519-regressies vereisen de optionele `cryptography`-backend;
+zonder backend worden die tests overgeslagen, en verificatie weigert
+de technische acceptatie. **GO-13 HOLD / DENY; PR #109 Draft.**
