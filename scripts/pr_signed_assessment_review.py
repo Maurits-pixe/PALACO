@@ -56,6 +56,7 @@ def verify_review(envelope: object, receipt: object, inputs: object,
         errors.extend("receipt:" + issue for issue in receipt_result["errors"])
     reviewers = reviewer_trust["reviewers"]
     selected: dict[str, str] = {}
+    selected_keys: set[str] = set()
     for index, item in enumerate(envelope["attestations"]):
         if not isinstance(item, dict) or set(item) != {
             "role", "reviewer_id", "signature_ed25519_hex"
@@ -78,6 +79,10 @@ def verify_review(envelope: object, receipt: object, inputs: object,
                 record.get("role") != role):
             errors.append(f"untrusted_revoked_or_wrong_role:{index}")
             continue
+        if record["public_key_hex"] in selected_keys:
+            errors.append(f"reviewer_public_key_reuse:{index}")
+            continue
+        selected_keys.add(record["public_key_hex"])
         if not is_hex(item["signature_ed25519_hex"], 128):
             errors.append(f"invalid_signature_encoding:{index}")
             continue
