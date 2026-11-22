@@ -949,3 +949,73 @@ onafhankelijke pin kan wijzigen, kan de gegevens vervalsen.
 Er is geen echte HR-verificatie, externe identiteitscontrole,
 beheerservice, productieautorisatie of GitHub-mergepoort
 geïmplementeerd. GO-13 blijft HOLD; PR #109 blijft Draft.
+
+## V25 — doorlopende governancegeschiedenis en gecontroleerde reviewerrotatie
+
+`scripts/pr_governance_history.py` verifieert in alleen-lezen
+modus een keten van 2–16 opeenvolgende v24-governanceversies met
+verplicht ondertekende overgangsverklaringen.
+
+```sh
+python3 scripts/pr_governance_history.py \
+  --history governance-history.json \
+  --independent-pin independently-retained-governance-history-pin.json \
+  --controller-trust independently-provisioned-governance-controllers.json
+python3 -m unittest discover -s tests -p 'test_pr_governance_history.py' -v
+```
+
+Het historydocument (`palaco.go20-governance-history.v1`)
+bevat `snapshots` en `transitions`. Iedere snapshot draagt
+de bijbehorende `policy`, cryptografische `review`,
+`receipt`, de zes originele `inputs` en `reviewer_trust`.
+**Iedere snapshot** wordt met de volledige v24-module opnieuw
+gevalideerd, inclusief de geverifieerde v23-handtekeningen,
+v22-rapportherberekening en de oorspronkelijke v21-evidence.
+De governanceversies moeten zonder revisiesprong oplopen.
+
+Een afzonderlijke, extern vastgelegde pin
+(`palaco.go20-governance-history-pin.v1`) verankert de
+eerste en laatste beleidsversies met hun SHA-256-hashes
+en exacte revisies. Iedere overgang bevat oude en nieuwe
+revisie en beleidshash, een lijst `changed_roles`, de
+`controller_id` en diens Ed25519-handtekening over een
+domeingescheiden `palaco.go20-governance-transition.v1`
+statement. De publieke sleutel van de controller wordt
+gecontroleerd tegen een **apart** aangeleverd, actueel
+`palaco.go20-governance-controller-trust.v1`-register.
+Een ingetrokken controller of een controller met dezelfde
+publieke sleutel als een reviewer wordt geweigerd.
+
+Bij een reviewerrotatie mogen **maximaal één rol per
+governanceovergang** en de bijbehorende revieweridentiteit
+en sleutelregistratie wijzigen. Een onverklaarde wijziging,
+dubbele rotatie, ongelijke overgangshashes, vervalste
+handtekeningen, gewijzigde verboden capabilities of een
+historisch ongeldige reviewerattestatie leidt tot afwijzing.
+
+### Beveiligingsacceptatiecriteria
+
+1. Alle v11–v25 PostgreSQL-, RLS-, replay-, audit- en Python-
+   tests moeten zijn uitgevoerd; geen mislukte verplichte CI-jobs.
+2. Iedere historische snapshot moet opnieuw cryptografisch
+   en beleidsmatig geldig zijn, ook als de huidige snapshot
+   geldig is.
+3. Een externe governancecontroller is nodig om elke
+   beleidsversieovergang te attesteren; diens sleutel
+   moet van reviewers gescheiden zijn.
+4. Historische begin- en eindankers, actuele reviewer- en
+   controllerregisters mogen niet uitsluitend uit de
+   te controleren geschiedenis zelf zijn overgenomen.
+5. De PR blijft Draft en alle reviews blijven strikt
+   adviserend: GO-13 HOLD, autorisatie DENY, geen merge
+   en geen productie-uitrol.
+
+**Grenzen:** handtekeningen bewijzen geen feitelijke
+organisatorische onafhankelijkheid, noch de authenticiteit
+van een extern aangeleverd sleutelregister. De module bewaart
+geen ankers, beheert geen sleutels, roteert geen echte accounts
+en wijzigt geen GitHub-governance. Ook een volledig positief
+verdict behoudt `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false` en
+`production_commit_performed: false`.
