@@ -14,6 +14,7 @@ on:
       - 'scripts/pr_signed_audit_checkpoint.py'
       - 'scripts/pr_audit_continuity.py'
       - 'scripts/pr_audit_witness_forks.py'
+      - 'scripts/pr_witness_transparency.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -26,6 +27,7 @@ on:
       - 'tests/test_pr_signed_audit_checkpoint.py'
       - 'tests/test_pr_audit_continuity.py'
       - 'tests/test_pr_audit_witness_forks.py'
+      - 'tests/test_pr_witness_transparency.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -68,6 +70,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_signed_audit_checkpoint.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_audit_continuity.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_audit_witness_forks.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_witness_transparency.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
