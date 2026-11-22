@@ -687,3 +687,60 @@ signing-service of productieautorisatie gebouwd. De positieve
 Ed25519-regressies vereisen de optionele `cryptography`-backend;
 zonder backend worden die tests overgeslagen, en verificatie weigert
 de technische acceptatie. **GO-13 HOLD / DENY; PR #109 Draft.**
+
+## V20 — transparante offline getuigenlogs en conflicterende publicaties
+
+De module \`scripts/pr_witness_transparency.py\` controleert een
+**afzonderlijk aangeleverd**, offline journal van per-getuige
+ondertekende checkpointpublicaties. Er is geen webservice, geen
+automatische publicatie, geen database en geen productie-integratie.
+
+\`\`\`sh
+python3 scripts/pr_witness_transparency.py \
+  --logbook witness-transparency.json \
+  --witness-trust trusted-witness-keys.json \
+  --independent-pins externally-retained-heads.json \
+  --start-revision 21
+python3 -m unittest discover -s tests \
+  -p 'test_pr_witness_transparency.py' -v
+\`\`\`
+
+Het journal gebruikt \`schema: palaco.go20-witness-transparency.v1\`,
+met twee tot zestien getuigenlogs. Elke getuige heeft een \`witness_id\`
+en één tot 256 cumulatief opeenvolgende publicaties:
+\`sequence\`, \`revision\`, \`checkpoint_payload_sha256\`,
+\`previous_entry_sha256\`, \`entry_sha256\` en
+\`signature_ed25519_hex\`. De statement heeft het schema
+\`palaco.go20-transparency-entry.v1\` en wordt per entry met
+Ed25519 ondertekend volgens de bestaande PALACO-domeinscheiding.
+De genesis-voorganger bestaat uit 64 hexnullen. De
+\`entry_sha256\` is SHA-256 van het canonieke statement.
+
+De controle vereist afzonderlijk aangeleverde actieve
+getuigensleutels (\`palaco.go20-witness-trust.v1\`) en een eerder
+**onafhankelijk vastgelegde** verzameling logkoppen
+(\`palaco.go20-transparency-pins.v1\`), met voor iedere getuige
+\`last_sequence\` en \`head_sha256\`. De extern vastgelegde
+\`start_revision\` moet voor beide logs gelijk zijn; publicaties
+dienen per getuige zonder ontbrekende revisies of posities te volgen.
+De controle weigert afwijkende logkoppen, ongeldige
+handtekeningen, ontbrekende regels, verkorte geschiedenis,
+dubbele getuigenidentiteiten, ingetrokken sleutels en niet-overeenkomende
+publicatiehorizonnen. Twee geldige, onafhankelijke getuigenlogs
+die over dezelfde revisie verschillende checkpointpayloadhashes
+publiceren, veroorzaken \`fork_detected: true\` en
+\`conflicting_signed_publications\`.
+
+**Geen volledig transparant publicatiesysteem:** deze code verifieert
+uitsluitend **aangeleverde** logboeken. Ze schrijft of verspreidt
+geen publicaties en beheert geen onafhankelijke, duurzame
+getuigenopslag. De externe pinnen mogen niet uitsluitend uit
+de aangeleverde logs worden herberekend. Meerdere sleutels
+bewijzen niet dat hun eigenaars onafhankelijk zijn. Deze
+logcontrole verifieert de publicatieverklaring, maar vereist
+een separate v17-verificatie van de bijbehorende auditcheckpointbundels
+en v18-continuïteit voordat de onderliggende auditevents zelf
+cryptografisch zijn geverifieerd. Een niet-gepubliceerde fork
+kan niet worden gedetecteerd. Alle verdicts blijven
+\`decision: HOLD\` en \`authorization: DENY\`;
+PR #109 blijft Draft, GO-13 blijft HOLD.
