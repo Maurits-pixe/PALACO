@@ -1019,3 +1019,44 @@ verdict behoudt `decision: HOLD`,
 `authorization: DENY`, `release_authorized: false`,
 `merge_authorized: false` en
 `production_commit_performed: false`.
+
+## V26 — fail-closed governancehardening en vijandige bewijsinvoer
+
+`scripts/pr_governance_hardening.py` biedt een afzonderlijke, alleen-lezen
+beveiligingslaag rond de historische v25-governanceverificatie.
+
+```sh
+python3 scripts/pr_governance_hardening.py \
+  --history governance-history.json \
+  --independent-pin externally-retained-history-pin.json \
+  --controller-trust independently-provisioned-controller-keys.json
+python3 -m unittest discover -s tests -p 'test_pr_governance_hardening.py' -v
+```
+
+De ingang accepteert uitsluitend afzonderlijk aangeleverde JSON-bestanden,
+begrenst elk bronbestand op 8 MiB, JSON-diepte op 64 niveaus, de totale
+nodeomvang op 250.000 en strings op maximaal 1.000.000 tekens.
+Dubbele JSON-sleutels, niet-finite getallen en niet-canonieke in-memory
+waardetypen worden geweigerd. Corruptie van historische snapshots,
+trustregisters, reviewerattestaties, rolrotaties en ondertekende
+overgangen wordt fail-closed verwerkt.
+
+Bij technisch geldige input controleert v26 de **complete**
+v25-governancegeschiedenis, inclusief v24-reviewerbeleid,
+v23-handtekeningen, v22-herberekening, onderliggende auditketens en
+de extern aangeleverde onafhankelijke begin- en eindankers.
+De JSON-uitkomst `palaco.go20-governance-hardening-verdict.v1`
+kan `evidence_valid: true` aangeven, maar verleent geen rechten.
+
+De governance-uitkomst blijft onder alle omstandigheden
+`decision: HOLD`, `authorization: DENY`,
+`release_authorized: false`, `merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+
+**Grenzen:** deze beveiligingslaag handelt alleen lokaal aangeleverde
+bewijspakketten af. Zij vervangt geen onafhankelijke key custody,
+feitelijke organisatiecontrole, externe onveranderlijke opslag,
+productiebevoegdheden of autorisatiepoort op GitHub.
+De nieuwe regressies zijn toegevoegd aan de bestaande advisory CI.
+GO-13 blijft HOLD en PR #109 blijft Draft, zonder merge of uitrol.
