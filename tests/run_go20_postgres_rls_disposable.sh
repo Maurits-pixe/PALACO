@@ -8,6 +8,7 @@ fi
 export PGHOST=127.0.0.1 PGPORT=5432 PGUSER=go20test PGDATABASE=go20test PGPASSWORD=go20test
 psql -X -v ON_ERROR_STOP=1 -f tests/go20_postgres_rls_fixture.sql
 initial_revision="$(psql -XAt -v ON_ERROR_STOP=1 -c 'SELECT revision FROM go20_test.state')"
+initial_receipts="$(psql -XAt -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM go20_test.consumed')"
 
 query_as() {
   local role="$1" sql="$2"
@@ -33,6 +34,6 @@ must_deny go20_alpha "SELECT go20_test.try_consume(0,repeat('a',64),repeat('b',6
 must_deny go20_beta "SELECT go20_test.try_consume(0,repeat('a',64),repeat('b',64),repeat('c',64));"
 
 [[ "$(psql -XAt -v ON_ERROR_STOP=1 -c 'SELECT revision FROM go20_test.state')" == "$initial_revision" ]]
-[[ "$(psql -XAt -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM go20_test.consumed')" == 0 ]]
+[[ "$(psql -XAt -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM go20_test.consumed')" == "$initial_receipts" ]]
 [[ "$(psql -XAt -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM go20_test.tenant_evidence')" == 2 ]]
 echo "GO-20 v12 PostgreSQL role/RLS negative tests: PASS"
