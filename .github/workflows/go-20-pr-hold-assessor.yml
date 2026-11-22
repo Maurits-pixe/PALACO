@@ -21,6 +21,7 @@ on:
       - 'scripts/pr_review_governance.py'
       - 'scripts/pr_governance_history.py'
       - 'scripts/pr_governance_hardening.py'
+      - 'scripts/pr_security_acceptance.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -40,6 +41,7 @@ on:
       - 'tests/test_pr_review_governance.py'
       - 'tests/test_pr_governance_history.py'
       - 'tests/test_pr_governance_hardening.py'
+      - 'tests/test_pr_security_acceptance.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -89,6 +91,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_review_governance.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_governance_history.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_governance_hardening.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_security_acceptance.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
