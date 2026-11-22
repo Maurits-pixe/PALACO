@@ -1,19 +1,15 @@
-# PALACO — offline PR HOLD assessor (candidate)
+# PALACO — offline PR HOLD assessor v2 (candidate)
 
-This opt-in, standard-library-only tool reads a **local synthetic or independently
-collected JSON snapshot** and emits a deterministic, machine-readable assessment.
-It does not query GitHub, approve a PR, validate cryptographic signatures, grant
-privileges, modify CI, or authorize deployments. It is not a trusted attestation.
+Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
 ## Run
 
-```bash
+```sh
 python3 -m unittest discover -s tests -p 'test_pr_hold_assessor.py'
 python3 scripts/pr_hold_assessor.py path/to/snapshot.json
 ```
 
-Example snapshot (replace the illustrative SHA with the real, independently
-verified head commit before any human review):
+Example synthetic input:
 
 ```json
 {
@@ -21,18 +17,19 @@ verified head commit before any human review):
   "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "checks": {"unit": "success", "security": "pending"},
   "reviews": "pending",
-  "evidence": ["synthetic-local-test"],
+  "evidence": [
+    {
+      "kind": "unit-test-log",
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ],
   "go13_release_authorized": false
 }
 ```
 
-Valid check states: `success`, `failure`, `pending`, `missing`.
-Valid review states: `approved`, `changes_requested`, `pending`, `missing`.
-Missing, invalid, or failed fields are listed under `reasons`. The output
-always contains `decision: HOLD` and `authorization: DENY`, including when
-`technical_inputs_complete` is true. No automated promotion exists.
+The `evidence` entries bind an artifact digest and type to a head SHA. The assessor checks **only the syntax and internal consistency** of those fields. It does not hash files, authenticate the source, verify signatures, confirm a real GitHub check, or establish actual authorization. The input may be fabricated and cannot be used as an attestation. Duplicate JSON keys and duplicate evidence digests are rejected; legacy string-only evidence records are rejected. SHA-1 head identifiers require 40 lowercase hex digits; SHA-256 artifacts require 64 lowercase hex digits.
 
-**Governance:** GO-13 remains HOLD. A separate authorized human review, external
-evidence verification, and documented approval would be needed before any
-release. This candidate must not be represented as an effective authorization
-or as proof that actual GitHub checks have passed.
+Valid check states: `success`, `failure`, `pending`, `missing`; reviews: `approved`, `changes_requested`, `pending`, `missing`. Any non-successful check produces a reason. `technical_inputs_complete` is an advisory statement about local input consistency, not verified trust.
+
+**Every output keeps `decision: HOLD` and `authorization: DENY`.** GO-13 remains HOLD. No merge or production promotion is permitted by this tool. Independent human review and verified evidence are separate requirements.
