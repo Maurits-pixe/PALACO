@@ -19,6 +19,8 @@ on:
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
+      - 'tests/go20_postgres_rls_fixture.sql'
+      - 'tests/run_go20_postgres_rls_disposable.sh'
       - '.github/workflows/go-20-pr-hold-assessor.yml'
   workflow_dispatch:
 
@@ -51,7 +53,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16.8
+        image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
         env:
           POSTGRES_DB: go20test
           POSTGRES_USER: go20test
@@ -74,3 +76,7 @@ jobs:
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
         run: bash tests/run_go20_postgres_disposable.sh
+      - name: Test isolated tenant RLS and negative permissions
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_rls_disposable.sh
