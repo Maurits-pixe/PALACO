@@ -799,3 +799,47 @@ publicaties, controleert geen klok-/timestampbewijs en
 bewijst geen bronvolledigheid vóór het eerste anker. Er is geen
 uitvoering, merge, uitrol, signing-service of verbinding met
 PALACO MONO. GO-13 blijft HOLD; PR #109 blijft Draft.
+
+## V22 — reproduceerbare beoordelingsreceipt en onafhankelijke hercontrole
+
+De alleen-lezen module `scripts/pr_assessment_receipt.py` legt de
+v21-technische beoordeling vast in een deterministisch JSON-document,
+`palaco.go20-assessment-receipt.v1`. De invoer is een lokaal JSON-object
+met **zes verplichte onderdelen**: `roundbook`, `audit_trust`,
+`witness_trust`, `logbook`, `external_pins` en `baseline`.
+Een ontbrekend of extra onderdeel wordt afgewezen.
+
+```sh
+python3 scripts/pr_assessment_receipt.py --inputs independently-provided-evidence.json
+python3 scripts/pr_assessment_receipt.py \
+  --inputs independently-provided-evidence.json \
+  --verify-receipt previously-recorded-receipt.json
+python3 -m unittest discover -s tests -p 'test_pr_assessment_receipt.py' -v
+```
+
+Bij het opbouwen wordt de bestaande v21-beoordelaar opnieuw uitgevoerd,
+zonder externe systemen te wijzigen. Het resultaat omvat de volledige
+`assessment`, een SHA-256 van de zes invoeronderdelen samen, afzonderlijke
+componenthashes en de hash van het uiteindelijke receipt-document.
+De receipt bevat expliciet `independently_attested: false`.
+
+**Verificatie is niet alleen een hashvergelijking.** De verifier
+herberekent de volledige v21-beoordeling uit de apart aangeleverde
+bronbestanden, inclusief alle ondertekende auditmomentopnames, historische
+continuïteit en getuigenlogs. Hij vergelijkt daarna de originele receipt
+met de opnieuw berekende componenthashes, status, foutcodes, controles
+en receipt-hash. Vervalste autorisatie, gewijzigde PASS-status,
+ontbrekende bewijsdelen, ingetrokken getuigensleutels en ontbrekende
+historische rondes veroorzaken een negatieve beoordeling. Ongeldige
+JSON, dubbele JSON-sleutels, te grote invoer en onjuiste nested
+objectstructuren worden fail-closed behandeld. Negatieve invoertests
+zijn onderdeel van de GitHub Actions-workflow.
+
+**Vertrouwensgrens:** de receipt is niet digitaal ondertekend, is geen
+onafhankelijk bewijsanker, en bewaart zelf geen externe oorsprong.
+Voor een reproduceerbare controle dienen dezelfde originele zes
+evidencebronnen via een afzonderlijk betrouwbaar kanaal beschikbaar te
+zijn. De module doet geen productieoperaties en verleent ook bij
+`receipt_valid: true` geen autorisatie: `decision: HOLD`,
+`authorization: DENY` en `external_attestation_verified: false`.
+GO-13 HOLD; PR #109 Draft, zonder merge of uitrol.
