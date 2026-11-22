@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v6 (candidate)
+# PALACO — offline PR HOLD assessor v7 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -152,3 +152,38 @@ atomair verbruik van replaytokens, en een menselijke governancebeslissing nodig.
 `policy_valid: true` blijft uitsluitend een technisch oordeel, nooit release-
 of uitvoeringsautorisatie. GO-13 blijft HOLD en alle uitkomsten houden
 `decision: HOLD` en `authorization: DENY`.
+
+## V7 — ondertekende registermomentopname en alleen-lezen CAS-voorstel
+
+`scripts/pr_replay_preflight.py` verwacht een onafhankelijk verankerde
+Ed25519-rootsleutel, een ondertekende snapshot van **zowel** het sleutelregister
+als het replayregister, en een expliciet verwacht revisienummer.
+
+```sh
+python3 scripts/pr_replay_preflight.py chain.json \
+  --signed-state signed-state.json \
+  --root-public-key <64-lowercase-hex> \
+  --expected-revision 4
+python3 -m unittest discover -s tests -p 'test_pr_replay_preflight.py' -v
+```
+
+De snapshot heeft `payload` en `signature_ed25519_hex`. De payload omvat
+`schema: palaco.pr-signed-state.v1`, `revision`, `registry` en `journal`.
+De handtekening is Ed25519 over de 32 ruwe bytes van SHA-256 van de
+gecanoniseerde statement `{"schema":"palaco.pr-state-signature.v1",
+"payload_sha256":"<digest>"}`. De rootsleutel moet uit een **onafhankelijke,
+vertrouwde bron** komen; een sleutel meegeleverd in de te verifiëren snapshot
+is niet voldoende.
+
+Bij geldige snapshot, onveranderd revisienummer en geslaagde v6-beleidstoets
+maakt de verifier uitsluitend een voorstel met de verwachte revisie,
+`expected_state_sha256`, voorgestelde nieuwe journalhash en
+`atomic_commit_performed: false`. De verifier schrijft niets terug.
+
+**Dit is geen daadwerkelijke CAS of atomaire transactie.** Een latere backend
+moet onder één databasevergrendeling de geauthenticeerde actuele staat,
+revisie en hash vergelijken, alle voorgestelde entrydigests opnieuw tegen
+het actuele replayregister toetsen, en pas daarna atomair opslaan.
+Snapshotversheid, sleutelintrekking, rollbackbescherming en een formele
+human-authority-verificatie vallen nog buiten dit lokale ontwerp.
+Alle uitkomsten houden **HOLD / DENY**.
