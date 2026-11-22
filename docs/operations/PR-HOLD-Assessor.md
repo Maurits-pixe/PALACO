@@ -517,3 +517,64 @@ governance. Noch die opslag noch een productieverbinding is in v16
 geïmplementeerd. De auditbron is uitsluitend de synthetische
 \`go20_test.audit_events\`-tabel; PALACO MONO blijft ongewijzigd.
 GO-13 blijft **HOLD**, autorisatie **DENY**, PR #109 blijft **Draft**.
+
+## V17 — extern ondertekend auditcheckpoint, intrekking en volledigheidsbinding
+
+`scripts/pr_signed_audit_checkpoint.py` bevat een afzonderlijke,
+alleen-lezen verifier voor de auditexport van v16. De verifier vereist
+**vier onafhankelijke invoeren**: auditexport, v16-manifest, ondertekend
+checkpoint en een afzonderlijk beheerd vertrouwd-sleutelregister.
+Daarbovenop moet de controleur een **minimumrevisie** aanleveren
+die niet uit het te verifiëren checkpoint is overgenomen.
+
+```sh
+python3 scripts/pr_signed_audit_checkpoint.py \
+  --export audit-export.json \
+  --manifest audit-manifest.json \
+  --checkpoint externally-signed-checkpoint.json \
+  --trusted-keys trusted-audit-keys.json \
+  --minimum-revision 7
+python3 -m unittest discover -s tests -p 'test_pr_signed_audit_checkpoint.py' -v
+```
+
+Het externe register gebruikt het schema `palaco.go20-audit-trust.v1`
+met `keys`: iedere sleutel heeft `public_key_hex` (32 bytes, als
+64 kleine hextekens) en `status` (`active` of `revoked`).
+Een ingetrokken sleutel geeft altijd een afwijzing, ook als haar
+handtekening cryptografisch geldig is. De verifier weigert
+een ontbrekend, onjuist of onbekend register.
+
+Het checkpoint heeft `payload`, `signer_key_id` en
+`signature_ed25519_hex`. De payload gebruikt het schema
+`palaco.go20-signed-audit-checkpoint.v1` met:
+`revision`, `repository`, `export_sha256`,
+`head_sha256`, `event_count`, `source_ids_sha256`,
+`first_source_id` en `last_source_id`.
+De repository moet exact `Maurits-pixe/PALACO` zijn.
+De Ed25519-handtekening geldt voor de **ruwe 32 SHA-256-bytes**
+van de gecanoniseerde statement met
+`schema: palaco.go20-audit-checkpoint-signature.v1` en
+`payload_sha256` van de volledige checkpoint-payload.
+
+**Volledigheidscontrole binnen de ondertekende momentopname:** de
+verifier toetst het aantal events, de JSON-exporthash, de
+eindketenhash, de hash van alle afzonderlijke en strikt oplopende
+PostgreSQL-bron-ID's, de eerste en laatste bron-ID en de
+extern verwachte minimumrevisie. Zowel de bron-ID-lijst als
+de export moeten met het ondertekende checkpoint overeenstemmen.
+Een ontbrekende, vervalste of herschikte gebeurtenis resulteert
+in `checkpoint_valid: false`.
+
+**Beperkingen:** dit bewijst de consistentie van de aangeleverde
+checkpointset, **niet** dat een kwaadwillende databasebeheerder
+nooit records heeft achtergehouden vóór ondertekening. Het register,
+de actuele intrekkingsstatus en de minimale revisie moeten via
+een onafhankelijke, geauthenticeerde beheerstroom worden verkregen;
+de lokale CLI haalt die niet automatisch op. Er is geen
+sleuteluitgifte, signing-service, extern grootboek, tijdsattest,
+rollbackbestendige centrale opslag of live databasekoppeling.
+De positieve Ed25519-regressietest vereist de optionele
+`cryptography`-bibliotheek; zonder deze bibliotheek weigert de
+verifier verificatie en kan de positieve integratietest worden
+overgeslagen. Alle uitkomsten blijven `decision: HOLD` en
+`authorization: DENY`. **GO-13 HOLD, PR #109 Draft.**
