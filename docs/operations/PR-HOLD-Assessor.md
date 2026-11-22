@@ -1060,3 +1060,69 @@ feitelijke organisatiecontrole, externe onveranderlijke opslag,
 productiebevoegdheden of autorisatiepoort op GitHub.
 De nieuwe regressies zijn toegevoegd aan de bestaande advisory CI.
 GO-13 blijft HOLD en PR #109 blijft Draft, zonder merge of uitrol.
+
+## V27 — geconsolideerd beveiligingsacceptatierapport en herverificatie
+
+`scripts/pr_security_acceptance.py` maakt een deterministisch,
+**niet-ondertekend**, alleen-lezen eindrapport van de offline GO-20
+beveiligings- en governancecontroles.
+
+```sh
+python3 scripts/pr_security_acceptance.py \
+  --history governance-history.json \
+  --independent-pin independent-governance-history-pin.json \
+  --controller-trust independently-provisioned-controller-keys.json
+
+python3 scripts/pr_security_acceptance.py \
+  --history governance-history.json \
+  --independent-pin independent-governance-history-pin.json \
+  --controller-trust independently-provisioned-controller-keys.json \
+  --verify-report previously-recorded-security-report.json
+
+python3 -m unittest discover -s tests -p 'test_pr_security_acceptance.py' -v
+```
+
+Het rapport (`palaco.go20-security-acceptance.v1`) bevat een
+SHA-256 van de drie volledige brononderdelen en afzonderlijke
+componenthashes: `history`, `independent_pin` en
+`controller_trust`. De technische v26-hardeningverdict en
+expliciete acceptatiecriteria zijn opgenomen, samen met een
+`report_sha256` van het volledige rapport zonder de eigen hash.
+
+De verifier (`palaco.go20-security-acceptance-verdict.v1`)
+**herberekent** de volledige v26-verificatie met de v25-,
+v24-, v23-, v22-, v21- en onderliggende audit- en
+getuigencontroles uit de afzonderlijk aangeleverde bewijsbronnen.
+Hij accepteert geen ontbrekende of extra rapportvelden, gewijzigde
+componenthashes, gemanipuleerde gate-uitkomsten, vervalste
+release-statussen of gewijzigd auditbewijs. Technische acceptatie
+vereist dat alle volgende criteria als waar worden herberekend:
+
+- bounded_evidence
+- signed_governance_chain
+- independent_anchor_binding
+- reviewer_role_separation
+- signed_audit_and_witness_history
+- release_prohibition
+
+Deze gatevelden zijn een **samengevatte uitkomst** van de
+complete v26-verificatie, niet zes afzonderlijke nieuwe
+beveiligingsalgoritmen. Een negatieve onderliggende verificatie
+betekent dat alle criteria `false` worden; de foutcodes zijn
+terug te vinden in `verification.errors`.
+
+Het rapport is geen onafhankelijk opgeslagen, digitaal
+ondertekend of van een betrouwbaar tijdstempel voorzien
+bewijsstuk: `independently_attested: false`. De caller moet
+de oorspronkelijke bronnen en de werkelijk onafhankelijke
+ankers gescheiden aanleveren. Een geldig rapport betekent
+uitsluitend dat de **aangeleverde bronnen** bij herberekening
+een technisch consistent resultaat opleveren.
+
+**Geen uitvoeringsrechten:** zelfs bij
+`technical_acceptance: true` en `acceptance_valid: true`
+blijven `decision: HOLD`, `authorization: DENY`,
+`release_authorized: false`, `merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD. PR #109 blijft Draft; geen merge, geen uitrol.
