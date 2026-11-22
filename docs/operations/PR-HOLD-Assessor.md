@@ -475,3 +475,45 @@ verwijdering van auditregels wordt geweigerd.
 
 Dit document en de implementatie geven geen automatische
 acceptatie, merge-, publicatie- of uitvoeringsrechten.
+
+## V16 — gecontroleerde exportbrug naar offline auditverificatie
+
+De afzonderlijke, fail-closed \`scripts/pr_audit_export.py\` converteert
+newline-delimited JSON-bronregels uit een lokaal aangeleverd bestand naar
+de v15-auditexport (\`palaco.go20-audit-export.v1\`). De bron moet een
+strikt oplopende, positieve PostgreSQL-\`id\` bevatten. **Gaten** zijn
+toegestaan: PostgreSQL-sequences worden niet teruggedraaid bij ROLLBACK.
+De export kent aaneengesloten ketenposities \`1..N\` toe en bewaart de
+werkelijke database-ID's afzonderlijk in het manifest
+(\`palaco.go20-export-manifest.v1\`). Per record worden de vorige
+eventhash en de SHA-256 van canonieke JSON vastgelegd. De converter
+weigert ongeldige, dubbele of ongeordende bronsleutels, onverwachte
+velden, te grote invoer en bestaande uitvoerbestanden.
+
+\`\`\`sh
+python3 scripts/pr_audit_export.py \
+  --input-ndjson audit-source.ndjson \
+  --output-export audit-export.json \
+  --output-manifest audit-manifest.json
+python3 scripts/pr_audit_integrity.py audit-export.json \
+  --expected-head-sha256 <INDEPENDENT_VASTGELEGD_SHA256_ANKER>
+python3 -m unittest discover -s tests -p 'test_pr_audit_export.py' -v
+\`\`\`
+
+In \`tests/run_go20_audit_export_disposable.sh\` worden auditrecords via
+\`row_to_json\` uit de wegwerpbare PostgreSQL CI-database opgehaald,
+geëxporteerd, tegen het lokaal berekende testanker gecontroleerd en
+vervolgens bewust gemanipuleerd. De gemanipuleerde export **moet**
+worden afgewezen met behoud van \`HOLD / DENY\`.
+
+**Bewijsgrens:** het manifest is afkomstig uit dezelfde bron als de
+export, is niet digitaal ondertekend en vormt dus **geen onafhankelijk
+bewijsanker**. Het testanker wordt alleen vastgezet vóór de testmutatie;
+een kwaadwillende met controle over zowel bron als anker kan beide
+herberekenen. Een echt onafhankelijk attestatieproces vereist een apart
+geauthenticeerde, onveranderbare opslag van de ankerwaarde inclusief
+tijdstip, bronidentiteit, volledigheidscontrole en formele sleutel-/rol-
+governance. Noch die opslag noch een productieverbinding is in v16
+geïmplementeerd. De auditbron is uitsluitend de synthetische
+\`go20_test.audit_events\`-tabel; PALACO MONO blijft ongewijzigd.
+GO-13 blijft **HOLD**, autorisatie **DENY**, PR #109 blijft **Draft**.
