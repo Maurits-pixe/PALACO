@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v13 (candidate)
+# PALACO — offline PR HOLD assessor v14 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -388,3 +388,36 @@ aangesloten. Het testmodel gebruikt opzettelijk echte PostgreSQL-rollen
 in een wegwerpdatabase, geen onbewezen clientclaims. Deze geslaagde
 testvoorwaarden verlenen geen productiebevoegdheid; GO-13 blijft HOLD
 en autorisatie DENY.
+
+## V14 — cross-tenant-aanvalstests en transactionele auditregistratie
+
+`tests/go20_postgres_audit_fixture.sql` voegt **uitsluitend in de tijdelijke
+PostgreSQL CI-database** de tabel `go20_test.audit_events` toe. Een
+`AFTER INSERT OR UPDATE OR DELETE`-trigger registreert geslaagde
+wijzigingen aan `tenant_evidence`, inclusief operatietype, uitvoerende
+database-rol, synthetische tenant en bewijs-hash. Een afzonderlijke
+trigger weigert gewone `UPDATE`- en `DELETE`-pogingen op auditregels.
+Beide laagbevoegde tenantrollen hebben geen rechten op de audittabel.
+
+`tests/run_go20_postgres_audit_disposable.sh` toetst:
+
+- Cross-tenant selectie met expliciete filters en joins levert geen
+  records van de andere synthetische tenant op.
+- Vervalste clientinstelbare identiteitsclaims veranderen de RLS-binding
+  aan `CURRENT_USER` niet.
+- Onbevoegde rolwisselingen, uitschakelpogingen van RLS, schrijfpogingen
+  en toegang tot audit/replaytabellen worden geweigerd.
+- Geweigerde pogingen veranderen de uitgangstoestand niet.
+- Een geslaagde **test-only** wijziging genereert precies één auditregel.
+- Een `ROLLBACK` verwijdert zowel de testwijziging als de auditregel.
+- Een gewone `DELETE` op de audittabel wordt door de beschermende
+  trigger geweigerd.
+
+**Auditgrens:** dit is een transactionele DML-audit van een synthetische
+tabel; geweigerde SQL-aanroepen worden niet als auditregel opgeslagen.
+De audit is evenmin een extern of cryptografisch onveranderlijk logboek:
+een databasebeheerder met superuser-/DDL-macht kan triggers en tabellen
+wijzigen. De tests bewijzen geen productie-auditdekking, externe
+retentie, vertrouwde identiteit, ketenverificatie of PostgreSQL-hardening.
+De gehele fixture is voor geïsoleerde CI bedoeld en mag niet zonder
+aparte review in PALACO MONO worden toegepast. **GO-13 HOLD / DENY.**
