@@ -49,7 +49,7 @@ def verify_signature(public_key_hex: str, signature_hex: str, statement: dict) -
         public_key.verify(signature, bytes.fromhex(digest(statement)))
     except (ValueError, TypeError):
         return "invalid_public_key_or_signature"
-    except Exception as exc:
+    except Exception:
         # Fail closed; no trust inferred from a backend exception.
         return "signature_invalid"
     return None
