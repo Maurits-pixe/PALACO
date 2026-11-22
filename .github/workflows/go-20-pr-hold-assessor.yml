@@ -5,9 +5,11 @@ on:
       - 'scripts/pr_hold_assessor.py'
       - 'scripts/pr_attestation_chain.py'
       - 'scripts/pr_attestation_policy.py'
+      - 'scripts/pr_replay_preflight.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
+      - 'tests/test_pr_replay_preflight.py'
       - '.github/workflows/go-20-pr-hold-assessor.yml'
   workflow_dispatch:
 
@@ -30,3 +32,4 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_hold_assessor.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_attestation_chain.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_attestation_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_replay_preflight.py' -v
