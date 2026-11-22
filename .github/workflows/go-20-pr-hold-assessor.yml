@@ -10,6 +10,7 @@ on:
       - 'scripts/pr_replay_interleavings.py'
       - 'scripts/pr_replay_sqlite_harness.py'
       - 'scripts/pr_audit_integrity.py'
+      - 'scripts/pr_audit_export.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -18,6 +19,7 @@ on:
       - 'tests/test_pr_replay_interleavings.py'
       - 'tests/test_pr_replay_sqlite_harness.py'
       - 'tests/test_pr_audit_integrity.py'
+      - 'tests/test_pr_audit_export.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -28,6 +30,7 @@ on:
       - 'tests/go20_postgres_audit_fixture.sql'
       - 'tests/run_go20_postgres_audit_disposable.sh'
       - 'tests/go20_postgres_audit_faults.sql'
+      - 'tests/run_go20_audit_export_disposable.sh'
       - '.github/workflows/go-20-pr-hold-assessor.yml'
   workflow_dispatch:
 
@@ -55,6 +58,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_replay_interleavings.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_replay_sqlite_harness.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_audit_integrity.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_audit_export.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
@@ -104,3 +108,8 @@ jobs:
           PGDATABASE: go20test
           PGPASSWORD: go20test
         run: psql -X -v ON_ERROR_STOP=1 -f tests/go20_postgres_audit_faults.sql
+      - name: Validate PostgreSQL-to-audit-export bridge and tampering rejection
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: bash tests/run_go20_audit_export_disposable.sh
