@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v10 (candidate)
+# PALACO — offline PR HOLD assessor v11 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -288,3 +288,38 @@ de verstrekte testreceipts zijn niet rechtsgeldig en alle verdicts houden
 `decision: HOLD`, `authorization: DENY` en
 `production_database_touched: false`. Een backendimplementatie vereist
 een aparte beveiligingsreview en formele releaseprocedure.
+
+## V11 — PostgreSQL-testcontract met geïsoleerde CI-database
+
+De SQL-testfixture `tests/go20_postgres_contract.sql` is **geen
+productiemigratie**. Ze maakt uitsluitend een `go20_test`-schema in
+de tijdelijke PostgreSQL-service van een afzonderlijke GitHub Actions-job.
+De fixture bevat geen `SECURITY DEFINER`, geen privilege-`GRANT`,
+geen verbinding met PALACO MONO en geen deploymentstap.
+
+De PL/pgSQL-testfunctie `go20_test.try_consume(...)` gebruikt
+`SELECT ... FOR UPDATE` om concurrerende wijzigingen aan één toestand
+te serialiseren. De transactie bewaakt zowel het revisienummer als de
+verwachte toestandhash. Een unieke sleutel op de ontvangsthash weigert
+hergebruik. Staatwijziging en ontvangstregistratie vinden in dezelfde
+database-transactie plaats.
+
+`tests/go20_postgres_contract_assertions.sql` controleert geldige
+overgangen, verouderde revisies, onjuiste toestandhashes, ongeldig
+bewijs, rollback bij een geïnjecteerde uitzondering en een retry
+na rollback. `tests/run_go20_postgres_disposable.sh` doet daarnaast
+twee concurrerende schrijfpogingen vanaf dezelfde oorspronkelijke revisie;
+precies één mag slagen in de **testdatabase**.
+
+De runner dwingt `PGHOST=127.0.0.1`, de synthetische testcredentials
+en de opt-in CI-vlag af. Gebruik uitsluitend de speciaal aangemaakte
+tijdelijke PostgreSQL-service. De runner is niet bedoeld voor lokale
+of gedeelde databases.
+
+**Beperkingen:** de code implementeert geen echte
+PALACO MONO/Supabase-schema's, RLS, authenticatie of operationele
+rollen. `TEST_ONLY_COMMIT` betekent uitsluitend dat de tijdelijke
+PostgreSQL-testtransactie is uitgevoerd. PostgreSQL-gedrag buiten deze
+specifieke transactie is niet bewezen. GO-13 blijft HOLD, autorisatie
+DENY en geen enkele code uit deze testfixture mag zonder aparte review
+naar productie worden gemigreerd.
