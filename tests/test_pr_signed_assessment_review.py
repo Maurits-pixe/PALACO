@@ -119,6 +119,10 @@ class SignedReviews(unittest.TestCase):
         self.envelope["attestations"].pop()
         self.assertIn("invalid_review_envelope", self.check()["errors"])
 
+    def test_same_public_key_across_distinct_reviewers_rejected(self):
+        self.trust["reviewers"]["security"]["public_key_hex"] = self.trust["reviewers"]["evidence"]["public_key_hex"]
+        self.assertIn("reviewer_public_key_reuse:1", self.check()["errors"])
+
     def test_forged_public_key(self):
         self.trust["reviewers"]["security"]["public_key_hex"] = "a" * 64
         self.assertFalse(self.check()["review_valid"])
