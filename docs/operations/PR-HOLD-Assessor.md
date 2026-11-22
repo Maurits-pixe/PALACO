@@ -578,3 +578,51 @@ De positieve Ed25519-regressietest vereist de optionele
 verifier verificatie en kan de positieve integratietest worden
 overgeslagen. Alle uitkomsten blijven `decision: HOLD` en
 `authorization: DENY`. **GO-13 HOLD, PR #109 Draft.**
+
+## V18 — historische auditcheckpoint-continuïteit en externe witness
+
+`scripts/pr_audit_continuity.py` vergelijkt twee **volledig cumulatieve**
+v17-checkpointbundels en verifieert beiden met het afzonderlijk
+aangeleverde vertrouwde sleutelregister. Iedere bundel heeft exact
+`export`, `manifest` en `checkpoint`. Een vierde input,
+`palaco.go20-audit-prior-witness.v1`, bevat de eerder onafhankelijk
+vastgelegde `revision` en `checkpoint_payload_sha256`.
+Deze witness moet uit een vertrouwde bron komen en mag niet
+door de huidige auditexport zelf worden bepaald.
+
+```sh
+python3 scripts/pr_audit_continuity.py \
+  --previous-bundle previous.json \
+  --current-bundle current.json \
+  --trusted-keys trusted-audit-keys.json \
+  --independent-witness prior-witness.json
+python3 -m unittest discover -s tests -p 'test_pr_audit_continuity.py' -v
+```
+
+De verifier vereist dat beide Ed25519-checkpoints voldoen aan v17,
+de vorige checkpoint-payload exact overeenkomt met de onafhankelijke
+witness, de nieuwe revisie **precies één** groter is, en het cumulatieve
+eventaantal toeneemt. De volledige historische eventreeks en de
+oorspronkelijke PostgreSQL-bron-ID's moeten een **ongewijzigde prefix**
+van de nieuwe reeks zijn. Nieuwe records mogen de oude reeks uitsluitend
+aan het einde verlengen. De repositorybinding, hashes, sleutelstatus,
+aanwezige events en bron-ID-grenzen blijven ondertekend geverifieerd.
+
+Negatieve regressies omvatten historische recordverwijdering,
+recordvervanging, verandering van oude bron-ID's, onjuiste witnesses,
+revisiesprongen, herhaalde checkpoints, ingetrokken sleutels,
+handtekeningmanipulatie en repositorysubstitutie.
+
+**Grenzen:** de onafhankelijke witness wordt in v18 **niet**
+gepubliceerd, ondertekend, opgeslagen of opgehaald; een eerder
+betrouwbaar bewaard exemplaar is verplicht. Deze offline verifier
+bewijst slechts dat de twee aangeleverde, ondertekende momentopnames
+binnen deze contractvorm een append-only historische relatie hebben.
+Eventverlies vóór het eerste vertrouwde checkpoint, gelijktijdige
+uitgifte van conflicterende checkpoints, sleutelcompromittering,
+vertraging en onvolledige bronregistratie kunnen hiermee niet worden
+uitgesloten. De positieve cryptografische tests vereisen de optionele
+`cryptography`-backend; anders worden zij overgeslagen en kan
+de verifier niet positief valideren. Alle verdicts blijven
+`decision: HOLD` en `authorization: DENY`.
+GO-13 blijft HOLD, PR #109 Draft, zonder productieaanpassingen.
