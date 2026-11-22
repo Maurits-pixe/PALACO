@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v8 (candidate)
+# PALACO — offline PR HOLD assessor v9 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -227,3 +227,32 @@ register en de nieuwe revisie samen atomair weg; commit éénmaal of
 rollback volledig. Verleen geen uitvoeringsbevoegdheid op basis van
 het feit dat het simulatiecontract slaagt. De code in v8 **implementeert
 deze databasehandelingen niet**. GO-13 blijft HOLD.
+
+## V9 — deterministische concurrentie- en rollback-simulatie
+
+`scripts/pr_replay_interleavings.py` voegt een geïsoleerde in-memory
+referentiemachine toe bovenop het v8-transitiecontract. De machine bootst
+**beide mogelijke seriële volgordes** van twee concurrerende voorstellen na.
+Twee voorstellen voor dezelfde oorspronkelijke revisie kunnen elk afzonderlijk
+geldig zijn, maar na een gesimuleerde eerste commit wordt het tweede
+afgewezen wegens revisie- of toestandconflict.
+
+```sh
+python3 -m unittest discover -s tests -p 'test_pr_replay_interleavings.py' -v
+```
+
+De testharness bevat vaste foutinjectiepunten (`before_cas`,
+`after_validation`, `before_commit`). Bij een geïnjecteerde fout blijft
+de complete simulatiestaat ongewijzigd en verschijnt geen ontvangstbewijs.
+Een geslaagde *gesimuleerde* overgang verhoogt alleen de revisie in het
+geïsoleerde geheugenmodel en voegt één gemarkeerd simulatiebewijs toe.
+Alle resultaten behouden `decision: HOLD`,
+`authorization: DENY` en `database_commit_performed: false`.
+
+**Beperkingen:** dit is geen gelijktijdige threaded load-test en geen
+databaseverificatie. De harness onderzoekt twee seriële interleavings;
+hij bewijst niets over netwerkfouten, procescrashes, lockbeheer,
+database-isolatieniveaus, multi-writerconsistentie of duurzame opslag.
+Geen GitHub-merge, autorisatie of productie-uitvoering wordt geactiveerd.
+Een echte database-implementatie vereist onafhankelijke integratietests,
+concurrerende transacties en crash-/herstelproeven.
