@@ -894,3 +894,58 @@ voor productie of databasewijziging geïmplementeerd.
 De positieve Ed25519-test vereist `cryptography`; zonder de backend
 wordt de test overgeslagen en weigert de verifier positieve
 verificatie. PR #109 blijft Draft en GO-13 blijft HOLD.
+
+## V24 — reviewer-governance, conflicterende belangen en vrijgaveverbod
+
+`scripts/pr_review_governance.py` voegt aan de v23-ondertekende
+review een onafhankelijk aangeleverd governancebeleid toe.
+Het beleid (`palaco.go20-reviewer-governance.v1`) bevat een
+revisie, repositorybinding, een rooster voor de rollen
+`evidence_reviewer` en `security_reviewer`, de expliciet
+verboden capabilities en opgegeven belangenconflicten.
+
+```sh
+python3 scripts/pr_review_governance.py \
+  --review signed-review.json \
+  --receipt receipt.json \
+  --inputs independent-evidence.json \
+  --reviewer-trust independent-reviewer-keys.json \
+  --policy governance-policy.json \
+  --independent-policy-pin independent-governance-pin.json
+python3 -m unittest discover -s tests -p 'test_pr_review_governance.py' -v
+```
+
+Een afzonderlijk bewaarde policy-pin
+(`palaco.go20-governance-policy-pin.v1`) bevat
+`minimum_revision` en `policy_sha256`. De controle
+weigert elke beleidsrollback, hashafwijking en
+repositorymismatch. Per reviewer vereist het rooster
+`reviewer_id`, `organization_id`, `control_domain_id`,
+`conflict_disclosed: false` en `governance_status: active`.
+De twee rollen moeten verschillende reviewer-ID's,
+organisatie-ID's en sleutelbeheerdomeinen hebben.
+De roosteridentiteiten worden vergeleken met de twee
+cryptografisch geverifieerde v23-reviewattestaties.
+
+Het beleid vereist exact deze zes verboden capabilities:
+`release`, `merge`, `deploy`, `production_write`,
+`policy_override` en `self_approval`. Ontbrekende,
+dubbele of afwijkende capabilities worden geweigerd.
+Een niet-lege lijst `declared_conflicts`, een opgegeven
+reviewerconflict of een inactieve reviewer maakt de
+governancecontrole ongeldig. Ongeacht de technische
+geldigheid blijven de outputs `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`, `deployment_authorized: false`
+en `production_commit_performed: false`.
+
+**Grenzen:** dit detecteert alleen conflicten die uit het
+aangeleverde, onafhankelijk geankerde beleid blijken.
+Twee verschillende organisatie-ID's of key domains
+bewijzen geen daadwerkelijke organisatorische onafhankelijkheid,
+goede intenties of afwezigheid van samenspanning. Een
+onbetrouwbare partij die zowel beleid als zogenaamd
+onafhankelijke pin kan wijzigen, kan de gegevens vervalsen.
+Er is geen echte HR-verificatie, externe identiteitscontrole,
+beheerservice, productieautorisatie of GitHub-mergepoort
+geïmplementeerd. GO-13 blijft HOLD; PR #109 blijft Draft.
