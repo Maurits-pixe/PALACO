@@ -7,6 +7,7 @@ paths, no network, no PALACO database connection, no production authorization.
 from __future__ import annotations
 
 import copy
+from contextlib import closing
 import json
 import sqlite3
 import tempfile
@@ -46,12 +47,12 @@ class DisposableSQLiteReplay:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
     def snapshot(self) -> dict:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute("SELECT body FROM state WHERE id=1").fetchone()
             return json.loads(row[0])
 
     def receipts(self) -> list[str]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             return [row[0] for row in conn.execute(
                 "SELECT entry_sha256 FROM receipts ORDER BY entry_sha256"
             )]
