@@ -1,0 +1,25 @@
+name: GO-20 offline evidence assessor
+on:
+  pull_request:
+    paths:
+      - 'scripts/pr_hold_assessor.py'
+      - 'tests/test_pr_hold_assessor.py'
+      - '.github/workflows/go-20-pr-hold-assessor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run isolated standard-library regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest discover -s tests -p 'test_pr_hold_assessor.py' -v
