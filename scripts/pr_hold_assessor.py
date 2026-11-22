@@ -35,13 +35,13 @@ def assess(data: object) -> dict:
         reasons.append("checks_absent")
     else:
         for name, state in checks.items():
-            if not isinstance(name, str) or not name.strip() or state not in CHECK_STATES:
+            if not isinstance(name, str) or not name.strip() or not isinstance(state, str) or state not in CHECK_STATES:
                 reasons.append("invalid_check_entry")
                 break
             if state != "success":
                 reasons.append("check_not_success:" + name)
     reviews = data.get("reviews")
-    if reviews not in REVIEW_STATES:
+    if not isinstance(reviews, str) or reviews not in REVIEW_STATES:
         reasons.append("invalid_reviews")
     elif reviews != "approved":
         reasons.append("review_not_approved")
