@@ -843,3 +843,54 @@ zijn. De module doet geen productieoperaties en verleent ook bij
 `receipt_valid: true` geen autorisatie: `decision: HOLD`,
 `authorization: DENY` en `external_attestation_verified: false`.
 GO-13 HOLD; PR #109 Draft, zonder merge of uitrol.
+
+## V23 — ondertekende review, rolscheiding en definitieve HOLD-gate
+
+`scripts/pr_signed_assessment_review.py` is een alleen-lezen
+Ed25519-verifier voor het **opnieuw berekende** v22-bewijsrapport.
+De verifier accepteert een afzonderlijk ondertekende
+`palaco.go20-signed-assessment-review.v1`-envelop met precies twee
+attestaties, plus een extern aangeleverd
+`palaco.go20-reviewer-role-trust.v1`-register.
+
+```sh
+python3 scripts/pr_signed_assessment_review.py \
+  --review signed-review.json \
+  --receipt receipt.json \
+  --inputs independently-provided-evidence.json \
+  --reviewer-trust independently-provisioned-reviewer-keys.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_signed_assessment_review.py' -v
+```
+
+Iedere attestatie bevat `role`, `reviewer_id` en
+`signature_ed25519_hex`. De verplichte, **verschillende rollen**
+zijn `evidence_reviewer` en `security_reviewer`. Het externe
+register koppelt elke reviewer-ID aan `public_key_hex`,
+`status: active|revoked` en precies één toegewezen rol.
+Dubbele reviewer-ID's, hetzelfde publieke sleutelmateriaal in
+beide rollen, rolverwisseling, ongeldige handtekeningen en
+ingetrokken sleutels worden geweigerd. De Ed25519-handtekening
+beschermt een domeingescheiden statement
+`palaco.go20-reviewer-attestation.v1` met repository,
+receipt-hash, reviewer-ID, rol en expliciete HOLD/DENY-status.
+
+De verifier vergelijkt de envelope met de SHA-256 van de
+oorspronkelijke receipt, voert de **volledige v22-herberekening**
+uit aan de hand van zes onafhankelijk aangeleverde bewijsbronnen
+en eist een positief technisch resultaat vóór de review
+`review_valid: true` kan zijn. Een ondertekend verslag betekent
+**uitsluitend review-integriteit**, geen bevoegdheid tot vrijgave.
+Zelfs twee geldige reviewers geven nooit `ALLOW`: iedere
+uitkomst behoudt `decision: HOLD`, `authorization: DENY`,
+`release_authorized: false` en `production_commit_performed: false`.
+
+**Grenzen:** reviewerrollen, sleutelbeheer en actueel intrekkingsbeleid
+moeten buiten deze offline module onafhankelijk en betrouwbaar worden
+beheerd. Twee sleutels bewijzen geen daadwerkelijke organisatorische
+onafhankelijkheid. Er is geen automatische signer, reviewerapp,
+rollentoewijzing, PR-approval, merge, webhook, autorisatiegate
+voor productie of databasewijziging geïmplementeerd.
+De positieve Ed25519-test vereist `cryptography`; zonder de backend
+wordt de test overgeslagen en weigert de verifier positieve
+verificatie. PR #109 blijft Draft en GO-13 blijft HOLD.
