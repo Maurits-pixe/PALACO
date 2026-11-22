@@ -17,6 +17,7 @@ on:
       - 'scripts/pr_witness_transparency.py'
       - 'scripts/pr_multiround_assessor.py'
       - 'scripts/pr_assessment_receipt.py'
+      - 'scripts/pr_signed_assessment_review.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -32,6 +33,7 @@ on:
       - 'tests/test_pr_witness_transparency.py'
       - 'tests/test_pr_multiround_assessor.py'
       - 'tests/test_pr_assessment_receipt.py'
+      - 'tests/test_pr_signed_assessment_review.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -77,6 +79,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_witness_transparency.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_multiround_assessor.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_assessment_receipt.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_signed_assessment_review.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
