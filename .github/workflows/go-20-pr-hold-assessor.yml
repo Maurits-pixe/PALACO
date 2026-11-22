@@ -16,6 +16,9 @@ on:
       - 'tests/test_pr_replay_transaction_contract.py'
       - 'tests/test_pr_replay_interleavings.py'
       - 'tests/test_pr_replay_sqlite_harness.py'
+      - 'tests/go20_postgres_contract.sql'
+      - 'tests/go20_postgres_contract_assertions.sql'
+      - 'tests/run_go20_postgres_disposable.sh'
       - '.github/workflows/go-20-pr-hold-assessor.yml'
   workflow_dispatch:
 
@@ -42,3 +45,32 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_replay_transaction_contract.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_replay_interleavings.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_replay_sqlite_harness.py' -v
+
+  disposable-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16.8
+        env:
+          POSTGRES_DB: go20test
+          POSTGRES_USER: go20test
+          POSTGRES_PASSWORD: go20test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U go20test -d go20test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL command-line client
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - name: Run disposable PostgreSQL contract and race tests
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_disposable.sh
