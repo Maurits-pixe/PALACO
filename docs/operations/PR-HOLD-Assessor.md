@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v14 (candidate)
+# PALACO — offline PR HOLD assessor v15 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -421,3 +421,57 @@ wijzigen. De tests bewijzen geen productie-auditdekking, externe
 retentie, vertrouwde identiteit, ketenverificatie of PostgreSQL-hardening.
 De gehele fixture is voor geïsoleerde CI bedoeld en mag niet zonder
 aparte review in PALACO MONO worden toegepast. **GO-13 HOLD / DENY.**
+
+## V15 — onafhankelijke audit-exportcontrole en foutinjectie
+
+`scripts/pr_audit_integrity.py` verifieert een offline JSON-auditexport
+tegen een **extern en onafhankelijk aangeleverd** SHA-256-ankerpunt:
+
+```sh
+python3 scripts/pr_audit_integrity.py audit-export.json \
+  --expected-head-sha256 <64-hex-anker>
+python3 -m unittest discover -s tests -p 'test_pr_audit_integrity.py' -v
+```
+
+De export gebruikt `schema: palaco.go20-audit-export.v1` en
+`events` (maximaal 10.000). Elk record bevat `id` (oplopend
+vanaf 1), `operation`, `actor_role`, `tenant_role`,
+`entry_sha256`, `previous_sha256` en `event_sha256`.
+`event_sha256` is de SHA-256 van canonieke JSON van het record zonder
+die eigen hash. Het eerste `previous_sha256` is 64 nullen;
+vervolgrecords verwijzen naar de vorige `event_sha256`.
+Verwijdering, herschikking, manipulatie en een afwijkend eindanker
+leiden tot een afwijzing. De externe ankerwaarde mag **niet**
+uit dezelfde onbewezen auditexport worden overgenomen.
+
+**Belangrijk:** de bestaande PostgreSQL-test-audittabel v14 heeft
+geen ingebouwde hashketen. De verifier controleert een afzonderlijk
+opgebouwde JSON-export; hij leest niet rechtstreeks uit PALACO MONO en
+claimt geen onafhankelijke attestatie of geauthenticeerde
+exportvoorziening. De provenance, publicatie, authenticiteit en
+actualiteit van het externe anker vereisen afzonderlijk ontwerp
+en autorisatie. Hashes bieden integriteitscontrole bij een betrouwbaar
+extern anker, maar geen op zichzelf staande onveranderlijkheid.
+
+`tests/go20_postgres_audit_faults.sql` controleert in de wegwerpbare
+CI-PostgreSQL-service dat geïnjecteerde uitzonderingen na een
+geauditeerde invoeging zowel data als auditregel terugdraaien,
+ongeldige invoer geen auditregel produceert en gewone
+verwijdering van auditregels wordt geweigerd.
+
+### Acceptatiecriteria voor de kandidaat
+
+1. Alle GO-20 Python-regressies, waaronder de tien
+   nieuwe auditintegriteitsgevallen, slagen.
+2. De geïsoleerde PostgreSQL-job slaagt, inclusief tenant-RLS,
+   replay- en auditfoutinjectiecontroles.
+3. De bestaande repository-brede security-, supply-chain-,
+   SBOM- en governancechecks slagen.
+4. Het testarchief bevat geen productiemigraties en verandert
+   geen externe of PALACO MONO-database.
+5. Ook als alle technische criteria slagen blijven PR #109
+   **Draft**, GO-13 **HOLD** en autorisatie **DENY**;
+   een afzonderlijke menselijke vrijgave zou vereist zijn.
+
+Dit document en de implementatie geven geen automatische
+acceptatie, merge-, publicatie- of uitvoeringsrechten.
