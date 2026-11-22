@@ -744,3 +744,58 @@ cryptografisch zijn geverifieerd. Een niet-gepubliceerde fork
 kan niet worden gedetecteerd. Alle verdicts blijven
 \`decision: HOLD\` en \`authorization: DENY\`;
 PR #109 blijft Draft, GO-13 blijft HOLD.
+
+## V21 — geïntegreerde multi-round auditbeoordeling en anti-rollback
+
+De alleen-lezen `scripts/pr_multiround_assessor.py` verenigt de
+technische controles uit v17–v20 tot één fail-closed beoordeling van
+**2 tot 16 opeenvolgende, cumulatieve auditcheckpoints**.
+
+```sh
+python3 scripts/pr_multiround_assessor.py \
+  --roundbook rounds.json \
+  --audit-trust trusted-audit-keys.json \
+  --witness-trust trusted-witness-keys.json \
+  --transparency-logbook signed-witness-logs.json \
+  --independent-pins independently-retained-log-heads.json \
+  --independent-baseline independently-retained-round-anchors.json
+python3 -m unittest discover -s tests -p 'test_pr_multiround_assessor.py' -v
+```
+
+Het roundbook gebruikt schema `palaco.go20-multiround-evidence.v1`
+met een array `rounds`: iedere ronde bevat `export`,
+`manifest` en `checkpoint`. De extern vastgelegde baseline
+(`palaco.go20-multiround-baseline.v1`) bevat
+`first_revision`, `first_payload_sha256`, `last_revision`
+en `last_payload_sha256`. Beide grenzen zijn verplicht,
+mogen niet uitsluitend uit het roundbook worden afgeleid en
+moeten overeenkomen met de ondertekende eerste en laatste
+auditcheckpointpayload.
+
+De beoordeling controleert per ronde de v17-handtekening,
+sleutelintrekking en bron-ID-volledigheid; tussen iedere twee
+rondes de v18-historische prefix en exact één revisiestap;
+en over de hele reeks de v20-Ed25519-publicaties en onafhankelijke
+pinnen van iedere getuige. Iedere getuige moet voor **iedere**
+aangeleverde ronde precies de juiste payloadhash hebben
+gepubliceerd. Een ontbrekende ronde, historische mutatie, ingetrokken
+sleutel, revisieterugval, ontbrekende publicatie of gesplitste
+getuigenweergave geeft een negatieve technische beoordeling.
+
+De JSON-uitkomst `palaco.go20-multiround-assessment.v1` bevat
+`technical_evidence_valid`, `rounds_checked`, afzonderlijke
+`checks` en foutcodes. Ook bij `technical_evidence_valid: true`
+blijven `decision: HOLD`, `authorization: DENY` en
+`production_commit_performed: false`.
+
+**Vertrouwensgrenzen:** de eerste en laatste checkpointankers én
+de afzonderlijke ondertekende getuigenlogkoppen moeten vooraf via
+een **onafhankelijk, geauthenticeerd kanaal** worden vastgelegd;
+de module beheert dat kanaal niet. Tussenliggende
+witness-referenties worden tijdens de verificatie afgeleid
+uit reeds cryptografisch geverifieerde checkpoints en zijn
+geen externe attestaties. De module verzamelt geen onbekende
+publicaties, controleert geen klok-/timestampbewijs en
+bewijst geen bronvolledigheid vóór het eerste anker. Er is geen
+uitvoering, merge, uitrol, signing-service of verbinding met
+PALACO MONO. GO-13 blijft HOLD; PR #109 blijft Draft.
