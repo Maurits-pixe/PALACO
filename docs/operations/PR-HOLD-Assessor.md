@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v3 (candidate)
+# PALACO — offline PR HOLD assessor v4 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -34,3 +34,26 @@ The `evidence` entries bind an artifact digest, root-relative POSIX-style path a
 Valid check states: `success`, `failure`, `pending`, `missing`; reviews: `approved`, `changes_requested`, `pending`, `missing`. Any non-successful check produces a reason. `technical_inputs_complete` is an advisory statement about local input consistency, not verified trust.
 
 **Every output keeps `decision: HOLD` and `authorization: DENY`.** GO-13 remains HOLD. No merge or production promotion is permitted by this tool. Independent human review and verified evidence are separate requirements.
+
+## V4 deterministic advisory proof identifiers
+
+Each advisory output now includes three identifiers derived with SHA-256 over
+canonical JSON (UTF-8, lexicographically sorted object keys, no insignificant
+whitespace, and no NaN/Infinity):
+
+- \`manifest_sha256\`: a digest of a separately versioned evidence manifest
+  containing repository, candidate head SHA and a sorted sequence of evidence
+  records; null if evidence cannot be represented as a valid manifest.
+- \`snapshot_sha256\`: digest of the complete untrusted input snapshot.
+- \`report_sha256\`: digest of the output report before adding this field,
+  including the two preceding identifiers and HOLD/DENY result.
+
+Reordering object keys or evidence entries does not change the manifest hash.
+Changing the submitted input changes the snapshot hash (except for negligible
+cryptographic collision probability). Hashes **do not prove who produced the
+data**: there are no signatures, trusted timestamps, independent reviewers,
+or authenticated attestations in v4. The SHA-256 digests cannot be used as
+authorization. GO-13 remains HOLD; no CI pass or manifest field grants authority.
+
+This candidate also pins \`actions/checkout\` to a Git commit SHA in GO-20 CI to
+meet repository workflow supply-chain requirements.
