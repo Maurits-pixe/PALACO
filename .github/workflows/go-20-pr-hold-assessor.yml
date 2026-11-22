@@ -23,6 +23,8 @@ on:
       - 'tests/run_go20_postgres_rls_disposable.sh'
       - 'tests/go20_postgres_identity_fixture.sql'
       - 'tests/run_go20_postgres_identity_disposable.sh'
+      - 'tests/go20_postgres_audit_fixture.sql'
+      - 'tests/run_go20_postgres_audit_disposable.sh'
       - '.github/workflows/go-20-pr-hold-assessor.yml'
   workflow_dispatch:
 
@@ -86,3 +88,7 @@ jobs:
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
         run: bash tests/run_go20_postgres_identity_disposable.sh
+      - name: Test cross-tenant attacks and transactional audit invariants
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_audit_disposable.sh
