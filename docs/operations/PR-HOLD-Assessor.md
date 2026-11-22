@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v11 (candidate)
+# PALACO — offline PR HOLD assessor v12 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -323,3 +323,36 @@ PostgreSQL-testtransactie is uitgevoerd. PostgreSQL-gedrag buiten deze
 specifieke transactie is niet bewezen. GO-13 blijft HOLD, autorisatie
 DENY en geen enkele code uit deze testfixture mag zonder aparte review
 naar productie worden gemigreerd.
+
+## V12 — PostgreSQL-permissiegrenzen en negatieve RLS-tests
+
+Deze kandidaat bevat twee nieuwe, uitsluitend voor de tijdelijke CI-database
+bestemde testbestanden:
+`tests/go20_postgres_rls_fixture.sql` en
+`tests/run_go20_postgres_rls_disposable.sh`.
+
+De SQL-fixture maakt twee synthetische `NOLOGIN`-rollen, `go20_alpha` en
+`go20_beta`. Beide krijgen uitsluitend `USAGE` op het test-schema en
+`SELECT` op de afzonderlijke `tenant_evidence`-tabel. Deze tabel heeft
+`ENABLE ROW LEVEL SECURITY` én `FORCE ROW LEVEL SECURITY`. Een
+`FOR SELECT`-policy vergelijkt `tenant_role` met `CURRENT_USER`.
+De roles kunnen daardoor uitsluitend hun eigen testbewijs zien.
+
+De testen controleren dat gebruikers **geen** directe `SELECT` op de
+interne replaytoestand of ontvangsttabel hebben, geen `INSERT` of
+`UPDATE` op de tenanttabel mogen uitvoeren en de replay-RPC
+`go20_test.try_consume` niet mogen aanroepen. De standaard
+`PUBLIC EXECUTE`-toestemming wordt op die testfunctie ingetrokken.
+
+De GitHub Actions PostgreSQL-testservice gebruikt nu de reeds door de
+GO-16-provenance-policy vastgelegde PostgreSQL 17-container met een
+immutabele SHA-256-image-digest. Dit herstelt de eerder geconstateerde
+niet-vastgepinde containerreferentie; formele CI-verificatie blijft vereist.
+
+**Grenzen:** de tests gebruiken `SET ROLE` binnen een lokale,
+wegwerpbare database met synthetische rollen. De werkelijke PALACO MONO
+rolstructuur, authenticatie en PostgreSQL/Supabase RLS-regels zijn niet
+gewijzigd of gevalideerd. Een administratieve eigenaar of superuser
+behoudt zijn eigen beheermogelijkheden; deze test doet geen uitspraken
+over veiligheid onder een gecompromitteerd databasebeheeraccount.
+Testsucces geeft nooit autorisatie: GO-13 blijft **HOLD / DENY**.
