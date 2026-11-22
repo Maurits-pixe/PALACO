@@ -1,5 +1,6 @@
-"""Contract tests for the offline PR assessment gate."""
+"""Negative and contract tests for the offline PR assessor."""
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 
@@ -16,41 +17,78 @@ class AssessorTests(unittest.TestCase):
             "head_sha": "a" * 40,
             "checks": {"test": "success", "lint": "success"},
             "reviews": "approved",
-            "evidence": ["local-run-001"],
+            "evidence": [{
+                "kind": "unit-test-log",
+                "head_sha": "a" * 40,
+                "artifact_sha256": "b" * 64,
+            }],
             "go13_release_authorized": True,
         }
 
-    def test_all_green_never_grants_authority(self):
+    def test_complete_inputs_still_deny(self):
         result = module.assess(self.valid())
         self.assertTrue(result["technical_inputs_complete"])
-        self.assertEqual(result["decision"], "HOLD")
-        self.assertEqual(result["authorization"], "DENY")
+        self.assertEqual((result["decision"], result["authorization"]), ("HOLD", "DENY"))
 
-    def test_missing_evidence_fails_closed(self):
-        input_data = self.valid()
-        input_data.pop("evidence")
-        self.assertIn("missing_evidence", module.assess(input_data)["reasons"])
+    def test_missing_evidence(self):
+        data = self.valid()
+        data.pop("evidence")
+        self.assertIn("missing_evidence", module.assess(data)["reasons"])
 
-    def test_pending_check_fails_closed(self):
-        input_data = self.valid()
-        input_data["checks"]["lint"] = "pending"
-        self.assertIn("check_not_success:lint", module.assess(input_data)["reasons"])
+    def test_pending_check(self):
+        data = self.valid()
+        data["checks"]["lint"] = "pending"
+        self.assertIn("check_not_success:lint", module.assess(data)["reasons"])
 
-    def test_release_authorization_missing(self):
-        input_data = self.valid()
-        input_data["go13_release_authorized"] = False
-        self.assertIn("go13_not_authorized", module.assess(input_data)["reasons"])
+    def test_go13_missing(self):
+        data = self.valid()
+        data["go13_release_authorized"] = False
+        self.assertIn("go13_not_authorized", module.assess(data)["reasons"])
 
-    def test_rejects_malformed_input(self):
+    def test_malformed_sha(self):
+        data = self.valid()
+        data["head_sha"] = "bad"
+        self.assertIn("invalid_head_sha", module.assess(data)["reasons"])
+
+    def test_invalid_check_state(self):
+        data = self.valid()
+        data["checks"] = {"test": "unknown"}
+        self.assertIn("invalid_check_entry", module.assess(data)["reasons"])
+
+    def test_different_evidence_commit(self):
+        data = self.valid()
+        data["evidence"][0]["head_sha"] = "c" * 40
+        self.assertIn("evidence_head_mismatch", module.assess(data)["reasons"])
+
+    def test_invalid_digest(self):
+        data = self.valid()
+        data["evidence"][0]["artifact_sha256"] = "bad"
+        self.assertIn("invalid_evidence", module.assess(data)["reasons"])
+
+    def test_duplicate_digest(self):
+        data = self.valid()
+        data["evidence"].append(dict(data["evidence"][0]))
+        self.assertIn("duplicate_evidence_digest", module.assess(data)["reasons"])
+
+    def test_reject_duplicate_json_keys(self):
+        with self.assertRaises(ValueError):
+            json.loads('{"checks": {}, "checks": {}}', object_pairs_hook=module.reject_duplicate_keys)
+
+    def test_unhashable_input(self):
+        data = self.valid()
+        data["reviews"] = []
+        data["checks"]["lint"] = []
+        result = module.assess(data)
+        self.assertIn("invalid_reviews", result["reasons"])
+        self.assertIn("invalid_check_entry", result["reasons"])
+
+    def test_legacy_unbound_evidence_rejected(self):
+        data = self.valid()
+        data["evidence"] = ["unbound-evidence"]
+        self.assertIn("invalid_evidence", module.assess(data)["reasons"])
+
+    def test_invalid_root(self):
         self.assertEqual(module.assess([])["authorization"], "DENY")
-        input_data = self.valid()
-        input_data["head_sha"] = "not-a-sha"
-        self.assertIn("invalid_head_sha", module.assess(input_data)["reasons"])
-
-    def test_rejects_invalid_check_state(self):
-        input_data = self.valid()
-        input_data["checks"] = {"test": "unknown"}
-        self.assertIn("invalid_check_entry", module.assess(input_data)["reasons"])
 
 
 if __name__ == "__main__":
