@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v4 (candidate)
+# PALACO — offline PR HOLD assessor v5 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -57,3 +57,43 @@ authorization. GO-13 remains HOLD; no CI pass or manifest field grants authority
 
 This candidate also pins \`actions/checkout\` to a Git commit SHA in GO-20 CI to
 meet repository workflow supply-chain requirements.
+
+## V5 independently keyed report-chain verification
+
+The new `scripts/pr_attestation_chain.py` verifier checks a sequence of
+HOLD/DENY reports, their report SHA-256 fingerprints, linked predecessor
+entry SHA-256 fingerprints and detached Ed25519 signatures. It accepts a
+**separate trust-store file** mapping reviewer key identifiers to raw
+Ed25519 public keys as 64 lowercase hexadecimal characters.
+
+```sh
+python3 scripts/pr_attestation_chain.py ./chain.json --trust-store ./trusted-reviewers.json
+python3 -m unittest discover -s tests -p 'test_pr_attestation_chain.py' -v
+```
+
+A chain has `schema: "palaco.pr-attestation-chain.v1"` and a nonempty `entries`
+list (maximum 256). Each entry provides `sequence` (starting at zero),
+`previous_entry_sha256` (64 zeroes for the first entry), `report` (the
+exact v4 HOLD/DENY output), `key_id`, `signature_ed25519_hex` (128 hex
+characters) and `entry_sha256`. The signed statement contains
+`schema: "palaco.pr-attestation-statement.v1"`, the entry sequence,
+predecessor hash and the report SHA-256. Sign Ed25519 over the **32 raw
+bytes of SHA-256(canonical JSON statement)**, not over the JSON text.
+The entry SHA-256 covers all its fields except `entry_sha256`.
+
+Ed25519 verification uses the optional, independently maintained Python
+`cryptography` package; absence of that package is an explicit
+`crypto_backend_unavailable` failure. The project does not install a
+cryptography dependency automatically, and no homemade signature primitive
+or fake signature verification is used. The optional success-path signature
+test is skipped on runners without this package; negative chain tests
+still run. A separate reviewed dependency/pinning decision is required
+before treating cryptographic checks as a required CI gate.
+
+The trust-store MUST be provisioned independently of the untrusted chain.
+Successful signature verification only establishes possession of a private
+key matching a trusted public key, not a human review decision or the
+reviewer's organizational authority. Trust-store lifecycle, key revocation,
+authenticated identity binding, time semantics and full artifact origin are
+not established. No verifier result authorizes execution, production,
+release or a GitHub merge; GO-13 stays HOLD.
