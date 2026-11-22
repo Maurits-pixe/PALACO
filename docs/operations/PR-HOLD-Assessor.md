@@ -1,4 +1,4 @@
-# PALACO — offline PR HOLD assessor v12 (candidate)
+# PALACO — offline PR HOLD assessor v13 (candidate)
 
 Opt-in, Python standard-library only. Reads a local JSON snapshot and emits a deterministic, machine-readable advisory assessment. No network requests, secrets, GitHub status changes, approvals, or deployments.
 
@@ -356,3 +356,35 @@ gewijzigd of gevalideerd. Een administratieve eigenaar of superuser
 behoudt zijn eigen beheermogelijkheden; deze test doet geen uitspraken
 over veiligheid onder een gecompromitteerd databasebeheeraccount.
 Testsucces geeft nooit autorisatie: GO-13 blijft **HOLD / DENY**.
+
+## V13 — synthetische principalbinding en multi-tenant-negatieve tests
+
+`tests/go20_postgres_identity_fixture.sql` en
+`tests/run_go20_postgres_identity_disposable.sh` bouwen voort op de v12
+tijdelijke PostgreSQL-testdatabase. Een extra tabel koppelt twee synthetische
+identiteiten aan hun eigen database-rol. De RLS-policy gebruikt uitsluitend
+`CURRENT_USER` voor de tenantbinding. De tests loggen voor de
+negatieve controles uitdrukkelijk als laagbevoegde principals in via
+`SET SESSION AUTHORIZATION`, zodat privilege-escalatie met
+`SET ROLE` naar de andere testrol daadwerkelijk wordt geweigerd.
+
+De regressiecontrole bewijst binnen de testfixture dat:
+- iedere principal maar één eigen identiteitsrecord ziet;
+- een vervalste, door de client instelbare sessievariabele de RLS-policy
+  niet verandert;
+- laagbevoegde principals geen `SET ROLE` naar de andere tenant mogen
+  uitvoeren;
+- identiteitsrecords niet kunnen worden geschreven en interne
+  replaytabellen en de replayfunctie afgeschermd blijven.
+
+Tevens is de foutieve v12-testaanname hersteld die na een voorgaande
+geslaagde v11-test ten onrechte nul ontvangstrecords verwachtte.
+De v12-test verifieert nu dat het bestaande aantal ontvangstrecords
+**ongewijzigd blijft** tijdens negatieve autorisatiecontroles.
+
+**Geen productiekoppeling:** echte PALACO ONE-accounts, Supabase JWT's,
+RLS-identiteitclaims, database-rollen en live services zijn niet
+aangesloten. Het testmodel gebruikt opzettelijk echte PostgreSQL-rollen
+in een wegwerpdatabase, geen onbewezen clientclaims. Deze geslaagde
+testvoorwaarden verlenen geen productiebevoegdheid; GO-13 blijft HOLD
+en autorisatie DENY.
