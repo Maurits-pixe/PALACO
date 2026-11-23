@@ -90,6 +90,10 @@ def verify_complete_history(history: object, trust: object, external_pin: object
             continue
         seen_rotations[sequence] = item
 
+    # Fail closed before walking potentially corrupted/missing intermediate links.
+    if any(not isinstance(e, dict) or set(e) != {"envelope", "report", "inputs"} or
+           not isinstance(e.get("envelope"), dict) for e in entries):
+        return verdict(errors + ["malformed_historical_entry"])
     previous = ZERO
     verified = 0
     rotations_ok = 0
@@ -176,11 +180,18 @@ def verify_complete_history(history: object, trust: object, external_pin: object
                         errors.append(f"rotation_signature:{i}:{name}:{issue}")
                 if signatures_good and not any(x.startswith(f"rotation_binding_mismatch:{i}") for x in errors):
                     rotations_ok += 1
-        previous = canonical_hash(envelope)
+        try:
+            previous = canonical_hash(envelope)
+        except (TypeError, ValueError, RecursionError, OverflowError):
+            errors.append(f"invalid_envelope_encoding:{i}")
+            previous = ZERO
         verified += 1
     if entries and isinstance(entries[0], dict) and isinstance(entries[0].get("envelope"), dict):
-        if canonical_hash(entries[0]["envelope"]) != external_pin["genesis_attestation_sha256"]:
-            errors.append("independent_genesis_anchor_mismatch")
+        try:
+            if canonical_hash(entries[0]["envelope"]) != external_pin["genesis_attestation_sha256"]:
+                errors.append("independent_genesis_anchor_mismatch")
+        except (TypeError, ValueError, RecursionError, OverflowError):
+            errors.append("invalid_genesis_encoding")
     if previous != external_pin["last_attestation_sha256"]:
         errors.append("independent_last_anchor_mismatch")
     return verdict(errors, verified, rotations_ok)
