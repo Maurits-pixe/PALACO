@@ -1256,3 +1256,60 @@ Iedere uitkomst blijft `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
+
+## V30 — vergelijking van onafhankelijke attestatiegeschiedenissen
+
+`scripts/pr_attestation_multiview.py` vergelijkt **twee tot acht**
+afzonderlijk aangeleverde, onafhankelijk geankerde v29-attestatieketens.
+De controle is uitsluitend offline en alleen-lezen.
+
+```sh
+python3 scripts/pr_attestation_multiview.py \
+  --views separately-supplied-attestation-views.json \
+  --independent-pins independently-retained-observer-pins.json
+python3 -m unittest discover -s tests -p 'test_pr_attestation_multiview.py' -v
+```
+
+Het bronpakket gebruikt `palaco.go20-attestation-multiview.v1` met
+`views`: per waarnemer een unieke `view_id`, de volledige v29
+`history` en het onafhankelijk aangeleverde `custodian_trust`.
+Het afzonderlijk beheerde register
+`palaco.go20-attestation-multiview-pin.v1` koppelt exact
+dezelfde `view_id`-waarden aan hun individueel geankerde
+v29-begin- en eindhash en laatste volgnummer.
+
+**Eerst volledige verificatie, daarna vergelijking:** iedere
+aangeleverde keten moet afzonderlijk cryptografisch slagen,
+inclusief complete historische publicaties, rapportherberekening,
+tweezijdig ondertekende sleutelrotaties en begin- en eindankers.
+De verifier weigert een ongeldige, verkorte, vervalste of
+onvoldoende geankerde waarnemersweergave. Alleen na positieve
+verificatie van **alle** afzonderlijke weergaven worden de
+gemeenschappelijke volgnummers vergeleken. Verschillende hashes
+op hetzelfde volgnummer resulteren in `fork_detected: true`,
+`fork_sequences` en `conflicting_signed_attestations`.
+Een kortere aantoonbaar consistente historische prefix is
+toegestaan; afwijkende genesisankers, tegenstrijdige
+sleutelidentiteiten voor hetzelfde signer-ID en onderling
+conflicterende ondertekende rotatierecords leiden tot afwijzing.
+
+De JSON-verdict
+`palaco.go20-attestation-multiview-verdict.v1` bevat de
+fouten, geverifieerde weergaven, forkvolgnummers en aantallen
+gecontroleerde rotaties. De module is geen transparant
+publicatieregister of gossipservice: ze bewijst uitsluitend
+consistentie van de **daadwerkelijk aangeleverde**,
+afzonderlijk geankerde en geverifieerde weergaven.
+Niet-aangeleverde publicaties of een verborgen fork
+worden niet gevonden. Verschillende `view_id`-waarden
+bewijzen geen organisatorische onafhankelijkheid van
+de waarnemers. Sleutels, ankers en bewaarbeleid moeten
+extern betrouwbaar zijn geprovisioneerd.
+
+Een positieve technische beoordeling geeft nooit
+toestemming voor uitvoering. Iedere uitkomst bevat
+`decision: HOLD`, `authorization: DENY`,
+`release_authorized: false`, `merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft, zonder merge of uitrol.
