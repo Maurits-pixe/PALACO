@@ -1377,3 +1377,69 @@ register. Alle uitkomsten blijven `decision: HOLD`,
 `merge_authorized: false`, `deployment_authorized: false`
 en `production_commit_performed: false`.
 GO-13 HOLD, PR #109 Draft; geen merge of productie-uitrol.
+
+## V32 — historische waarnemersankers, sleutelintrekkingen en continuïteit
+
+`scripts/pr_observer_anchor_history.py` verifieert in alleen-lezen
+modus twee tot acht achtereenvolgende waarnemersepochs.
+Elke epoch bevat de vijf benodigde v31-bronnen:
+`views`, `history_pins`, `signed_anchors`,
+`observer_trust` en `independent_heads`. De module voert
+**voor iedere epoch opnieuw** de volledige v31- en v30-verificatie
+van ondertekende waarnemersankers en attestatiegeschiedenis uit.
+
+```sh
+python3 scripts/pr_observer_anchor_history.py \
+  --history observer-anchor-history.json \
+  --independent-pin externally-retained-observer-history-pin.json \
+  --revocations independently-managed-observer-revocations.json
+python3 -m unittest discover -s tests -p 'test_pr_observer_anchor_history.py' -v
+```
+
+Het historyschema `palaco.go20-observer-anchor-history.v1`
+bevat `epochs` en `rotations`. De onafhankelijke
+`palaco.go20-observer-history-pin.v1` koppelt
+`first_epoch`, `last_epoch`, `first_snapshot_sha256`,
+`last_snapshot_sha256` en `revocation_register_sha256`.
+Ontbrekende epochs, herschreven begin- of eindankers en
+niet-geankerde wijzigingen in het intrekkingsregister
+worden afgewezen.
+
+Het extern aangeleverde revocatieregister
+(`palaco.go20-observer-revocations.v1`) bevat unieke
+`public_key_hex`-waarden met een gehele `effective_epoch`.
+Een sleutel die vanaf die epoch ingetrokken is, mag in
+geen enkele geverifieerde snapshot vanaf die epoch nog als
+actieve waarnemerssleutel voorkomen. Historische gebruiks-
+momenten vóór de intrekking worden niet automatisch afgewezen.
+Het register wordt door de code **niet** beheerd of
+onafhankelijk ondertekend: de afgeleverde hash moet via
+een werkelijk onafhankelijk en geauthenticeerd bewaarkanaal
+zijn vastgelegd.
+
+Een verandering van een waarnemerssleutel tussen twee
+opeenvolgende epochs vereist een domeingescheiden
+`palaco.go20-observer-key-rotation.v1`-verklaring,
+voorzien van zowel de oude als de nieuwe Ed25519-handtekening.
+Het statement bindt `epoch`, `view_id`, beide publieke
+sleutels en de SHA-256-hashes van de oude en nieuwe
+waarnemersattestaties. Ontbrekende, dubbele, vervalste,
+gemanipuleerde of overbodige rotatierecords worden geweigerd.
+Als de onderliggende attestatiegeschiedenis van een
+waarnemer verandert, moet die nieuwe geschiedenis de oude
+cryptografisch verifieerbare prefix behouden: verkorting,
+herschrijving of fork leidt tot afwijzing.
+
+**Grenzen:** dit is uitsluitend een verifier voor
+**aangeleverde** snapshots, niet een opslag- of
+sleutelintrekkingsdienst, transparantielog of onafhankelijke
+klokbron. Het bewijst geen werkelijke organisatorische
+onafhankelijkheid of het ontbreken van verborgen forks.
+Een kwaadwillende eigenaar van zowel historie als externe
+pinnen kan een valse geschiedenis presenteren. Iedere
+uitkomst blijft `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft, zonder merge of uitrol.
