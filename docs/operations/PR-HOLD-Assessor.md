@@ -1717,3 +1717,52 @@ De PostgreSQL-fixture is niet voor migratie naar productie
 bedoeld. Geen wijzigingen aan live database, geen
 toegangsverruiming, geen merge of release. GO-13 HOLD en
 `authorization: DENY` blijven ongewijzigd. PR #109 blijft Draft.
+
+## V38 — backendonderbreking, transactionele rollback en hernieuwde claims
+
+`tests/run_go20_postgres_recovery_faults_disposable.sh` voert
+een reproduceerbare negatieve herstelproef uit op de **tijdelijke
+PostgreSQL-container** van GitHub Actions. De runner weigert
+uitvoering zonder `GITHUB_ACTIONS=true` en
+`CI_GO20_DISPOSABLE_PG=yes`, en gebruikt uitsluitend de
+afgeschermde database `go20test` op `127.0.0.1:5432`.
+De proef gebruikt het bestaande synthetische v37-claimsregister
+en vereist dat de v37-CI-stap vooraf is geslaagd.
+
+```sh
+CI_GO20_DISPOSABLE_PG=yes \
+  bash tests/run_go20_postgres_recovery_faults_disposable.sh
+```
+
+De v38-controle omvat:
+
+1. Een afzonderlijke PostgreSQL-client start `BEGIN` en
+   schrijft een synthetische testclaim binnen zijn transactie.
+   Voor `COMMIT` blijft de client geblokkeerd in
+   `pg_sleep`. De controller vindt de uitsluitend voor deze
+   proef gemarkeerde backend via `application_name` en
+   beëindigt die met `pg_terminate_backend`.
+   Daarna moeten het totale rijenaantal en de afwezigheid
+   van de onvoltooide aanvraag exact overeenkomen met de
+   toestand vóór de onderbreking.
+2. Een nieuwe databaseverbinding claimt dezelfde invoer:
+   één `TEST_ONLY_COMMIT`, daarna exact `REPLAY`.
+   Hetzelfde aanvraag-ID met afwijkend materiaal resulteert
+   in `CONFLICT`, zonder extra claim.
+3. Een tweede synthetische transactie krijgt een
+   server-side `statement_timeout` nadat de testclaim is
+   ingevoegd maar voordat is gecommit. Die mislukking mag
+   geen database-record bewaren. Een nieuwe client kan
+   de claim daarna exact eenmaal committeren en herhalen.
+
+Dit test **backendbeëindiging en een query-timeout**, niet het
+fysiek crashen of herstarten van de PostgreSQL-server,
+niet het uitvallen van opslag en niet echte replicatie of
+clusterfailover. Er worden geen productiegegevens of
+externe databases gebruikt. De testfunctie retourneert
+`TEST_ONLY_COMMIT` als synthetische technische uitkomst,
+nooit als release- of herstelautorisatie.
+
+**Veiligheidsbesluit:** GO-13 blijft `HOLD`,
+`authorization: DENY`. PR #109 blijft Draft; geen
+merge, publicatie, productiemigratie of werkelijk herstel.
