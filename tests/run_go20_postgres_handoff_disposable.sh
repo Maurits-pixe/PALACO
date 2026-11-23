@@ -57,7 +57,7 @@ compare() {
     --independent-pin "$tmp/pin.json" > "$tmp/verdict.json"
 }
 copy_fixture() {
-  pg_dump -X -h 127.0.0.1 -p 5432 -U go20test -d go20test \
+  pg_dump -h 127.0.0.1 -p 5432 -U go20test -d go20test \
     --schema=go20_v37 --no-owner --no-acl > "$tmp/fixture.sql"
   psql -X -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 5433 \
     -U go20test -d go20test -f "$tmp/fixture.sql" > /dev/null
