@@ -1313,3 +1313,67 @@ toestemming voor uitvoering. Iedere uitkomst bevat
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft, zonder merge of uitrol.
+
+## V31 — ondertekende waarnemersankers en controle van beheergrenzen
+
+`scripts/pr_observer_anchor_custody.py` controleert in uitsluitend
+leesmodus de **afzonderlijk aangeleverde, ondertekende** verklaringen
+van twee tot acht waarnemers. De v30-ketenverificatie wordt altijd
+opnieuw uitgevoerd; een geldige waarnemershandtekening volstaat nooit
+om ongeldige of conflicterende attestatiegeschiedenis te accepteren.
+
+```sh
+python3 scripts/pr_observer_anchor_custody.py \
+  --views separately-supplied-attestation-views.json \
+  --history-pins independently-retained-v30-history-pins.json \
+  --signed-anchors signed-observer-anchor-receipts.json \
+  --observer-trust independently-provisioned-observer-custody.json \
+  --independent-heads externally-retained-observer-receipt-hashes.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_observer_anchor_custody.py' -v
+```
+
+De ondertekende receipts (`palaco.go20-observer-anchor-bundle.v1`)
+bevatten een uniek `view_id`, een domeingescheiden
+`palaco.go20-observer-anchor-statement.v1` en
+`signature_ed25519_hex`. Iedere statement bindt
+`repository`, `view_id`, een geheel `epoch`,
+`history_pin_sha256` (de hash van de afzonderlijk vastgelegde
+v30-view-pin), `organization_id`, `control_domain_id`,
+`decision: HOLD` en `authorization: DENY`.
+
+Het extern beheerde waarnemersregister
+(`palaco.go20-observer-custody-trust.v1`) bevat de actuele
+Ed25519-`public_key_hex`, `status`, `organization_id` en
+`control_domain_id` per `view_id`. De verifier weigert
+ingetrokken sleutels en **overlap** in publieke sleutels,
+organisatie-ID's of sleutelbeheerdomeinen. De aparte
+`palaco.go20-observer-anchor-pins.v1` bevat voor iedere
+waarnemer een eerder vastgelegde `minimum_epoch` en de
+`receipt_sha256`. Daardoor worden teruggedraaide epochs,
+mismatches met de extern bewaarde receipthash en vervalste
+handtekeningen afgewezen. Ontbrekende, dubbele of extra
+waarnemers ontbreken nooit stilzwijgend in het resultaat:
+volledige identiteit- en pin-dekking is verplicht.
+
+De validator vereist bovendien opnieuw een positieve v30-
+multiviewcontrole, inclusief alle v29-ondertekende
+attestatiegeschiedenissen, sleutelrotaties, historische
+eindrapporten en hun onafhankelijke ankers. De uitvoer
+`palaco.go20-observer-anchor-verdict.v1` bevat
+`anchors_valid`, `observers_verified`, de volledige
+`multiview_verdict` en foutcodes.
+
+**Grenzen:** deze module creëert **geen duurzame opslag**,
+publieke transparantiedienst, onafhankelijke identiteitscontrole,
+onafhankelijk sleutelbeheer of automatische monitoring.
+Zij controleert uitsluitend de onafhankelijk **aangeleverde**
+bewaarankers en claims. Verschillende organisatie-ID's bewijzen
+niet dat de eigenaars werkelijk onafhankelijk zijn; verborgen
+forks worden niet gevonden. Werkelijke duurzaamheid vereist
+extern beheerde onveranderlijke opslag en authenticatie van het
+register. Alle uitkomsten blijven `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`, `deployment_authorized: false`
+en `production_commit_performed: false`.
+GO-13 HOLD, PR #109 Draft; geen merge of productie-uitrol.
