@@ -60,6 +60,8 @@ on:
       - 'tests/test_pr_recovery_simulation.py'
       - 'tests/test_pr_recovery_transaction.py'
       - 'tests/test_pr_concurrent_recovery.py'
+      - 'tests/go20_postgres_recovery_idempotency.sql'
+      - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -148,6 +150,10 @@ jobs:
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
         run: bash tests/run_go20_postgres_disposable.sh
+      - name: Test durable restore idempotency, replay and rollback in disposable PostgreSQL
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_recovery_idempotency_disposable.sh
       - name: Test isolated tenant RLS and negative permissions
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
