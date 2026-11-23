@@ -1195,3 +1195,64 @@ uitkomst behoudt `decision: HOLD`,
 `merge_authorized: false`, `deployment_authorized: false`
 en `production_commit_performed: false`. GO-13 HOLD,
 PR #109 Draft; geen productieactie.
+
+## V29 — volledige final-report-attestatieketen en tweezijdige sleutelrotatie
+
+`scripts/pr_final_attestation_history.py` verifieert in uitsluitend
+leesmodus **alle** aangeleverde Ed25519-attestaties vanaf genesis tot
+de extern geankerde laatste attestatie. Anders dan de éénstapscontrole
+in v28, controleert v29 ieder historisch ketenverband en iedere
+onderliggende v27-beveiligingsrapportage opnieuw.
+
+```sh
+python3 scripts/pr_final_attestation_history.py \
+  --history final-attestation-history.json \
+  --custodian-trust independently-managed-attestation-keys.json \
+  --independent-pin independently-retained-full-chain-pin.json
+python3 -m unittest discover -s tests -p 'test_pr_final_attestation_history.py' -v
+```
+
+Het journal gebruikt `palaco.go20-final-attestation-history.v1`
+met één tot zestien `entries`, ieder met `envelope`,
+`report` en `inputs`, en een `rotations`-array.
+De verifier gebruikt de bestaande v28-Ed25519-controle voor
+elk volgnummer, controleert iedere `previous_attestation_sha256`
+vanaf de verplichte genesisvoorganger (64 hexnullen) en vereist dat
+alle beveiligingsrapporten onafhankelijk uit hun meegeleverde
+governance- en auditbronbestanden kunnen worden herberekend.
+
+De afzonderlijk vooraf vastgelegde
+`palaco.go20-final-attestation-history-pin.v1` bindt
+`genesis_attestation_sha256`, `last_sequence` en
+`last_attestation_sha256`. Een afgebroken of verkorte
+geschiedenis kan niet positief eindigen als de externe pin
+niet mee is aangepast. Iedere hash- of handtekeningwijziging,
+rollback van een volgnummer of beschadigde tussenschakel
+leidt tot een negatieve technische beoordeling.
+
+Een verandering van `signer_key_id` vereist exact één
+`palaco.go20-attestation-key-rotation.v1`-overgang,
+met het oude en nieuwe sleutel-ID, het volgnummer en de
+hashes van de twee betrokken attestaties. De overgang
+moet door **beide actieve Ed25519-sleutels** zijn ondertekend;
+identiek publiek sleutelmateriaal is niet als rotatie
+toegestaan. De verifier gebruikt uitsluitend het afzonderlijk
+aangeleverde, actuele custodian-trustregister. Een
+ingetrokken sleutel, ontbrekende tegenhandtekening,
+ongeautoriseerde verandering of onnodige rotatie
+veroorzaakt afwijzing.
+
+**Grenzen:** het eerste en laatste ketenanker moeten
+onafhankelijk en betrouwbaar worden beheerd, en het
+sleutelregister moet een onafhankelijke en actuele bron
+hebben. De verifier haalt geen sleutels op, beheert geen
+sleutelrotatie, publiceert geen attestaties, verifieert
+geen betrouwbare tijdstempels en kan onzichtbare
+niet-gepubliceerde forks niet ontdekken. Dit is geen
+feitelijke organisatieattestatie en geen productie-releasegate.
+Iedere uitkomst blijft `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
