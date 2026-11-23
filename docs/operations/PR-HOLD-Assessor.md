@@ -1558,3 +1558,59 @@ daadwerkelijk van fysieke back-upmedia kunnen worden hersteld,
 of dat extern gepresenteerde opslag onveranderlijk is. Een
 productieherstelprocedure vereist een afzonderlijk goedgekeurd
 operationeel plan. GO-13 HOLD en PR #109 Draft.
+
+## V35 — transactionele herstelproef met foutinjectie en atomische rollback
+
+`scripts/pr_recovery_transaction.py` voert een **afgeschermde
+SQLite-hersteltransactie uit in een nieuwe `:memory:`-database**.
+Een volledig positief v34-herstelsimulatieverdict is verplicht
+**vóór** de transactie wordt gestart. De test kan geen externe
+database of productiegegevens bereiken en kent geen opslagpad
+of productie-DSN.
+
+```sh
+python3 scripts/pr_recovery_transaction.py \
+  --segments recovery-segments.json \
+  --manifest recovery-segment-manifest.json \
+  --independent-pin independent-segment-manifest-pin.json
+# Negatieve herstelproeven:
+python3 scripts/pr_recovery_transaction.py \
+  --segments recovery-segments.json \
+  --manifest recovery-segment-manifest.json \
+  --independent-pin independent-segment-manifest-pin.json \
+  --inject-fault before_commit
+python3 -m unittest discover -s tests -p 'test_pr_recovery_transaction.py' -v
+```
+
+De transactiesimulator heeft een geïsoleerde tabel voor
+herstelonderdelen en een tweede tabel voor het manifestgebonden
+commitbewijs. De transactie gebruikt `BEGIN IMMEDIATE`,
+controleert het exacte aantal ingevoerde onderdelen en de
+SHA-256-hash van het aangeleverde manifest, en commit pas nadat
+alle invarianten zijn vastgesteld. Er zijn drie doelgerichte
+foutinjecties: `after_begin`, `after_first_segment`
+en `before_commit`. Bij iedere geforceerde fout volgt
+`ROLLBACK`, waarna de simulator controleert dat beide
+tabellen leeg zijn en er geen open transactie overblijft.
+
+Het verdict `palaco.go20-recovery-transaction-proof.v1`
+maakt onderscheid tussen `sandbox_commit_performed`
+(alleen een commit in de tijdelijke, afgesloten SQLite-database),
+`rollback_verified`, `sandbox_rows_after_transaction`
+en `transaction_valid`. Geforceerde foutscenario's leveren
+een negatief technisch verdict op, zelfs als rollback correct
+werd uitgevoerd.
+
+**Beveiligingsgrens:** een succesvolle sandboxcommit is **geen
+herstel in PALACO**, geen fysieke back-uptest en geen externe
+datawarehouse- of PostgreSQL-commit. De module heeft geen
+bestandsherstel, productietransactie, databaseconnectie of
+autorisatiemechanisme. Iedere uitkomst behoudt
+`decision: HOLD`, `authorization: DENY`,
+`restore_performed: false`,
+`production_commit_performed: false`,
+`production_write_performed: false`,
+`release_authorized: false`,
+`merge_authorized: false` en
+`deployment_authorized: false`.
+GO-13 HOLD; PR #109 Draft, geen merge of uitrol.
