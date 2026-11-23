@@ -1500,3 +1500,61 @@ Ongeacht de uitkomst blijven `decision: HOLD`,
 `production_commit_performed: false` en
 `restore_performed: false`.
 GO-13 HOLD, PR #109 Draft; geen merge, publicatie of uitrol.
+
+## V34 — geïsoleerde herstelproef, segmentdekking en gedeeltelijk herstel
+
+`scripts/pr_recovery_simulation.py` valideert een **volledig
+gesegmenteerd herstelpakket uitsluitend in het geheugen**. Het script
+schrijft niet naar schijf, herstelt geen bestanden, opent geen database
+en raakt geen productieomgeving aan.
+
+```sh
+python3 scripts/pr_recovery_simulation.py \
+  --segments recovery-segments.json \
+  --manifest recovery-segment-manifest.json \
+  --independent-pin independent-segment-manifest-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_recovery_simulation.py' -v
+```
+
+Het bronpakket `palaco.go20-recovery-segments.v1` bevat `parts`,
+elk met de exacte velden `name` en `content`. Verplicht zijn
+`epoch:0` tot en met `epoch:N-1` (2–8 epochs) en de afzonderlijke
+segmenten `rotations`, `v32_pin`, `revocations`,
+`inventory` en `recovery_pin`. De historische
+waarnemerssleutelrotaties blijven een eigen segment en veranderen
+het strikt bestaande v33-inventarisschema niet.
+
+Het `palaco.go20-recovery-segment-manifest.v1` bevat een
+repositorybinding, het aantal epochs, een `history_sha256` en
+een exact `segment_sha256` voor elk segment. Het afzonderlijk
+bewaarde `palaco.go20-recovery-segment-pin.v1` bevat
+`manifest_sha256` en `expected_epochs`. De proef weigert
+ontbrekende, dubbele, onbekende, gewijzigde of extra segmenten,
+en een aangepast manifest zonder overeenkomende onafhankelijke pin.
+De volgorde van aangeleverde fragmenten is niet relevant: de
+historie wordt **tijdelijk** op basis van expliciete namen
+gereconstrueerd.
+
+Na controle van alle segmenten vergelijkt de verifier de
+samengestelde historische SHA-256-hash met het manifest en
+herberekent alle v33-herstelcontroles, inclusief onafhankelijke
+retentiecheckpoints, waarnemersgeschiedenis, intrekkingen,
+ondertekende attestaties en gouvernancecontroles.
+Er is geen echte bestandsrestauratie of opslagreconstructie.
+
+`palaco.go20-recovery-simulation-verdict.v1` rapporteert
+`simulation_valid`, `segments_verified`,
+`recovery_evidence_valid`, foutcodes en vaste
+`restore_performed: false` en `write_performed: false`.
+Iedere uitkomst behoudt `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`, `deployment_authorized: false`
+en `production_commit_performed: false`.
+
+**Grenzen:** de validator vertrouwt op onafhankelijk beheerde
+pinnen en bronbestanden; hij kan niet bewijzen dat gegevens
+daadwerkelijk van fysieke back-upmedia kunnen worden hersteld,
+of dat extern gepresenteerde opslag onveranderlijk is. Een
+productieherstelprocedure vereist een afzonderlijk goedgekeurd
+operationeel plan. GO-13 HOLD en PR #109 Draft.
