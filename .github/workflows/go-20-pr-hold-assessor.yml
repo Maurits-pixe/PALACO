@@ -158,7 +158,9 @@ jobs:
       - name: Test backend termination, timeout rollback and reconnect recovery in disposable PostgreSQL
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
-        run: bash tests/run_go20_postgres_recovery_faults_disposable.sh
+        run: |
+          bash -n tests/run_go20_postgres_recovery_faults_disposable.sh
+          bash tests/run_go20_postgres_recovery_faults_disposable.sh
       - name: Test isolated tenant RLS and negative permissions
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
