@@ -1614,3 +1614,63 @@ autorisatiemechanisme. Iedere uitkomst behoudt
 `merge_authorized: false` en
 `deployment_authorized: false`.
 GO-13 HOLD; PR #109 Draft, geen merge of uitrol.
+
+## V36 — concurrerende herstelclaims, idempotentie en conflictisolatie
+
+`scripts/pr_concurrent_recovery.py` simuleert **maximaal twaalf
+gelijktijdige herstelclaims** tegen één nieuwe, tijdelijke SQLite
+`:memory:`-database. Voor **ieder** verzoek wordt eerst de
+volledige v34-herstel- en governanceverificatie uitgevoerd;
+een ongeldig verzoek verhindert de hele batch, voordat een
+SQL-transactie kan beginnen.
+
+```sh
+python3 scripts/pr_concurrent_recovery.py \
+  --requests concurrent-restore-claims.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_concurrent_recovery.py' -v
+```
+
+Het JSON-bronschema `palaco.go20-concurrent-restore-requests.v1`
+bevat `requests`. Iedere claim bevat exact `request_id`,
+`segments`, `manifest` en `independent_pin`.
+Binnen de geïsoleerde ledger geldt:
+
+- Exact gelijke `request_id` plus dezelfde SHA-256-hashes
+  van manifest, pin en segmenten: `idempotent_replay`.
+- Andere `request_id` met exact dezelfde drie hashes:
+  eveneens een replay; geen tweede tijdelijke ledger-commit.
+- Een bestaande `request_id` met een gewijzigde combinatie
+  van hashes: `request_id_conflict`, strikt negatief verdict.
+- Een nieuw, onafhankelijk geldig herstelbewijs met uniek
+  materiaal: maximaal één `new_sandbox_commit`.
+
+De SQL-ledger gebruikt zowel een unieke `request_id` als
+een unieke combinatie van `manifest_sha256`,
+`pin_sha256` en `segments_sha256`. Een expliciet
+threadslot beschermt het transactievenster, zodat de
+`BEGIN IMMEDIATE`/controle/`COMMIT`-cyclus onder
+meerdere testthreads serialiseerbaar is. De bronvolgorde
+van het testresultaat is stabiel gerangschikt op de
+oorspronkelijke index, ook als de aanroepen elkaar
+overlappen.
+
+De uitkomst `palaco.go20-concurrent-restore-verdict.v1`
+rapporteert `new_sandbox_commits`,
+`idempotent_replays`, `conflicts_rejected`,
+`sandbox_ledger_rows` en de afzonderlijke
+`request_outcomes`.
+
+**Grenzen:** het slot en de ledger bestaan uitsluitend
+binnen één procesaanroep en verdwijnen na beëindiging.
+Dit bewijst **geen** idempotentie over meerdere servers,
+herstarts of productiedatabases; geen productie-DSN,
+bestandsherstel of daadwerkelijke persistente commit is
+aanwezig. V36 vraagt geen wijziging van het bestaande
+GO-13-beleid en geeft geen rechten. Iedere uitkomst
+behoudt `decision: HOLD`, `authorization: DENY`,
+`restore_performed: false`,
+`production_commit_performed: false`,
+`production_write_performed: false`,
+`release_authorized: false`, `merge_authorized: false`
+en `deployment_authorized: false`. PR #109 blijft Draft.
