@@ -1126,3 +1126,72 @@ blijven `decision: HOLD`, `authorization: DENY`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD. PR #109 blijft Draft; geen merge, geen uitrol.
+
+## V28 — extern ondertekend eindrapport en onafhankelijk anti-rollbackanker
+
+`scripts/pr_final_report_attestation.py` controleert een
+Ed25519-ondertekende attestatie van het **volledig opnieuw
+berekende** v27-beveiligingsrapport. De module is uitsluitend
+een offline verifier: zij maakt geen sleutels of handtekeningen
+aan, schrijft geen bewijsregister en autoriseert geen uitrol.
+
+```sh
+python3 scripts/pr_final_report_attestation.py \
+  --attestation signed-final-report.json \
+  --security-report final-security-report.json \
+  --history governance-history.json \
+  --independent-governance-pin independent-governance-pin.json \
+  --controller-trust independent-governance-controllers.json \
+  --attestation-trust independent-report-signers.json \
+  --independent-attestation-pin independent-attestation-pin.json
+# Bij een hoger volgnummer ook: --previous-attestation signed-previous.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_final_report_attestation.py' -v
+```
+
+De envelop `palaco.go20-final-report-attestation.v1` bevat
+`statement`, `signer_key_id` en `signature_ed25519_hex`.
+De ondertekende, domeingescheiden statement heeft schema
+`palaco.go20-final-report-statement.v1` en bindt:
+`repository`, `sequence`, `previous_attestation_sha256`,
+`report_sha256`, `decision: HOLD` en
+`authorization: DENY`. Ed25519 tekent de ruwe 32 SHA-256-bytes
+van de canonieke JSON-statement, overeenkomstig de
+bestaande v17–v27-PALACO-handtekeningconventie.
+
+Het afzonderlijk beheerde sleutelregister
+(`palaco.go20-final-report-trust.v1`) bevat per
+`signer_key_id` de `public_key_hex`, actuele
+`status: active|revoked` en de verplichte
+`role: attestation_custodian`. De attestatiesleutel mag
+niet gelijk zijn aan een reviewer- of governancecontrollersleutel
+uit de aangeleverde governancegeschiedenis.
+
+De **onafhankelijk vastgelegde** pin gebruikt
+`palaco.go20-final-report-pin.v1`, met
+`expected_sequence` en `previous_attestation_sha256`.
+Bij het genesisvolgnummer `0` is de voorganger verplicht
+64 hexnullen. Voor een vervolgattestatie moet het afzonderlijk
+aangeleverde vorige attest overeenkomen met de onafhankelijke
+voorgangerhash, exact het vorige volgnummer hebben en een
+geldige actieve Ed25519-handtekening bevatten. Verkeerde
+volgnummers, ontbrekende voorgangers, ingetrokken ondertekenaars,
+mismatches met de rapporthash of vervalste status worden
+afgewezen.
+
+**Bewijsgrenzen:** de pin en het sleutelregister worden niet
+zelfstandig gepubliceerd, op versheid gecontroleerd of
+onveranderlijk opgeslagen. Bij meerdere historische
+attestaties valideert v28 de actuele attestatie en de direct
+voorgaande, geankerde attestatie; dit is **geen volledig
+onafhankelijk bewijs** van alle oudere schakels of van een
+betrouwbaar tijdstip. De oorspronkelijke audit- en
+governancegeschiedenis wordt door de v27-verifier wel volledig
+herberekend. Externe sleutelbezit- en rolgovernance moet
+afzonderlijk worden vastgesteld. Deze code mag uitsluitend
+een technisch `attestation_valid`-oordeel geven; iedere
+uitkomst behoudt `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`, `deployment_authorized: false`
+en `production_commit_performed: false`. GO-13 HOLD,
+PR #109 Draft; geen productieactie.
