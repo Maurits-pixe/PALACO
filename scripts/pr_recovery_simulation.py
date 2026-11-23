@@ -18,8 +18,8 @@ from pr_observer_recovery import verify_recovery
 SCHEMA = "palaco.go20-recovery-segments.v1"
 MANIFEST_SCHEMA = "palaco.go20-recovery-segment-manifest.v1"
 PIN_SCHEMA = "palaco.go20-recovery-segment-pin.v1"
-PARTS = ("v32_pin", "revocations", "inventory", "recovery_pin")
-MAX_SEGMENTS = 12
+PARTS = ("v32_pin", "revocations", "inventory", "recovery_pin", "rotations")
+MAX_SEGMENTS = 13
 
 
 def outcome(errors: list[str], covered: int = 0, history_valid: bool = False) -> dict:
@@ -49,7 +49,7 @@ def simulate(segments: object, manifest: object, independent_pin: object) -> dic
     if (not isinstance(segments, dict) or set(segments) != {"schema", "parts"} or
             segments.get("schema") != SCHEMA or
             not isinstance(segments.get("parts"), list) or
-            not 6 <= len(segments["parts"]) <= MAX_SEGMENTS):
+            not 7 <= len(segments["parts"]) <= MAX_SEGMENTS):
         return outcome(["invalid_segment_package"])
     if (not isinstance(manifest, dict) or set(manifest) != {
             "schema", "repository", "segment_sha256", "epoch_count",
@@ -101,12 +101,9 @@ def simulate(segments: object, manifest: object, independent_pin: object) -> dic
     history = {
         "schema": "palaco.go20-observer-anchor-history.v1",
         "epochs": [contents[f"epoch:{i}"] for i in range(manifest["epoch_count"])],
-        "rotations": contents["inventory"]["rotations"]
-        if isinstance(contents["inventory"], dict) and
-        "rotations" in contents["inventory"] else None,
+        "rotations": contents["rotations"],
     }
-    # The rotation ledger belongs to the recovered history rather than to the
-    # v33 checkpoint inventory; it is carried in its own extra segment.
+    # The rotation ledger is carried separately from the v33 inventory.
     return _complete_simulation(history, contents, manifest, len(contents))
 
 
