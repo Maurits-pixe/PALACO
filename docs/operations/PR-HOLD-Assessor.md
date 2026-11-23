@@ -1766,3 +1766,48 @@ nooit als release- of herstelautorisatie.
 **Veiligheidsbesluit:** GO-13 blijft `HOLD`,
 `authorization: DENY`. PR #109 blijft Draft; geen
 merge, publicatie, productiemigratie of werkelijk herstel.
+
+## V39 — PostgreSQL-crashherstel en duurzaamheid van testclaims
+
+De **laatste stap** in de bestaande `disposable-postgres`-CI-job
+draait `tests/run_go20_postgres_recovery_crash_disposable.sh`.
+De runner controleert vóór een ingreep beide verplichte
+GitHub Actions-/wegwerptestvariabelen, een lokale verbinding
+met database `go20test`, het bestaan van de geïsoleerde
+v37-claimadministratie en **precies één** Docker-container
+die poort 5432 publiceert. Het image moet overeenkomen
+met de verwachte PostgreSQL 17-service en de container
+moet `POSTGRES_DB=go20test` bevatten. Zonder deze
+controles weigert de runner te draaien.
+
+De proef gebruikt uitsluitend synthetische hashwaarden en
+afzonderlijke testaanvraag-ID's. Eerst wordt een claim
+**gecommit**, daarna start een tweede client een transactie
+die een andere claim invoegt maar vóór `COMMIT` blijft
+wachten. Na bevestiging van de actieve transactie volgt
+`docker kill --signal=SIGKILL` op **alleen de geïdentificeerde
+tijdelijke PostgreSQL-container**, gevolgd door
+`docker start` van exact diezelfde container.
+
+Na herstel moet PostgreSQL's WAL-herstel garanderen dat:
+1. de vóór de crash gecommitte claim behouden is;
+2. de bij de crash niet-gecommitte claim ontbreekt;
+3. het totale rijenaantal niet onverwacht is veranderd;
+4. een herhaalde gecommitte claim `REPLAY` oplevert;
+5. de gecommitte aanvraag-ID met ander materiaal `CONFLICT`
+   oplevert;
+6. de eerder afgebroken claim eenmaal opnieuw kan committen,
+   waarna herhaling uitsluitend `REPLAY` oplevert.
+
+De stap wordt **na alle andere disposable PostgreSQL-tests**
+uitgevoerd. De runner bevat een `bash -n`-syntaxiscontrole
+en een tijdelijke uitvoerfolder met automatische opruiming.
+Het GitHub Actions-jobtimeout blijft op tien minuten.
+
+**Beperkingen:** dit is een volledige harde stop/herstart
+van **één tijdelijke databasecontainer**, geen bewezen
+clusterfailover, herstel van hardwarefalen of fysiek
+verlies van de opslaglaag. De synthetische v37-testfunctie
+voert zelf geen volledige externe v34–v36-preflight uit.
+Geen productie-migratie of -herstel is voorzien.
+GO-13 `HOLD`, `authorization: DENY`; PR #109 Draft.
