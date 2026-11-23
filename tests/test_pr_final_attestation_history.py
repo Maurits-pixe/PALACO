@@ -152,7 +152,7 @@ class FullHistoryTests(unittest.TestCase):
     def test_truncated_history_even_with_new_last_pin(self):
         self.add_same_signer()
         self.pin["last_sequence"] = 0
-        self.assertIn("historical_truncation_or_sequence_rollback", self.check()["errors"]) if len(self.entries) == 2 else None
+        self.assertIn("historical_truncation_or_sequence_rollback", self.check()["errors"])
 
     def test_revoked_old_signer_rejected(self):
         self.add_rotated_signer()
@@ -163,6 +163,12 @@ class FullHistoryTests(unittest.TestCase):
         self.entries[0]["report"] = copy.deepcopy(self.entries[0]["report"])
         self.entries[0]["report"]["authorization"] = "ALLOW"
         self.assertFalse(self.check()["history_valid"])
+
+    def test_malformed_intermediate_envelope_denied(self):
+        self.add_same_signer()
+        self.add_same_signer()
+        self.entries[1]["envelope"] = None
+        self.assertIn("malformed_historical_entry", self.check()["errors"])
 
     def test_replayed_genesis_in_middle(self):
         self.add_same_signer()
