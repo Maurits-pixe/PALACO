@@ -24,6 +24,7 @@ on:
       - 'scripts/pr_security_acceptance.py'
       - 'scripts/pr_final_report_attestation.py'
       - 'scripts/pr_final_attestation_history.py'
+      - 'scripts/pr_attestation_multiview.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -46,6 +47,7 @@ on:
       - 'tests/test_pr_security_acceptance.py'
       - 'tests/test_pr_final_report_attestation.py'
       - 'tests/test_pr_final_attestation_history.py'
+      - 'tests/test_pr_attestation_multiview.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -98,6 +100,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_security_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_final_report_attestation.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_final_attestation_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_attestation_multiview.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
