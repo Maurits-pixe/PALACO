@@ -28,6 +28,7 @@ on:
       - 'scripts/pr_observer_anchor_custody.py'
       - 'scripts/pr_observer_anchor_history.py'
       - 'scripts/pr_observer_recovery.py'
+      - 'scripts/pr_recovery_simulation.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -54,6 +55,7 @@ on:
       - 'tests/test_pr_observer_anchor_custody.py'
       - 'tests/test_pr_observer_anchor_history.py'
       - 'tests/test_pr_observer_recovery.py'
+      - 'tests/test_pr_recovery_simulation.py'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -110,6 +112,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_observer_anchor_custody.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_observer_anchor_history.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_observer_recovery.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_recovery_simulation.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
