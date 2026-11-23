@@ -1811,3 +1811,55 @@ verlies van de opslaglaag. De synthetische v37-testfunctie
 voert zelf geen volledige externe v34–v36-preflight uit.
 Geen productie-migratie of -herstel is voorzien.
 GO-13 `HOLD`, `authorization: DENY`; PR #109 Draft.
+
+## V40 — geïsoleerde tweedatabase-handoff, snapshotverschillen en failover-DENY
+
+`scripts/pr_recovery_handoff.py` vergelijkt twee gestructureerde
+exports van het **synthetische v37-herstelclaimsregister**.
+Iedere rij bevat exact `request_id`, `manifest_sha256`,
+`pin_sha256` en `segments_sha256`. De controle toetst
+unieke aanvraag-ID's en uniek bewijsmateriaal, het volledige
+rijenaantal, en exacte canoniek gesorteerde records. Een
+afzonderlijk aangeleverd `palaco.go20-restore-handoff-pin.v1`
+bevat de bron-SHA-256 en een `minimum_rows`-retentiegrens.
+De verifier weigert ontbrekende, extra, dubbele, gewijzigde
+of gemanipuleerde records en een mismatch met het bronanker.
+Een consistente snapshot verleent **nooit** failoverrechten;
+het verdict bevat altijd `decision: HOLD`,
+`authorization: DENY` en `failover_authorized: false`.
+
+De nieuwe CI-runner
+`tests/run_go20_postgres_handoff_disposable.sh` maakt een
+**tweede, afzonderlijke PostgreSQL 17-wegwerpcontainer**
+op lokale poort 5433, met tijdelijke gebruikersgegevens.
+De bestaande primaire disposable CI-database blijft op 5432.
+De runner loopt vóór de v39-crashproef en ruimt de tweede
+container en zijn tijdelijke bestanden bij beëindiging op.
+
+De test voert eerst een `pg_dump`-/`psql`-snapshotkopie van
+het geïsoleerde `go20_v37`-schema uit. Een exact gelijke
+snapshot moet slagen. Daarna wordt op de primaire
+wegwerpdatabase een extra claim gecommit, terwijl de kopie
+achterloopt: de verifier **moet weigeren**. Een nieuwe
+snapshotkopie herstelt de overeenstemming. Een opzettelijk
+gemanipuleerde claim op de kopie moet opnieuw worden
+geweigerd. Er zijn veertien aparte Python-regressietests
+in `tests/test_pr_recovery_handoff.py`.
+
+```sh
+python3 -m unittest discover -s tests -p 'test_pr_recovery_handoff.py' -v
+# Uitsluitend vanuit disposable GitHub Actions CI:
+bash tests/run_go20_postgres_handoff_disposable.sh
+```
+
+**Belangrijke grenzen:** dit is snapshotgebaseerde overdracht
+tussen twee werkelijk afzonderlijke, maar tijdelijke databases.
+Er is **geen** streamingreplicatie, synchrone WAL-replicatie,
+fysieke promotie, leader election, quorum, fencing of
+automatische failover. De CI-fixture maakt de bronhash zelf
+en bewijst dus geen onafhankelijke operationele bewaarketen;
+bij werkelijke toepassing moet de pin vooraf onafhankelijk
+en geauthenticeerd worden vastgesteld. Dit bewijst ook niet
+dat opslag op twee machines fouttolerant is. Er zijn geen
+productiemigraties of live herstelacties. GO-13 HOLD,
+PR #109 Draft, geen merge, uitrol of productieaanpassing.
