@@ -1443,3 +1443,60 @@ uitkomst blijft `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft, zonder merge of uitrol.
+
+## V33 — retentiecheckpoints en herstelverificatie voor historische waarnemers
+
+`scripts/pr_observer_recovery.py` biedt een **alleen-lezen**
+verificatiepoort voor uit een back-up gereconstrueerde
+waarnemersgeschiedenis, zonder herstelactie, schrijfbevoegdheid
+of productieautorisatie.
+
+```sh
+python3 scripts/pr_observer_recovery.py \
+  --restored-history restored-observer-history.json \
+  --v32-pin independently-retained-observer-history-pin.json \
+  --revocations independently-retained-observer-revocations.json \
+  --inventory recovery-checkpoint-inventory.json \
+  --independent-recovery-pin independently-retained-recovery-pin.json
+python3 -m unittest discover -s tests -p 'test_pr_observer_recovery.py' -v
+```
+
+De inventaris `palaco.go20-observer-recovery-inventory.v1`
+bevat de volledige `history_sha256`,
+`v32_pin_sha256` en `revocations_sha256`, een
+repositorybinding en exact één checkpoint per historische epoch.
+Elk `palaco.go20-observer-recovery-checkpoint.v1` bevat
+`epoch`, `snapshot_sha256`,
+`previous_checkpoint_sha256` en
+`checkpoint_sha256`, berekend als SHA-256 van de canonieke
+checkpoint-inhoud zonder het eigen hashveld. De keten begint met
+64 hexnullen en sluit zonder ontbrekende of herschikte snapshots.
+
+Een afzonderlijk aangeleverde
+`palaco.go20-observer-recovery-pin.v1` legt
+`inventory_sha256`, `first_checkpoint_sha256`,
+`last_checkpoint_sha256`, `last_epoch` en
+`minimum_epochs` vast. De verifier toetst deze exacte
+referenties vóór technische acceptatie, weigert verkorte
+retentiegeschiedenis en herberekent bovendien alle oorspronkelijke
+v32-controles, inclusief v31-v30-ankers, handtekeningen,
+revocaties en onderliggende attestatieketens.
+
+Het resultaat `palaco.go20-observer-recovery-verdict.v1`
+rapporteert `recovery_evidence_valid`,
+`historical_chain_valid`, `checkpoints_verified` en
+de precieze foutcodes. Een geldig resultaat is slechts bewijs
+van **overeenstemming met aangeleverde herstelreferenties**.
+Het bewijst niet dat die referenties onafhankelijk of duurzaam
+zijn opgeslagen, noch dat back-ups feitelijk herstelbaar zijn.
+De module maakt geen back-up, schrijft geen opslag,
+herstelt geen bestand en beschikt niet over een betrouwbare
+tijdstempelservice.
+
+Ongeacht de uitkomst blijven `decision: HOLD`,
+`authorization: DENY`, `release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false`,
+`production_commit_performed: false` en
+`restore_performed: false`.
+GO-13 HOLD, PR #109 Draft; geen merge, publicatie of uitrol.
