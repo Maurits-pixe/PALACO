@@ -63,6 +63,7 @@ on:
       - 'tests/go20_postgres_recovery_idempotency.sql'
       - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
       - 'tests/run_go20_postgres_recovery_faults_disposable.sh'
+      - 'tests/run_go20_postgres_recovery_crash_disposable.sh'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -186,3 +187,9 @@ jobs:
           CI_GO20_DISPOSABLE_PG: "yes"
           PYTHONDONTWRITEBYTECODE: "1"
         run: bash tests/run_go20_audit_export_disposable.sh
+      - name: Crash and restart only disposable PostgreSQL container, verify WAL rollback and durable replay
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: |
+          bash -n tests/run_go20_postgres_recovery_crash_disposable.sh
+          bash tests/run_go20_postgres_recovery_crash_disposable.sh
