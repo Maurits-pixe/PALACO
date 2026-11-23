@@ -1678,28 +1678,28 @@ en `deployment_authorized: false`. PR #109 blijft Draft.
 ## V37 — cross-session idempotentie in disposable PostgreSQL
 
 De uitsluitend voor CI bestemde SQL-fixture
-\`tests/go20_postgres_recovery_idempotency.sql\` introduceert een
-geïsoleerd \`go20_v37\`-schema in de tijdelijke PostgreSQL-dienst.
+`tests/go20_postgres_recovery_idempotency.sql` introduceert een
+geïsoleerd `go20_v37`-schema in de tijdelijke PostgreSQL-dienst.
 De tabel bevat een unieke aanvraag-ID en een unieke combinatie
 van SHA-256-hashes van herstelmanifest, onafhankelijk anker
-en herstelonderdelen. De testfunctie \`go20_v37.try_claim\`
-kent uitsluitend de uitslagen \`TEST_ONLY_COMMIT\`,
-\`REPLAY\`, \`CONFLICT\`, \`INVALID_INPUT\` en
-\`UNRESOLVED_CONCURRENCY\`. Een status is nooit een
+en herstelonderdelen. De testfunctie `go20_v37.try_claim`
+kent uitsluitend de uitslagen `TEST_ONLY_COMMIT`,
+`REPLAY`, `CONFLICT`, `INVALID_INPUT` en
+`UNRESOLVED_CONCURRENCY`. Een status is nooit een
 bevoegdheid of toestemming om een productieherstel uit te voeren.
 
-De runner \`tests/run_go20_postgres_recovery_idempotency_disposable.sh\`
+De runner `tests/run_go20_postgres_recovery_idempotency_disposable.sh`
 dwingt de bestaande GitHub Actions-bevestiging
-\`CI_GO20_DISPOSABLE_PG=yes\` af en gebruikt uitsluitend
-\`127.0.0.1:5432\` met de geïsoleerde database
-\`go20test\`. De runner toetst:
+`CI_GO20_DISPOSABLE_PG=yes` af en gebruikt uitsluitend
+`127.0.0.1:5432` met de geïsoleerde database
+`go20test`. De runner toetst:
 
 - Herhaling met dezelfde aanvraag-ID en hetzelfde materiaal
   vanuit een **nieuwe databaseverbinding** zonder tweede commit.
 - Een andere aanvraag-ID met hetzelfde materiaal als replay,
   en dezelfde aanvraag-ID met afwijkend materiaal als conflict.
 - Ongeldige invoer zonder databasewijziging.
-- Expliciete \`ROLLBACK\` en gesloten clientsessies vóór commit,
+- Expliciete `ROLLBACK` en gesloten clientsessies vóór commit,
   waarbij geen gedeeltelijke claim achterblijft.
 - Acht gelijktijdige PostgreSQL-clients met identiek
   bewijsmateriaal: precies één testcommit, zeven replays.
@@ -1716,4 +1716,4 @@ claimt dus niet zelfstandig cryptografische bronverificatie.
 De PostgreSQL-fixture is niet voor migratie naar productie
 bedoeld. Geen wijzigingen aan live database, geen
 toegangsverruiming, geen merge of release. GO-13 HOLD en
-\`authorization: DENY\` blijven ongewijzigd. PR #109 blijft Draft.
+`authorization: DENY` blijven ongewijzigd. PR #109 blijft Draft.
