@@ -31,6 +31,7 @@ on:
       - 'scripts/pr_recovery_simulation.py'
       - 'scripts/pr_recovery_transaction.py'
       - 'scripts/pr_concurrent_recovery.py'
+      - 'scripts/pr_recovery_handoff.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -60,10 +61,12 @@ on:
       - 'tests/test_pr_recovery_simulation.py'
       - 'tests/test_pr_recovery_transaction.py'
       - 'tests/test_pr_concurrent_recovery.py'
+      - 'tests/test_pr_recovery_handoff.py'
       - 'tests/go20_postgres_recovery_idempotency.sql'
       - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
       - 'tests/run_go20_postgres_recovery_faults_disposable.sh'
       - 'tests/run_go20_postgres_recovery_crash_disposable.sh'
+      - 'tests/run_go20_postgres_handoff_disposable.sh'
       - 'tests/go20_postgres_contract.sql'
       - 'tests/go20_postgres_contract_assertions.sql'
       - 'tests/run_go20_postgres_disposable.sh'
@@ -123,6 +126,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_recovery_simulation.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_recovery_transaction.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_concurrent_recovery.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_recovery_handoff.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
@@ -187,6 +191,12 @@ jobs:
           CI_GO20_DISPOSABLE_PG: "yes"
           PYTHONDONTWRITEBYTECODE: "1"
         run: bash tests/run_go20_audit_export_disposable.sh
+      - name: Verify independent two-PostgreSQL-instance snapshot handoff and reject stale or divergent claims
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: |
+          bash -n tests/run_go20_postgres_handoff_disposable.sh
+          bash tests/run_go20_postgres_handoff_disposable.sh
       - name: Crash and restart only disposable PostgreSQL container, verify WAL rollback and durable replay
         env:
           CI_GO20_DISPOSABLE_PG: "yes"
