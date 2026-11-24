@@ -177,6 +177,19 @@ class RevocationHistoryTests(unittest.TestCase):
         self.right_pin = self.repin(self.right)
         self.assertFalse(self.check()["revocation_history_valid"])
 
+    def test_two_individually_valid_divergent_views_rejected(self):
+        # Both views carry the same valid revocations, but signatures are
+        # ordered differently at both epochs. Re-sign successor link to keep
+        # the second view locally consistent and independently pinned.
+        first, second = self.right["epochs"]
+        first["signatures"].reverse()
+        second["previous_sha256"] = canonical_hash(first)
+        self.sign(second)
+        self.right_pin = self.repin(self.right)
+        v = self.check()
+        self.assertIn("contradictory_revocation_histories", v["errors"])
+        self.assertIn("right_external_head_mismatch", v["errors"])
+
     def test_duplicate_revocation_rejected(self):
         item = {"custodian_id": "inactive", "public_key_hex": "f" * 64,
                 "effective_round": 20}
