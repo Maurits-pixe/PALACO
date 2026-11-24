@@ -2363,3 +2363,77 @@ publicatiebewijzen aan. Daarom zijn
 `production_commit_performed: false`,
 `decision: HOLD` en `authorization: DENY`.
 GO-13 HOLD; PR #109 Draft, geen merge of productie-uitrol.
+
+## V48 — archiefbeschikbaarheidsuitdagingen en bescherming tegen verouderde antwoorden
+
+`scripts/pr_archive_availability_challenge.py` controleert
+een **van tevoren onafhankelijk vastgelegde challenge**
+met een 256-bits nonce-hash, de exacte checkpointketenhash,
+het verwachte laatste checkpointnummer en een minimaal
+aantal archiefbeheerderantwoorden. Het bijbehorende
+`palaco.go20-archive-availability-challenge-pin.v1`-anker
+bindt `challenge_sha256`, `trusted_chain_sha256`,
+`minimum_sequence` en `minimum_responses`.
+
+```sh
+python3 scripts/pr_archive_availability_challenge.py \
+  --chain checkpoint-chain.json \
+  --chain-pin independent-v46-pin.json \
+  --witnesses independent-checkpoint-witnesses.json \
+  --v45 complete-v45-evidence.json \
+  --archive signed-v47-archive-copies.json \
+  --custodians independent-custodian-register.json \
+  --retention-pin independent-v47-pin.json \
+  --challenge independently-pinned-challenge.json \
+  --responses signed-challenge-responses.json \
+  --independent-pin independent-v48-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_archive_availability_challenge.py' -v
+```
+
+Per beheerder controleert de verifier dat de signer bij de
+**oorspronkelijk geverifieerde v47-archiefkopieën** behoort,
+uniek is en een actieve, verschillende organisatorische
+en beheeridentiteit heeft. De Ed25519-handtekening is
+gebonden aan de beheerderidentiteit, nonce, ketenhash,
+checkpointnummer, vertrouwensregister en `HOLD/DENY`.
+Een antwoord dat bij een vorige nonce, andere keten,
+andere checkpointsequentie of een andere beheerder hoort,
+wordt geweigerd. De minimumquorumgrens wordt bepaald
+door de strengste van de challenge en de externe pin.
+
+De volledige v47→v46→v45→v44-bewijsketen wordt vóór het
+meetellen van nieuwe antwoorden opnieuw geverifieerd.
+Verouderde, vervalste, dubbele, niet-gearchiveerde of
+onvoldoende ondertekende antwoorden mogen **nooit**
+ontbrekende historische getuigenbewijzen vervangen.
+
+**Operationele grenzen:** de verifier genereert geen nonce
+en bewaart geen uitgegeven of verbruikte uitdagingen.
+Echte replaypreventie vereist een extern, duurzaam
+bijgehouden *eenmalige challengeadministratie* en een
+onafhankelijk vertrouwensanker. Een offline
+ondertekende antwoordverklaring bewijst op zichzelf
+geen live netwerkbeschikbaarheid, fysieke
+opslagbeschikbaarheid of uitgevoerde herstelactie.
+De module voert geen netwerk-, publicatie- of
+productieacties uit.
+
+Het verdict `palaco.go20-archive-availability-challenge-verdict.v1`
+rapporteert `challenge_evidence_valid`,
+`responses_verified` en afzonderlijke foutcodes.
+Ook bij positief technisch bewijs blijven
+`challenge_freshness_independently_verified: false`,
+`remote_availability_verified: false`,
+`restoration_performed: false`,
+`missing_witness_quorum_overridden: false`,
+`checkpoint_published: false`,
+`fence_performed: false`,
+`failover_authorized: false`,
+`promotion_performed: false`,
+`release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false`,
+`production_commit_performed: false`,
+`decision: HOLD` en `authorization: DENY`.
+GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
