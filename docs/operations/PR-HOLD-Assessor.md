@@ -1934,3 +1934,75 @@ blijven `decision: HOLD`, `authorization: DENY`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD, PR #109 Draft; geen merge of uitrol.
+
+## V42 — ondertekende fencingverklaringen met extern vastgelegde quorumgrens
+
+`scripts/pr_signed_fencing_quorum.py` herverifieert de volledige
+v41-fencingketen en vereist bovendien **Ed25519-handtekeningen**
+van ten minste twee onafhankelijke stemmers, waaronder de
+extern aangewezen `fence_controller`. De quorumgrens mag
+strenger zijn: `minimum_signatures` komt uit het onafhankelijke
+`palaco.go20-fencing-quorum-pin.v1` en mag maximaal het
+aantal geregistreerde stemmers bedragen.
+
+```sh
+python3 scripts/pr_signed_fencing_quorum.py \
+  --primary primary-recovery-claims.json \
+  --candidate candidate-recovery-claims.json \
+  --handoff-pin independent-v40-pin.json \
+  --transition v41-transition.json \
+  --transition-pin independent-v41-pin.json \
+  --signed-votes signed-fencing-quorum-votes.json \
+  --trust independently-provisioned-fencing-keys.json \
+  --independent-pin independent-v42-pin.json
+python3 -m unittest discover -s tests -p 'test_pr_signed_fencing_quorum.py' -v
+```
+
+Het onafhankelijke vertrouwensregister
+`palaco.go20-fencing-quorum-trust.v1` bevat drie tot
+zeven stemmers met elk een publieke Ed25519-sleutel,
+organisatie-ID, beheerdomein-ID, rol en sleutelstatus.
+Een opgegeven stem telt uitsluitend als de sleutel actief
+is, de handtekening correct is en er geen overlap is met
+eerder meegetelde organisaties, domeinen of sleutels.
+
+Een ondertekend statement met schema
+`palaco.go20-fencing-quorum-statement.v1` bindt
+repository, `candidate_epoch`, `transition_sha256`,
+`trust_sha256`, `member_id`, `decision: HOLD` en
+`authorization: DENY`. De ondertekening is een
+Ed25519-handtekening over de bytes van de canonieke
+SHA-256-hash van dat statement. De onafhankelijke pin
+bindt bovendien de hashs van het vertrouwensregister en
+de overgangsverklaring, een minimale epoch, een minimaal
+aantal geldige handtekeningen en de identiteit van de
+vereiste fencingcontroller.
+
+De verifier weigert vervalste, dubbele, ontbrekende of
+ongeldige stemmen; ingetrokken sleutels; overlappende
+beheerclaims; onvoldoende quorum; ontbrekende
+controllerstem; gewijzigde onafhankelijke ankers;
+teruggedraaide epochs; en iedere ongeldige v41-handoff.
+Het resultaat `palaco.go20-signed-fencing-quorum-verdict.v1`
+bevat `quorum_evidence_valid`, `signatures_verified`
+en foutcodes.
+
+**Grenzen:** een cryptografische stem bevestigt alleen
+de ondertekende verklaring. Dit is geen bewijs dat een
+fysieke fencingactie is uitgevoerd, geen onafhankelijk
+identiteitsonderzoek naar organisaties, geen consensus-
+of leaseprotocol, en geen productiequorumsysteem.
+Onafhankelijke provisioning, authentieke key custody,
+vertrouwde externe pinopslag en fysieke fencing blijven
+vereiste afzonderlijke beveiligingsmaatregelen.
+
+Ook bij een positief technisch resultaat blijven alle
+bevoegdheden geblokkeerd: `decision: HOLD`,
+`authorization: DENY`, `fence_performed: false`,
+`promotion_performed: false`,
+`failover_authorized: false`,
+`release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft, geen merge of productie-uitrol.
