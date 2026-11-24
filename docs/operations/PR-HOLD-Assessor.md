@@ -2213,3 +2213,78 @@ resultaat autoriseert niets: `decision: HOLD`,
 `deployment_authorized: false`,
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V46 — checkpointopvolging, ondertekende ontvangstbewijzen en publicatiegaten
+
+`scripts/pr_checkpoint_receipt_continuity.py` verifieert een
+**aangeleverde reeks van 2–6 opeenvolgende checkpoints**
+met Ed25519-ondertekende ontvangstverklaringen. De
+`palaco.go20-checkpoint-receipt-continuity.v1`-keten
+bevat `entries`; elk item heeft `sequence`,
+`previous_entry_sha256`, `checkpoint` en
+`receipts`. Het eerste item verwijst naar de
+nulhash; elk volgend item verwijst naar de canonieke
+SHA-256 van het volledige voorafgaande item, inclusief
+ontvangstbewijzen.
+
+```sh
+python3 scripts/pr_checkpoint_receipt_continuity.py \
+  --chain checkpoint-receipt-chain.json \
+  --independent-pin independent-chain-anchor.json \
+  --trust independent-witness-keys.json \
+  --v45-evidence validated-v45-evidence-bundle.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_checkpoint_receipt_continuity.py' -v
+```
+
+De onafhankelijk vastgelegde
+`palaco.go20-checkpoint-receipt-continuity-pin.v1`
+bevat `first_sequence`, `last_sequence`,
+`first_entry_sha256`, `last_entry_sha256`,
+`trust_sha256` en `quorum`. De verifier verlangt
+exact aaneensluitende nummers, overeenkomende
+hashkoppelingen en de correcte begintoestand en eindhash.
+De laatste checkpoint moet exact gelijk zijn aan de
+volledig opnieuw geverifieerde v45-checkpointweergave.
+
+Iedere ontvangstverklaring ondertekent met Ed25519
+een `palaco.go20-checkpoint-delivery-receipt.v1`
+statement dat repository, checkpointnummer,
+checkpointhash, voorgaande entry-hash, vertrouwensregister,
+ontvangeridentiteit en `HOLD/DENY` bindt.
+Een afzonderlijk gepind quorum van minimaal twee
+unieke actieve getuigen met niet-overlappende
+organisaties en domeinen is per checkpoint vereist.
+Ontbrekende, hergebruikte, dubbele, vervalste of
+ingetrokken getuigenbewijzen worden geweigerd.
+
+Voor een positieve technische uitspraak wordt ook de
+v45-verificatie uitgevoerd, inclusief de onderliggende
+v44-ondertekende revocaties en de v43-historische
+quorumcontrole. De module doet geen netwerkverzoeken.
+
+**Grenzen:** de ontvangstbewijzen zijn aangeleverde,
+cryptografisch te verifiëren *claims*; de module kan
+niet vaststellen dat een externe transparantiedienst
+de checkpoint werkelijk duurzaam heeft gepubliceerd
+of dat alle mogelijke checkpoints ooit werden aangeleverd.
+Echte onafhankelijkheid vereist vooraf authentiek
+bewaarde pins, een openbaar controleerbare log,
+externe beschikbaarheidscontrole en onafhankelijke
+getuigeninfrastructuur.
+
+Het verdict `palaco.go20-checkpoint-receipt-continuity-verdict.v1`
+rapporteert `publication_evidence_valid`,
+`checkpoints_verified`, `receipts_verified` en
+foutcodes; **ook een technisch geldige keten** houdt
+`checkpoint_published: false`,
+`remote_publication_verified: false`,
+`decision: HOLD`, `authorization: DENY`,
+`fence_performed: false`,
+`failover_authorized: false`,
+`promotion_performed: false`,
+`release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
