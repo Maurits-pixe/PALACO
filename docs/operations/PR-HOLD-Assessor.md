@@ -1863,3 +1863,74 @@ en geauthenticeerd worden vastgesteld. Dit bewijst ook niet
 dat opslag op twee machines fouttolerant is. Er zijn geen
 productiemigraties of live herstelacties. GO-13 HOLD,
 PR #109 Draft, geen merge, uitrol of productieaanpassing.
+
+## V41 — fail-closed fencingbewijs, split-brainpreventie en epochbinding
+
+`scripts/pr_recovery_fencing.py` valideert **uitsluitend
+aangeleverd bewijsmateriaal** voor de overgang tussen twee
+databaseknooppunten. De verifier is geen clustercontroller:
+hij schakelt geen knooppunten uit, promoveert geen replica,
+kiest geen leider en geeft geen productiebevoegdheid.
+
+```sh
+python3 scripts/pr_recovery_fencing.py \
+  --primary primary-recovery-claims.json \
+  --candidate candidate-recovery-claims.json \
+  --handoff-pin independently-retained-v40-handoff-pin.json \
+  --transition observer-fencing-evidence.json \
+  --independent-pin independently-retained-fencing-transition-pin.json
+python3 -m unittest discover -s tests -p 'test_pr_recovery_fencing.py' -v
+```
+
+Het bewijspakket `palaco.go20-recovery-fencing-evidence.v1`
+bindt `repository`, `previous_epoch`,
+`candidate_epoch`, `old_writer_id`, `candidate_id`,
+`node_roles`, `fencing_ack` en `handoff_sha256`.
+De onafhankelijke `palaco.go20-recovery-fencing-pin.v1`
+bindt de canonieke `transition_sha256`, minimale epoch
+en de afzonderlijk verwachte knooppuntidentiteiten.
+
+Het controlecontract vereist één hoger opvolgende epoch,
+twee verschillende knooppuntidentiteiten, het oude knooppunt
+in rol `fenced` en het nieuwe knooppunt in rol
+`candidate` (dus **nog niet** `writer`). De
+`fencing_ack` benoemt expliciet het gefencete knooppunt,
+dezelfde nieuwe epoch, een positieve bewijsclaim en een
+niet-lege `control_domain`. Een ontbrekende bevestiging,
+gelijktijdig schrijvende knooppunten, een extra schrijver,
+verouderde epochs en niet-aangeleverd extern anker worden
+afgewezen.
+
+Daarnaast wordt de volledige v40-handoffcontrole
+opnieuw uitgevoerd. Beide claimadministraties moeten
+dezelfde gegevens bevatten en overeenstemmen met het
+onafhankelijk aangeleverde bronanker; de hash van de
+bronadministratie moet ook overeenkomen met de
+`handoff_sha256` in het fencingbewijs. Afwijkende
+of ontbrekende transacties blokkeren de beoordeling.
+
+Het verdict `palaco.go20-recovery-fencing-verdict.v1`
+rapporteert `fencing_evidence_valid`, gecontroleerde
+epochs, aantallen vergeleken records en foutcodes.
+
+**Strikte grenzen:** de huidige `fencing_ack` is
+een aangeleverde, hashgebonden claim, **geen
+cryptografisch geauthenticeerd fencingbewijs** en geen
+controle of een eerder schrijvend knooppunt werkelijk
+geen toegang meer heeft. Verschillende node-ID's of
+beheerdomeinnamen bewijzen geen onafhankelijke beheerders.
+Split-brain wordt alleen gedetecteerd wanneer strijdige
+rollen in aangeleverde gegevens staan. Voor echte
+failover zijn geauthenticeerde fencing, quorum/lease-
+beheer, een betrouwbare controlebron en aparte
+autorisatie vereist.
+
+Zowel bij positief als negatief technisch resultaat
+blijven `decision: HOLD`, `authorization: DENY`,
+`fence_performed: false`,
+`failover_authorized: false`,
+`promotion_performed: false`,
+`release_authorized: false`, `merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD, PR #109 Draft; geen merge of uitrol.
