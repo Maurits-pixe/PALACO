@@ -2288,3 +2288,78 @@ foutcodes; **ook een technisch geldige keten** houdt
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V47 — onafhankelijke checkpointbewaring en fail-closed herstel bij ontbrekende getuigen
+
+`scripts/pr_checkpoint_retention_custody.py` controleert
+**twee tot vijf aangeleverde, ondertekende archiefkopieën**
+van een volledige v46-checkpointketen. De verifier controleert
+de **gehele** oorspronkelijke v46→v45→v44-bewijsketen
+opnieuw; een ontbrekende originele handtekening of
+onvoldoende quorum kan nooit worden gerepareerd door
+uitsluitend een kopie van het bewijs aan te leveren.
+
+```sh
+python3 scripts/pr_checkpoint_retention_custody.py \
+  --chain checkpoint-chain.json \
+  --chain-pin independent-v46-pin.json \
+  --witness-trust independent-v46-witness-trust.json \
+  --v45-evidence all-v45-inputs.json \
+  --archive externally-collected-archive-copies.json \
+  --custodians independent-archive-custodians.json \
+  --independent-pin independent-v47-retention-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_checkpoint_retention_custody.py' -v
+```
+
+Het `palaco.go20-checkpoint-retention-pin.v1`-anker
+legt de canonieke SHA-256 van de volledige keten en
+het afzonderlijk vastgelegde register van archiefbeheerders
+vast, plus minimaal twee beheerders, de kleinste
+toegestane checkpointsequentie en de ondergrens voor
+het aantal behouden checkpoints. Elke archiefkopie
+bevat de volledige originele checkpointketen en een
+Ed25519-handtekening over
+`palaco.go20-checkpoint-retention-receipt.v1`,
+met expliciete binding aan ketenhash, begin- en
+eindsequentie, beheerregisterhash, beheerderidentiteit
+en `HOLD/DENY`.
+
+Het externe register
+`palaco.go20-checkpoint-custodian-trust.v1`
+bevat actieve publieke sleutels, organisatie- en
+beheerdomeinidentiteiten. De verifier weigert dubbele
+beheerders, overlappende domeinen en organisaties,
+vervalste handtekeningen, ingetrokken beheerders,
+afwijkende archiefkopieën, gewijzigde pins,
+teruggedraaide checkpointsequenties en aantasting
+van de oorspronkelijke quorumketen.
+
+Het verdict `palaco.go20-checkpoint-retention-verdict.v1`
+bevat `custody_evidence_valid`,
+`checkpoints_archived`, `custodians_verified`
+en foutcodes. Een positief technisch resultaat
+toont uitsluitend **consistent aangeleverde,
+ondertekende archiefverklaringen**, niet werkelijk
+actuele fysieke of externe beschikbaarheid.
+
+**Geen onbewezen claim:** deze module bevraagt geen
+externe opslaglocatie, garandeert geen retentieduur,
+voert geen herstel uit en bevestigt geen onafhankelijke
+operationele sleutelcustody. Archiefkopieën leveren
+geen autorisatie, kunnen ontbrekend oorspronkelijk
+getuigenquorum niet vervangen en maken geen
+publicatiebewijzen aan. Daarom zijn
+`physical_availability_verified: false`,
+`restoration_performed: false`,
+`missing_witness_quorum_overridden: false`,
+`checkpoint_published: false`,
+`fence_performed: false`,
+`failover_authorized: false`,
+`promotion_performed: false`,
+`release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false`,
+`production_commit_performed: false`,
+`decision: HOLD` en `authorization: DENY`.
+GO-13 HOLD; PR #109 Draft, geen merge of productie-uitrol.
