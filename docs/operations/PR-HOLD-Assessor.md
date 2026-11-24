@@ -2878,3 +2878,65 @@ houdt `decision: HOLD`, `authorization: DENY`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
+
+## V55 — ondertekende intrekkingsgeschiedenis en tegenstrijdige sleutelstatussen
+
+`scripts/pr_revocation_history_consensus.py` verifieert twee onafhankelijke
+waarnemingsgeschiedenissen, elk met **2–4 opeenvolgende intrekkingsepochen**.
+Iedere epoch bindt `epoch`, `previous_sha256`, de volledige cumulatieve
+`palaco.go20-custodian-key-revocations.v1`-lijst en Ed25519-handtekeningen
+van minstens twee onafhankelijke getuigen. Het eerdere v54→v53→v52-bewijs
+wordt eerst opnieuw geverifieerd. De finale intrekkingslijst moet exact
+overeenkomen met de v54-lijst en het vooraf extern vastgelegde SHA-256-anker.
+
+```sh
+python3 scripts/pr_revocation_history_consensus.py \
+  --left independent-revocation-history-east.json \
+  --left-pin east-revocation-history-pin.json \
+  --right independent-revocation-history-west.json \
+  --right-pin west-revocation-history-pin.json \
+  --independent-head external-revocation-history-head.json \
+  --v54-evidence complete-v54-evidence.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_revocation_history_consensus.py' -v
+```
+
+De historie gebruikt `palaco.go20-revocation-history-observer-view.v1`
+en `palaco.go20-revocation-history-pin.v1`.
+Een apart `palaco.go20-revocation-history-independent-head.v1`-anker
+bindt de complete verwachte historiehash, de getuigenregisterhash,
+de finale intrekkingshash, de minimale laatste epoch en het minimumquorum.
+De Ed25519-handtekening op iedere
+`palaco.go20-revocation-history-witness-statement.v1`
+bindt de epoch, vorige epochhash, cumulatieve intrekkingshash,
+getuigenregister, finale intrekkingshash, getuigenidentiteit en `HOLD/DENY`.
+
+Een intrekking blijft vanaf opname in een eerdere epoch permanent
+aanwezig, met onveranderde beheerder, publieke sleutel en
+`effective_round`. Verwijdering, herdatering, dubbele intrekking,
+verbroken voorgangerhash, ontbrekende handtekening, onvoldoende
+onafhankelijke getuigen en geschiedenisrollback leiden tot een
+negatieve beoordeling. Beide compleet geverifieerde geschiedenissen
+moeten ook byte-inhoudelijk/canoniek overeenkomen; bij afwijking
+volgt `contradictory_revocation_histories`, zelfs wanneer elk
+afzonderlijk cryptografisch geldig is.
+
+**Grenzen:** deze module valideert aangeleverde offline
+cryptografische waarnemingen. De authenticiteit en onafhankelijkheid
+van extern bewaarde pins, de operationele beschikbaarheid van
+getuigen en de handhaving in werkelijk draaiende diensten zijn
+niet door deze verifier bewezen. Er vindt geen wijziging van
+sleutels, intrekkingsregisters of productieopslag plaats.
+
+Het verdict `palaco.go20-revocation-history-verdict.v1`
+heeft `revocation_history_valid`, `epochs_verified`,
+`signatures_verified` en foutcodes, maar houdt steeds
+`decision: HOLD`, `authorization: DENY`,
+`revocation_enforced_in_production: false`,
+`trust_registry_promoted: false`,
+`history_restored: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109; geen merge of uitrol.
