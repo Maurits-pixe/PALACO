@@ -60,7 +60,7 @@ def digest(records):
 
 def verify(primary, candidate, anchor):
     try:
-        if not isinstance(anchor, dict) or set(anchor) != {
+        if (not isinstance(anchor, dict) or set(anchor) != {
                 "schema", "primary_sha256", "minimum_rows"
         } or anchor["schema"] != "palaco.go20-restore-handoff-pin.v1" or
                 not isinstance(anchor["primary_sha256"], str) or
