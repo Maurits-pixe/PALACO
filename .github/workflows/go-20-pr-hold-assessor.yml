@@ -34,6 +34,7 @@ on:
       - 'scripts/pr_recovery_handoff.py'
       - 'scripts/pr_recovery_fencing.py'
       - 'scripts/pr_signed_fencing_quorum.py'
+      - 'scripts/pr_fencing_quorum_history.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -66,6 +67,7 @@ on:
       - 'tests/test_pr_recovery_handoff.py'
       - 'tests/test_pr_recovery_fencing.py'
       - 'tests/test_pr_signed_fencing_quorum.py'
+      - 'tests/test_pr_fencing_quorum_history.py'
       - 'tests/go20_postgres_recovery_idempotency.sql'
       - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
       - 'tests/run_go20_postgres_recovery_faults_disposable.sh'
@@ -133,6 +135,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_recovery_handoff.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_recovery_fencing.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_signed_fencing_quorum.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_fencing_quorum_history.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
