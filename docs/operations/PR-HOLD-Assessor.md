@@ -2640,3 +2640,84 @@ blijft ook bij geldige technische ketens:
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109; geen merge of uitrol.
+
+## V52 — onafhankelijke ontvangst van volledige ledgergeschiedenissen
+
+`scripts/pr_ledger_history_receipts.py` verifieert een
+**aangeleverd register met twee tot vijf afzonderlijk
+ondertekende kopieën** van een volledige, v51-gecontroleerde
+challengeledgergeschiedenis. De v51-controle van twee
+onafhankelijk gepinde geschiedenissen blijft een
+verplichte voorafgaande stap; een archiefkopie kan
+ontbrekende of gemanipuleerde historie niet repareren.
+
+```sh
+python3 scripts/pr_ledger_history_receipts.py \
+  --left-history ledger-history-left.json \
+  --left-pin independent-left-ledger-pin.json \
+  --right-history ledger-history-right.json \
+  --right-pin independent-right-ledger-pin.json \
+  --independent-head independent-v51-head.json \
+  --archive signed-ledger-history-copies.json \
+  --custodians independently-provisioned-custodians.json \
+  --external-pin independently-retained-v52-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_ledger_history_receipts.py' -v
+```
+
+Het `palaco.go20-ledger-history-receipts.v1`-object
+bevat `receipts`, elk met een `custodian_id`,
+een volledige `history` en een
+`signature_ed25519_hex`. Het afzonderlijke
+`palaco.go20-ledger-history-custodian-trust.v1`-register
+heeft twee tot vijf geregistreerde beheerders met
+Ed25519-publieke sleutel, organisatie-ID, domein-ID
+en sleutelstatus. Voor de minimale ontvangstgrens
+moeten ten minste twee actieve beheerders met
+verschillende organisatie, domein én sleutel geldige
+verklaringen overleggen.
+
+De onafhankelijk vastgelegde
+`palaco.go20-ledger-history-receipts-pin.v1`
+bindt de vertrouwde beheerdersregisterhash, de
+volledige canonieke historiehash, de externe
+head-pinhash, het minimale ontvangstquorum en
+het minimaal toegestane eindcheckpointnummer.
+Een `palaco.go20-ledger-history-archive-receipt.v1`
+statement bindt repository, beheerderidentiteit,
+historiehash, head-pinhash, checkpointvenster,
+beheerdersregisterhash en `HOLD/DENY`. De
+Ed25519-handtekening wordt tegen het vooraf
+extern geregistreerde sleutelmateriaal gecontroleerd.
+
+De verifier weigert onder andere vervalste ontvangsten,
+onbekende of dubbele beheerders, ingetrokken sleutels,
+overlappende beheerdomeinen, vervangen publieke sleutels,
+ontbrekende historische checkpoints, divergentie van
+archiefkopieën, rollback van het minimale eindnummer
+en afwijking van het onafhankelijke historie- of headanker.
+
+**Grenzen:** dit is bewijsverificatie op aangeleverde
+archiefkopieën. De module controleert geen live
+netwerkbereikbaarheid, fysieke opslag, WORM-retentie,
+authentieke organisatorische onafhankelijkheid of
+werkelijke herstelbaarheid. Een ondertekende ontvangst
+geeft geen toestemming om historische bewijzen te
+overschrijven of een ontbrekend checkpoint aan te vullen.
+Voor die garanties is externe onafhankelijke
+sleutelvoorziening, opslag en attestatie nodig.
+
+Het verdict `palaco.go20-ledger-history-receipts-verdict.v1`
+bevat `archive_evidence_valid`, `receipts_verified`
+en foutcodes. Alle resultaten houden
+`decision: HOLD`, `authorization: DENY`,
+`external_storage_verified: false`,
+`missing_history_recovered: false`,
+`history_rewritten: false`,
+`ledger_promoted: false`,
+`challenge_reopened: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft, geen merge of uitrol.
