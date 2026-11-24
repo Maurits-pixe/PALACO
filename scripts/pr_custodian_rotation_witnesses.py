@@ -107,6 +107,18 @@ def assess(left, left_pin, right, right_pin, head, testimony, witness_trust,
         revoked.add(key)
 
     checked, signed = 0, 0
+    # Revocation is effective at its declared round; also examine the first
+    # retained snapshot so an already-revoked genesis key cannot slip through.
+    for index, round_item in enumerate(left["rounds"]):
+        members = round_item["sources"]["trust"]["custodians"]
+        for custodian_id, record in members.items():
+            if any(isinstance(item, dict) and
+                   item.get("custodian_id") == custodian_id and
+                   item.get("public_key_hex") == record["public_key_hex"] and
+                   type(item.get("effective_round")) is int and
+                   item["effective_round"] <= round_item["round"]
+                   for item in revocations["entries"]):
+                errors.append(f"revoked_key_present_in_history:{index}:{custodian_id}")
     for i, pair in enumerate(zip(left["rounds"][:-1], left["rounds"][1:])):
         previous, current = pair
         old_trust = previous["sources"]["trust"]["custodians"]
