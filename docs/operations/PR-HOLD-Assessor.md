@@ -2565,3 +2565,78 @@ houdt ook bij positieve technische verificatie
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109, geen merge of uitrol.
+
+## V51 — historische challengeledger-checkpoints, dubbele verificatie en forkdetectie
+
+`scripts/pr_challenge_ledger_history.py` verifieert **twee tot zes
+opeenvolgende v50-checkpoints per geschiedenis**. Alle snapshots
+bestaan uit de geordende, volledige challengeledger-rijen,
+het v50-checkpoint, een onafhankelijk aangeleverd v50-pin
+en de bijbehorende Ed25519-checkpointhandtekening.
+De v50-verifier controleert **ieder** historisch
+checkpoint opnieuw; een geslaagde eindcheckpoint
+kan eerdere ongeldige records niet vervangen.
+
+```sh
+python3 scripts/pr_challenge_ledger_history.py \
+  --left-history ledger-history-A.json \
+  --left-pin independent-history-A-pin.json \
+  --right-history ledger-history-B.json \
+  --right-pin independent-history-B-pin.json \
+  --independent-head externally-retained-head-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_challenge_ledger_history.py' -v
+```
+
+Het `palaco.go20-challenge-ledger-history.v1`-formaat
+bevat een rij `entries`; iedere entry heeft `rows`,
+`checkpoint`, `independent_pin` en `signature`.
+De historiepin `palaco.go20-challenge-ledger-history-pin.v1`
+bindt het eerste en laatste checkpoint, de volledige
+historiehash, het eerste en laatste volgnummer en
+onafhankelijke ondergrenzen voor het aantal rijen
+en de hoeveelheid reeds geconsumeerde uitdagingen.
+
+Opeenvolgende checkpoints moeten strikt één sequence
+opschuiven en hun `previous_checkpoint_sha256` laten
+aansluiten op de canonieke SHA-256 van hun voorganger.
+Verschillende ondertekeningssleutels zijn niet
+stilzwijgend toegestaan. Ieder eerder geregistreerd
+nonce-ID moet behouden blijven; reeds geconsumeerde
+uitdagingen mogen niet worden teruggedraaid, herschreven
+of opnieuw geopend. Nog niet geconsumeerde uitdagingen
+mogen uitsluitend ongewijzigd blijven of volgens de
+bestaande toestanden worden geconsumeerd.
+Rij- en consumptietotalen mogen niet dalen.
+
+De verifier herhaalt alle controles voor twee onafhankelijk
+aangeleverde geschiedenissen. Beide moeten voldoen aan
+hun eigen extern gepinde begin-, eind- en volledige
+historiehash en bovendien overeenkomen met één
+afzonderlijk bewaard
+`palaco.go20-challenge-ledger-head-pin.v1`-anker.
+Zelfs wanneer beide takken intern correct ondertekende
+v50-checkpoints bevatten, resulteert afwijking in
+`ledger_history_fork_detected` en een negatieve
+technische conclusie.
+
+**Grenzen:** zonder authentiek onafhankelijk bewaarde
+pins, correcte sleutelcustody en een betrouwbaar
+extern checkpointverspreidingskanaal kan een aanvaller
+mogelijk alle aangeleverde ankers samen vervangen.
+Een append-only log of robuuste distributed consensus
+is niet geïmplementeerd. De verifier is offline,
+voert geen rollback, failover, herstel of databasewijziging
+uit en verleent geen productiebevoegdheid.
+
+Het verdict `palaco.go20-challenge-ledger-history-verdict.v1`
+blijft ook bij geldige technische ketens:
+`decision: HOLD`, `authorization: DENY`,
+`restoration_performed: false`,
+`ledger_promoted: false`,
+`challenge_reopened: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109; geen merge of uitrol.
