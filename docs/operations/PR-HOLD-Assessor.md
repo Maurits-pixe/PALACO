@@ -2498,3 +2498,70 @@ recovery of failover. Iedere uitkomst blijft
 `deployment_authorized: false`,
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft, geen merge of productie-uitrol.
+
+## V50 — onafhankelijk ondertekende SQLite-ledgercheckpoints en rollbackdetectie
+
+`scripts/pr_challenge_ledger_checkpoint.py` opent een bestaande,
+expliciet geselecteerde v49 SQLite-testdatabase met `mode=ro`
+en `PRAGMA query_only=ON`. Binnen een consistente
+leestran­sactie leest de verifier de volledige challengeadministratie,
+in vaste sorteervolgorde, met een harde grens van 10.000 rijen.
+Hij controleert de kolommen, unieke nonces, unieke challengehashes,
+uitgifte- en consumptietoestanden, bijbehorende tijdwaarden
+en de canonieke SHA-256 van de rijen.
+
+Een vooraf onafhankelijk opgeslagen
+`palaco.go20-challenge-ledger-independent-pin.v1`
+bevat de verwachte SHA-256 van het checkpoint, de
+publieke Ed25519-sleutel en sleutel-ID, de minimale
+checkpoint-sequentie, minimaal behouden rijen en
+minimaal behouden geconsumeerde uitdagingen.
+Het checkpoint `palaco.go20-challenge-ledger-checkpoint.v1`
+bindt een volgnummer, rijenhash, totaal rijen,
+aantal geconsumeerde uitdagingen en hash van een
+voorafgaand checkpoint. De Ed25519-handtekening
+over `palaco.go20-challenge-ledger-checkpoint-statement.v1`
+bindt de checkpoint-SHA-256, repository, sleutel-ID
+en `HOLD/DENY`.
+
+```sh
+python3 scripts/pr_challenge_ledger_checkpoint.py \
+  --database /absolute/path/to/disposable-v49-ledger.sqlite3 \
+  --checkpoint signed-ledger-checkpoint.json \
+  --independent-pin externally-stored-checkpoint-pin.json \
+  --signature checkpoint-signature.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_challenge_ledger_checkpoint.py' -v
+```
+
+De verifier weigert een verdwenen `CONSUMED`-rij,
+een gewijzigde challengeadministratie, een verkeerde
+checkpointkop, een verlaagde retentiegrens, een
+teruggedraaid checkpointvolgnummer, een andere
+ondertekeningssleutel en een vervalste handtekening.
+De proef bevat een opzettelijke `DELETE` op een
+**uitsluitend tijdelijke testdatabase**; geen
+productiedatabase wordt aangepast.
+
+**Beveiligingsgrens:** een aanvaller die zowel de
+SQLite-database als het extern bewaarde checkpointanker
+en de verificatiesleutel kan vervangen, wordt hiermee
+niet tegengehouden. Het vorige checkpoint wordt als
+hash vastgelegd maar een volledige onafhankelijk
+opgeslagen meervoudige checkpointgeschiedenis wordt
+nog niet getoetst. SQLite-integriteit is geen
+onafhankelijke productie-WORM-opslag of vertrouwde
+tijdbron. De module herstelt of wijzigt de database
+niet en geeft nooit een challenge opnieuw vrij.
+
+Het verdict `palaco.go20-challenge-ledger-checkpoint-verdict.v1`
+houdt ook bij positieve technische verificatie
+`decision: HOLD`, `authorization: DENY`,
+`database_restored: false`,
+`rollback_recovery_authorized: false`,
+`challenge_reopened: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109, geen merge of uitrol.
