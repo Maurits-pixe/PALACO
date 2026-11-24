@@ -2137,3 +2137,79 @@ fencing- of failoverbevoegdheid. Iedere uitkomst blijft
 `promotion_performed: false`, `release_authorized: false`,
 `merge_authorized: false`, `deployment_authorized: false`
 en `production_commit_performed: false`. GO-13 HOLD; PR #109 Draft.
+
+## V45 — onafhankelijke Ed25519-getuigen voor transparantiecheckpoints
+
+`scripts/pr_transparency_checkpoint_views.py` controleert
+**twee tot vijf apart aangeleverde checkpointweergaven**
+met hun eigen ondertekende getuigenverklaringen. De verifier
+voert eerst de volledige v44-controle uit op ondertekende
+intrekkingen en op twee v43-quorumgeschiedenissen.
+
+```sh
+python3 scripts/pr_transparency_checkpoint_views.py \
+  --left-history quorum-history-left.json \
+  --left-pin history-left-pin.json \
+  --right-history quorum-history-right.json \
+  --right-pin history-right-pin.json \
+  --revocations revocations.json \
+  --signed-register signed-revocations.json \
+  --v44-pin independent-v44-pin.json \
+  --views independent-checkpoint-observations.json \
+  --trust independent-witness-trust.json \
+  --independent-pin independent-checkpoint-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_transparency_checkpoint_views.py' -v
+```
+
+Het `palaco.go20-transparency-checkpoint.v1`-record
+legt `repository`, `sequence`, `last_epoch`,
+`history_sha256` en `revocations_sha256` vast.
+Een aparte `palaco.go20-transparency-checkpoint-pin.v1`
+bindt de verwachte checkpoint-SHA-256, de SHA-256 van het
+getuigenregister, een minimale sequence en de quorumgrens.
+Een checkpoint waarvan de hash afwijkt van dit
+vooraf vastgelegde anker wordt geweigerd, ook wanneer
+andere getuigen die afwijkende checkpoint rechtsgeldig
+hebben ondertekend.
+
+Het onafhankelijke `palaco.go20-transparency-witness-trust.v1`
+heeft drie tot zeven getuigen, elk met publieke Ed25519-sleutel,
+organisatie-ID, beheerdomein-ID en sleutelstatus. Per weergave
+moeten minimaal twee verschillende actieve getuigen een
+canoniek `palaco.go20-transparency-witness-statement.v1`
+ondertekenen, dat de `observer_id`, `checkpoint_sha256`,
+`trust_sha256`, `witness_id` en `HOLD/DENY` bindt.
+De onafhankelijke quorumgrens kan strenger zijn.
+
+De v45-testgevallen controleren onder andere:
+- twee ondertekende maar onderling tegenstrijdige historieankers;
+- een veranderd sequence-nummer of verouderde minimumsequence;
+- onvoldoende getuigen, dubbele stemmen of dubbele observers;
+- sleutelintrekking, handtekeningvervalsing en overlap in
+  organisaties of beheerdomeinen;
+- ongeautoriseerde wijzigingen in checkpointinhoud,
+  sleutelregister, historie of intrekkingsregister.
+
+Het verdict `palaco.go20-transparency-checkpoint-verdict.v1`
+bevat `transparency_evidence_valid`, `views_verified`,
+`signatures_verified` en gespecificeerde foutcodes.
+
+**Grenzen:** er wordt geen externe logserver aangeschreven,
+geen checkpoint gepubliceerd, geen gossipnetwerk gebruikt
+en geen onafhankelijk netwerkquorum vastgesteld. De
+getuigen en pins zijn in dit contract **aangeleverde
+bewijsmaterialen**; onafhankelijke opslag, distributie,
+authentieke sleutelcustody en logbeschikbaarheid blijven
+separate operationele vereisten. Een positief technisch
+resultaat autoriseert niets: `decision: HOLD`,
+`authorization: DENY`,
+`checkpoint_published: false`,
+`fence_performed: false`,
+`failover_authorized: false`,
+`promotion_performed: false`,
+`release_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false`,
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
