@@ -2940,3 +2940,81 @@ heeft `revocation_history_valid`, `epochs_verified`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109; geen merge of uitrol.
+
+## V56 — onafhankelijke ontvangsten voor ieder historisch intrekkingscheckpoint
+
+`scripts/pr_revocation_checkpoint_receipts.py` verifieert per
+historische v55-intrekkingsepoch een exacte kopie van de
+volledig ondertekende checkpoint en minstens twee afzonderlijke
+Ed25519-archiefontvangsten. Alle epochs van de aangeleverde
+v55-geschiedenis moeten aanwezig zijn. Eerst wordt opnieuw
+de **volledige v55→v54→v53-keten** gevalideerd; nieuwe
+ontvangsten kunnen ontbrekende oorspronkelijke historie
+nooit vervangen.
+
+```sh
+python3 scripts/pr_revocation_checkpoint_receipts.py \
+  --v55-evidence complete-v55-evidence.json \
+  --custody signed-revocation-epoch-copies.json \
+  --custodian-trust independent-archive-custodian-register.json \
+  --independent-pin independently-retained-v56-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_revocation_checkpoint_receipts.py' -v
+```
+
+Het `palaco.go20-revocation-checkpoint-receipts.v1`-register
+bevat `epochs` met `epoch`, `checkpoint` en
+`receipts`. Elk ontvangstbewijs bevat
+`custodian_id` en `signature_ed25519_hex`.
+Het afzonderlijke
+`palaco.go20-revocation-archive-custodian-trust.v1`
+registreert 3–7 beheerders met Ed25519-sleutels,
+organisaties, domeinen en status. Minimaal twee
+unieke actieve beheerders met niet-overlappende
+organisaties, domeinen en publieke sleutels
+moeten iedere checkpoint ontvangen hebben verklaard.
+
+Een extern bewaarde
+`palaco.go20-revocation-checkpoint-receipts-pin.v1`
+bindt de v55-historiehash, v55-headhash, het
+beheerdersregister, het exacte eerste/laatste
+epochnummer en het ontvangstquorum.
+De `palaco.go20-revocation-checkpoint-custody-statement.v1`
+handtekening bindt repository, epochnummer,
+exacte checkpoint-SHA-256, vorige epochhash,
+historiehash, headhash, sleutelregister,
+beheerderidentiteit en `HOLD/DENY`.
+
+De verifier detecteert ontbrekende ontvangsten,
+ontbrekende checkpoints, vervalste of
+hergebruikte handtekeningen, dubbele beheerders,
+vervangen of ingetrokken sleutels, overlappende
+beheergebieden, afwijkende checkpointkopieën
+en niet-aansluitende externe geschiedenisankers.
+Een te laag quorum veroorzaakt
+`missing_publication_receipts` als
+technische foutcode.
+
+**Grenzen:** de foutcode duidt uitsluitend op
+ontbrekend of ongeldig *aangeleverd bewijs* van
+ontvangst; hij bewijst niet dat een werkelijk
+gepubliceerd checkpoint ontbreekt. De module
+bevestigt geen fysieke beschikbaarheid,
+duurzame externe opslag, onafhankelijke
+operationele sleutelcustody of feitelijke
+publicatie. Er vinden geen netwerkverzoeken,
+herstelprocedures of productiehandelingen plaats.
+
+Het verdict `palaco.go20-revocation-checkpoint-receipts-verdict.v1`
+houdt altijd `decision: HOLD`,
+`authorization: DENY`,
+`remote_storage_verified: false`,
+`publication_performed: false`,
+`missing_history_recovered: false`,
+`revocation_enforced_in_production: false`,
+`trust_registry_promoted: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
