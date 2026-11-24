@@ -2721,3 +2721,81 @@ en foutcodes. Alle resultaten houden
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft, geen merge of uitrol.
+
+## V53 — opeenvolging van archiefontvangsten, dubbele sleutelrotaties en registerforks
+
+`scripts/pr_ledger_receipt_succession.py` verifieert
+**twee tot vier aaneensluitende archiefontvangstrondes**
+per afzonderlijk aangeleverde waarnemingsgeschiedenis.
+Elke ronde bevat de volledige v52-bewijsbundel:
+twee v51-ledgerhistories, onafhankelijke pins, headanker,
+ondertekende archiefkopieën, sleutelregister en v52-pin.
+De volledige v52-verificatie moet voor **elke** ronde
+slagen. Ontbrekende originele historie kan nooit
+worden vervangen door nieuwere archiefontvangsten.
+
+```sh
+python3 scripts/pr_ledger_receipt_succession.py \
+  --left receipts-rounds-east.json \
+  --left-pin independent-east-rounds-pin.json \
+  --right receipts-rounds-west.json \
+  --right-pin independent-west-rounds-pin.json \
+  --independent-head independently-retained-receipt-head.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_ledger_receipt_succession.py' -v
+```
+
+Het `palaco.go20-ledger-receipt-succession.v1`-formaat
+bevat `rounds` en `rotations`. Elke ronde bindt
+`round`, `previous_round_sha256` en `sources`.
+De eerste ronde verwijst naar een nulhash; iedere
+volgende ronde verwijst naar de SHA-256 van het
+volledige voorgaande ronderecord. Een aparte
+`palaco.go20-ledger-receipt-succession-pin.v1`
+legt begin- en eindronde, begin- en eindhash, de
+volledige geschiedenis, de minimumontvangstgrens en
+het minimaal bewaarde ledgercheckpoint vast.
+
+Een wijziging in de publieke Ed25519-sleutel van
+een bestaande archiefbeheerder vereist het
+`palaco.go20-ledger-receipt-key-rotation.v1`-statement
+met beheerder-ID, ronde, beide publieke sleutels en
+de hashes van het oude en nieuwe volledige
+sleutelregister. Zowel de **oude** als de **nieuwe**
+sleutel moet het statement ondertekenen.
+Ontbrekende, dubbele, verweesde, onnodige of
+vervalste rotatieverklaringen worden geweigerd.
+Verzwakking van de minimumquorumgrens, een
+teruggedraaid ledgercheckpoint, gewijzigde
+beheerderidentiteiten en gewijzigde oorspronkelijke
+ledgerhistorie zijn niet toegestaan.
+
+De twee onafhankelijk aangeleverde registerhistorieën
+worden elk volledig opnieuw geverifieerd, vervolgens
+onderling vergeleken en getoetst aan een extern vastgelegd
+`palaco.go20-ledger-receipt-head-pin.v1`-anker.
+Zelfs twee op zichzelf geldig ondertekende maar
+uiteenlopende histories geven de fout
+`contradictory_receipt_registers`.
+
+**Beperkingen:** de onafhankelijke pins moeten werkelijk
+buiten de invloedssfeer van het archief blijven;
+de module schrijft geen transparantielog, bezit geen
+onafhankelijke sleutelcustody, bewaakt geen actuele
+netwerkbeschikbaarheid en verricht geen herstel.
+De verificatie verleent geen operationele bevoegdheid.
+
+Het verdict `palaco.go20-ledger-receipt-succession-verdict.v1`
+rapporteert `succession_evidence_valid`,
+`rounds_verified`, `rotations_verified` en foutcodes.
+Het blijft altijd `decision: HOLD`,
+`authorization: DENY`,
+`history_restored: false`,
+`archive_published: false`,
+`trust_registry_promoted: false`,
+`challenge_reopened: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
