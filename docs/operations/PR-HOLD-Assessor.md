@@ -2006,3 +2006,74 @@ bevoegdheden geblokkeerd: `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft, geen merge of productie-uitrol.
+
+## V43 — historische fencingquorums, intrekkingen en dubbel ondertekende sleutelrotaties
+
+`scripts/pr_fencing_quorum_history.py` controleert een
+**aangeleverde reeks van 2–6 opeenvolgende quorum-epochs**,
+waarvan iedere snapshot opnieuw de volledige v42-check op
+Ed25519-stemmen, onafhankelijk sleutelregister, fencingbewijs,
+replicatie-snapshots en GO-13-governance doorloopt.
+
+```sh
+python3 scripts/pr_fencing_quorum_history.py \
+  --history historical-fencing-quorums.json \
+  --independent-pin independent-historical-quorum-pin.json \
+  --revocations independent-fencing-key-revocations.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_fencing_quorum_history.py' -v
+```
+
+Het `palaco.go20-fencing-quorum-history.v1`-object
+bevat `snapshots` en `rotations`. Per snapshot zijn
+alle v42-bewijsbronnen, een gehele `epoch` en
+hun bijbehorende onafhankelijke pinnen vereist.
+De afzonderlijk bewaarde
+`palaco.go20-fencing-quorum-history-pin.v1`
+bevat het exacte begin- en eind-epoch, SHA-256-ankers
+van beide eindmomenten, de hash van de gehele historie
+en de hash van het intrekkingsregister.
+
+Het extern beheerde
+`palaco.go20-fencing-quorum-revocations.v1`-register
+bevat unieke publieke sleutels en een gehele
+`effective_epoch`. Vanaf die epoch mag een ingetrokken
+sleutel niet meer actief zijn in een geverifieerde
+quorumsnapshot. Historische epochs vóór intrekking
+blijven geldig mits hun oorspronkelijke bewijs intact
+is. Dubbele of gewijzigde revocaties worden geweigerd.
+
+Een sleutelverandering tussen twee epochs vraagt een
+`palaco.go20-fencing-quorum-key-rotation.v1`-statement
+met `epoch`, `member_id`, oude en nieuwe sleutel en
+de hashes van beide volledige quorumvertrouwensregisters.
+De **oude én nieuwe sleutel** moeten het statement
+afzonderlijk met Ed25519 ondertekenen; hergebruik van
+oude verklaringen, onjuiste rotatiebinding, vervalste
+handtekeningen of onverklaarde sleutelwijzigingen
+leiden tot een negatief verdict.
+
+Tussen opeenvolgende snapshots controleert de module
+de continuïteit van de knooppuntketen, stabiele
+quorumleden, een niet-dalende minimumquorumgrens,
+een niet-dalende epochgrens en strikte epochopvolging.
+De historie mag niet stilzwijgend worden ingekort
+of herschreven.
+
+Het verdict `palaco.go20-fencing-quorum-history-verdict.v1`
+rapporteert `history_valid`, `epochs_verified`,
+`rotations_verified` en afzonderlijke foutcodes.
+
+**Grenzen:** dit is een offline bewijsverifier, geen
+onafhankelijk opgeslagen of ondertekend intrekkingsregister,
+geen fysieke sleutelbewaarplaats en geen bewijs dat
+fencing werkelijk is uitgevoerd. Vertrouwensankers
+moeten **vooraf** via een authentiek onafhankelijk kanaal
+zijn vastgelegd. Er bestaat geen nieuwe uitvoering-,
+productie- of failoverbevoegdheid.
+`decision: HOLD`, `authorization: DENY`,
+`fence_performed: false`, `promotion_performed: false`,
+`failover_authorized: false`, `release_authorized: false`,
+`merge_authorized: false`, `deployment_authorized: false`,
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft, geen merge of uitrol.
