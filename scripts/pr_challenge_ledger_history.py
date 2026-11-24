@@ -81,6 +81,9 @@ def assess_view(history, pin):
             errors.extend(f"v50:{index}:{e}" for e in result["errors"])
             continue
         verified += 1
+        if (cp["row_count"] < pin["minimum_rows"] or
+                cp["minimum_consumed"] < pin["minimum_consumed"]):
+            errors.append(f"pinned_retention_floor_rollback:{index}")
         if index == 0 and canonical_hash(cp) != pin["first_checkpoint_sha256"]:
             errors.append("first_checkpoint_mismatch")
         if index == len(history["entries"]) - 1 and canonical_hash(cp) != pin["last_checkpoint_sha256"]:
