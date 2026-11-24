@@ -3018,3 +3018,66 @@ houdt altijd `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
+
+## V57 — onafhankelijke archive-retrievaluitdagingen voor historische intrekkingsepochen
+
+`scripts/pr_revocation_archive_challenges.py` beoordeelt voor iedere
+historische v56-intrekkingsepoch een afzonderlijke, offline aangeleverde
+cryptografische archiefuitdaging. De v56→v55→v54-bewijsketen wordt
+opnieuw volledig geverifieerd. Een minimaal quorum van onafhankelijke
+beheerders moet de juiste SHA-256 van dezelfde epochcheckpoints
+terugrapporteren, ondertekend met de eerder gepinde Ed25519-sleutels.
+
+```sh
+python3 scripts/pr_revocation_archive_challenges.py \
+  --v56-evidence complete-v56-evidence.json \
+  --challenges pinned-epoch-challenges-and-responses.json \
+  --independent-pin externally-stored-v57-pin.json \
+  --observed-at 120
+python3 -m unittest discover -s tests \
+  -p 'test_pr_revocation_archive_challenges.py' -v
+```
+
+Het `palaco.go20-revocation-archive-challenges.v1`-bestand bevat
+2–4 epochen met per epoch `nonce_sha256`, `issued_at`,
+`expires_at` en `responses`. Nonces moeten per aangeleverde
+bundel uniek zijn. Het externe
+`palaco.go20-revocation-archive-challenges-pin.v1`-anker bindt
+de complete v56-archiefbewijzen, de archiefbeheerderssleutels,
+de volledige challengebundel, het minimumepochnummer en het
+minimumaantal geldige antwoorden.
+
+Iedere `palaco.go20-revocation-archive-retrieval-response.v1`
+ondertekening bindt epochnummer, nonce, begin- en eindtijd,
+oorspronkelijke checkpointhash, geclaimde teruggelezen hash,
+beheerderidentiteit, externe archief- en vertrouwensankers,
+en `HOLD/DENY`. De verifier weigert verlopen of nog niet
+geldige challenges, noncereplay tussen epochen, te lange
+geldigheidsintervallen, vervalste of hergebruikte
+handtekeningen, afwijkende retrievalhashes, niet eerder
+geattesteerde archiefbeheerders, een ontoereikend quorum
+en ontbrekende originele historische bewijsstukken.
+
+**Grenzen:** deze *offline* module ontvangt hashes en
+handtekeningen als invoer; hij voert geen live
+archiefverzoek uit en controleert niet of een werkelijk
+retrievalproces plaatsvond. `observed_at` is een
+aangeleverde, niet onafhankelijk vertrouwde klokwaarde.
+Nonces zijn uitsluitend uniek binnen de aangeleverde
+bundel: mondiale eenmaligheid vereist een extern
+duurzaam challengeverbruiksregister. Een geslaagde
+bewijscontrole bewijst dus geen echte externe
+opslagbeschikbaarheid of historische herstelbaarheid.
+
+Het verdict `palaco.go20-revocation-archive-challenges-verdict.v1`
+houdt daarom altijd `decision: HOLD`,
+`authorization: DENY`,
+`remote_availability_verified: false`,
+`historical_recovery_performed: false`,
+`trusted_time_verified: false`,
+`one_time_nonce_enforced: false`,
+`missing_history_recovered: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
