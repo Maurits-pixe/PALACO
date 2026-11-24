@@ -43,6 +43,7 @@ on:
       - 'scripts/pr_challenge_lifecycle_ledger.py'
       - 'scripts/pr_challenge_ledger_checkpoint.py'
       - 'scripts/pr_challenge_ledger_history.py'
+      - 'scripts/pr_ledger_history_receipts.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -84,6 +85,7 @@ on:
       - 'tests/test_pr_challenge_lifecycle_ledger.py'
       - 'tests/test_pr_challenge_ledger_checkpoint.py'
       - 'tests/test_pr_challenge_ledger_history.py'
+      - 'tests/test_pr_ledger_history_receipts.py'
       - 'tests/go20_postgres_recovery_idempotency.sql'
       - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
       - 'tests/run_go20_postgres_recovery_faults_disposable.sh'
@@ -160,6 +162,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_challenge_lifecycle_ledger.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_challenge_ledger_checkpoint.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_challenge_ledger_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_ledger_history_receipts.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
