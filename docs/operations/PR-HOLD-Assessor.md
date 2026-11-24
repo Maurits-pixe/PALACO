@@ -2799,3 +2799,82 @@ Het blijft altijd `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
+
+## V54 — onafhankelijke rotatiegetuigen, historische sleutelintrekkingen en anti-rollback
+
+`scripts/pr_custodian_rotation_witnesses.py` verifieert
+**twee tot vier v53-archiefontvangstrondes** met vooraf
+onafhankelijk vastgelegde getuigensleutels en een
+apart gepinde, historische lijst van ingetrokken
+archiefbeheerderssleutels. Voor elke overgang wordt
+de volledige v53→v52→v51-bewijsketen opnieuw getoetst.
+
+```sh
+python3 scripts/pr_custodian_rotation_witnesses.py \
+  --left receipt-succession-left.json \
+  --left-pin independent-receipt-pin-left.json \
+  --right receipt-succession-right.json \
+  --right-pin independent-receipt-pin-right.json \
+  --head independent-receipt-head.json \
+  --testimony independent-signed-rotation-testimony.json \
+  --witness-trust externally-retained-witness-trust.json \
+  --revocations externally-retained-revocations.json \
+  --independent-pin external-v54-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_custodian_rotation_witnesses.py' -v
+```
+
+Het `palaco.go20-rotation-witness-independent-pin.v1`-anker
+bindt de SHA-256 van de volledige v53-ontvangstgeschiedenis,
+van het afzonderlijke actieve getuigenregister en van het
+historische intrekkingsregister, plus de minimumronde
+en het getuigenquorum. Per overgang tekenen minstens
+twee onafhankelijke actieve Ed25519-getuigen met
+verschillende organisaties, domeinen en sleutels een
+`palaco.go20-custodian-rotation-witness-statement.v1`,
+dat oude en nieuwe registerhash, rotatiebewijshash,
+de externe ankers, getuigenidentiteit en `HOLD/DENY`
+cryptografisch bindt.
+
+Elke geregistreerde intrekking bevat een
+`custodian_id`, `public_key_hex` en
+`effective_round`. De verifier weigert dubbele
+of ongeldige intrekkingen en controleert *alle*
+vastgelegde vertrouwensregisters, inclusief de
+oudste ronde, op sleutels die op of na hun
+intrekkingsronde nog voorkomen.
+Een verlopen of eerder ingetrokken sleutel
+mag dus niet ongemerkt herleven in een oudere
+archiefweergave.
+
+Sleutelrotaties zelf vereisen nog steeds de
+bestaande v53-dubbele ondertekening door de oude
+en nieuwe sleutel. De nieuwe v54-getuigen vormen
+een aanvullende onafhankelijke verificatielaag;
+zij vervangen geen van die twee handtekeningen.
+Ontbrekende oorspronkelijke archiefbewijzen,
+manipulatie van getuigenregister, gewijzigde
+intrekkingslijsten, overlappende getuigenbewaring,
+vervalste handtekeningen en een teruggedraaide
+minimumronde worden fail-closed geweigerd.
+
+**Grenzen:** het is een uitsluitend offline
+bewijsverifier voor aangeleverde registraties.
+Een vertrouwd extern bewaarkanaal voor ankers en
+sleutels is vereist om gezamenlijke vervanging
+tegen te gaan. De module handhaaft intrekkingen
+niet in live diensten, roteert geen productiesleutels
+en schrijft geen registers. Geen herstel,
+publicatie, failover of productieautorisatie.
+
+Het verdict `palaco.go20-custodian-rotation-witness-verdict.v1`
+houdt `decision: HOLD`, `authorization: DENY`,
+`trust_registry_promoted: false`,
+`revocation_enforced_in_production: false`,
+`history_restored: false`,
+`archive_published: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
