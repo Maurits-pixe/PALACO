@@ -96,7 +96,7 @@ class ReceiptContinuityTests(unittest.TestCase):
 
     def test_missing_latest_entry(self):
         self.chain["entries"].pop()
-        self.assertIn("invalid_independent_continuity_pin", self.check()["errors"])
+        self.assertIn("invalid_checkpoint_chain", self.check()["errors"])
 
     def test_sequence_gap(self):
         self.chain["entries"][1]["sequence"] = 45
