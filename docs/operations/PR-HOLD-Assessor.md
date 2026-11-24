@@ -2077,3 +2077,63 @@ productie- of failoverbevoegdheid.
 `merge_authorized: false`, `deployment_authorized: false`,
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft, geen merge of uitrol.
+
+## V44 — onafhankelijk ondertekende intrekkingen en detectie van historische forks
+
+`scripts/pr_signed_revocation_fork.py` vereist een **Ed25519-ondertekende
+verklaring** over de v43-intrekkingsregisterhash, de vooraf vastgelegde
+historiehash en een minimale epoch. De sleutel-ID en de Ed25519-publieke
+sleutel worden uit een **afzonderlijk aangeleverde pin** betrokken; ze
+worden niet uit de ondertekende verklaring zelf vertrouwd.
+
+```sh
+python3 scripts/pr_signed_revocation_fork.py \
+  --left-history quorum-history-left.json \
+  --left-pin independently-retained-left-history-pin.json \
+  --right-history quorum-history-right.json \
+  --right-pin independently-retained-right-history-pin.json \
+  --revocations quorum-revocations.json \
+  --signed-register externally-signed-revocations.json \
+  --independent-pin independently-retained-revocation-fork-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_signed_revocation_fork.py' -v
+```
+
+De externe `palaco.go20-signed-revocation-fork-pin.v1` bevat
+`trusted_key_id`, `trusted_public_key_hex`,
+`revocations_sha256`, `history_sha256` en
+`minimum_epoch`. Het statement
+`palaco.go20-revocation-register-statement.v1` bindt deze
+historische referenties expliciet aan repository en
+`HOLD / DENY`. De Ed25519-handtekening wordt gecontroleerd
+tegen het onafhankelijk vertrouwde publieke sleutelmateriaal.
+
+Twee apart aangeleverde en zelfstandig gepinde v43-geschiedenissen
+worden **beide volledig** gecontroleerd op quorums, sleutelrotaties,
+effectieve revocaties en continuïteit. Daarna vergelijkt de verifier
+hun canonieke SHA-256-hashes met elkaar en met de vooraf vastgelegde
+externe historiehash. Zelfs wanneer beide geschiedenissen elk op
+zichzelf cryptografisch geldig zijn, leidt een verschil tot
+`historical_fork_detected`. Ongelijke epochvensters, een
+teruggedraaide minimumepoch en ontbrekende of gewijzigde revocaties
+geven aparte fouten.
+
+Het verdict `palaco.go20-revocation-fork-verdict.v1` geeft
+`historical_evidence_valid`, `histories_verified`,
+`epochs_verified` en de foutcodes. De tests omvatten onder meer
+handtekeningvervalsing, sleutelvervanging, een niet-geautoriseerde
+registerupdate, inkorting van historie, twee verschillend
+ondertekende geldige quorumtakken en replay van oude verklaringen.
+
+**Grenzen:** de onafhankelijke pin en vertrouwenssleutel moeten
+daadwerkelijk via een extern geauthenticeerd kanaal worden beheerd;
+een lokaal door dezelfde partij vervangen pin is geen echte
+onafhankelijkheidswaarborg. Het systeem beschikt niet over een
+publieke transparantielog of netwerkbreed forkdetectieprotocol.
+Een geldig technisch bewijs verleent geen herstel-, merge-,
+fencing- of failoverbevoegdheid. Iedere uitkomst blijft
+`decision: HOLD`, `authorization: DENY`,
+`fence_performed: false`, `failover_authorized: false`,
+`promotion_performed: false`, `release_authorized: false`,
+`merge_authorized: false`, `deployment_authorized: false`
+en `production_commit_performed: false`. GO-13 HOLD; PR #109 Draft.
