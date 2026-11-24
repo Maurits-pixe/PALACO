@@ -87,7 +87,7 @@ class ArchiveChallengeTests(unittest.TestCase):
     def test_missing_epoch(self):
         self.challenges["epochs"].pop()
         self.repin()
-        self.assertIn("epoch_rollback_or_incomplete_challenges", self.check()["errors"])
+        self.assertIn("invalid_challenge_bundle", self.check()["errors"])
 
     def test_nonce_reused_across_epochs(self):
         self.challenges["epochs"][1]["nonce_sha256"] = self.challenges["epochs"][0]["nonce_sha256"]
