@@ -2437,3 +2437,64 @@ Ook bij positief technisch bewijs blijven
 `production_commit_performed: false`,
 `decision: HOLD` en `authorization: DENY`.
 GO-13 HOLD; PR #109 Draft; geen merge of uitrol.
+
+## V49 — transactionele challengeadministratie (uitsluitend tijdelijke SQLite-proef)
+
+`scripts/pr_challenge_lifecycle_ledger.py` maakt een expliciet
+opgegeven SQLite-testdatabase met `synchronous=FULL`,
+`journal_mode=WAL` en een `UNIQUE` primaire sleutel
+op `nonce_sha256`. Elke aanvraag heeft ook een uniek
+`challenge_sha256`, vaste `issued_at`/`expires_at`
+en de toestanden `ISSUED` en `CONSUMED`.
+De module bevat **geen** productie-endpoint, netwerkserver,
+automatische nonce-uitgifte of mergebevoegdheid.
+
+De `issue`-functie weigert dubbele nonce- en challengehashes,
+een ongeldige externe v48-challengepin, ongeldige tijdwaarden
+en verlopen of onredelijk lange geldigheidsvensters.
+De `consume`-functie werkt uitsluitend vanuit een bestaande
+`ISSUED`-rij, binnen het expliciet aangeleverde
+geldigheidsinterval. Vóór een atomische
+`ISSUED → CONSUMED`-transitie wordt de **volledige v48**
+bewijsketen, inclusief v47/v46/v45-controles, daadwerkelijk
+herverifieerd. Er bestaat geen route die uitsluitend een
+door de aanroeper opgegeven `approved=True` vertrouwt.
+
+De SQLite-schrijfacties gebruiken
+`BEGIN IMMEDIATE` en een transactionele statuswijziging
+om twee gelijktijdige consumpties te serialiseren. Een
+eenmaal geconsumeerde nonce mag in dezelfde blijvende
+testdatabase niet opnieuw worden uitgegeven of geconsumeerd.
+De tests gebruiken `TemporaryDirectory`, heropenen
+dezelfde database via een nieuwe verbinding en omvatten
+acht gelijktijdige uitgiften en acht gelijktijdige
+consumpties.
+
+```sh
+python3 -m unittest discover -s tests \
+  -p 'test_pr_challenge_lifecycle_ledger.py' -v
+```
+
+**Belangrijke operationele grenzen:** dit is een
+lokale, testgebonden administratiemodule, **geen
+extern onafhankelijk beheerde duurzame productieledger**.
+De tijdwaarden `now`, `issued_at` en `expires_at`
+worden aangeleverd en zijn niet cryptografisch of via
+een vertrouwde klok geattesteerd. De code garandeert
+geen bescherming tegen verwijdering, kopiëren of
+terugdraaien van de gehele SQLite-database door een
+beheerder. Voor echte uitrol zijn onafhankelijke
+tijdbron, authenticatie, opslagintegriteit, herstel
+en exclusieve productietransactiegrenzen nodig.
+
+De teststatussen `ISSUED_TEST_ONLY` en
+`CONSUMED_TEST_ONLY` zijn uitsluitend
+ledgerovergangen, nooit goedkeuringen voor werkelijke
+recovery of failover. Iedere uitkomst blijft
+`decision: HOLD`, `authorization: DENY`,
+`remote_availability_verified: false`,
+`recovery_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false`,
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft, geen merge of productie-uitrol.
