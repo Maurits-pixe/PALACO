@@ -89,6 +89,11 @@ def verify_history(history, external_pin, revocations):
                 snapshot["transition"].get("candidate_epoch") != snapshot["epoch"]):
             errors.append(f"transition_epoch_mismatch:{index}")
             continue
+        # Compare independent endpoint anchors even when an inner epoch is corrupt.
+        if index == 0 and canonical_hash(snapshot) != external_pin["first_snapshot_sha256"]:
+            errors.append("first_snapshot_anchor_mismatch")
+        if index == len(history["snapshots"]) - 1 and canonical_hash(snapshot) != external_pin["last_snapshot_sha256"]:
+            errors.append("last_snapshot_anchor_mismatch")
         try:
             v = verify_quorum(*(snapshot[name] for name in (
                 "primary", "candidate", "handoff_pin", "transition",
@@ -100,10 +105,6 @@ def verify_history(history, external_pin, revocations):
         if not v["quorum_evidence_valid"]:
             errors.extend(f"epoch:{index}:{issue}" for issue in v["errors"])
             continue
-        if index == 0 and canonical_hash(snapshot) != external_pin["first_snapshot_sha256"]:
-            errors.append("first_snapshot_anchor_mismatch")
-        if index == len(history["snapshots"]) - 1 and canonical_hash(snapshot) != external_pin["last_snapshot_sha256"]:
-            errors.append("last_snapshot_anchor_mismatch")
         members = snapshot["trust"]["members"]
         for mid, member in members.items():
             key = member["public_key_hex"]
