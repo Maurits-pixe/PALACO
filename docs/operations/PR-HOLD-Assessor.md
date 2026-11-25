@@ -3081,3 +3081,76 @@ houdt daarom altijd `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V58 — geïsoleerde reconstructie van historische checkpointbewijzen
+
+`scripts/pr_isolated_evidence_reconstruction.py` controleert
+**volledige aangeleverde JSON-kopieën van intrekkingscheckpoints** in
+geheugen. Er wordt geen productieopslag geopend, geschreven,
+hersteld of gemigreerd. De volledige v57→v56→v55→v54-bewijsketen
+moet eerst opnieuw slagen. Iedere historische epoch moet exact
+voorkomen, met de oorspronkelijke challenge-nonce en minimaal
+twee inhoudelijk identieke kopieën uit verschillende reeds
+geattesteerde archiefbeheerders.
+
+```sh
+python3 scripts/pr_isolated_evidence_reconstruction.py \
+  --v57-evidence full-v57-evidence.json \
+  --reconstruction restored-checkpoint-copies-and-reviews.json \
+  --reviewer-trust independently-retained-reviewer-registry.json \
+  --independent-pin independently-retained-v58-pin.json \
+  --observed-at 120
+python3 -m unittest discover -s tests \
+  -p 'test_pr_isolated_evidence_reconstruction.py' -v
+```
+
+Het `palaco.go20-isolated-reconstruction-evidence.v1`-formaat
+bevat `epochs` en `review_signatures`. Per epoch worden
+`epoch`, `nonce_sha256`, `copies` en per kopie
+`custodian_id` met het **volledige** `checkpoint`
+aangeleverd. Elke kopie wordt inhoudelijk met het
+verwachte oorspronkelijke checkpoint vergeleken en
+op canonieke SHA-256 getoetst. Een onvolledige historische
+handtekeningenlijst of gewijzigde intrekkingsinhoud faalt
+ongeacht opnieuw berekende hashes.
+
+Het externe `palaco.go20-isolated-reconstruction-pin.v1`
+bindt de volledige v57-bewijsbundel, het afzonderlijk
+aangeleverde kopieënregister (zonder de ondertekeningen),
+het onafhankelijke reviewer-register, de minimale epoch
+en de minimale kopie- en reviewquorums.
+Ten minste twee onafhankelijke actieve reviewers
+ondertekenen het exacte
+`palaco.go20-isolated-reconstruction-report.v1`
+met de oorspronkelijke bewijsbundelhash, kopiehash,
+reviewerregisterhash, aantal volledig gecontroleerde
+epochen en kopieën, revieweridentiteit en
+`HOLD/DENY`. Dubbelen, onjuiste sleutels,
+overlappende beheerdomeinen, ingetrokken reviewers
+en vervalste handtekeningen worden afgewezen.
+
+Dit is een **geïsoleerde in-memory bewijsvergelijking**,
+niet de uitvoering van herstel vanaf externe
+fysieke media. De aangeboden kopieën kunnen door een
+aanroeper zijn samengesteld; de verifier kan
+hun werkelijke herkomst, live beschikbaarheid,
+onafhankelijke sleutelcustody of daadwerkelijke
+herstelprocedure niet bewijzen. Ook de v57-tijdbron
+blijft extern aangeleverd en is niet vertrouwd.
+
+Het verdict `palaco.go20-isolated-reconstruction-verdict.v1`
+rapporteert `isolated_evidence_valid`,
+`epochs_compared`, `copies_compared`,
+`reviewer_signatures_verified` en foutcodes.
+Steeds gelden `decision: HOLD`,
+`authorization: DENY`,
+`remote_media_read_performed: false`,
+`live_availability_verified: false`,
+`production_restoration_performed: false`,
+`independent_media_custody_verified: false`,
+`challenge_reopened: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
