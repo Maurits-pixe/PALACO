@@ -49,6 +49,7 @@ on:
       - 'scripts/pr_revocation_history_consensus.py'
       - 'scripts/pr_revocation_checkpoint_receipts.py'
       - 'scripts/pr_revocation_archive_challenges.py'
+      - 'scripts/pr_isolated_evidence_reconstruction.py'
       - 'tests/test_pr_hold_assessor.py'
       - 'tests/test_pr_attestation_chain.py'
       - 'tests/test_pr_attestation_policy.py'
@@ -96,6 +97,7 @@ on:
       - 'tests/test_pr_revocation_history_consensus.py'
       - 'tests/test_pr_revocation_checkpoint_receipts.py'
       - 'tests/test_pr_revocation_archive_challenges.py'
+      - 'tests/test_pr_isolated_evidence_reconstruction.py'
       - 'tests/go20_postgres_recovery_idempotency.sql'
       - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
       - 'tests/run_go20_postgres_recovery_faults_disposable.sh'
@@ -178,6 +180,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_pr_revocation_history_consensus.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_revocation_checkpoint_receipts.py' -v
           python3 -m unittest discover -s tests -p 'test_pr_revocation_archive_challenges.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_isolated_evidence_reconstruction.py' -v
 
   disposable-postgres:
     runs-on: ubuntu-latest
