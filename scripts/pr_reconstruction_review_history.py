@@ -73,9 +73,12 @@ def assess_view(view, pin):
             previous = None
             continue
         source = round_item["sources"]
-        if (canonical_hash(source["v57"]) != pin["v57_sha256"] or
-                canonical_hash(source["reviewers"]) != pin["reviewer_trust_sha256"] or
-                source["pin"].get("minimum_reviews", 0) < pin["minimum_reviews"]):
+        candidate_pin = source["pin"]
+        if (not isinstance(candidate_pin, dict) or
+                type(candidate_pin.get("minimum_reviews")) is not int or
+                candidate_pin["minimum_reviews"] < pin["minimum_reviews"] or
+                canonical_hash(source["v57"]) != pin["v57_sha256"] or
+                canonical_hash(source["reviewers"]) != pin["reviewer_trust_sha256"]):
             errors.append(f"external_trust_or_evidence_substitution:{i}")
             previous = None
             continue
