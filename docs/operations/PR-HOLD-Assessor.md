@@ -3154,3 +3154,69 @@ Steeds gelden `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V59 — onafhankelijke reconstructiebeoordelingsgeschiedenis en conflicterende rapporten
+
+`scripts/pr_reconstruction_review_history.py` controleert twee onafhankelijk
+aangeleverde waarnemingsgeschiedenissen, ieder met **twee tot vier aaneengesloten
+reconstructiebeoordelingsrondes**. Iedere ronde bevat alle benodigde v58-bronbewijzen,
+de volledige inhoudelijk vergeleken reconstructiekopieën, het reviewerregister,
+de v58-pin en een aangeleverde tijdwaarde. De v58→v57→v56→v55-keten wordt
+voor **iedere ronde** opnieuw geverifieerd; een geldige latere beoordeling
+kan een eerdere fout niet overschrijven.
+
+```sh
+python3 scripts/pr_reconstruction_review_history.py \
+  --left independent-review-history-a.json \
+  --left-pin separately-retained-review-history-a-pin.json \
+  --right independent-review-history-b.json \
+  --right-pin separately-retained-review-history-b-pin.json \
+  --independent-head separately-retained-review-head.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_reconstruction_review_history.py' -v
+```
+
+Een `palaco.go20-reconstruction-review-history.v1`-object
+bevat `rounds`: een opeenvolgend rondnummer,
+`previous_round_sha256` en de volledige `sources`-bundel.
+De eerste ronde verwijst naar een nulhash, iedere volgende
+ronde naar de canonieke SHA-256 van de volledige vorige ronde.
+De extern bewaarde `palaco.go20-reconstruction-review-history-pin.v1`
+bindt begin- en eindronde, begin- en eindhash, volledige
+waarnemingsgeschiedenis, oorspronkelijke v57-bewijsbundelhash,
+reviewerregisterhash en minimumreviewquorum.
+
+De module weigert onder andere ontbrekende of overgeslagen
+rondes, verbroken voorgangerhashes, vervangen reviewerregisters,
+gewijzigde onderliggende v57-bewijzen, lagere reviewquorums,
+vervalste handtekeningen, verlopen archiefuitdagingen, verschil
+in reconstructieresultaten tussen opeenvolgende rondes en een
+historie die onder de onafhankelijke minimumronde terugvalt.
+Twee inhoudelijk geldige, maar canoniek afwijkende
+waarnemingsgeschiedenissen geven
+`contradictory_reconstruction_reports`. Beide moeten
+overeenkomen met de extern bewaarde
+`palaco.go20-reconstruction-review-head-pin.v1`.
+
+**Grenzen:** de geschiedenis vergelijkt uitsluitend aangeleverde
+offline gegevens. De verifier bewijst niet dat externe archiefmedia
+zijn gelezen, dat de aangeleverde kopieën fysiek onafhankelijk zijn,
+dat de reviewerorganisaties daadwerkelijk onafhankelijke entiteiten
+zijn of dat productieherstel technisch uitvoerbaar is. Externe
+pins en sleutelregistraties moeten buiten het te controleren
+systeem betrouwbaar bewaard blijven.
+
+Het verdict `palaco.go20-reconstruction-review-history-verdict.v1`
+bevat `review_history_valid`, `rounds_verified` en foutcodes,
+maar houdt altijd `decision: HOLD`,
+`authorization: DENY`,
+`report_promoted: false`,
+`trust_registry_promoted: false`,
+`history_restored: false`,
+`physical_media_verified: false`,
+`production_restoration_performed: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
