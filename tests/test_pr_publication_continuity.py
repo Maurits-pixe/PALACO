@@ -117,6 +117,32 @@ class PublicationContinuityTests(unittest.TestCase):
         v=self.check()
         self.assertIn("contradictory_publication_continuity",v["errors"])
 
+    def test_validly_signed_revocation_cannot_disappear(self):
+        first=self.right["rounds"][0]
+        evidence=first["evidence"]
+        entry={"custodian_id":"retired","public_key_hex":"f"*64,
+               "effective_snapshot":50}
+        evidence["revocations"]["entries"].append(entry)
+        digest=canonical_hash(evidence["revocations"])
+        evidence["independent_pin"]["revocations_sha256"]=digest
+        original_digest=self.base.pin["revocations_sha256"]
+        self.base.pin["revocations_sha256"]=digest
+        try:
+            for view in (evidence["left"],evidence["right"]):
+                for i,record in enumerate(view["checkpoints"]):
+                    snap=self.base.base.left["snapshots"][i]
+                    for sig in record["signatures"]:
+                        sig["signature_ed25519_hex"]=self.base.sign(snap,sig["witness_id"])
+        finally:
+            self.base.pin["revocations_sha256"]=original_digest
+        evidence["independent_pin"]["left_sha256"]=canonical_hash(evidence["left"])
+        evidence["independent_pin"]["right_sha256"]=canonical_hash(evidence["right"])
+        # Second round omits the earlier revoked key, even though each
+        # v64 bundle is independently valid and newly externally pinned.
+        self.right["rounds"][1]["previous_sha256"]=canonical_hash(first)
+        self.right_pin=self.repin(self.right)
+        self.assertIn("right:revocation_removed_or_redated:1",self.check()["errors"])
+
     def test_external_rollback_floor(self):
         self.head["minimum_last_round"]=62
         self.assertIn("independent_history_rollback",self.check()["errors"])
