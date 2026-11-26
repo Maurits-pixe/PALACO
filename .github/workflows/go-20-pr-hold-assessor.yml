@@ -1,0 +1,280 @@
+name: GO-20 offline evidence assessor
+on:
+  pull_request:
+    paths:
+      - 'scripts/pr_hold_assessor.py'
+      - 'scripts/pr_attestation_chain.py'
+      - 'scripts/pr_attestation_policy.py'
+      - 'scripts/pr_replay_preflight.py'
+      - 'scripts/pr_replay_transaction_contract.py'
+      - 'scripts/pr_replay_interleavings.py'
+      - 'scripts/pr_replay_sqlite_harness.py'
+      - 'scripts/pr_audit_integrity.py'
+      - 'scripts/pr_audit_export.py'
+      - 'scripts/pr_signed_audit_checkpoint.py'
+      - 'scripts/pr_audit_continuity.py'
+      - 'scripts/pr_audit_witness_forks.py'
+      - 'scripts/pr_witness_transparency.py'
+      - 'scripts/pr_multiround_assessor.py'
+      - 'scripts/pr_assessment_receipt.py'
+      - 'scripts/pr_signed_assessment_review.py'
+      - 'scripts/pr_review_governance.py'
+      - 'scripts/pr_governance_history.py'
+      - 'scripts/pr_governance_hardening.py'
+      - 'scripts/pr_security_acceptance.py'
+      - 'scripts/pr_final_report_attestation.py'
+      - 'scripts/pr_final_attestation_history.py'
+      - 'scripts/pr_attestation_multiview.py'
+      - 'scripts/pr_observer_anchor_custody.py'
+      - 'scripts/pr_observer_anchor_history.py'
+      - 'scripts/pr_observer_recovery.py'
+      - 'scripts/pr_recovery_simulation.py'
+      - 'scripts/pr_recovery_transaction.py'
+      - 'scripts/pr_concurrent_recovery.py'
+      - 'scripts/pr_recovery_handoff.py'
+      - 'scripts/pr_recovery_fencing.py'
+      - 'scripts/pr_signed_fencing_quorum.py'
+      - 'scripts/pr_fencing_quorum_history.py'
+      - 'scripts/pr_signed_revocation_fork.py'
+      - 'scripts/pr_transparency_checkpoint_views.py'
+      - 'scripts/pr_checkpoint_receipt_continuity.py'
+      - 'scripts/pr_checkpoint_retention_custody.py'
+      - 'scripts/pr_archive_availability_challenge.py'
+      - 'scripts/pr_challenge_lifecycle_ledger.py'
+      - 'scripts/pr_challenge_ledger_checkpoint.py'
+      - 'scripts/pr_challenge_ledger_history.py'
+      - 'scripts/pr_ledger_history_receipts.py'
+      - 'scripts/pr_ledger_receipt_succession.py'
+      - 'scripts/pr_custodian_rotation_witnesses.py'
+      - 'scripts/pr_revocation_history_consensus.py'
+      - 'scripts/pr_revocation_checkpoint_receipts.py'
+      - 'scripts/pr_revocation_archive_challenges.py'
+      - 'scripts/pr_isolated_evidence_reconstruction.py'
+      - 'scripts/pr_reconstruction_review_history.py'
+      - 'scripts/pr_reconstruction_head_witnesses.py'
+      - 'scripts/pr_reconstruction_head_succession.py'
+      - 'scripts/pr_head_succession_custody.py'
+      - 'scripts/pr_head_custody_succession.py'
+      - 'scripts/pr_historical_custody_checkpoints.py'
+      - 'scripts/pr_publication_continuity.py'
+      - 'tests/test_pr_hold_assessor.py'
+      - 'tests/test_pr_attestation_chain.py'
+      - 'tests/test_pr_attestation_policy.py'
+      - 'tests/test_pr_replay_preflight.py'
+      - 'tests/test_pr_replay_transaction_contract.py'
+      - 'tests/test_pr_replay_interleavings.py'
+      - 'tests/test_pr_replay_sqlite_harness.py'
+      - 'tests/test_pr_audit_integrity.py'
+      - 'tests/test_pr_audit_export.py'
+      - 'tests/test_pr_signed_audit_checkpoint.py'
+      - 'tests/test_pr_audit_continuity.py'
+      - 'tests/test_pr_audit_witness_forks.py'
+      - 'tests/test_pr_witness_transparency.py'
+      - 'tests/test_pr_multiround_assessor.py'
+      - 'tests/test_pr_assessment_receipt.py'
+      - 'tests/test_pr_signed_assessment_review.py'
+      - 'tests/test_pr_review_governance.py'
+      - 'tests/test_pr_governance_history.py'
+      - 'tests/test_pr_governance_hardening.py'
+      - 'tests/test_pr_security_acceptance.py'
+      - 'tests/test_pr_final_report_attestation.py'
+      - 'tests/test_pr_final_attestation_history.py'
+      - 'tests/test_pr_attestation_multiview.py'
+      - 'tests/test_pr_observer_anchor_custody.py'
+      - 'tests/test_pr_observer_anchor_history.py'
+      - 'tests/test_pr_observer_recovery.py'
+      - 'tests/test_pr_recovery_simulation.py'
+      - 'tests/test_pr_recovery_transaction.py'
+      - 'tests/test_pr_concurrent_recovery.py'
+      - 'tests/test_pr_recovery_handoff.py'
+      - 'tests/test_pr_recovery_fencing.py'
+      - 'tests/test_pr_signed_fencing_quorum.py'
+      - 'tests/test_pr_fencing_quorum_history.py'
+      - 'tests/test_pr_signed_revocation_fork.py'
+      - 'tests/test_pr_transparency_checkpoint_views.py'
+      - 'tests/test_pr_checkpoint_receipt_continuity.py'
+      - 'tests/test_pr_checkpoint_retention_custody.py'
+      - 'tests/test_pr_archive_availability_challenge.py'
+      - 'tests/test_pr_challenge_lifecycle_ledger.py'
+      - 'tests/test_pr_challenge_ledger_checkpoint.py'
+      - 'tests/test_pr_challenge_ledger_history.py'
+      - 'tests/test_pr_ledger_history_receipts.py'
+      - 'tests/test_pr_ledger_receipt_succession.py'
+      - 'tests/test_pr_custodian_rotation_witnesses.py'
+      - 'tests/test_pr_revocation_history_consensus.py'
+      - 'tests/test_pr_revocation_checkpoint_receipts.py'
+      - 'tests/test_pr_revocation_archive_challenges.py'
+      - 'tests/test_pr_isolated_evidence_reconstruction.py'
+      - 'tests/test_pr_reconstruction_review_history.py'
+      - 'tests/test_pr_reconstruction_head_witnesses.py'
+      - 'tests/test_pr_reconstruction_head_succession.py'
+      - 'tests/test_pr_head_succession_custody.py'
+      - 'tests/test_pr_head_custody_succession.py'
+      - 'tests/test_pr_historical_custody_checkpoints.py'
+      - 'tests/test_pr_publication_continuity.py'
+      - 'tests/go20_postgres_recovery_idempotency.sql'
+      - 'tests/run_go20_postgres_recovery_idempotency_disposable.sh'
+      - 'tests/run_go20_postgres_recovery_faults_disposable.sh'
+      - 'tests/run_go20_postgres_recovery_crash_disposable.sh'
+      - 'tests/run_go20_postgres_handoff_disposable.sh'
+      - 'tests/go20_postgres_contract.sql'
+      - 'tests/go20_postgres_contract_assertions.sql'
+      - 'tests/run_go20_postgres_disposable.sh'
+      - 'tests/go20_postgres_rls_fixture.sql'
+      - 'tests/run_go20_postgres_rls_disposable.sh'
+      - 'tests/go20_postgres_identity_fixture.sql'
+      - 'tests/run_go20_postgres_identity_disposable.sh'
+      - 'tests/go20_postgres_audit_fixture.sql'
+      - 'tests/run_go20_postgres_audit_disposable.sh'
+      - 'tests/go20_postgres_audit_faults.sql'
+      - 'tests/run_go20_audit_export_disposable.sh'
+      - '.github/workflows/go-20-pr-hold-assessor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  advisory-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Run isolated standard-library regressions
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m unittest discover -s tests -p 'test_pr_hold_assessor.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_attestation_chain.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_attestation_policy.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_replay_preflight.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_replay_transaction_contract.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_replay_interleavings.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_replay_sqlite_harness.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_audit_integrity.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_audit_export.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_signed_audit_checkpoint.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_audit_continuity.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_audit_witness_forks.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_witness_transparency.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_multiround_assessor.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_assessment_receipt.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_signed_assessment_review.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_review_governance.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_governance_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_governance_hardening.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_security_acceptance.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_final_report_attestation.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_final_attestation_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_attestation_multiview.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_observer_anchor_custody.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_observer_anchor_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_observer_recovery.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_recovery_simulation.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_recovery_transaction.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_concurrent_recovery.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_recovery_handoff.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_recovery_fencing.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_signed_fencing_quorum.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_fencing_quorum_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_signed_revocation_fork.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_transparency_checkpoint_views.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_checkpoint_receipt_continuity.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_checkpoint_retention_custody.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_archive_availability_challenge.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_challenge_lifecycle_ledger.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_challenge_ledger_checkpoint.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_challenge_ledger_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_ledger_history_receipts.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_ledger_receipt_succession.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_custodian_rotation_witnesses.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_revocation_history_consensus.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_revocation_checkpoint_receipts.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_revocation_archive_challenges.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_isolated_evidence_reconstruction.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_reconstruction_review_history.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_reconstruction_head_witnesses.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_reconstruction_head_succession.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_head_succession_custody.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_head_custody_succession.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_historical_custody_checkpoints.py' -v
+          python3 -m unittest discover -s tests -p 'test_pr_publication_continuity.py' -v
+
+  disposable-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17@sha256:31ba9c94a03ada9988f2bb493a22a75eef3a185884533e5cdbcd498ea835b08f
+        env:
+          POSTGRES_DB: go20test
+          POSTGRES_USER: go20test
+          POSTGRES_PASSWORD: go20test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U go20test -d go20test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install PostgreSQL command-line client
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - name: Run disposable PostgreSQL contract and race tests
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_disposable.sh
+      - name: Test durable restore idempotency, replay and rollback in disposable PostgreSQL
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_recovery_idempotency_disposable.sh
+      - name: Test backend termination, timeout rollback and reconnect recovery in disposable PostgreSQL
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: |
+          bash -n tests/run_go20_postgres_recovery_faults_disposable.sh
+          bash tests/run_go20_postgres_recovery_faults_disposable.sh
+      - name: Test isolated tenant RLS and negative permissions
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_rls_disposable.sh
+      - name: Test synthetic principal binding and denied role hopping
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_identity_disposable.sh
+      - name: Test cross-tenant attacks and transactional audit invariants
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: bash tests/run_go20_postgres_audit_disposable.sh
+      - name: Verify transactional audit fault-injection invariants
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: go20test
+          PGDATABASE: go20test
+          PGPASSWORD: go20test
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/go20_postgres_audit_faults.sql
+      - name: Validate PostgreSQL-to-audit-export bridge and tampering rejection
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: bash tests/run_go20_audit_export_disposable.sh
+      - name: Verify independent two-PostgreSQL-instance snapshot handoff and reject stale or divergent claims
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: |
+          bash -n tests/run_go20_postgres_handoff_disposable.sh
+          bash tests/run_go20_postgres_handoff_disposable.sh
+      - name: Crash and restart only disposable PostgreSQL container, verify WAL rollback and durable replay
+        env:
+          CI_GO20_DISPOSABLE_PG: "yes"
+        run: |
+          bash -n tests/run_go20_postgres_recovery_crash_disposable.sh
+          bash tests/run_go20_postgres_recovery_crash_disposable.sh
