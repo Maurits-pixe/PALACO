@@ -3420,3 +3420,75 @@ houdt steeds `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V63 — chronologische archiefontvangsten, anti-rollback en historische forks
+
+`scripts/pr_head_custody_succession.py` controleert twee onafhankelijk
+aangeleverde geschiedenissen met ieder **2–4 chronologisch gekoppelde
+v62-archiefontvangstbundels**. Iedere snapshot bevat de volledige
+v62-bewijsbronnen en wordt door de bestaande v62→v61→v60-keten
+opnieuw verifieerbaar gemaakt. De snapshots dragen een oplopend
+nummer, de volledige SHA-256 van hun voorganger en de exacte
+eerder ondertekende archiefontvangsten.
+
+```sh
+python3 scripts/pr_head_custody_succession.py \
+  --left custody-history-observer-a.json \
+  --left-pin independent-custody-history-a-pin.json \
+  --right custody-history-observer-b.json \
+  --right-pin independent-custody-history-b-pin.json \
+  --independent-head separately-retained-v63-head.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_head_custody_succession.py' -v
+```
+
+Het `palaco.go20-head-custody-succession.v1`-formaat bevat
+`snapshots` met `snapshot`, `previous_sha256` en
+`sources`. De onafhankelijke
+`palaco.go20-head-custody-succession-pin.v1` bindt
+het eerste en laatste snapshotnummer en hun hashes,
+de volledige historiehash, oorspronkelijke
+v61-bewijsbundel, de archiefbeheerderssleutels,
+het minimale ontvangstquorum en de minimale bewaarde ronde.
+
+Voor iedere overgang worden de volledige oorspronkelijke
+v62-ontvangsten, hun kopieën en de extern vastgelegde
+sleutels opnieuw gecontroleerd. De verifier weigert
+ontbrekende of overgeslagen snapshots, verbroken
+hashkoppelingen, vervangen archiefbeheerderssleutels,
+een teruggedraaid ontvangstquorum of minimumronde
+en afwijkende archiefontvangsten tussen opeenvolgende
+snapshots. Twee afzonderlijk geldig ondertekende,
+maar uiteenlopende waarnemingsgeschiedenissen
+worden geweigerd met
+`contradictory_archival_receipt_histories`.
+
+Het extern onafhankelijk vastgelegde
+`palaco.go20-head-custody-succession-independent-head.v1`
+bevat de verwachte canonieke historiehash,
+de minimaal aanvaardbare laatste snapshot,
+het minimale ontvangstquorum en de minimale
+historische bewaargrens. Deze externe ankers
+zijn essentieel: uitsluitend opnieuw berekende,
+door dezelfde aanbieder aangeleverde hashes
+zijn niet voldoende voor onafhankelijk vertrouwen.
+
+**Beveiligingsgrens:** een valide offline ontvangstgeschiedenis
+bewijst geen werkelijke netwerkpublicatie, actuele beschikbaarheid
+of fysieke onafhankelijkheid van archiefbeheerders.
+De module verricht geen live opslagverzoek,
+herstelactie of productieaanpassing.
+
+Het verdict `palaco.go20-head-custody-succession-verdict.v1`
+houdt steeds `decision: HOLD`,
+`authorization: DENY`,
+`remote_publication_verified: false`,
+`storage_reachability_verified: false`,
+`independent_media_custody_verified: false`,
+`history_restored: false`,
+`recovery_authorized: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
