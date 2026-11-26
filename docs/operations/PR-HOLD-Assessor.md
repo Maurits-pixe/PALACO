@@ -3346,3 +3346,77 @@ houdt steeds `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
+
+## V62 — onafhankelijk ondertekende archiefontvangsten van iedere historieankerronde
+
+`scripts/pr_head_succession_custody.py` controleert volledige
+historische v61-opvolgingsrondes, niet uitsluitend hun hashes.
+De originele, door twee waarnemers onafhankelijke v61-bewijsketen
+wordt volledig opnieuw geverifieerd. Vervolgens moet voor
+**iedere** oorspronkelijke ronde een exact overeenkomende
+`full_round_copy` en een quorum van minimaal twee geldige
+Ed25519-archiefontvangsten worden aangeleverd.
+
+```sh
+python3 scripts/pr_head_succession_custody.py \
+  --v61-evidence complete-v61-succession-evidence.json \
+  --copies independent-full-round-copies-and-receipts.json \
+  --custodian-trust externally-retained-custodian-trust.json \
+  --independent-pin externally-retained-v62-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_head_succession_custody.py' -v
+```
+
+Het `palaco.go20-head-succession-custody.v1`-register bevat
+`rounds` met `round`, `full_round_copy` en `receipts`.
+Een ontvangst wordt ondertekend op het
+`palaco.go20-head-succession-custody-statement.v1`,
+dat repository, rondnummer, volledige rondedigest,
+voorgangerdigest, v61-historiehash, complete
+v61-bewijsbundelhash, extern bewaarde
+archiefbeheerdersregisterhash, beheerder-ID en
+`HOLD/DENY` cryptografisch bindt.
+
+Het afzonderlijke
+`palaco.go20-head-succession-custodians.v1`-register
+bevat actieve beheerders met publieke Ed25519-sleutel,
+organisatie-ID en domein-ID. Elke ronde vereist
+minstens twee verschillende identiteiten,
+organisaties, domeinen en sleutels.
+Het extern vastgelegde
+`palaco.go20-head-succession-custody-pin.v1`
+bindt de volledige v61-bewijsketen, haar
+historiehash, de complete ontvangstbundel,
+de sleutels, minimale ronde en quorumgrens.
+
+De verifier weigert ontbrekende historische rondes,
+onvolledige bewijskopieën, onjuiste SHA-256,
+vervalste of tussen rondes hergebruikte handtekeningen,
+dubbele of ingetrokken beheerders,
+sleutelvervanging, verzwakking van het quorum
+en verschillen tussen de onderliggende twee
+v61-waarnemers. Geen archiefontvangst kan
+een defecte oorspronkelijke v61-bewijsketen
+compenseren.
+
+**Beveiligingsgrens:** de module leest uitsluitend
+aangeleverde lokale JSON-bewijzen; hij doet geen
+extern opslagverzoek en kan daarom niet aantonen
+dat publicatie werkelijk heeft plaatsgevonden,
+externe opslag toegankelijk is of bewaarcustody
+organisatorisch onafhankelijk wordt uitgevoerd.
+De externe SHA-256-pins moeten onafhankelijk van
+de bewijsaanbieder worden beheerd.
+
+Het verdict `palaco.go20-head-succession-custody-verdict.v1`
+houdt steeds `decision: HOLD`,
+`authorization: DENY`,
+`remote_publication_verified: false`,
+`remote_storage_reachable: false`,
+`independent_custody_established: false`,
+`history_restored: false`,
+`recovery_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
