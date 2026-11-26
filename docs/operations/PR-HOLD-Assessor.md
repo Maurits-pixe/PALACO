@@ -3280,3 +3280,69 @@ houdt altijd `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
+
+## V61 — opvolging van onafhankelijke reconstructieankers, revocation-retentie en herstelconflicten
+
+`scripts/pr_reconstruction_head_succession.py` controleert voor
+twee afzonderlijke waarnemers een volledige chronologische
+opvolging van **2–4 v60-historieankerbewijzen**.
+Voor elke ronde wordt de volledige v60→v59→v58-bewijsketen
+opnieuw geverifieerd. De rondes hebben aaneengesloten
+volgnummers en zijn via `previous_sha256` gekoppeld
+aan de canonieke SHA-256 van de vorige volledige
+bewijsronde; de eerste ronde verwijst naar een nulhash.
+
+```sh
+python3 scripts/pr_reconstruction_head_succession.py \
+  --left independently-observed-succession-a.json \
+  --left-pin externally-retained-succession-a-pin.json \
+  --right independently-observed-succession-b.json \
+  --right-pin externally-retained-succession-b-pin.json \
+  --independent-head externally-retained-v61-head.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_reconstruction_head_succession.py' -v
+```
+
+Het `palaco.go20-reconstruction-head-succession.v1`-formaat
+bevat `rounds`; iedere ronde draagt `round`,
+`previous_sha256` en alle vijf verplichte v60-bewijsbronnen.
+De onafhankelijke `palaco.go20-reconstruction-head-succession-pin.v1`
+bindt de begin- en eindronde, hun hashes, de gehele
+opvolgingsgeschiedenis, de oorspronkelijke v59-bewijsbundel,
+het historisch vertrouwensregister voor de headgetuigen
+en een minimaal getuigenquorum.
+Het aparte
+`palaco.go20-reconstruction-head-succession-independent-head.v1`
+verankert de verwachte volledige historiehash,
+de minimaal aanvaardbare laatste ronde en het
+minimale onafhankelijke getuigenquorum.
+
+De verifier weigert ontbrekende of gewijzigde rondes,
+verbroken SHA-256-voorgangers, teruggedraaide
+minimumrondes of getuigenquorums, vervanging van
+getuigensleutels of onderliggende reconstructiebronnen,
+gewijzigde herstelverklaringen en het verwijderen
+of herdateren van eerder vastgelegde reviewerintrekkingen.
+Twee individueel geldige, maar verschillende
+waarnemingsgeschiedenissen leiden tot
+`conflicting_reconstruction_head_histories`.
+
+**Grenzen:** de historie bevat aangeleverde,
+extern te bewaren ankers. De verifier maakt geen
+daadwerkelijke onafhankelijke bewaarinfrastructuur,
+controleert geen live archiefbeschikbaarheid en
+voert geen herstel uit. Nieuwe bewijsrondes
+blijven uitsluitend technische verificaties;
+een positieve uitkomst draagt geen autorisatie over.
+
+Het verdict `palaco.go20-reconstruction-head-succession-verdict.v1`
+houdt steeds `decision: HOLD`,
+`authorization: DENY`,
+`revocations_enforced_in_production: false`,
+`recovery_performed: false`,
+`recovery_authorized: false`,
+`trust_registry_promoted: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
