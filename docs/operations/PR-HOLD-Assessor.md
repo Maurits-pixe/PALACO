@@ -3492,3 +3492,84 @@ houdt steeds `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V64 — onafhankelijk ondertekende historische ontvangstcheckpoints en bewaardersintrekkingen
+
+`scripts/pr_historical_custody_checkpoints.py` herverifieert de
+twee volledige v63-ontvangstgeschiedenissen en vereist vervolgens
+voor **iedere** v63-snapshot een onafhankelijke Ed25519-verklaring
+van minstens twee onderscheiden publicatiegetuigen.
+De ondertekening koppelt de volledige snapshot-SHA-256,
+haar voorganger, de volledige v63-bewijsketen, het
+onafhankelijke getuigenregister, de historische
+archiefbeheerdersintrekkingen, de getuigenidentiteit
+en het onveranderlijke `HOLD/DENY`.
+
+```sh
+python3 scripts/pr_historical_custody_checkpoints.py \
+  --v63-evidence complete-v63-evidence.json \
+  --left archive-publication-observer-a.json \
+  --right archive-publication-observer-b.json \
+  --witness-trust independently-kept-publication-witnesses.json \
+  --custodian-revocations external-custodian-revocations.json \
+  --independent-pin externally-kept-v64-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_historical_custody_checkpoints.py' -v
+```
+
+`palaco.go20-historical-custody-checkpoints.v1` bevat
+chronologisch een `checkpoints`-lijst van
+`snapshot`, `snapshot_sha256` en `signatures`.
+De verklaringen gebruiken de domeingescheiden
+`palaco.go20-publication-checkpoint-witness-statement.v1`.
+De afzonderlijke `palaco.go20-publication-witness-trust.v1`
+bevat actieve ondertekenaars met publieke Ed25519-sleutel,
+organisatie-ID en domein-ID. Getuigen in hetzelfde
+organisatie- of beheerdomein tellen niet als afzonderlijk
+quorumlid.
+
+Het historische
+`palaco.go20-archive-custodian-revocations.v1`
+registreert `custodian_id`, `public_key_hex` en
+`effective_snapshot`. De verifier weigert dubbele,
+ongeldige of teruggedraaide intrekkingsbewijzen en
+controleert alle oorspronkelijke v63-snapshots,
+inclusief de eerste bewaarde snapshot, op
+archiefbeheerderssleutels die op of na hun
+intrekking nog in het vertrouwensregister voorkomen.
+
+Het extern bewaarde
+`palaco.go20-publication-checkpoint-independent-pin.v1`
+bindt de volledige v63-bronbewijs-SHA-256, getuigenregister,
+intrekkingsregister, de twee afzonderlijke
+checkpointgeschiedenissen, de minimumsnapshot en het quorum.
+Ontbrekende historische checkpoints, vervalste of
+hergebruikte handtekeningen, sleutelvervanging,
+te weinig onafhankelijke getuigen en uiteenlopende
+waarnemingsgeschiedenissen worden fail-closed geweigerd.
+Twee individueel geldige maar verschillende
+waarnemingsgeschiedenissen geven
+`split_publication_histories`.
+
+**Grenzen:** het systeem beoordeelt aangeleverde
+offline ondertekeningen en sluit niet zelfstandig
+aan op echte archiefmedia of transparantienetwerken.
+Een ondertekende ontvangstverklaring bewijst niet
+dat een gepubliceerde snapshot werkelijk vindbaar,
+duurzaam opgeslagen of toegankelijk is. De externe
+intrekkingslijst en ondertekenaarssleutels dienen
+betrouwbaar en onafhankelijk bewaard te worden.
+
+Het verdict `palaco.go20-historical-custody-checkpoint-verdict.v1`
+houdt steeds `decision: HOLD`,
+`authorization: DENY`,
+`live_publication_verified: false`,
+`external_custody_verified: false`,
+`storage_access_verified: false`,
+`revocation_enforced_in_production: false`,
+`recovery_authorized: false`,
+`history_restored: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
