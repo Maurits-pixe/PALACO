@@ -3573,3 +3573,70 @@ houdt steeds `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
+
+## V65 — historische continuïteit van ondertekende publicatiecheckpoints
+
+`scripts/pr_publication_continuity.py` beoordeelt twee onafhankelijk
+aangeleverde geschiedenissen, elk met **2–4 SHA-256-gekoppelde
+bewijsrondes**. In iedere ronde wordt het volledige v64-bewijs
+inclusief beide publicatiewaarnemingen, de onafhankelijke
+Ed25519-getuigen en de intrekkingslijst opnieuw gecontroleerd.
+De oorspronkelijke v63-bewijsketen, publicatiecheckpoints en
+getuigenregistratie blijven over de volledige geschiedenis
+onveranderd. Alle eerder opgenomen sleutelintrekkingen
+moeten permanent aanwezig blijven met dezelfde ingangsdatum.
+
+```sh
+python3 scripts/pr_publication_continuity.py \
+  --left publication-continuity-a.json \
+  --left-pin independently-retained-continuity-a-pin.json \
+  --right publication-continuity-b.json \
+  --right-pin independently-retained-continuity-b-pin.json \
+  --independent-head separately-retained-v65-head.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_publication_continuity.py' -v
+```
+
+Het `palaco.go20-publication-continuity.v1`-formaat bevat
+`rounds` met `round`, `previous_sha256` en de
+volledige `evidence` voor v64. De externe
+`palaco.go20-publication-continuity-pin.v1` bindt
+begin- en eindronde, hun SHA-256-hashes, de volledige
+geschiedenis, de oorspronkelijke v63-bewijsbundel,
+de twee afzonderlijke publicatieviews,
+de getuigenregistratie en het minimale quorum.
+De externe
+`palaco.go20-publication-continuity-independent-head.v1`
+bevat de verwachte canonieke historiehash,
+de minimale eindronde en het minimumquorum.
+
+De verifier weigert ontbrekende rondes, ontbrekende
+ontvangsten, verbroken voorgangerhashes, veranderde
+publicatieview of historische vertrouwenssleutel,
+verlaagd getuigenquorum, teruggedraaide
+minimumsnapshots, ingetrokken sleutels die
+opnieuw worden vertrouwd, verwijderde of
+herdateerde intrekkingen en verschillende
+waarnemersgeschiedenissen. Een verschil tussen
+twee afzonderlijk verifieerbare externe histories
+wordt `contradictory_publication_continuity`.
+
+**Verificatiegrens:** dit is een alleen-lezen offline
+bewijsverifier. De externe pins moeten onafhankelijk
+bewaard zijn. De module publiceert niets, maakt
+geen verbinding met archieven en bewijst geen
+fysieke beschikbaarheid of operationele
+onafhankelijkheid van getuigen.
+
+Het verdict `palaco.go20-publication-continuity-verdict.v1`
+blijft altijd `decision: HOLD`,
+`authorization: DENY`,
+`network_publication_verified: false`,
+`physical_archive_verified: false`,
+`revocation_enforced_in_production: false`,
+`recovery_authorized: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false`,
+`production_commit_performed: false`.
+GO-13 HOLD; PR #109 Draft; geen merge of productie-uitrol.
