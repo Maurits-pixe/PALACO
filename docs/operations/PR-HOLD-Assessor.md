@@ -3220,3 +3220,63 @@ maar houdt altijd `decision: HOLD`,
 `deployment_authorized: false` en
 `production_commit_performed: false`.
 GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
+
+## V60 — onafhankelijk ondertekende reconstructieankerbewijzen en reviewerintrekkingen
+
+`scripts/pr_reconstruction_head_witnesses.py` hercontroleert beide volledige
+v59-reconstructierapportgeschiedenissen en verifieert de geschiedenishead met
+**minstens twee externe Ed25519-getuigen** met afzonderlijke
+organisaties, domeinen en sleutels. De handtekeningen binden
+de exacte v59-bewijsbundel, historiehead, getuigenregister,
+historische reviewerintrekkingen, minimumronde en
+`HOLD / DENY`. Het externe
+`palaco.go20-reconstruction-head-independent-pin.v1`-anker
+legt deze SHA-256-waarden en de minimale getuigendrempel vast.
+
+```sh
+python3 scripts/pr_reconstruction_head_witnesses.py \
+  --v59-sources full-v59-review-evidence.json \
+  --head-witnesses independently-signed-head.json \
+  --witness-trust externally-retained-head-witnesses.json \
+  --reviewer-revocations externally-retained-reviewer-revocations.json \
+  --independent-pin independently-retained-v60-pin.json
+python3 -m unittest discover -s tests \
+  -p 'test_pr_reconstruction_head_witnesses.py' -v
+```
+
+Het `palaco.go20-historical-reviewer-revocations.v1`-register
+bevat reviewer-ID, ingetrokken Ed25519-publieke sleutel en
+een `effective_round`. De verifier weigert dubbele of
+ongeldige intrekkingen en controleert elke historisch
+bewaarde v59-beoordelingsronde op een reviewer die op
+of na de intrekkingsronde nog als vertrouwd voorkomt.
+Ook de eerste vastgelegde ronde valt onder deze controle.
+
+Een `palaco.go20-reconstruction-head-witnesses.v1`-bundel
+bevat de handtekeningen en voor beide waarnemers een
+expliciet herstelbesluit. Beide moeten verwijzen naar
+dezelfde extern gepinde historiehash en uitsluitend
+`decision: HOLD` en `authorization: DENY` bevatten.
+Tegenstrijdige, dubbele, ontbrekende of verruimde
+herstelbesluiten worden geweigerd. Er wordt geen
+operationeel herstel uitgevoerd.
+
+**Grenzen:** het betreft uitsluitend offline
+bewijsverificatie; de externe sleutelbewaring en
+onafhankelijkheid van getuigen moeten buiten deze
+module betrouwbaar zijn geregeld. De module voert
+geen live opslagcontroles, revocation enforcement,
+archiefherstel of productieaanpassingen uit.
+
+Het verdict `palaco.go20-reconstruction-head-witness-verdict.v1`
+houdt altijd `decision: HOLD`,
+`authorization: DENY`,
+`reviewer_revocations_enforced_in_production: false`,
+`restoration_performed: false`,
+`recovery_authorized: false`,
+`trust_registry_promoted: false`,
+`failover_authorized: false`,
+`merge_authorized: false`,
+`deployment_authorized: false` en
+`production_commit_performed: false`.
+GO-13 HOLD; Draft-PR #109; geen merge of productie-uitrol.
